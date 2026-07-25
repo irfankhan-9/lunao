@@ -31,22 +31,54 @@ export interface FlashToastFn {
 
 const BLANK_CANVAS = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;padding:0;background:#f8f8f8}</style></head><body></body></html>`;
 
-const VIBE_CODE_PROMPT = `Create a complete, production-ready single-file HTML website for a local business.
+const VIBE_CODE_PROMPT = `You are an expert front-end web developer. Build a complete, production-ready single-file HTML website for a local service business that I will describe.
 
-REQUIREMENTS:
-- Single HTML file with all CSS inline in <style> tags
-- Fully responsive: mobile-first design
-- Real business name, city, and phone number included directly in the HTML (no placeholders, no tokens)
-- Professional design with a cohesive color palette
-- Sections: header/nav, hero with CTA, services/features, about/why us, testimonials, CTA banner, footer with contact info
-- Phone link: <a href="tel:+15550100100">(555) 010-0100</a> format
-- Instagram and Facebook links included where appropriate
-- Use real Unsplash image URLs for photos
-- Google Fonts loaded from fonts.googleapis.com
-- No JavaScript frameworks — vanilla JS only
-- NO external CSS files — everything inline
-- Return ONLY the HTML document, starting with <!DOCTYPE html> and ending with </html>
-- Do NOT wrap in markdown fences`;
+OUTPUT FORMAT — STRICT:
+- Return ONLY the HTML document.
+- Start with <!DOCTYPE html> and end with </html>.
+- Do NOT wrap output in markdown code fences (\`\`\`html or \`\`\`).
+- Do NOT include any commentary, explanations, or notes.
+
+FILE STRUCTURE:
+- Single .html file with everything inline.
+- All CSS must live inside one <style> tag in <head>. No external stylesheets.
+- Google Fonts loaded from fonts.googleapis.com (one display font for headings, one neutral for body).
+- Icons via inline SVG only — no icon libraries.
+- No JavaScript frameworks. Vanilla JS only if interactivity is needed (smooth scroll, mobile menu toggle).
+
+REQUIRED CONTENT IN THE HTML (hardcode real values, not placeholders):
+- Business name (used in <title>, header logo, hero headline, footer)
+- City and state (used in hero subhead and contact section)
+- Phone number in TWO formats:
+  * Display: (XXX) XXX-XXXX
+  * Dial link: <a href="tel:+1XXXXXXXXXX">…</a> with the +1 country code
+- Email address
+- Physical street address
+- Instagram handle (https://instagram.com/<handle>)
+- Facebook page URL (https://facebook.com/<page>)
+- Google review badge: 4.9 stars, 200+ reviews
+
+DESIGN:
+- Mobile-first responsive layout with breakpoints at 640px and 1024px.
+- Cohesive 2-color brand palette (one accent, one neutral) used consistently.
+- Sections in this exact order:
+  1. Sticky top navigation with logo, anchor links, and a "Call Now" button.
+  2. Hero with H1 headline, subheadline, two CTA buttons (Call + Book/Quote).
+  3. Services / Features grid (4–6 items with icons).
+  4. About / Why Choose Us section with a stat strip (years in business, reviews, customers served).
+  5. Testimonials (3 customer quotes with names).
+  6. Contact / CTA banner with phone, email, address, hours.
+  7. Footer with logo, contact info, social links, copyright.
+- Generous whitespace, modern typography hierarchy, subtle hover states, accessible color contrast.
+
+IMAGES:
+- Use real Unsplash image URLs (https://images.unsplash.com/photo-…) for the hero background and section photos.
+- Pick imagery that matches the business type (barber, dentist, HVAC, etc.).
+
+QUALITY BAR:
+- The final HTML must render perfectly when opened directly in a browser (no build step, no server).
+- All links must work, all phone numbers must be clickable, all images must load.
+- The site should look like a $5,000 custom design — premium, polished, ready to ship.`;
 
 // ---------------------------------------------------------------------------
 // Sound design
@@ -166,6 +198,7 @@ export const TemplateLabPage: React.FC<{
   const [saving, setSaving] = useState(false);
   const [categories, setCategories] = useState<{ id: string; name: string; color: string }[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [promptCopied, setPromptCopied] = useState(false);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -366,6 +399,27 @@ export const TemplateLabPage: React.FC<{
   };
 
   // -------------------------------------------------------------------------
+  // Copy vibe code prompt to clipboard
+  // -------------------------------------------------------------------------
+  const copyVibePrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(VIBE_CODE_PROMPT);
+      setPromptCopied(true);
+      sfx.copy();
+      setTimeout(() => setPromptCopied(false), 2000);
+    } catch {
+      // Fallback for browsers without clipboard API
+      const ta = document.createElement('textarea');
+      ta.value = VIBE_CODE_PROMPT;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); setPromptCopied(true); sfx.copy(); } catch { /* ignore */ }
+      document.body.removeChild(ta);
+      setTimeout(() => setPromptCopied(false), 2000);
+    }
+  };
+
+  // -------------------------------------------------------------------------
   // Save as template
   // -------------------------------------------------------------------------
   const openSave = async () => {
@@ -540,6 +594,46 @@ export const TemplateLabPage: React.FC<{
             )}
           </div>
 
+          {/* ---- Idle sidebar helper card ---- */}
+          {!isActive && (
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 min-h-0">
+              <div className="rounded-2xl border border-border-main bg-gradient-to-br from-accent-soft to-white p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-7 h-7 rounded-lg bg-accent flex items-center justify-center">
+                    <Sparkles className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  <span className="text-[11px] font-bold font-sans text-accent uppercase tracking-wider">Vibe Code</span>
+                </div>
+                <p className="text-[12px] font-sans text-ink leading-relaxed mb-3">
+                  Copy the prompt on the right and paste it into <span className="font-semibold">Cursor</span>, <span className="font-semibold">Windsurf</span>, or any coding IDE. The AI will generate a complete website HTML file. Upload it back here to turn it into a reusable template.
+                </p>
+                <div className="space-y-2 text-[11px] font-sans text-ink-secondary">
+                  {[
+                    { n: '1', t: 'Copy the prompt' },
+                    { n: '2', t: 'Generate HTML in your IDE' },
+                    { n: '3', t: 'Upload the HTML file here' },
+                    { n: '4', t: 'Turn into Template' },
+                  ].map(s => (
+                    <div key={s.n} className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-white border border-accent/30 text-accent text-[10px] font-bold flex items-center justify-center shrink-0">{s.n}</span>
+                      <span>{s.t}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-border-light bg-off-white p-3">
+                <p className="text-[10px] font-bold font-sans text-ink-tertiary uppercase tracking-wider mb-1.5">Tip</p>
+                <p className="text-[11px] font-sans text-ink-secondary leading-relaxed">
+                  Be specific in your prompt: mention the business type, city, services, and any branding preferences. The richer the prompt, the better the output.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ---- Chat messages, prompt input, recent builds — only in active mode ---- */}
+          {isActive && (
+            <>
           {/* ---- Chat messages — always visible ---- */}
           <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2 space-y-2 min-h-0">
             {messages.length === 0 && !streaming && (
@@ -666,6 +760,8 @@ export const TemplateLabPage: React.FC<{
               </div>
             </div>
           </div>
+            </>
+          )}
         </div>
 
         {/* ----------------------------------------------------
@@ -675,112 +771,113 @@ export const TemplateLabPage: React.FC<{
 
           {/* ========== WELCOME / IDLE MODE ========== */}
           {!isActive && (
-            <div className="flex-1 overflow-y-auto flex justify-center items-start pt-10 pb-6 px-6">
-              <div className="w-full max-w-2xl animate-editor-rise">
-                {/* Hero */}
-                <div className="text-center mb-8">
-                  <div className="w-16 h-16 rounded-2xl bg-accent-soft flex items-center justify-center mx-auto mb-4">
-                    <FlaskConical className="w-8 h-8 text-accent" />
+            <div className="flex-1 overflow-y-auto flex justify-center items-start pt-8 pb-6 px-6">
+              <div className="w-full max-w-3xl animate-editor-rise space-y-5">
+
+                {/* Hero — dark gradient */}
+                <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-[#1A1916] via-[#252320] to-[#1A1916] border border-white/10 p-7">
+                  <div className="pointer-events-none absolute -top-16 -right-16 w-56 h-56 bg-accent/15 rounded-full blur-3xl" />
+                  <div className="pointer-events-none absolute -bottom-12 -left-12 w-44 h-44 bg-violet-500/8 rounded-full blur-2xl" />
+                  <div className="relative">
+                    <div className="flex items-center gap-2.5 mb-3">
+                      <div className="w-10 h-10 rounded-xl bg-accent/20 border border-accent/30 flex items-center justify-center">
+                        <FlaskConical className="w-5 h-5 text-accent" />
+                      </div>
+                      <div>
+                        <span className="block text-[10px] font-bold font-sans text-white/60 uppercase tracking-widest leading-none">AI Site Builder</span>
+                        <span className="block text-base font-bold font-sans text-white leading-tight mt-1">Vibe Code a website</span>
+                      </div>
+                    </div>
+                    <p className="text-sm font-sans text-white/60 max-w-lg leading-relaxed mb-5">
+                      Copy a single prompt, paste it into any coding IDE (Cursor, Windsurf, Claude Code), and the AI generates a complete production-ready website. Upload the HTML back here to turn it into a reusable Lunao template in one click.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {[
+                        { n: '1', t: 'Copy prompt', d: 'One-click below' },
+                        { n: '2', t: 'Vibe code', d: 'In your IDE of choice' },
+                        { n: '3', t: 'Upload HTML', d: 'Turn into template' },
+                      ].map(s => (
+                        <div key={s.n} className="flex items-start gap-2.5 rounded-xl bg-white/5 border border-white/10 p-2.5">
+                          <div className="w-7 h-7 rounded-lg bg-accent text-white text-xs font-bold font-sans flex items-center justify-center shrink-0">
+                            {s.n}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[12px] font-bold font-sans text-white leading-tight">{s.t}</p>
+                            <p className="text-[10px] font-sans text-white/50 leading-tight mt-0.5">{s.d}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <h2 className="text-2xl font-bold font-sans text-ink mb-2">Build any website with AI</h2>
-                  <p className="text-sm text-ink-secondary font-sans max-w-md mx-auto leading-relaxed">
-                    Describe what you want in plain English. AI writes the complete HTML \u2014 preview it live, edit it, and save it as a reusable template.
+                </div>
+
+                {/* Vibe Code Prompt — copy card */}
+                <div className="rounded-2xl border border-border-main bg-white p-5">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-accent-soft flex items-center justify-center shrink-0">
+                      <Code2 className="w-5 h-5 text-accent" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-bold font-sans text-ink leading-tight">The Vibe Code Prompt</h3>
+                      <p className="text-[11px] font-sans text-ink-secondary leading-relaxed mt-0.5">
+                        A battle-tested system prompt that turns any AI coding agent into a premium website builder.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Prompt preview */}
+                  <div className="relative rounded-xl bg-off-white border border-border-light p-3.5 mb-3">
+                    <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-accent-soft text-accent text-[9px] font-bold font-sans uppercase tracking-wider">
+                      System Prompt
+                    </div>
+                    <pre className="text-[11px] font-mono text-ink-secondary leading-relaxed whitespace-pre-wrap line-clamp-6 max-h-32 overflow-hidden pr-12">
+                      {VIBE_CODE_PROMPT}
+                    </pre>
+                    <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-off-white to-transparent pointer-events-none rounded-b-xl" />
+                  </div>
+
+                  <button
+                    onClick={copyVibePrompt}
+                    className={`w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-bold font-sans transition-all shadow-sm active:scale-[0.98] ${
+                      promptCopied
+                        ? 'bg-success text-white'
+                        : 'bg-accent text-white hover:bg-accent-hover'
+                    }`}
+                  >
+                    {promptCopied ? (
+                      <><Check className="w-4 h-4" /> Copied to clipboard!</>
+                    ) : (
+                      <><Copy className="w-4 h-4" /> Copy Prompt</>
+                    )}
+                  </button>
+
+                  <p className="mt-2.5 text-[10px] font-sans text-ink-tertiary text-center">
+                    Paste this prompt into Cursor, Windsurf, Claude Code, or any coding IDE — then describe your business.
                   </p>
                 </div>
 
-                {/* How it works cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-                  {[
-                    { icon: String.fromCodePoint(0x270F, 0xFE0F), label: 'Describe your site', hint: 'e.g. Modern dental clinic with amber tones, hero with booking CTA' },
-                    { icon: String.fromCodePoint(0x1F3AF), label: 'AI builds instantly', hint: 'Live preview updates as AI writes \u2014 see changes in real-time' },
-                    { icon: String.fromCodePoint(0x1F4C1), label: 'Save as template', hint: 'Convert to reusable Lunao template and use in campaigns' },
-                  ].map(f => (
-                    <div key={f.label} className="flex items-start gap-3 p-4 rounded-2xl bg-white border border-border-main">
-                      <span className="text-2xl leading-none mt-0.5">{f.icon}</span>
-                      <div>
-                        <p className="text-sm font-bold font-sans text-ink leading-tight">{f.label}</p>
-                        <p className="text-[11px] font-sans text-ink-tertiary leading-relaxed mt-1">{f.hint}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Quick-start */}
-                <div className="bg-white rounded-2xl border border-border-main p-5 mb-4">
-                  <p className="text-xs font-bold font-sans text-ink-tertiary uppercase tracking-wide mb-3">Quick start</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                    {[
-                      { emoji: String.fromCodePoint(0x1F9E7), label: 'Dental Clinic', prompt: 'A modern dental clinic website with warm amber tones, hero section with booking CTA, services grid, patient testimonials, and contact form.', color: '#0EA5A0' },
-                      { emoji: String.fromCodePoint(0x1F3E8), label: 'Barber Shop', prompt: 'A luxury barber shop website with dark wood tones, vintage aesthetic, services menu with prices, about the barbers section, and a booking CTA.', color: '#C9A96E' },
-                      { emoji: String.fromCodePoint(0x2744, 0xFE0F), label: 'HVAC Service', prompt: 'A bold HVAC company website with navy and orange, 24/7 emergency banner, services checklist, and a CTA to call.', color: '#F97316' },
-                    ].map(item => (
-                      <button
-                        key={item.label}
-                        onClick={() => {
-                          sfx.tap();
-                          setNiche(item.label);
-                          setTitle(item.label);
-                          setInput(item.prompt);
-                          setMode('active');
-                          setMessages([{ role: 'user', content: item.prompt }]);
-                          setStreaming(true);
-                          setThinkingAcc('');
-                          setLabError(null);
-                          streamAiEdit(
-                            { html: BLANK_CANVAS, instruction: item.prompt, anthropicApiKey: apiKey.trim() || undefined },
-                            (_fullSoFar) => {},
-                            (thinkingText) => setThinkingAcc(prev => prev + thinkingText),
-                          ).then(result => {
-                            const finalCompiled = compilePreview(result);
-                            setHtml(result);
-                            setPreviewHtml(finalCompiled); // triggers useEffect → iframe updated
-                            setThinkingAcc('');
-                            setMessages(m => {
-                              const next = [...m];
-                              next[next.length - 1] = { role: 'assistant', content: summarizeHtml(result) || 'Done! Preview ready.' };
-                              return next;
-                            });
-                            sfx.aiDone();
-                            createSiteHistory({ title: item.label, niche: item.label, html: result, snapshotLabel: item.prompt.slice(0, 60) }).catch(() => {});
-                          }).catch((err: any) => {
-                            sfx.error();
-                            setThinkingAcc('');
-                            setMessages(m => {
-                              const next = [...m];
-                              next[next.length - 1] = { role: 'assistant', content: 'Error: ' + (err?.message || 'Generation failed.') };
-                              return next;
-                            });
-                          }).finally(() => setStreaming(false));
-                        }}
-                        className="flex flex-col items-center gap-1.5 p-4 rounded-xl border border-border-main hover:border-[var(--c)] hover:shadow-md transition-all text-center"
-                        style={{ '--c': item.color } as React.CSSProperties}
-                      >
-                        <span className="text-3xl">{item.emoji}</span>
-                        <span className="text-xs font-bold font-sans text-ink">{item.label}</span>
-                      </button>
-                    ))}
+                {/* Upload HTML */}
+                <div className="rounded-2xl border border-dashed border-border-main bg-white p-6 text-center">
+                  <div className="w-12 h-12 rounded-xl bg-accent-soft flex items-center justify-center mx-auto mb-3">
+                    <Upload className="w-6 h-6 text-accent" />
                   </div>
-                </div>
-
-                {/* Upload */}
-                <div className="bg-white rounded-2xl border border-dashed border-border-main p-5 text-center">
-                  <p className="text-sm font-semibold font-sans text-ink mb-1">Have an HTML file?</p>
-                  <p className="text-xs text-ink-secondary font-sans mb-4">
-                    Upload it and AI will convert it to a Lunao template \u2014 adding all personalization placeholders automatically.
+                  <h3 className="text-base font-bold font-sans text-ink mb-1">Paste your generated HTML below</h3>
+                  <p className="text-xs text-ink-secondary font-sans max-w-sm mx-auto leading-relaxed mb-4">
+                    Upload the <code className="px-1 py-0.5 rounded bg-off-white text-[11px] font-mono">.html</code> file you generated in your IDE. We'll convert it into a Lunao template with personalization placeholders for business name, city, phone, and social handles automatically.
                   </p>
                   <button
                     onClick={() => { sfx.tap(); fileInputRef.current?.click(); }}
                     disabled={uploading}
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-accent text-white text-sm font-bold font-sans hover:bg-accent-hover active:scale-[0.98] transition-all shadow-sm disabled:opacity-50"
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-ink text-white text-sm font-bold font-sans hover:bg-ink/90 active:scale-[0.98] transition-all shadow-sm disabled:opacity-50"
                   >
                     {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                    {uploading ? 'Processing\u2026' : 'Upload HTML File'}
+                    {uploading ? 'Processing…' : 'Upload HTML File'}
                   </button>
                   {uploadError && (
                     <p className="mt-2 text-xs text-red-500 font-sans">{uploadError}</p>
                   )}
                   <input ref={fileInputRef} type="file" accept=".html,text/html" className="hidden" onChange={handleFileUpload} />
-                  <p className="mt-3 text-[10px] text-ink-tertiary font-sans">Max 10MB \u00b7 Single .html file</p>
+                  <p className="mt-3 text-[10px] text-ink-tertiary font-sans">Max 10MB · Single .html file</p>
                 </div>
               </div>
             </div>

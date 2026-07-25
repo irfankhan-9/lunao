@@ -123,7 +123,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
 
   // Template Lab — unified AI site builder
   const [labOpen, setLabOpen] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false); // reserved for future
   const [browseOpen, setBrowseOpen] = useState(false);
 
   // AI chat
@@ -506,10 +506,6 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
             sfx.open();
             setBrowseOpen(true);
           }}
-          onCreateNew={() => {
-            sfx.primary();
-            setCreateOpen(true);
-          }}
           onOpenStudio={() => {
             sfx.primary();
             setLabOpen(true);
@@ -524,19 +520,6 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
             sfx.engage();
             flashToast({ type: 'info', text: `Template "${t.name}" selected. Use it in a campaign wizard.` });
             setBrowseOpen(false);
-          }}
-        />
-
-        {/* Create Template modal */}
-        <CreateTemplateModal
-          open={createOpen}
-          onClose={() => { sfx.close(); setCreateOpen(false); }}
-          aiEnabled={aiEnabled}
-          onGenerated={(t) => {
-            sfx.confirmSuccess();
-            flashToast({ type: 'success', text: `"${t.name}" saved to your templates.` });
-            setCreateOpen(false);
-            setBrowseOpen(true);
           }}
         />
 
@@ -1204,9 +1187,8 @@ const SAMPLE_PROMPTS = [
 const TemplateLabBanner: React.FC<{
   aiEnabled: boolean;
   onBrowseTemplates: () => void;
-  onCreateNew: () => void;
   onOpenStudio: () => void;
-}> = ({ aiEnabled, onBrowseTemplates, onCreateNew, onOpenStudio }) => (
+}> = ({ aiEnabled, onBrowseTemplates, onOpenStudio }) => (
   <div className="relative mb-8 rounded-2xl overflow-hidden bg-gradient-to-br from-[#1A1916] via-[#252320] to-[#1A1916] border border-white/10 animate-sparkle-in">
     {/* Ambient glow */}
     <div className="pointer-events-none absolute -top-20 -right-20 w-72 h-72 bg-accent/15 rounded-full blur-3xl" />
@@ -1250,13 +1232,6 @@ const TemplateLabBanner: React.FC<{
         >
           <FlaskConical className="w-4 h-4" />
           AI Studio
-        </button>
-        <button
-          onClick={onCreateNew}
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white text-sm font-semibold font-sans hover:bg-white/20 active:scale-[0.98] transition-all"
-        >
-          <Wand2 className="w-4 h-4" />
-          Create Template
         </button>
       </div>
     </div>
