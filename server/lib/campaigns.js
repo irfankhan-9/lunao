@@ -226,6 +226,18 @@ export function markCampaignFailed(id, error) {
   return getCampaign(id);
 }
 
+// Mark a campaign as cancelled by the user. Soft cancel — the in-flight
+// runPipeline() loop picks this up on its next iteration and exits early.
+// Unlike finalizeCampaign() this does NOT recompute counters from
+// campaign_leads; the partial totals that were already written by the
+// loop stay as-is so the dashboard's progress bar matches reality.
+export function markCampaignCancelled(id) {
+  db.prepare(
+    `UPDATE campaigns SET status = 'cancelled', completed_at = ? WHERE id = ?`,
+  ).run(Date.now(), id);
+  return getCampaign(id);
+}
+
 // ---- Lead lookups ---------------------------------------------------------
 
 export function getLead(id) {

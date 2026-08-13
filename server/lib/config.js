@@ -87,8 +87,29 @@ export const auth = {
 export const googleOAuth = {
   clientId: env.GOOGLE_CLIENT_ID || '',
   clientSecret: env.GOOGLE_CLIENT_SECRET || '',
+  // Gmail send + profile lookup. We include `openid email profile` so we can
+  // fetch the user's email address from Google's OpenID userinfo endpoint.
+  // Without an OpenID scope, the Gmail API itself rejects our access token
+  // for the /profile call with "401 missing credentials" because Gmail
+  // requires the audience to include openid if you want user identity.
+  scopes: [
+    'openid',
+    'email',
+    'profile',
+    'https://www.googleapis.com/auth/gmail.send',
+    'https://www.googleapis.com/auth/gmail.readonly',
+  ].join(' '),
   get enabled() {
     return Boolean(this.clientId && this.clientSecret);
+  },
+};
+
+// AES-256-GCM encryption key for refresh tokens. Falls back to a derived key
+// from JWT secret in dev so we never silently store tokens in plaintext.
+export const emailCrypto = {
+  key: env.EMAIL_TOKEN_ENCRYPTION_KEY || env.JWT_SECRET || env.SESSION_SECRET || 'change-me-use-32-byte-hex',
+  get enabled() {
+    return Boolean(this.key);
   },
 };
 

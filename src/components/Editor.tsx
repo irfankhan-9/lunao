@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Code2, ArrowLeft, Save, UploadCloud, Image as ImageIcon,
-  Send, Monitor, Smartphone, Wand2, Loader2, ExternalLink, X,
+  Monitor, Smartphone, Wand2, Loader2, ExternalLink, X,
   Rocket, AlertCircle, Pencil, CheckCircle2, Link2,
-  Globe, Copy, Eye, Search, RefreshCw, Clock,
+  Globe, Copy, Search, RefreshCw, Clock,
   Puzzle, MessageCircle, UserPlus, Sparkles,
   Download, Trash2, Layout, Key, ChevronDown,
   History, FolderOpen, Eraser, Shuffle, FlaskConical, BookmarkPlus,
@@ -94,9 +94,8 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   const [dirty, setDirty] = useState(false);
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [editMode, setEditMode] = useState(false);
-  // On mobile only one panel is visible at a time (segmented switch).
-  const [mobileTab, setMobileTab] = useState<'chat' | 'preview'>('preview');
   const [saving, setSaving] = useState(false);
+  const [streaming, setStreaming] = useState(false);
 
   // First-page filtering (real, runs over the loaded sites).
   const [search, setSearch] = useState('');
@@ -126,16 +125,13 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   const [createOpen, setCreateOpen] = useState(false); // reserved for future
   const [browseOpen, setBrowseOpen] = useState(false);
 
-  // AI chat
+  // AI chat (legacy — AI edit now lives in TemplateLabPage)
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [streaming, setStreaming] = useState(false);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const htmlRef = useRef('');
   const lastPreviewPush = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const chatScrollRef = useRef<HTMLDivElement>(null);
 
   const flashToast = (t: Toast) => {
     setToast(t);
@@ -162,13 +158,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
     if (active && !listLoaded && !listLoading) loadList();
   }, [active, listLoaded, listLoading, loadList]);
 
-  useEffect(() => {
-    if (chatScrollRef.current) {
-      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
-    }
-  }, [messages, streaming]);
-
-  // ---- invite codes loading ----------------------------------------------
+  // ---- invite codes loading ------------------------------------------------
   const loadInviteCodes = useCallback(async (s: string) => {
     try {
       const list = await listInviteCodes(s);
@@ -182,19 +172,30 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
     if (selected) loadInviteCodes(selected.slug);
   }, [selected, inviteRefreshKey, loadInviteCodes]);
 
-  // Refresh the active-count badge whenever the drawer closes
-  // (it may have created/revoked codes inside).
+  // Refresh the active-count badge whenever the drawer closes.
   const activeInviteCount = inviteCodes.filter((c) => !c.revokedAt).length;
 
   // ---- open / load a single site ------------------------------------------
   const openSite = async (site: EditorSite) => {
     sfx.open();
+    // Reset scroll on every "Open Editor" click so the user lands at the
+    // top of the edit view instead of inheriting whatever scroll position
+    // they were at in the list. Without this, half-scrolled pages make
+    // the edit toolbar feel misaligned.
+    const scrollToTop = () => {
+      const main = document.getElementById('main-content-flow');
+      if (main) main.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+    scrollToTop();
+    // Set the state IMMEDIATELY so the view flips to 'edit' before the
+    // smooth-scroll animation finishes; this keeps the toolbar pinned
+    // to the top of the user's viewport.
     setSelected(site);
     setView('edit');
     setLoadingSite(true);
     setMessages([]);
     setEditMode(false);
-    setMobileTab('preview');
     setImgPanel(false);
     setAddonsPanel(false);
     setDeployInfo(null);
@@ -203,6 +204,9 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
       const html = await getSiteHtml(site.slug);
       htmlRef.current = html;
       setPreviewHtml(html);
+      // Re-scroll once the HTML is loaded — heavy sites can push the
+      // scroll position down when the iframe mounts.
+      scrollToTop();
       getAddons(site.slug)
         .then((a) => setAddonsState(a))
         .catch(() => setAddonsState({ booking: false, chatbot: false }));
@@ -222,10 +226,15 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
     htmlRef.current = '';
     setImgPanel(false);
     selectedImgRef.current = null;
+    // Reset scroll on back-navigation so the user lands at the top of the
+    // list instead of inheriting whatever mid-list scroll position they
+    // were at before opening a site.
+    const main = document.getElementById('main-content-flow');
+    if (main) main.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // ---- iframe wiring -------------------------------------------------------
-  // Read the live DOM (with inline edits) back into our canonical html string.
   const syncFromIframe = useCallback((): string => {
     const doc = iframeRef.current?.contentDocument;
     if (!doc || !doc.documentElement) return htmlRef.current;
@@ -263,7 +272,6 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   const onIframeLoad = () => {
     const doc = iframeRef.current?.contentDocument;
     if (!doc) return;
-    // Track edits to mark the site dirty.
     doc.addEventListener('input', () => setDirty(true));
     doc.addEventListener('click', handleImgClick, true);
     applyEditModeToDoc(editMode);
@@ -275,8 +283,6 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   }, [editMode, previewHtml, applyEditModeToDoc]);
 
   const toggleEditMode = () => {
-    // Editing only makes sense over the live preview.
-    setMobileTab('preview');
     setEditMode((v) => {
       if (v) sfx.tap(); else sfx.engage();
       return !v;
@@ -300,7 +306,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
     const reader = new FileReader();
     reader.onload = () => {
       if (selectedImgRef.current && typeof reader.result === 'string') {
-        selectedImgRef.current.src = reader.result; // data URI embeds the image
+        selectedImgRef.current.src = reader.result;
         setDirty(true);
         sfx.swap();
         flashToast({ type: 'success', text: 'Image uploaded & embedded.' });
@@ -338,7 +344,6 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
     try {
       const { url } = await deploySite(selected.slug, html);
       setDirty(false);
-      // The clean, stable public URL is where the edited site now lives.
       setDeployInfo({ url: selected.url, deployUrl: url, dryRun: !url });
       sfx.deployed();
     } catch (err: any) {
@@ -364,8 +369,6 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
     const next: SiteAddons = { ...addons, [kind]: !addons[kind] };
     setAddonBusy(kind);
     try {
-      // Persist any in-progress inline edits first so the widget injects on top
-      // of the latest version, then re-inject/remove the widget block.
       const current = syncFromIframe();
       await saveSiteHtml(selected.slug, current);
       const { addons: applied, html: newHtml } = await setAddons(selected.slug, next);
@@ -383,56 +386,6 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
       flashToast({ type: 'error', text: err?.message || 'Could not update add-ons.' });
     } finally {
       setAddonBusy(null);
-    }
-  };
-
-  // ---- AI chat -------------------------------------------------------------
-  const sendAi = async () => {
-    const instruction = chatInput.trim();
-    if (!instruction || streaming) return;
-    if (!aiEnabled) {
-      sfx.error();
-      flashToast({ type: 'error', text: 'AI editor needs an Anthropic key on the server.' });
-      return;
-    }
-    sfx.tap();
-    const baseHtml = syncFromIframe();
-    const history = messages.slice(-6);
-    setMessages((m) => [...m, { role: 'user', content: instruction }, { role: 'assistant', content: '' }]);
-    setChatInput('');
-    setStreaming(true);
-
-    try {
-      const finalHtml = await streamAiEdit(
-        { html: baseHtml, instruction, history },
-        (fullSoFar) => {
-          const now = Date.now();
-          if (now - lastPreviewPush.current > 350) {
-            lastPreviewPush.current = now;
-            setPreviewHtml(fullSoFar);
-          }
-        },
-      );
-      htmlRef.current = finalHtml;
-      setPreviewHtml(finalHtml);
-      setDirty(true);
-      sfx.aiDone();
-      setMessages((m) => {
-        const next = [...m];
-        next[next.length - 1] = { role: 'assistant', content: 'Done — preview updated. Review it, then Save or Redeploy.' };
-        return next;
-      });
-    } catch (err: any) {
-      sfx.error();
-      setMessages((m) => {
-        const next = [...m];
-        next[next.length - 1] = { role: 'assistant', content: `⚠ ${err?.message || 'AI edit failed.'}` };
-        return next;
-      });
-      // Restore the pre-edit preview.
-      setPreviewHtml(htmlRef.current);
-    } finally {
-      setStreaming(false);
     }
   };
 
@@ -761,114 +714,11 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
         </button>
       </div>
 
-      {/* Mobile panel switch — one panel at a time so scrolling stays clean */}
-      <div className="flex lg:hidden items-center gap-1 p-1 bg-white border border-border-main rounded-xl mb-3">
-        <button
-          onClick={() => { sfx.toggle(); setMobileTab('chat'); }}
-          className={`flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold font-sans transition-all ${
-            mobileTab === 'chat' ? 'bg-accent-soft text-accent' : 'text-ink-secondary'
-          }`}
-        >
-          <Wand2 className="w-4 h-4" /> AI Editor
-        </button>
-        <button
-          onClick={() => { sfx.toggle(); setMobileTab('preview'); }}
-          className={`flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold font-sans transition-all ${
-            mobileTab === 'preview' ? 'bg-accent-soft text-accent' : 'text-ink-secondary'
-          }`}
-        >
-          <Eye className="w-4 h-4" /> Preview
-        </button>
-      </div>
+      {/* Workspace: full-width preview — AI chat moved to TemplateLabPage */}
+      <div className="flex flex-col gap-4 h-[calc(100dvh-250px)] min-h-[440px] lg:h-[calc(100vh-170px)] lg:min-h-[440px] lg:max-h-[760px]">
 
-      {/* Workspace: chat (left) + preview (right) — desktop height fits the
-          viewport so the whole editor (incl. chat) is visible without scrolling */}
-      <div className="flex flex-col lg:flex-row gap-4 h-[calc(100dvh-250px)] min-h-[440px] lg:h-[calc(100vh-170px)] lg:min-h-[440px] lg:max-h-[760px]">
-        {/* AI chat panel */}
-        <div className={`lg:w-[340px] shrink-0 bg-white rounded-xl border border-border-main flex-col h-full overflow-hidden lg:flex ${mobileTab === 'chat' ? 'flex' : 'hidden'}`}>
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-border-light">
-            <div className="w-7 h-7 rounded-lg bg-accent-soft flex items-center justify-center">
-              <Wand2 className="w-4 h-4 text-accent" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-bold font-sans text-ink leading-none">AI Code Chat</span>
-              <span className="text-[10px] text-ink-secondary font-sans">
-                {aiEnabled ? 'Powered by Claude' : 'Disabled — add server key'}
-              </span>
-            </div>
-          </div>
-
-          <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
-            {messages.length === 0 && (
-              <div className="text-center pt-8 px-2">
-                <div className="w-12 h-12 rounded-2xl bg-accent-soft flex items-center justify-center mx-auto mb-3">
-                  <Wand2 className="w-6 h-6 text-accent" />
-                </div>
-                <p className="text-sm font-semibold font-sans text-ink mb-1">Describe a change</p>
-                <p className="text-xs text-ink-secondary font-sans mb-4">
-                  AI writes real code and the preview refreshes as it types.
-                </p>
-                <div className="space-y-1.5 text-left">
-                  {['Make the hero background darker and more luxurious',
-                    'Change the headline to be more bold and confident',
-                    'Add a limited-time offer banner at the top'].map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => { sfx.tap(); setChatInput(s); }}
-                      className="w-full text-left text-xs font-sans text-ink-secondary bg-off-white hover:bg-accent-soft hover:text-accent rounded-lg px-3 py-2 transition-all"
-                    >
-                      "{s}"
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {messages.map((m, i) => (
-              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div
-                  className={`max-w-[88%] rounded-2xl px-3.5 py-2 text-sm font-sans leading-relaxed ${
-                    m.role === 'user'
-                      ? 'bg-accent text-white rounded-br-sm'
-                      : 'bg-off-white text-ink rounded-bl-sm border border-border-light'
-                  }`}
-                >
-                  {m.content || (
-                    <span className="inline-flex items-center gap-2 text-ink-secondary">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Writing code…
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="p-3 border-t border-border-light">
-            <div className="flex items-end gap-2">
-              <textarea
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAi(); }
-                }}
-                placeholder={aiEnabled ? 'e.g. make the buttons gold…' : 'AI editor is disabled'}
-                disabled={!aiEnabled || streaming}
-                rows={2}
-                className="flex-1 resize-none rounded-lg border border-border-main bg-off-white px-3 py-2 text-sm font-sans text-ink placeholder:text-ink-secondary/70 focus:outline-none focus:border-accent focus:bg-white transition-all disabled:opacity-60"
-              />
-              <button
-                onClick={sendAi}
-                disabled={!aiEnabled || streaming || !chatInput.trim()}
-                className="w-10 h-10 shrink-0 rounded-lg bg-accent text-white flex items-center justify-center hover:bg-accent/90 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {streaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Preview panel */}
-        <div className={`flex-1 bg-white rounded-xl border border-border-main overflow-hidden flex-col h-full relative lg:flex ${mobileTab === 'preview' ? 'flex' : 'hidden'}`}>
+        {/* Preview panel — always full width, no chat sidebar */}
+        <div className="flex-1 bg-white rounded-xl border border-border-main overflow-hidden flex-col relative lg:flex">
           {editMode && (
             <div className="flex items-center gap-2 px-4 py-2 bg-accent-soft/60 border-b border-accent/15 text-[11px] font-sans text-accent font-medium">
               <Pencil className="w-3.5 h-3.5" />
@@ -1184,35 +1034,35 @@ const SAMPLE_PROMPTS = [
 ];
 
 // Template Lab hero section — shown above the site grid in the Editor list view.
+// Uses the same brand token palette as every other Lunao card (white bg, accent tones).
 const TemplateLabBanner: React.FC<{
   aiEnabled: boolean;
   onBrowseTemplates: () => void;
   onOpenStudio: () => void;
 }> = ({ aiEnabled, onBrowseTemplates, onOpenStudio }) => (
-  <div className="relative mb-8 rounded-2xl overflow-hidden bg-gradient-to-br from-[#1A1916] via-[#252320] to-[#1A1916] border border-white/10 animate-sparkle-in">
-    {/* Ambient glow */}
-    <div className="pointer-events-none absolute -top-20 -right-20 w-72 h-72 bg-accent/15 rounded-full blur-3xl" />
-    <div className="pointer-events-none absolute -bottom-16 -left-16 w-56 h-56 bg-violet-500/8 rounded-full blur-2xl" />
+  <div className="relative mb-8 rounded-2xl overflow-hidden bg-gradient-to-br from-accent-soft/60 via-white to-accent-soft/20 border border-accent/15 p-6 sm:p-7 animate-sparkle-in">
+    {/* Ambient glow — subtle accent diffusion */}
+    <div className="pointer-events-none absolute -top-16 -right-16 w-64 h-64 bg-accent/8 rounded-full blur-3xl" />
 
-    <div className="relative px-6 py-7 sm:px-8 sm:py-8 flex flex-col sm:flex-row sm:items-center gap-5">
+    <div className="relative flex flex-col sm:flex-row sm:items-center gap-5">
       {/* Left — icon + copy */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2.5 mb-2">
-          <div className="w-8 h-8 rounded-lg bg-accent/20 border border-accent/30 flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-accent" />
+          <div className="w-8 h-8 rounded-xl bg-accent flex items-center justify-center shadow-sm">
+            <Sparkles className="w-4 h-4 text-white" />
           </div>
-          <span className="text-xs font-bold font-sans text-white/60 uppercase tracking-widest">Template Lab</span>
+          <span className="text-[10px] font-bold font-sans text-accent uppercase tracking-widest">Template Lab</span>
         </div>
-        <h2 className="text-lg sm:text-xl font-bold font-sans text-white mb-1 leading-snug">
-          Design any website with AI
+        <h2 className="text-lg sm:text-xl font-bold font-sans text-ink mb-1 leading-snug">
+          Build any website with AI
         </h2>
-        <p className="text-sm font-sans text-white/50 max-w-md">
+        <p className="text-sm font-sans text-ink-secondary max-w-md">
           Describe a business type and style in plain English. AI generates a complete template — no code required.
         </p>
         {!aiEnabled && (
-          <div className="flex items-start gap-1.5 mt-2 text-[11px] text-amber-400/80 font-sans">
+          <div className="flex items-start gap-1.5 mt-2 text-[11px] text-warning font-sans bg-warning-soft rounded-lg px-3 py-2">
             <Key className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-            <span>No server key configured — bring your own Anthropic key to generate templates.</span>
+            <span>No server Anthropic key configured — add one to generate templates.</span>
           </div>
         )}
       </div>
@@ -1221,9 +1071,9 @@ const TemplateLabBanner: React.FC<{
       <div className="flex flex-col sm:flex-row gap-2.5 shrink-0">
         <button
           onClick={onBrowseTemplates}
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white text-sm font-semibold font-sans hover:bg-white/20 active:scale-[0.98] transition-all"
+          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-white border border-border-main text-ink text-sm font-semibold font-sans hover:bg-off-white hover:border-accent/40 active:scale-[0.98] transition-all shadow-sm"
         >
-          <Layout className="w-4 h-4" />
+          <Layout className="w-4 h-4 text-accent" />
           Browse Templates
         </button>
         <button

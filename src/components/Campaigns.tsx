@@ -1,15 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Campaign, Template, Business, SmsLog } from '../types';
 import {
-  Plus, Play, Pause, Trash2, Eye, EyeOff, ExternalLink, ChevronRight, Upload,
-  MapPin, Sliders, CheckCircle, Smartphone, SlidersHorizontal, Loader2, Sparkles, Check, Minus, Info, Users, Star, X, ShieldAlert, Send, Globe, Key, Compass, ShieldCheck, Layout, MessageSquare
+  Plus, Trash2, Eye, EyeOff, ExternalLink, ChevronRight, Upload,
+  MapPin, Sliders, CheckCircle, CheckCircle2, Smartphone, SlidersHorizontal, Loader2, Sparkles, Check, Minus, Info, Users, Star, X, ShieldAlert, Send, Globe, Key, Compass, ShieldCheck, Layout, MessageSquare, Mail, AlertCircle, Search, RefreshCw, Activity, Save, Link2, Copy, Square, Battery
 } from 'lucide-react';
 import { nicheList } from '../data';
 import { getTemplateContent, getNicheBgImage } from './Templates';
-import { playGentleChime, playLaunchSwell, playVictoryCelebration, playSoftTap, playSoftBubble, playElegantBell, playSlideTick, playElegantError, playTiktokLike } from '../utils/audio';
+import { playGentleChime, playLaunchSwell, playVictoryCelebration, playSoftTap, playSoftBubble, playElegantBell, playSlideTick, playElegantError, playTiktokLike, playConfirmSuccess } from '../utils/audio';
 import { CelebrationEffect } from './CelebrationEffect';
 import { TemplateSimPreview } from './TemplateSimPreview';
-import { validateCsvFile, runCampaign, runSiteDeployCampaign, PipelineLead, PipelineResultRow, CsvValidation, listCustomTemplates, CustomTemplate } from '../lib/pipelineClient';
+import { UnifiedRecentCampaigns } from './UnifiedRecentCampaigns';
+import { validateCsvFile, runCampaign, runSiteDeployCampaign, PipelineLead, PipelineResultRow, CsvValidation, listCustomTemplates, CustomTemplate, listEmailAccounts, createEmailCampaign, probeAllEmailAccounts, runEmailCampaign, cancelCampaign, cancelEmailCampaign, EmailCampaignEvent } from '../lib/pipelineClient';
+import { ActiveCampaignRun } from '../App';
 
 interface CampaignsProps {
   campaigns: Campaign[];
@@ -26,6 +28,23 @@ interface CampaignsProps {
   setUserCredits: React.Dispatch<React.SetStateAction<number>>;
   telnyxKey?: string;
   telnyxPhone?: string;
+  setScrollTarget?: (id: string | null) => void;
+  // Active Campaigns registry (lifted from App.tsx) so both the wizard
+  // and the Active Campaigns progress card stay in sync without prop drilling.
+  activeCampaignRuns?: ActiveCampaignRun[];
+  upsertActiveRun?: (run: ActiveCampaignRun) => void;
+  updateActiveRun?: (id: string, patch: Partial<ActiveCampaignRun>) => void;
+  removeActiveRun?: (id: string) => void;
+  // One-click "Edit outreach" — when the user clicks the pencil on a
+  // Recent Campaigns row, App.tsx passes the source campaign in; we
+  // pre-fill the email sub-wizard and jump straight to the message step.
+  initialEmailSubject?: string;
+  initialEmailBody?: string;
+  // Bump this counter from the parent to force re-application of
+  // initialEmailSubject/Body (used after the user clicks Edit Outreach
+  // multiple times in a row, since string identity alone won't trigger
+  // a re-render when the user re-edits the same campaign).
+  initialEmailNonce?: number;
 }
 
 const getCityCoords = (city: string) => {
@@ -313,7 +332,15 @@ export const Campaigns: React.FC<CampaignsProps> = ({
   userCredits,
   setUserCredits,
   telnyxKey = '',
-  telnyxPhone = ''
+  telnyxPhone = '',
+  setScrollTarget,
+  activeCampaignRuns = [],
+  upsertActiveRun,
+  updateActiveRun,
+  removeActiveRun,
+  initialEmailSubject,
+  initialEmailBody,
+  initialEmailNonce,
 }) => {
   const isUpgraded = userPlan === 'Pro Plan' || userPlan === 'Agency Plan';
   
@@ -343,6 +370,11 @@ export const Campaigns: React.FC<CampaignsProps> = ({
   const [csvError, setCsvError] = useState<string | null>(null);
   const [csvValidation, setCsvValidation] = useState<CsvValidation | null>(null);
   const [launchError, setLaunchError] = useState<string | null>(null);
+  const [launchSuccess, setLaunchSuccess] = useState<string | null>(null);
+  // Bumped by SSE handlers so React re-reads `activeCampaignRuns` after
+  // we mutate it imperatively. Avoids subtle stale-state bugs when a
+  // site:generated event fires before the next paint.
+  const [activeRunsTick, setActiveRunsTick] = useState(0);
   const [cityInput, setCityInput] = useState<string[]>(['Toronto, ON']);
   const [selectedProvinceTab, setSelectedProvinceTab] = useState<string>('All');
   const [citySearchQuery, setCitySearchQuery] = useState<string>('');
@@ -364,6 +396,22 @@ export const Campaigns: React.FC<CampaignsProps> = ({
     listCustomTemplates()
       .then(setCustomTemplates)
       .catch(() => setCustomTemplates([]));
+  }, []);
+
+  // Cross-tab open: the dashboard's "Open" button writes the campaign id
+  // to sessionStorage and switches tabs. We read it on mount and forward
+  // it to the unified Recent Campaigns section so it pops the detail
+  // modal and highlights the target row. Both one-shot keys are cleared
+  // after consumption so they never re-fire on subsequent renders.
+  const [pendingOpenId, setPendingOpenId] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const id = sessionStorage.getItem('lunao_pending_open_campaign');
+      if (id) {
+        setPendingOpenId(id);
+        sessionStorage.removeItem('lunao_pending_open_campaign');
+      }
+    } catch { /* ignore */ }
   }, []);
   const [campaignName, setCampaignName] = useState<string>('Toronto Barbers May Campaign');
   const [targetSmsCount, setTargetSmsCount] = useState<number>(10);
@@ -569,18 +617,115 @@ export const Campaigns: React.FC<CampaignsProps> = ({
   // Textarea reference for inserting tokens
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Campaign Filtering Tabs
-  const [filterTab, setFilterTab] = useState<'All' | 'Active' | 'Completed' | 'Queued' | 'Crashed'>('All');
-
   const [quotaError, setQuotaError] = useState<boolean>(false);
   const [missingSelectionError, setMissingSelectionError] = useState<boolean>(false);
   const [errorShakes, setErrorShakes] = useState<number>(0);
   const [latestCampId, setLatestCampId] = useState<string | null>(null);
 
-  // Campaign detail modal state
-  const [selectedSdCampaign, setSelectedSdCampaign] = useState<Campaign | null>(null);
+  // (Per-campaign detail modal state now lives inside the unified
+  // Recent Campaigns component — no need to hoist it here.)
   const [activeCampaignType, setActiveCampaignType] = useState<'sms' | 'site-deploy'>('site-deploy');
   const [sdActiveStep, setSdActiveStep] = useState<number>(1);
+  const [emailActiveStep, setEmailActiveStep] = useState<number>(1);
+  const [emailCsvFileName, setEmailCsvFileName] = useState<string | null>(null);
+  const [emailCsvLeads, setEmailCsvLeads] = useState<PipelineLead[]>([]);
+  const [emailCsvError, setEmailCsvError] = useState<string | null>(null);
+  const [emailCsvCopied, setEmailCsvCopied] = useState(false);
+  // Live result card after the SSE finishes: per-account + per-lead breakdown.
+  const [emailResults, setEmailResults] = useState<{ sent: number; failed: number; status: string; perAccount: any[]; perLead: any[]; sitesLive?: number } | null>(null);
+  const [emailLaunchError, setEmailLaunchError] = useState<string | null>(null);
+  const [emailLaunchSuccess, setEmailLaunchSuccess] = useState<string | null>(null);
+  const [emailInputMethod, setEmailInputMethod] = useState<'csv' | 'find'>('csv');
+  const [emailTargetVolume, setEmailTargetVolume] = useState<number>(10);
+  const [emailTargetCity, setEmailTargetCity] = useState<string>('');
+  const [emailDiscoveredLeads, setEmailDiscoveredLeads] = useState<any[]>([]);
+  const [emailIsFinding, setEmailIsFinding] = useState<boolean>(false);
+  const [emailHasFound, setEmailHasFound] = useState<boolean>(false);
+  const [emailSelectedTemplateId, setEmailSelectedTemplateId] = useState<string>('t1');
+  const [emailSubject, setEmailSubject] = useState<string>('Quick idea for {{business_name}}');
+  const [emailBody, setEmailBody] = useState<string>(`Hi {{business_name}} team,
+
+I noticed your shop in {{city}} doesn't have a modern website yet — most of your competitors already do, and they're capturing the customers who search Google before choosing where to book.
+
+I built a free, personalized mockup of what a premium site could look like for {{business_name}} (took me ~60 seconds). You can view it here:
+
+{{site_url}}
+
+No strings attached. If you like it, I'd love to chat for 5 minutes about how I help local businesses like yours get more bookings.
+
+Cheers,
+The Lunao Team`);
+  const [emailLiveSitesCount, setEmailLiveSitesCount] = useState(0);
+  // Live email counters: tick up the moment each SSE event arrives so the
+  // celebration card shows real-time progress during the run instead of
+  // frozen zeros waiting for the `complete` event. Mirrors the same
+  // pattern in src/components/EmailCampaignWizard.tsx.
+  const [emailLiveSentCount, setEmailLiveSentCount] = useState(0);
+  const [emailLiveFailedCount, setEmailLiveFailedCount] = useState(0);
+  // Stable ref to the latest active run for this campaign. We use a ref
+  // instead of reading `activeCampaignRuns.find(...)` inside the SSE
+  // callback because the callback is captured at render time and would
+  // otherwise see a stale `activeCampaignRuns` array — meaning `cur.done`
+  // never increments past the value at the moment the SSE was opened,
+  // and the top progress bar appears frozen at 0% even while sends
+  // complete. The ref is updated on every render so the callback always
+  // sees the freshest run state.
+  const activeRunRef = useRef<ActiveCampaignRun | undefined>(undefined);
+  const [emailIsLaunching, setEmailIsLaunching] = useState<boolean>(false);
+  const [emailLaunchProgress, setEmailLaunchProgress] = useState<number>(0);
+  const [emailLaunchMessage, setEmailLaunchMessage] = useState<string>('');
+  const [emailCampaignCreated, setEmailCampaignCreated] = useState<boolean>(false);
+  // Real backend campaign id — set once `createEmailCampaign` returns.
+  // Used by the Stop button on the celebration card so we can hit
+  // `POST /api/email-campaigns/:id/cancel`. The local optimistic id
+  // (`em_<timestamp>`) used during launch is replaced the moment the
+  // server returns its real id.
+  const [emailBackendCampaignId, setEmailBackendCampaignId] = useState<string | null>(null);
+  // Keep the ref synced with the latest active run for the email campaign
+  // currently in flight, keyed by `emailBackendCampaignId` (the server's
+  // real id). This way the SSE callback always sees the freshest `done`
+  // count when it bumps the Active Campaigns card.
+  useEffect(() => {
+    const id = emailBackendCampaignId;
+    if (!id) { activeRunRef.current = undefined; return; }
+    const found = activeCampaignRuns.find((r) => r.id === id);
+    if (found) activeRunRef.current = found;
+  }, [activeCampaignRuns, emailBackendCampaignId]);
+  // Stop-campaign state — surfaces a "Stopping..." spinner on the Stop
+  // button while the cancel request is in flight. The actual SSE
+  // `cancelled` event handler at the top of this file marks the row as
+  // Crashed and updates the Active card too.
+
+  // Apply "Edit outreach" payload from the parent — pre-fills the email
+  // sub-wizard with the source campaign's subject/body, then jumps to
+  // step 4 so the user lands on the message editor with one click.
+  useEffect(() => {
+    if (initialEmailSubject) setEmailSubject(initialEmailSubject);
+    if (initialEmailBody) setEmailBody(initialEmailBody);
+    if (initialEmailSubject || initialEmailBody) {
+      setActiveCampaignType('email');
+      setEmailActiveStep(4);
+    }
+  }, [initialEmailNonce, initialEmailSubject, initialEmailBody]);
+
+  // Email account / token management
+  const [emailAccounts, setEmailAccounts] = useState<any[]>([]);
+  const [emailAccountsLoading, setEmailAccountsLoading] = useState<boolean>(false);
+  const [selectedEmailAccountId, setSelectedEmailAccountId] = useState<string>('');
+  // Multi-account selection (round-robin across these for the campaign).
+  const [selectedEmailAccountIds, setSelectedEmailAccountIds] = useState<string[]>([]);
+  const [emailAccountHealth, setEmailAccountHealth] = useState<Record<string, any>>({});
+  // Live token-probe state. When the user tries to leave step 4 we hit
+  // /api/email-accounts/probe-all; if any account's refresh_token is dead
+  // we block the transition and surface `expiredEmailAccounts` here so a
+  // prominent red error card can render with a one-click "Reconnect"
+  // action.
+  const [expiredEmailAccounts, setExpiredEmailAccounts] = useState<any[]>([]);
+  const [probingTokens, setProbingTokens] = useState<boolean>(false);
+  // Refs for the horizontal stepper so the auto-scroll lands on the
+  // current step even when the bar overflows on narrow screens.
+  const emailStepRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+  const emailStepTrackRef = useRef<HTMLDivElement | null>(null);
   const [sdSelectedTemplateId, setSdSelectedTemplateId] = useState<string>('t1');
   const [sdCsvFileName, setSdCsvFileName] = useState<string | null>(null);
   const [sdIsCsvParsing, setSdIsCsvParsing] = useState<boolean>(false);
@@ -589,6 +734,7 @@ export const Campaigns: React.FC<CampaignsProps> = ({
   const [sdCsvValidation, setSdCsvValidation] = useState<CsvValidation | null>(null);
   const [sdCsvError, setSdCsvError] = useState<string | null>(null);
   const [sdLaunchError, setSdLaunchError] = useState<string | null>(null);
+  const [sdLaunchSuccess, setSdLaunchSuccess] = useState<string | null>(null);
   const [sdIsLaunching, setSdIsLaunching] = useState<boolean>(false);
   const [sdLaunchProgress, setSdLaunchProgress] = useState<number>(0);
   const [sdLaunchMessage, setSdLaunchMessage] = useState<string>('');
@@ -616,6 +762,20 @@ export const Campaigns: React.FC<CampaignsProps> = ({
     }
   }, [sdActiveStep]);
 
+  // Auto-scroll the Email wizard stepper so the active step is always
+  // centered. Without this, on narrow screens the user can only see the
+  // first 2–3 steps and has no idea step 5 ("Review & Launch") exists.
+  React.useEffect(() => {
+    if (activeCampaignType !== 'email') return;
+    const activeElem = emailStepRefs.current[emailActiveStep];
+    const trackElem = document.getElementById('wizard-steps-horizontal-track');
+    if (!activeElem || !trackElem) return;
+    const trackRect = trackElem.getBoundingClientRect();
+    const elemRect = activeElem.getBoundingClientRect();
+    const offset = (elemRect.left - trackRect.left) + trackElem.scrollLeft - (trackRect.width / 2) + (elemRect.width / 2);
+    trackElem.scrollTo({ left: Math.max(0, offset), behavior: 'smooth' });
+  }, [emailActiveStep, activeCampaignType]);
+
   // Persist Site Deploy results to localStorage keyed by campaign id
   React.useEffect(() => {
     if (sdSiteDeployResults.length > 0 && sdCampaignId) {
@@ -627,23 +787,136 @@ export const Campaigns: React.FC<CampaignsProps> = ({
     }
   }, [sdSiteDeployResults, sdCampaignId]);
 
-  const filteredCampaigns = campaigns.filter(c => {
-    if (filterTab === 'All') return true;
-    
-    // Status visual overrides
-    const isQueued = isWaitingForLast(c.id);
-    
-    if (filterTab === 'Queued') return isQueued;
-    if (filterTab === 'Active') return c.status === 'Active' && !isQueued;
-    
-    return c.status === filterTab;
-  });
+  // Reusable Gmail OAuth opener. Opens the consent screen in a popup,
+  // polls for it to close, then refreshes the connected-accounts list
+  // (which now upserts the existing row instead of duplicating it).
+  const startGmailConnect = React.useCallback(async () => {
+    playSoftTap();
+    const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
+    const res = await fetch(`/api/email-accounts/oauth/url?provider=gmail&ownerKey=${encodeURIComponent(ownerKey)}`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      playElegantError();
+      setEmailCsvError(data.error || 'Could not start Gmail connect');
+      return;
+    }
+    const data = await res.json();
+    const popup = window.open(data.url, 'gmail_oauth', 'width=520,height=640');
+    if (!popup) {
+      window.location.href = data.url;
+      return;
+    }
+    const poll = setInterval(async () => {
+      if (popup.closed) {
+        clearInterval(poll);
+        const ownerKey2 = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
+        try {
+          const list = await listEmailAccounts(ownerKey2);
+          // Dedupe by (provider, email) to defend against any stale rows.
+          const seen = new Set<string>();
+          const deduped = list.filter((acc: any) => {
+            const key = `${acc.provider}::${(acc.email || '').toLowerCase()}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          setEmailAccounts(deduped);
+          const healthMap: Record<string, any> = {};
+          deduped.forEach((acc: any) => { healthMap[acc.id] = acc.health || acc; });
+          setEmailAccountHealth(healthMap);
+          if (deduped.length > 0 && !selectedEmailAccountId) setSelectedEmailAccountId(deduped[0].id);
+          // Clear the dead-token error card — the user just reconnected.
+          setExpiredEmailAccounts([]);
+          // Ping every Dashboard/EmailsTodayLog listener so they re-bind
+          // their polling to the current ownerKey (in case the user was
+          // on a different ownerKey when this OAuth flow started).
+          try { window.dispatchEvent(new Event('lunao_owner_key_changed')); } catch { /* ignore */ }
+          playVictoryCelebration();
+        } catch {}
+      }
+    }, 1000);
+  }, [selectedEmailAccountId]);
 
-  const isWaitingForLast = (campId: string) => {
-    const idx = campaigns.findIndex(c => c.id === campId);
-    if (idx === -1) return false;
-    return campaigns.slice(idx + 1).some(c => c.status === 'Active');
-  };
+  // Refresh the picker list + probe every connected account's refresh
+  // token. Called automatically the moment the wizard enters Step 4 so
+  // dead tokens surface BEFORE the user tries to advance.
+  const probeAndRefreshAccounts = React.useCallback(async () => {
+    const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
+    setProbingTokens(true);
+    setEmailAccountsLoading(true);
+    try {
+      const list = await listEmailAccounts(ownerKey);
+      const seen = new Set<string>();
+      const deduped = list.filter((acc: any) => {
+        const key = `${acc.provider}::${(acc.email || '').toLowerCase()}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      setEmailAccounts(deduped);
+      if (deduped.length > 0 && !selectedEmailAccountId) setSelectedEmailAccountId(deduped[0].id);
+      const healthMap: Record<string, any> = {};
+      deduped.forEach((acc: any) => { healthMap[acc.id] = acc.health || acc; });
+      setEmailAccountHealth(healthMap);
+
+      if (deduped.length === 0) {
+        setExpiredEmailAccounts([]);
+        return;
+      }
+      // Probe each token — cheap (one OAuth roundtrip per account).
+      const probeResults = await probeAllEmailAccounts(ownerKey);
+      const dead = probeResults.filter((r: any) => !r.ok);
+      setExpiredEmailAccounts(dead);
+    } catch (err) {
+      // Soft-fail: keep the existing list, don't surface a scary error
+      // just because the probe network call failed.
+    } finally {
+      setEmailAccountsLoading(false);
+      setProbingTokens(false);
+    }
+  }, [selectedEmailAccountId]);
+
+  // Auto-probe the moment the user lands on Step 4 ("Email Content").
+  // Surfaces dead tokens BEFORE they try to click Next, so they get a
+  // chance to reconnect instead of being blocked at the gate.
+  React.useEffect(() => {
+    if (emailActiveStep === 4) {
+      probeAndRefreshAccounts();
+    }
+  }, [emailActiveStep, probeAndRefreshAccounts]);
+
+  // v3: Real-time health polling while the user is on the email-wizard
+  // steps. Refreshes battery % / Gmail-health every 5 seconds so the picker
+  // mirrors what the server sees — including any sends the previous campaign
+  // has just stacked onto each account. Skips the polling work entirely
+  // outside the email wizard to keep the dashboard cheap.
+  React.useEffect(() => {
+    if (emailActiveStep < 4 || emailActiveStep > 5) return;
+    const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const list = await listEmailAccounts(ownerKey);
+        if (cancelled) return;
+        setEmailAccounts((prev) => {
+          if (!prev || prev.length === 0) return list;
+          // Merge by id so we never lose optimistic local toggles that haven't
+          // been reflected by the server yet (defensive — the toggle endpoint
+          // already returns the updated row, this just covers background polls).
+          const map = new Map(list.map((a) => [a.id, a]));
+          return prev.map((p) => map.get(p.id) || p);
+        });
+      } catch {
+        // Network blip — keep the previous snapshot.
+      }
+    };
+    tick();
+    const id = setInterval(tick, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [emailActiveStep]);
 
   // Handle Finding simulation
   const handleFindBusinesses = () => {
@@ -756,10 +1029,12 @@ export const Campaigns: React.FC<CampaignsProps> = ({
 
   // Launch a CSV campaign. UX: ~2.5s loading → success page, while the real
   // compile → Cloudflare deploy → SMS pipeline runs in the BACKGROUND and
-  // updates the campaign row (Active → Completed) in Recent Campaigns. Once
-  // launched it runs to completion and cannot be cancelled mid-flight.
+  // updates the campaign row (Active → Completed) in Recent Campaigns. The
+  // Active Campaigns card (rendered below the wizard) shows live progress
+  // and exposes a Stop button that soft-cancels the in-flight pipeline.
   const runRealCsvPipeline = () => {
     setLaunchError(null);
+    setLaunchSuccess(null);
 
     const totalLeads = csvLeads.length;
     if (totalLeads === 0) {
@@ -796,10 +1071,11 @@ export const Campaigns: React.FC<CampaignsProps> = ({
     // Register the campaign immediately as Active (shows in Recent Campaigns).
     const newCampId = 'c' + Date.now();
     setLatestCampId(newCampId);
+    const smsName = campaignName || `${selectedNiche} CSV Outreach`;
     setCampaigns((prev) => [
       {
         id: newCampId,
-        name: campaignName || `${selectedNiche} CSV Outreach`,
+        name: smsName,
         niche: selectedNiche,
         leadsFound: totalLeads,
         sites: 0,
@@ -811,6 +1087,11 @@ export const Campaigns: React.FC<CampaignsProps> = ({
       },
       ...prev,
     ]);
+
+    // Insert an Active Campaigns card row immediately so the user can
+    // stop the run without waiting for the simulated launch animation.
+    // The SSE stream below will tick `done` as sites compile and SMS go out.
+    upsertActiveRun?.({ id: newCampId, kind: 'site-deploy', name: smsName, niche: selectedNiche, total: totalLeads, done: 0, status: 'starting', startedAt: Date.now() });
 
     // Short, fixed loading animation (~2.5s) then success — the actual work
     // continues in the background regardless of this screen.
@@ -834,6 +1115,7 @@ export const Campaigns: React.FC<CampaignsProps> = ({
   // Launch a sites-only CSV campaign (1 credit/lead, no SMS).
   const runSiteDeployCsvPipeline = () => {
     setSdLaunchError(null);
+    setSdLaunchSuccess(null);
     const totalLeads = sdCsvLeads.length;
     if (totalLeads === 0) { setSdLaunchError('Upload a CSV first.'); return; }
     if (!sdCsvValidation?.ok) { setSdLaunchError('Your CSV is not valid yet.'); return; }
@@ -842,12 +1124,20 @@ export const Campaigns: React.FC<CampaignsProps> = ({
     setUserCredits((prev) => { const next = Math.max(0, prev - requiredCredits); localStorage.setItem('lunao_user_credits', next.toString()); return next; });
     const newCampId = 'sd' + Date.now();
     setSdCampaignId(newCampId);
-    setCampaigns((prev) => [{ id: newCampId, name: sdCampaignName || `${selectedNiche} Site Deploy`, niche: selectedNiche, leadsFound: totalLeads, sites: 0, smsSent: 0, claimed: 0, status: 'Active' as const, createdAt: new Date().toISOString().split('T')[0], templateId: sdSelectedTemplateId, type: 'site-deploy' as const }, ...prev]);
+    const sdName = sdCampaignName || `${selectedNiche} Site Deploy`;
+    setCampaigns((prev) => [{ id: newCampId, name: sdName, niche: selectedNiche, leadsFound: totalLeads, sites: 0, smsSent: 0, claimed: 0, status: 'Active' as const, createdAt: new Date().toISOString().split('T')[0], templateId: sdSelectedTemplateId, type: 'site-deploy' as const }, ...prev]);
     setSdIsLaunching(true); setSdLaunchProgress(0); setSdLaunchMessage('Provisioning site deployment...'); playLaunchSwell();
+    // Insert an Active Campaigns card row immediately so the user can
+    // stop the run without having to wait for the simulated launch
+    // animation. The SSE stream below will tick `done` as Cloudflare
+    // publishes each site.
+    upsertActiveRun?.({ id: newCampId, kind: 'site-deploy', name: sdName, niche: selectedNiche, total: totalLeads, done: 0, status: 'starting', startedAt: Date.now() });
+    // Optimistic inline progress (purely cosmetic — the server drives the
+    // real progress via SSE). Kept so the wizard bar still animates while
+    // waiting for the first SSE event.
     setTimeout(() => { setSdLaunchProgress(40); setSdLaunchMessage('Compiling personalized websites...'); }, 500);
     setTimeout(() => { setSdLaunchProgress(75); setSdLaunchMessage('Publishing to the Cloudflare edge...'); playSoftTap(); }, 1200);
     setTimeout(() => { setSdLaunchProgress(100); setSdLaunchMessage('Sites are live!'); }, 2000);
-    setTimeout(() => { setSdIsLaunching(false); setSdCampaignCreated(true); playVictoryCelebration(); }, 2200);
     const ownerKey = localStorage.getItem('lunao_owner_key') || `dash-${userPlan.replace(/\s+/g, '-')}`;
     if (!localStorage.getItem('lunao_owner_key')) localStorage.setItem('lunao_owner_key', ownerKey);
     const backendLeads = sdCsvLeads.map(l => ({
@@ -855,8 +1145,39 @@ export const Campaigns: React.FC<CampaignsProps> = ({
       city: l.city,
       phone: l.phone_number,
     }));
-    runSiteDeployCampaign({ businesses: backendLeads, niche: selectedNiche, templateId: sdSelectedTemplateId, name: sdCampaignName || `${selectedNiche} Site Deploy`, ownerKey, plan: userPlan },
-      (e) => { if (e.type === 'site:generated') { setCampaigns((prev) => prev.map((c) => c.id === newCampId ? { ...c, sites: (c.sites || 0) + 1 } : c)); } }
+    runSiteDeployCampaign({ businesses: backendLeads, niche: selectedNiche, templateId: sdSelectedTemplateId, name: sdName, ownerKey, plan: userPlan },
+      (e) => {
+        if (e.type === 'start') {
+          // First SSE event from the server = the run was accepted.
+          // Show the inline success banner + Active card immediately,
+          // independent of the simulated progress animation above.
+          setSdIsLaunching(false);
+          setSdCampaignCreated(true);
+          setSdLaunchSuccess(`Site Deploy launched! ${e.total} site${e.total === 1 ? '' : 's'} queued on the edge.`);
+          playVictoryCelebration();
+          updateActiveRun?.(newCampId, { status: 'running' });
+        } else if (e.type === 'site:generated') {
+          setCampaigns((prev) => prev.map((c) => c.id === newCampId ? { ...c, sites: (c.sites || 0) + 1 } : c));
+          // Tick the Active card's `done` counter. Using `e.index`
+          // directly avoids the stale-closure bug on `activeCampaignRuns`.
+          if (typeof e.index === 'number') {
+            updateActiveRun?.(newCampId, { done: Math.max(e.index, 1), status: 'running' });
+          } else {
+            setActiveRunsTick((t) => t + 1); // dummy bump so React re-renders if needed
+          }
+        } else if (e.type === 'cancelled') {
+          // Soft cancel — flip Active card to cancelled + mark Recent row.
+          updateActiveRun?.(newCampId, { status: 'cancelled' });
+          setCampaigns((prev) => prev.map((c) => c.id === newCampId ? { ...c, status: 'Crashed' as const, errorReason: 'Stopped by user' } : c));
+          // Refund credits for un-processed leads.
+          const unprocessed = Math.max(0, totalLeads - (e.processed || 0));
+          if (unprocessed > 0) {
+            setUserCredits((prev) => { const next = prev + unprocessed; localStorage.setItem('lunao_user_credits', next.toString()); return next; });
+          }
+          // Remove the row after a short delay so the user sees the cancelled state.
+          setTimeout(() => removeActiveRun?.(newCampId), 1500);
+        }
+      }
     ).then(({ results }) => {
       const ok = results.filter((r) => r.siteStatus === 'generated');
       const failedCount = Math.max(0, totalLeads - ok.length);
@@ -864,7 +1185,12 @@ export const Campaigns: React.FC<CampaignsProps> = ({
       setCampaigns((prev) => prev.map((c) => c.id === newCampId ? { ...c, sites: ok.length, status: 'Completed' as const } : c));
       setSdSiteDeployResults(results);
       refreshServerCredits(ownerKey, userPlan);
+      // Mark Active run completed and drop it after a brief pause.
+      updateActiveRun?.(newCampId, { done: ok.length, status: 'completed' });
+      setTimeout(() => removeActiveRun?.(newCampId), 1500);
     }).catch((err: any) => {
+      updateActiveRun?.(newCampId, { status: 'cancelled' });
+      setTimeout(() => removeActiveRun?.(newCampId), 1500);
       if (err?.status === 402) {
         setUserCredits((prev) => { const next = err.available ?? (prev + totalLeads); localStorage.setItem('lunao_user_credits', String(next)); return next; });
         setSdLaunchError(`Server says you have ${err.available ?? 0} credits but need ${totalLeads}.`); setCampaigns((prev) => prev.map((c) => c.id === newCampId ? { ...c, status: 'Crashed' as const, errorReason: 'Insufficient server credits' } : c));
@@ -895,11 +1221,35 @@ export const Campaigns: React.FC<CampaignsProps> = ({
           plan: userPlan,
         },
         (e) => {
-          if (e.type === 'site:generated') {
+          if (e.type === 'start') {
+            // First SSE event from server = run accepted. Show inline success
+            // banner + flip Active card to running.
+            setLaunchSuccess(`Outreach campaign launched! ${e.total} lead${e.total === 1 ? '' : 's'} queued.`);
+            updateActiveRun?.(campId, { status: 'running' });
+          } else if (e.type === 'site:generated') {
             compiled += 1;
             setCampaigns((prev) =>
               prev.map((c) => (c.id === campId ? { ...c, sites: compiled } : c)),
             );
+            // Tick the Active card's `done` counter. Using `e.index`
+            // directly avoids the stale-closure bug on `activeCampaignRuns`.
+            if (typeof e.index === 'number') {
+              updateActiveRun?.(campId, { done: Math.max(e.index, 1), status: 'running' });
+            }
+          } else if (e.type === 'cancelled') {
+            updateActiveRun?.(campId, { status: 'cancelled' });
+            setCampaigns((prev) =>
+              prev.map((c) => c.id === campId ? { ...c, status: 'Crashed' as const, errorReason: 'Stopped by user' } : c),
+            );
+            const unprocessed = Math.max(0, totalLeads - (e.processed || 0));
+            if (unprocessed > 0) {
+              setUserCredits((prev) => {
+                const next = prev + unprocessed * COST_PER_LEAD;
+                localStorage.setItem('lunao_user_credits', next.toString());
+                return next;
+              });
+            }
+            setTimeout(() => removeActiveRun?.(campId), 1500);
           }
         },
       );
@@ -908,9 +1258,16 @@ export const Campaigns: React.FC<CampaignsProps> = ({
       // Pull it back so the dashboard never drifts from the ledger.
       refreshServerCredits(ownerKey, userPlan);
       void campaignId; // (kept for future "View campaign details" link)
+      // Active run done — flip status + remove row after a short pause so
+      // the user sees the "Completed" state before the row disappears.
+      const okCount = (results || []).filter((r) => r.siteStatus === 'generated').length;
+      updateActiveRun?.(campId, { done: okCount, status: 'completed' });
+      setTimeout(() => removeActiveRun?.(campId), 1500);
     } catch (err: any) {
       // 402 means the server (truth) says the user is broke. Roll back the
       // optimistic local debit and surface a precise message.
+      updateActiveRun?.(campId, { status: 'cancelled' });
+      setTimeout(() => removeActiveRun?.(campId), 1500);
       if (err?.status === 402) {
         setUserCredits((prev) => {
           const next = err.available ?? (prev + totalLeads * COST_PER_LEAD);
@@ -1087,22 +1444,6 @@ export const Campaigns: React.FC<CampaignsProps> = ({
     if (firstForNiche) setSdSelectedTemplateId(firstForNiche.id);
   }, [selectedNiche]);
 
-  // Status badge style helper
-  const getStatusStyle = (status: Campaign['status']) => {
-    switch (status) {
-      case 'Active':
-        return 'bg-success-soft text-success border border-success/20';
-      case 'Completed':
-        return 'bg-border-light text-ink-secondary border border-border-main/50';
-      case 'Queued':
-        return 'bg-amber-500/10 text-amber-800 border border-amber-500/15';
-      case 'Crashed':
-        return 'bg-danger-soft text-danger border border-danger/20';
-      default:
-        return 'bg-surface text-ink-secondary';
-    }
-  };
-
   return (
     <div id="campaigns-tab-container-root" className="space-y-8 animate-fade-in font-sans relative">
       
@@ -1161,6 +1502,16 @@ export const Campaigns: React.FC<CampaignsProps> = ({
                     activeCampaignType === 'site-deploy' ? 'bg-accent/15 text-accent' : 'bg-surface text-ink-tertiary'
                   }`}>1 credit/lead</span>
                 </button>
+                {/* Email Campaign */}
+                <button onClick={() => { playSoftBubble(); setActiveCampaignType('email'); }}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold font-sans transition-all ${
+                    activeCampaignType === 'email' ? 'bg-accent-soft text-accent shadow-sm border border-accent/20' : 'text-ink-secondary hover:text-ink hover:bg-off-white'
+                  }`}>
+                  <Mail className="w-3.5 h-3.5" /> Email
+                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                    activeCampaignType === 'email' ? 'bg-accent/15 text-accent' : 'bg-surface text-ink-tertiary'
+                  }`}>2 credits/lead</span>
+                </button>
                 {/* SMS Campaign — locked */}
                 <button disabled onClick={() => {}}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold font-sans transition-all opacity-60 cursor-not-allowed">
@@ -1170,36 +1521,55 @@ export const Campaigns: React.FC<CampaignsProps> = ({
               </div>
             </div>
           </div>
-          {/* Step Indicator Panel */}
-          <div id="wizard-steps-horizontal-track" className="px-6 py-5 bg-white flex flex-nowrap items-center overflow-x-auto scrollbar-none gap-4 md:justify-between">
+          {/* Step Indicator Panel — horizontally scrollable so users can
+              always swipe to see every step, even on narrow screens.
+              `min-w-max` per step group prevents the names from being
+              truncated; `scroll-smooth` + `snap-x` makes the auto-scroll
+              land cleanly on the active step. */}
+          <div id="wizard-steps-horizontal-track" className="px-6 py-5 bg-white flex flex-nowrap items-stretch overflow-x-auto scrollbar-thin gap-3 md:gap-4 snap-x snap-mandatory scroll-smooth">
             {activeCampaignType === 'site-deploy' ? (
               [ { step: 1, name: 'Select Niche' }, { step: 2, name: 'Input Businesses' }, { step: 3, name: 'Choose Template' }, { step: 4, name: 'Deploy Preview' } ].map((item) => (
                 <React.Fragment key={item.step}>
-                  <div ref={el => { sdStepRefs.current[item.step] = el; }} className="flex items-center gap-3 shrink-0">
+                  <div ref={el => { sdStepRefs.current[item.step] = el; }} className="flex items-center gap-3 shrink-0 snap-start min-w-[140px]">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm ${sdActiveStep === item.step ? 'bg-accent text-white ring-4 ring-accent-soft' : sdActiveStep > item.step ? 'bg-success text-white' : 'bg-surface text-ink-secondary border border-border-main'}`}>
                       {sdActiveStep > item.step ? <Check className="w-4 h-4" /> : item.step}
                     </div>
                     <div className="flex flex-col">
                       <span className={`text-[11px] uppercase tracking-wider font-semibold ${sdActiveStep === item.step ? 'text-accent' : 'text-ink-secondary'}`}>Step 0{item.step}</span>
-                      <span className={`text-xs font-medium leading-tight ${sdActiveStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
+                      <span className={`text-xs font-medium leading-tight whitespace-nowrap ${sdActiveStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
                     </div>
                   </div>
-                  {item.step < 4 && <div className="hidden md:block h-[1px] bg-border-light flex-1 mx-4 min-w-[20px]"></div>}
+                  {item.step < 4 && <div className="hidden md:block h-[1px] bg-border-light flex-1 min-w-[20px] mx-2 self-center"></div>}
+                </React.Fragment>
+              ))
+            ) : activeCampaignType === 'email' ? (
+              [ { step: 1, name: 'Select Niche' }, { step: 2, name: 'Upload Leads' }, { step: 3, name: 'Choose Template' }, { step: 4, name: 'Email Content' }, { step: 5, name: 'Review & Launch' } ].map((item) => (
+                <React.Fragment key={item.step}>
+                  <div ref={el => { emailStepRefs.current[item.step] = el; }} className="flex items-center gap-3 shrink-0 snap-start min-w-[140px]">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm ${emailActiveStep === item.step ? 'bg-accent text-white ring-4 ring-accent-soft' : emailActiveStep > item.step ? 'bg-success text-white' : 'bg-surface text-ink-secondary border border-border-main'}`}>
+                      {emailActiveStep > item.step ? <Check className="w-4 h-4" /> : item.step}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className={`text-[11px] uppercase tracking-wider font-semibold ${emailActiveStep === item.step ? 'text-accent' : 'text-ink-secondary'}`}>Step 0{item.step}</span>
+                      <span className={`text-xs font-medium leading-tight whitespace-nowrap ${emailActiveStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
+                    </div>
+                  </div>
+                  {item.step < 5 && <div className="hidden md:block h-[1px] bg-border-light flex-1 min-w-[16px] mx-2 self-center"></div>}
                 </React.Fragment>
               ))
             ) : (
               [ { step: 1, name: 'Select Niche' }, { step: 2, name: 'Input Businesses' }, { step: 3, name: 'Choose Template' }, { step: 4, name: 'SMS Messaging' }, { step: 5, name: 'Launch Outreach' } ].map((item) => (
                 <React.Fragment key={item.step}>
-                  <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex items-center gap-3 shrink-0 snap-start min-w-[140px]">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm ${activeStep === item.step ? 'bg-accent text-white ring-4 ring-accent-soft' : activeStep > item.step ? 'bg-success text-white' : 'bg-surface text-ink-secondary border border-border-main'}`}>
                       {activeStep > item.step ? <Check className="w-4 h-4" /> : item.step}
                     </div>
                     <div className="flex flex-col">
                       <span className={`text-[11px] uppercase tracking-wider font-semibold ${activeStep === item.step ? 'text-accent' : 'text-ink-secondary'}`}>Step 0{item.step}</span>
-                      <span className={`text-xs font-medium leading-tight ${activeStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
+                      <span className={`text-xs font-medium leading-tight whitespace-nowrap ${activeStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
                     </div>
                   </div>
-                  {item.step < 5 && <div className="hidden md:block h-[1px] bg-border-light flex-1 mx-4 min-w-[20px]"></div>}
+                  {item.step < 5 && <div className="hidden md:block h-[1px] bg-border-light flex-1 min-w-[20px] mx-2 self-center"></div>}
                 </React.Fragment>
               ))
             )}
@@ -1519,12 +1889,1547 @@ export const Campaigns: React.FC<CampaignsProps> = ({
                       </button>
                     )}
                   </div>
-                  {sdLaunchError && (
-                    <div className="mt-4 p-3 bg-danger/5 border border-danger/20 rounded-xl">
-                      <p className="text-xs text-danger font-semibold">{sdLaunchError}</p>
+                  {/* Inline success banner — fires the moment the server accepts the run. */}
+                  {sdLaunchSuccess && !sdLaunchError && (
+                    <div className="mt-4 p-4 bg-success-soft border border-success/30 rounded-xl flex items-start gap-3 animate-fade-in">
+                      <CheckCircle2 className="w-5 h-5 text-success shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-success">Site deploy launched successfully!</p>
+                        <p className="text-xs text-ink-secondary mt-0.5">{sdLaunchSuccess}</p>
+                      </div>
+                      <button type="button" aria-label="Dismiss" onClick={() => setSdLaunchSuccess(null)} className="text-ink-tertiary hover:text-ink transition-colors cursor-pointer">
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
                   )}
+                  {sdLaunchError && (
+                    <div className="mt-4 p-4 bg-danger/5 border border-danger/30 rounded-xl flex items-start gap-3 animate-fade-in">
+                      <AlertCircle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-danger">Site deploy failed to launch</p>
+                        <p className="text-xs text-ink-secondary mt-0.5">{sdLaunchError}</p>
+                      </div>
+                      <button type="button" aria-label="Dismiss" onClick={() => setSdLaunchError(null)} className="text-ink-tertiary hover:text-ink transition-colors cursor-pointer">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                  {/* Active Campaigns progress card — sits below the wizard buttons
+                      so the user can stop a run mid-flight without leaving the wizard. */}
+                  <ActiveCampaignsCard
+                    runs={activeCampaignRuns}
+                    onStop={async (id, kind) => {
+                      try {
+                        updateActiveRun?.(id, { status: 'cancelling' });
+                        if (kind === 'email') {
+                          await cancelEmailCampaign(id);
+                        } else {
+                          await cancelCampaign(id);
+                        }
+                        playCancelTone();
+                      } catch (e: any) {
+                        // Couldn't reach the cancel endpoint — flip back so the
+                        // user can retry. The stream will keep ticking.
+                        updateActiveRun?.(id, { status: 'running' });
+                        playElegantError();
+                        console.error('[campaigns] cancel failed:', e);
+                      }
+                    }}
+                  />
                 </>
+              )}
+            </>
+          ) : activeCampaignType === 'email' ? (
+            <>
+              {/* ============ EMAIL STEP 1: NICHE WITH EMOJIS ============ */}
+              {emailActiveStep === 1 && (
+                <div className="space-y-5 animate-fade-in">
+                  <div className="space-y-1">
+                    <h3 className="font-serif text-2xl text-ink">Select your niche</h3>
+                    <p className="text-sm text-ink-secondary">Choose the industry for your email campaign.</p>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {nicheList.map((niche) => (
+                      <button key={niche.id} type="button" onClick={() => { playSoftTap(); setSelectedNiche(niche.id); }} className={`p-4 rounded-xl border text-left transition-all group ${selectedNiche === niche.id ? 'bg-accent-soft border-accent ring-2 ring-accent/20' : 'bg-white border-border-main hover:border-accent/40 hover:bg-accent-soft/30'}`}>
+                        <div className="text-3xl mb-2">{niche.emoji}</div>
+                        <div className="text-sm font-semibold text-ink">{niche.label}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ============ EMAIL STEP 2: LEADS (CSV OR FIND) ============ */}
+              {emailActiveStep === 2 && (
+                <div className="space-y-5 animate-fade-in">
+                  <div className="space-y-1">
+                    <h3 className="font-serif text-2xl text-ink">Find your leads</h3>
+                    <p className="text-sm text-ink-secondary">Upload your own list or let our system find local business emails for you.</p>
+                  </div>
+
+                  {/* Method toggle */}
+                  <div className="flex items-center gap-1 p-1 bg-off-white border border-border-main rounded-xl w-fit">
+                    <button type="button" onClick={() => { playSoftTap(); setEmailInputMethod('csv'); setEmailCsvError(null); }} className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all ${emailInputMethod === 'csv' ? 'bg-white text-ink shadow-sm' : 'text-ink-secondary hover:text-ink'}`}>
+                      <Upload className="w-3.5 h-3.5 inline mr-1.5" />Upload CSV
+                    </button>
+                    <button type="button" onClick={() => { playSoftTap(); setEmailInputMethod('find'); setEmailCsvError(null); }} className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all ${emailInputMethod === 'find' ? 'bg-white text-ink shadow-sm' : 'text-ink-secondary hover:text-ink'}`}>
+                      <Globe className="w-3.5 h-3.5 inline mr-1.5" />Find Globally with Lunao
+                    </button>
+                  </div>
+
+                  {emailInputMethod === 'csv' && (
+                    <div className="space-y-3">
+                      {/* AI rebrand helper card */}
+                      <details className="group rounded-xl border border-border-light bg-gradient-to-br from-accent-soft/30 to-white overflow-hidden">
+                        <summary className="flex items-center justify-between px-4 py-2.5 cursor-pointer list-none select-none">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="w-3.5 h-3.5 text-accent" />
+                            <span className="text-[11px] font-semibold text-ink">Got messy data? Use AI to clean it</span>
+                            <span className="text-[10px] text-ink-tertiary font-normal">— paste this into ChatGPT or Claude</span>
+                          </div>
+                          <ChevronRight className="w-3.5 h-3.5 text-ink-tertiary transition-transform group-open:rotate-90" />
+                        </summary>
+                        <div className="px-4 pb-3 space-y-2">
+                          <p className="text-[10px] text-ink-secondary leading-relaxed">
+                            Drop your messy file into ChatGPT or Claude and paste this prompt. It will return a clean CSV with exactly the columns Lunao needs.
+                          </p>
+                          <div className="relative">
+                            <pre
+                              id="csv-rebrand-prompt"
+                              className="text-[10px] font-mono leading-relaxed bg-ink/5 border border-border-light rounded-lg p-2.5 overflow-x-auto whitespace-pre-wrap break-words max-h-32 overflow-y-auto"
+                            >{`Take this spreadsheet and turn it into a CSV. Keep only rows that have a real business name, email, phone number, and city. Clean each cell: strip extra spaces, fix email typos (missing dots or @), remove obviously fake entries (test, foo, bar, 123@example.com), and normalize phone numbers to 10 digits with no formatting. Output ONLY the CSV with this exact header row and nothing else — no explanation, no code blocks:
+
+business_name,email,phone_number,city
+
+Here is my data:
+[PASTE YOUR DATA OR UPLOAD YOUR FILE]`}</pre>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const text = (document.getElementById('csv-rebrand-prompt') as HTMLPreElement)?.innerText || '';
+                                try {
+                                  await navigator.clipboard.writeText(text);
+                                  playSoftTap();
+                                  setEmailCsvCopied(true);
+                                  setTimeout(() => setEmailCsvCopied(false), 1500);
+                                } catch {
+                                  playElegantError();
+                                }
+                              }}
+                              className="absolute top-1.5 right-1.5 flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-md bg-white border border-border-light hover:bg-accent-soft/40 transition-all"
+                            >
+                              {emailCsvCopied ? (
+                                <><Check className="w-3 h-3 text-green-600" />Copied</>
+                              ) : (
+                                <><Copy className="w-3 h-3" />Copy prompt</>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </details>
+
+                      {!emailCsvFileName ? (
+                        <label className="block cursor-pointer">
+                          <div className="border-2 border-dashed border-border-main rounded-xl p-8 text-center hover:border-accent/50 hover:bg-accent-soft/10 transition-all">
+                            <Upload className="w-8 h-8 mx-auto mb-3 text-ink-tertiary" />
+                            <p className="text-sm font-semibold text-ink">Drop your CSV file here</p>
+                            <p className="text-xs text-ink-secondary mt-1">or click to browse</p>
+                            <p className="text-[10px] text-ink-tertiary mt-3">Required columns: <span className="font-mono font-semibold">business_name</span>, <span className="font-mono font-semibold">email</span>, <span className="font-mono font-semibold">phone_number</span>, <span className="font-mono font-semibold">city</span></p>
+                          </div>
+                          <input
+                            type="file"
+                            accept=".csv"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              if (!file.name.toLowerCase().endsWith('.csv')) {
+                                playElegantError();
+                                setEmailCsvError('File must be a .csv file');
+                                return;
+                              }
+                              if (file.size > 10 * 1024 * 1024) {
+                                playElegantError();
+                                setEmailCsvError('CSV file is too large (max 10 MB)');
+                                return;
+                              }
+                              setEmailCsvFileName(file.name);
+                              setEmailCsvError(null);
+                              setEmailLaunchError(null);
+                              playLaunchSwell();
+                              try {
+                                const text = await file.text();
+                                // Strict header validation
+                                const firstLine = text.split(/\r?\n/)[0] || '';
+                                const headers = firstLine.split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+                                const required = ['business_name', 'email', 'phone_number', 'city'];
+                                const missing = required.filter(r => !headers.includes(r));
+                                if (missing.length > 0) {
+                                  playElegantError();
+                                  setEmailCsvFileName(null);
+                                  setEmailCsvError(`Missing required column(s): ${missing.join(', ')}. Please add these headers to your CSV and re-upload.`);
+                                  return;
+                                }
+                                // Validate email format on first 100 rows
+                                const lines = text.split(/\r?\n/).filter(l => l.trim());
+                                const sampleRows = lines.slice(1, 101);
+                                const emailIdx = headers.indexOf('email');
+                                const invalidEmails: string[] = [];
+                                sampleRows.forEach((row, i) => {
+                                  const cols = row.split(',').map(c => c.trim().replace(/^['"]|['"]$/g, ''));
+                                  const em = cols[emailIdx];
+                                  if (em && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+                                    invalidEmails.push(`Row ${i + 2}: "${em}"`);
+                                  }
+                                });
+                                if (invalidEmails.length > 5) {
+                                  playElegantError();
+                                  setEmailCsvFileName(null);
+                                  setEmailCsvError(`Found ${invalidEmails.length} invalid email addresses in first 100 rows. Please clean your CSV.`);
+                                  return;
+                                }
+                                const report = await validateCsvFile(file);
+                                if (report.ok && report.validCount > 0) {
+                                  playVictoryCelebration();
+                                  setEmailCsvLeads(report.leads);
+                                  setEmailCsvError(null);
+                                } else {
+                                  playElegantError();
+                                  setEmailCsvFileName(null);
+                                  setEmailCsvError(report.message || 'CSV validation failed. Please check column names and data formats.');
+                                }
+                              } catch (err: any) {
+                                playElegantError();
+                                setEmailCsvFileName(null);
+                                setEmailCsvError('Could not read the CSV file. Make sure it is a valid CSV.');
+                              }
+                            }}
+                          />
+                        </label>
+                      ) : (
+                        <div className="bg-success-soft border border-success/20 rounded-xl p-4 flex items-center gap-4">
+                          <CheckCircle className="w-5 h-5 text-success shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-ink truncate">{emailCsvFileName}</p>
+                            <p className="text-xs text-ink-secondary">{emailCsvLeads.length} valid leads loaded</p>
+                          </div>
+                          <button type="button" onClick={() => { setEmailCsvFileName(null); setEmailCsvLeads([]); setEmailCsvError(null); playSoftTap(); }} className="text-xs font-semibold text-ink-secondary hover:text-danger">Replace</button>
+                        </div>
+                      )}
+
+                      {emailCsvError && (
+                        <div className="bg-danger/5 border border-danger/20 rounded-xl p-4 flex items-start gap-3 animate-fade-in">
+                          <AlertCircle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-danger uppercase tracking-wider">CSV Error</p>
+                            <p className="text-xs text-danger mt-1 leading-relaxed">{emailCsvError}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {emailInputMethod === 'find' && (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-ink-secondary mb-1">Niche</label>
+                          <div className="px-3 py-2 border border-border-main rounded-lg text-sm bg-off-white text-ink-secondary">
+                            {nicheList.find(n => n.id === selectedNiche)?.label || <span className="italic">— pick a niche in step 1 —</span>}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-ink-secondary mb-1">
+                            City <span className="text-danger">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={emailTargetCity}
+                            onChange={(e) => setEmailTargetCity(e.target.value)}
+                            placeholder="e.g. Austin, TX"
+                            className="w-full px-3 py-2 border border-border-main rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-accent/30"
+                          />
+                          <p className="text-[10px] text-ink-tertiary mt-1">Where do you want to find {selectedNiche || 'businesses'}?</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-ink-secondary mb-1">Number of emails to send</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={500}
+                            value={emailTargetVolume}
+                            onChange={(e) => setEmailTargetVolume(Math.max(1, Math.min(500, parseInt(e.target.value) || 1)))}
+                            className="w-full px-3 py-2 border border-border-main rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-accent/30"
+                          />
+                          <p className="text-[10px] text-ink-tertiary mt-1">
+                            We'll find {emailTargetVolume} {selectedNiche || 'businesses'} in <span className="font-semibold text-ink-secondary">{emailTargetCity || 'your city'}</span> with verified emails.
+                          </p>
+                        </div>
+                      </div>
+
+                      {!emailHasFound ? (
+                        <button
+                          type="button"
+                          disabled={emailIsFinding || !selectedNiche || !emailTargetCity.trim()}
+                          onClick={async () => {
+                            setEmailIsFinding(true);
+                            playLaunchSwell();
+                            // Simulate discovery - in production this hits the Google Maps discovery API
+                            await new Promise(r => setTimeout(r, 1500));
+                            const mock = Array.from({ length: emailTargetVolume }).map((_, i) => ({
+                              business_name: `${selectedNiche} Business ${i + 1}`,
+                              email: `owner${i + 1}@example.com`,
+                              city: emailTargetCity.trim(),
+                              phone_number: `(000) 555-${String(1000 + i).padStart(4, '0')}`,
+                            }));
+                            setEmailDiscoveredLeads(mock);
+                            setEmailCsvLeads(mock as any);
+                            setEmailHasFound(true);
+                            setEmailIsFinding(false);
+                            playVictoryCelebration();
+                          }}
+                          className="w-full px-5 py-3 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2"
+                        >
+                          {emailIsFinding
+                            ? <><Loader2 className="w-4 h-4 animate-spin" />Scanning {emailTargetCity} for {selectedNiche}…</>
+                            : <><Globe className="w-4 h-4" />Find {emailTargetVolume} {selectedNiche || 'Businesses'} in {emailTargetCity || 'City'}</>}
+                        </button>
+                      ) : (
+                        <div className="bg-success-soft border border-success/20 rounded-xl p-4 flex items-center gap-4">
+                          <CheckCircle className="w-5 h-5 text-success shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-ink">{emailDiscoveredLeads.length} leads ready</p>
+                            <p className="text-xs text-ink-secondary">
+                              {selectedNiche} in {emailTargetCity} — all have verified emails and phone numbers
+                            </p>
+                          </div>
+                          <button type="button" onClick={() => { setEmailHasFound(false); setEmailDiscoveredLeads([]); setEmailCsvLeads([]); playSoftTap(); }} className="text-xs font-semibold text-ink-secondary hover:text-danger">Re-scan</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ============ EMAIL STEP 3: TEMPLATE ============ */}
+              {emailActiveStep === 3 && (
+                <div className="space-y-5 animate-fade-in">
+                  <div className="space-y-1">
+                    <h3 className="font-serif text-2xl text-ink">Choose a template</h3>
+                    <p className="text-sm text-ink-secondary">Pick the website template used for personalized preview pages.</p>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {[...templates.filter(t => t.niche === selectedNiche), ...customTemplates.filter(t => t.niche === selectedNiche)].map((tpl) => (
+                      <button key={tpl.id} type="button" onClick={() => { playSoftTap(); setEmailSelectedTemplateId(tpl.id); }} className={`relative rounded-xl overflow-hidden border-2 transition-all ${emailSelectedTemplateId === tpl.id ? 'border-accent ring-2 ring-accent/20' : 'border-transparent hover:border-accent/30'}`}>
+                        <div className="aspect-video bg-gradient-to-br from-accent/10 to-accent/5">
+                          <TemplateSimPreview id={tpl.id} name={tpl.name} niche={tpl.niche} badge={tpl.tag || ''} isMostUsed={tpl.isMostUsed} />
+                        </div>
+                        <div className="p-3 bg-white">
+                          <p className="text-xs font-semibold text-ink truncate">{tpl.name}</p>
+                          <p className="text-[10px] text-ink-secondary capitalize">{tpl.niche}</p>
+                        </div>
+                        {emailSelectedTemplateId === tpl.id && <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-accent text-white flex items-center justify-center"><Check className="w-3.5 h-3.5" /></div>}
+                      </button>
+                    ))}
+                    {templates.filter(t => t.niche === selectedNiche).length === 0 && customTemplates.filter(t => t.niche === selectedNiche).length === 0 && (
+                      <div className="col-span-full text-center py-8 text-xs text-ink-secondary">No templates available for this niche yet.</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ============ EMAIL STEP 4: EMAIL CONTENT + ACCOUNT/TOKEN/HEALTH ============ */}
+              {emailActiveStep === 4 && (
+                <div className="space-y-6 animate-fade-in">
+                  <div className="space-y-1">
+                    <h3 className="font-serif text-2xl text-ink">Compose & connect</h3>
+                    <p className="text-sm text-ink-secondary">Customize the cold email and pick a sending account.</p>
+                  </div>
+
+                  {/* Pre-built cold email editor */}
+                  <div className="bg-off-white border border-border-main rounded-xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold uppercase tracking-widest text-ink-secondary">Cold Email Template</h4>
+                      <span className="text-[10px] font-mono text-ink-tertiary">pre-filled • editable</span>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-ink-secondary mb-1">Subject Line</label>
+                      <input type="text" value={emailSubject} onChange={(e) => setEmailSubject(e.target.value)} className="w-full px-3 py-2 border border-border-main rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-accent/30" />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-semibold text-ink-secondary">Message</label>
+                        <div className="flex gap-1">
+                          {['{{business_name}}', '{{city}}', '{{site_url}}'].map(token => (
+                            <button key={token} type="button" onClick={() => setEmailBody(prev => prev + ' ' + token)} className="px-2 py-0.5 text-[10px] bg-white hover:bg-accent-soft text-ink-secondary hover:text-accent border border-border-light rounded transition-colors font-mono">{token}</button>
+                          ))}
+                        </div>
+                      </div>
+                      <textarea value={emailBody} onChange={(e) => setEmailBody(e.target.value)} rows={8} className="w-full px-3 py-2 border border-border-main rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-accent/30 resize-none font-sans leading-relaxed" />
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] text-ink-tertiary">
+                      <Info className="w-3 h-3" />
+                      <span>{emailBody.length} characters · {emailBody.split(/\s+/).filter(w => w).length} words</span>
+                    </div>
+                  </div>
+
+                  {/* Sending account picker */}
+                  <div className="bg-white border border-border-main rounded-xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold uppercase tracking-widest text-ink-secondary">Sending Account</h4>
+                      <button type="button" onClick={async () => {
+                        setEmailAccountsLoading(true);
+                        try {
+                          const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
+                          const list = await listEmailAccounts(ownerKey);
+                          // Defense-in-depth dedupe: collapse any rows that
+                          // somehow share the same (provider, email) pair
+                          // before they hit the UI. The backend already
+                          // enforces uniqueness via a DB index, but this
+                          // also hides stale rows from older deployments.
+                          const seen = new Set<string>();
+                          const deduped = list.filter((acc: any) => {
+                            const key = `${acc.provider}::${(acc.email || '').toLowerCase()}`;
+                            if (seen.has(key)) return false;
+                            seen.add(key);
+                            return true;
+                          });
+                          setEmailAccounts(deduped);
+                          if (deduped.length > 0 && !selectedEmailAccountId) setSelectedEmailAccountId(deduped[0].id);
+                          // Auto-select all healthy accounts for round-robin by default.
+                          if (selectedEmailAccountIds.length === 0) {
+                            const healthy = deduped.filter((a: any) => {
+                              // Skip accounts whose Gmail health is ruined.
+                              // Lower battery alone is still selectable — the
+                              // warning card on launch handles that, per the
+                              // user spec ("let them use it").
+                              const hp = a.health_percent ?? 100;
+                              const hl = a.health_label || (hp <= 0 ? 'health_ruined' : '');
+                              return hl !== 'health_ruined';
+                            });
+                            setSelectedEmailAccountIds(healthy.map((a: any) => a.id));
+                          }
+                          // The list endpoint already returns per-account `health`
+                          // (sendsToday, dailyCap, healthPercent, healthLabel)
+                          // so we don't need a second round trip per account.
+                          const healthMap: Record<string, any> = {};
+                          deduped.forEach((acc: any) => { healthMap[acc.id] = acc.health || acc; });
+                          setEmailAccountHealth(healthMap);
+                        } catch (err) {
+                          // No accounts yet — that's fine
+                          setEmailAccounts([]);
+                        } finally {
+                          setEmailAccountsLoading(false);
+                        }
+                      }} className="text-[10px] font-semibold text-accent hover:text-accent-hover flex items-center gap-1">
+                        <RefreshCw className="w-3 h-3" />Refresh
+                      </button>
+                    </div>
+
+                    {emailAccountsLoading ? (
+                      <div className="flex items-center gap-2 text-xs text-ink-secondary py-3"><Loader2 className="w-3.5 h-3.5 animate-spin" />Loading accounts...</div>
+                    ) : emailAccounts.length === 0 ? (
+                      <div className="text-xs text-ink-secondary bg-off-white border border-border-light rounded-lg p-3">No connected email accounts yet. Add one below to send from your own domain.</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {/* Round-robin distribution preview */}
+                        {selectedEmailAccountIds.length >= 1 && emailCsvLeads.length > 0 && (
+                          <div className="bg-accent-soft/40 border border-accent/20 rounded-lg p-2.5 text-[11px] text-ink-secondary flex items-start gap-2">
+                            <Info className="w-3.5 h-3.5 text-accent shrink-0 mt-0.5" />
+                            <div>
+                              <span className="font-semibold text-ink">Auto-distribution:</span>{' '}
+                              {(() => {
+                                const leadCount = emailCsvLeads.length;
+                                const accountCount = selectedEmailAccountIds.length;
+                                const perAccount = Math.floor(leadCount / accountCount);
+                                const remainder = leadCount % accountCount;
+                                return (
+                                  <>
+                                    <span className="font-mono font-bold text-accent">{leadCount}</span> lead{leadCount === 1 ? '' : 's'} across{' '}
+                                    <span className="font-mono font-bold text-accent">{accountCount}</span> account{accountCount === 1 ? '' : 's'}{' '}
+                                    = <span className="font-mono font-bold text-ink">{perAccount} each</span>
+                                    {remainder > 0 && <> + <span className="font-mono font-bold text-amber-600">{remainder} extra</span> to first {remainder} account{remainder === 1 ? '' : 's'}</>}
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        )}
+                        {emailAccounts.map((acc: any) => {
+                          // v3: Server-side health is the source of truth. We
+                          // pull BOTH gauges so the picker can show:
+                          //   - battery % (300 sends = 0%, 0 sends = 100%)
+                          //   - Gmail-health label (spam-risk assessment)
+                          // The two are independent — a fresh account can be
+                          // 100% battery but already in 'critical' health from
+                          // historical bounces.
+                          const batteryPercent: number = typeof acc.battery_percent === 'number' ? acc.battery_percent : 100;
+                          const batteryCapacity: number = acc.battery_capacity || 300;
+                          const healthPercent: number = typeof acc.health_percent === 'number' ? acc.health_percent : 100;
+                          const healthLabel: string = acc.health_label || (healthPercent <= 0 ? 'health_ruined' : healthPercent <= 10 ? 'critical' : healthPercent <= 40 ? 'warning' : 'healthy');
+                          const dailyCap = acc.daily_cap || 80;
+                          const sent = acc.sends_today || 0;
+                          const remaining = Math.max(0, dailyCap - sent);
+                          const ruined = healthLabel === 'health_ruined';
+                          const critical = healthLabel === 'critical';
+                          const warning = healthLabel === 'warning';
+                          const batteryEmpty = batteryPercent <= 0;
+                          const batteryCritical = batteryPercent > 0 && batteryPercent <= 20;
+                          // Battery bar colour — green above 50, amber 20–50, red
+                          // below 20, drained below or equal to 0.
+                          const batteryBarColor = batteryEmpty
+                            ? 'bg-danger'
+                            : batteryCritical
+                              ? 'bg-amber-500'
+                              : 'bg-success';
+                          const batteryLabelColor = batteryEmpty
+                            ? 'text-danger'
+                            : batteryCritical
+                              ? 'text-amber-600'
+                              : 'text-success';
+                          const healthLabelColor = ruined
+                            ? 'text-danger'
+                            : critical
+                              ? 'text-amber-700'
+                              : warning
+                                ? 'text-amber-600'
+                                : 'text-success';
+                          return (
+                            <div key={acc.id} className="space-y-1">
+                              <label className={`flex items-center gap-3 p-3 border rounded-lg transition-all cursor-pointer ${
+                                selectedEmailAccountIds.includes(acc.id)
+                                  ? 'border-accent bg-accent-soft/30'
+                                  : 'border-border-main hover:border-accent/30'
+                              }`}>
+                                <input
+                                  type="checkbox"
+                                  value={acc.id}
+                                  checked={selectedEmailAccountIds.includes(acc.id)}
+                                  onChange={(e) => {
+                                    setSelectedEmailAccountIds(prev =>
+                                      e.target.checked
+                                        ? [...prev, acc.id]
+                                        : prev.filter(id => id !== acc.id)
+                                    );
+                                  }}
+                                  className="accent-accent w-4 h-4"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-semibold text-ink truncate">{acc.email}</p>
+                                  <p className="text-[10px] text-ink-secondary">
+                                    {acc.display_name || acc.provider || 'Connected'} · {sent}/{batteryCapacity} sent in last 24h
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {/* Battery readout — the primary gauge per spec */}
+                                  <div className="flex items-center gap-1.5">
+                                    <Battery className={`w-4 h-4 ${batteryLabelColor}`} />
+                                    <span className={`text-[11px] font-bold font-mono ${batteryLabelColor}`}>
+                                      {batteryPercent}%
+                                    </span>
+                                  </div>
+                                  {/* Secondary Gmail-health badge — kept so users
+                                      with low bounce history still see spam-risk
+                                      warnings. */}
+                                  {(ruined || critical || warning) && (
+                                    <span className={`flex items-center gap-1 text-[10px] font-bold ${healthLabelColor}`}>
+                                      <Activity className="w-3 h-3" />
+                                      {ruined ? 'Ruined' : critical ? 'Critical' : 'Warning'}
+                                    </span>
+                                  )}
+                                </div>
+                              </label>
+                              {/* v3 Battery bar — the primary visual gauge.
+                                  Width is the inverse of consumption so a brand-
+                                  new account fills the bar; an empty battery
+                                  drains it to nothing. */}
+                              <div className="px-1 pt-0.5">
+                                <div className="h-1.5 bg-off-white rounded-full overflow-hidden" title={`${batteryPercent}% battery · ${sent}/${batteryCapacity} sent (24h)`}>
+                                  <div
+                                    className={`h-full ${batteryBarColor} transition-all duration-500`}
+                                    style={{ width: `${Math.max(2, batteryPercent)}%` }}
+                                  />
+                                </div>
+                              </div>
+                              {/* Soft-warning card. Shown for any selected
+                                  account that's drained or in a critical/ruined
+                                  Gmail-health state. Per the user spec, this
+                                  NEVER blocks launch — the campaign still sends
+                                  if the user clicks Launch. */}
+                              {(ruined || batteryEmpty || batteryCritical) && (
+                                <div className={`mx-1 mt-1 px-2.5 py-2 rounded-lg flex items-start gap-2 border ${
+                                  ruined || batteryEmpty
+                                    ? 'bg-danger/10 border-danger/30'
+                                    : 'bg-amber-50 border-amber-200'
+                                }`}>
+                                  <ShieldAlert className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${
+                                    ruined || batteryEmpty
+                                      ? 'text-danger'
+                                      : 'text-amber-700'
+                                  }`} />
+                                  <p className={`text-[11px] font-semibold leading-snug ${
+                                    ruined || batteryEmpty
+                                      ? 'text-danger'
+                                      : 'text-amber-800'
+                                  }`}>
+                                    {ruined
+                                      ? `${acc.email} Gmail health is ruined. Use a different email or risk this Gmail getting banned by Google. Sending is still allowed.`
+                                      : batteryEmpty
+                                        ? `${acc.email} battery is empty (${sent}/${batteryCapacity} sent in 24h). Sending is still allowed — we just won't recommend it.`
+                                        : `${acc.email} battery is low (${batteryPercent}%). Sending is still allowed.`}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Add new OAuth account */}
+                    <div className="border-t border-border-light pt-4 space-y-3">
+                      <h5 className="text-[11px] font-bold uppercase tracking-widest text-ink-secondary">Connect Email Account</h5>
+                      <p className="text-[10px] text-ink-tertiary flex items-center gap-1"><Link2 className="w-3 h-3" />Connect once — reused across every campaign. We never see your password.</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={startGmailConnect}
+                          className="px-3 py-2 bg-white hover:bg-off-white border border-border-main rounded-lg text-xs font-semibold text-ink flex items-center justify-center gap-2"
+                        >
+                          <Mail className="w-3.5 h-3.5 text-blue-600" />Connect Gmail
+                        </button>
+                        <button
+                          type="button"
+                          disabled
+                          title="Outlook coming soon — only Gmail is wired in this build"
+                          className="px-3 py-2 bg-white border border-border-light rounded-lg text-xs font-semibold text-ink-tertiary flex items-center justify-center gap-2 cursor-not-allowed opacity-60"
+                        >
+                          <Mail className="w-3.5 h-3.5 text-blue-700" />Connect Outlook
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* DEAD-TOKEN ERROR CARD — surfaces BEFORE the user clicks
+                      Next so they can re-login instead of being blocked at
+                      the gate. Probed automatically on entering Step 4. */}
+                  {expiredEmailAccounts.length > 0 && (
+                    <div className="bg-danger/5 border-2 border-danger/40 rounded-xl p-5 space-y-4 animate-fade-in">
+                      <div className="flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-full bg-danger text-white flex items-center justify-center shrink-0">
+                          <ShieldAlert className="w-5 h-5" />
+                        </div>
+                        <div className="flex-1 space-y-1">
+                          <p className="text-sm font-bold text-danger">
+                            {expiredEmailAccounts.length === 1
+                              ? 'Token expired — please re-login to continue'
+                              : `${expiredEmailAccounts.length} accounts need re-login`}
+                          </p>
+                          <p className="text-xs text-ink-secondary leading-relaxed">
+                            {probingTokens
+                              ? 'Checking your connected accounts…'
+                              : 'We tested every Gmail account connected to this workspace and at least one refresh token is no longer valid (Google revoked it, or the OAuth grant was removed from your Google account settings). Click Reconnect for each one — you\'ll be sent back to Google\'s consent screen for ~5 seconds and then the picker below will turn green.'}
+                          </p>
+                        </div>
+                      </div>
+                      <ul className="space-y-2">
+                        {expiredEmailAccounts.map((acc: any) => (
+                          <li key={acc.id} className="flex items-center justify-between gap-3 p-3 bg-white border border-danger/30 rounded-lg">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Mail className="w-4 h-4 text-danger shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-ink truncate">{acc.email}</p>
+                                <p className="text-[10px] text-ink-tertiary truncate">
+                                  {acc.code === 'TOKEN_REVOKED' || /invalid|revoked|400|401/i.test(acc.error || '')
+                                    ? 'Token revoked by Google'
+                                    : (acc.error || 'Token refresh failed')}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={startGmailConnect}
+                              className="shrink-0 px-3 py-1.5 bg-danger hover:bg-danger-hover text-white text-[11px] font-bold rounded-md flex items-center gap-1.5"
+                            >
+                              <RefreshCw className="w-3 h-3" />Reconnect
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Probe-in-progress pill — small status banner so the user
+                      knows we ARE checking their tokens right now. */}
+                  {probingTokens && expiredEmailAccounts.length === 0 && emailAccounts.length > 0 && (
+                    <div className="flex items-center gap-2 text-[11px] text-ink-secondary bg-off-white border border-border-light rounded-lg px-3 py-2">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Verifying your connected Gmail tokens…
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ============ EMAIL STEP 5: REVIEW & LAUNCH ============ */}
+              {/* Once the campaign is live (emailCampaignCreated === true) the
+                  Step 5 review card is REPLACED by the celebration card
+                  (rendered below, at the same indentation level) so the
+                  page rhythm stays consistent — the niche/lead/template/
+                  accounts cards (Steps 1-4) above stay visible, and the
+                  spacing where Step 5 used to be is now filled by the
+                  celebration card. We also hide Step 5 the moment launch
+                  starts so there is no flash of the inline progress bar
+                  before the celebration card animates in. */}
+              {emailActiveStep === 5 && !emailCampaignCreated && !emailIsLaunching && (
+                <div className="space-y-5 animate-fade-in">
+                  <div className="space-y-1">
+                    <h3 className="font-serif text-2xl text-ink">Review & launch</h3>
+                    <p className="text-sm text-ink-secondary">Confirm everything below, then send it live.</p>
+                  </div>
+
+                  {/* Selected template card — thumbnail + name + niche so the
+                      user can verify the right design is going out. */}
+                  {(() => {
+                    const tpl = templates.find((t) => t.id === emailSelectedTemplateId);
+                    const nicheLabel = nicheList.find(n => n.id === selectedNiche)?.label || selectedNiche || tpl?.niche || 'Niche';
+                    return (
+                      <div className="bg-white border border-border-main rounded-xl overflow-hidden flex items-stretch">
+                        <div className="w-24 sm:w-28 shrink-0 bg-off-white relative">
+                          {tpl ? (
+                            <img
+                              src={getNicheBgImage(tpl.niche)}
+                              alt={tpl.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-ink-tertiary"><Layout className="w-6 h-6" /></div>
+                          )}
+                        </div>
+                        <div className="flex-1 p-4 space-y-1 min-w-0">
+                          <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Template</p>
+                          <p className="text-sm font-semibold text-ink truncate">{tpl?.name || 'Default template'}</p>
+                          <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-accent-soft text-accent border border-accent/20">{nicheLabel}</span>
+                            {tpl?.tag && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold text-ink-secondary bg-off-white border border-border-light">{tpl.tag}</span>
+                            )}
+                            {tpl?.isMostUsed && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200"><Sparkles className="w-2.5 h-2.5" />Most used</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Two-column summary: setup on the left, message on the right.
+                      On mobile they stack vertically. */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* LEFT — campaign setup */}
+                    <div className="bg-off-white border border-border-main rounded-xl p-4 space-y-3">
+                      <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Setup</p>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-ink-secondary">Niche</span>
+                          <span className="font-semibold text-ink text-right">{nicheList.find(n => n.id === selectedNiche)?.label || selectedNiche || '—'}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-ink-secondary">Lead source</span>
+                          <span className="font-semibold text-ink text-right">
+                            {emailInputMethod === 'csv'
+                              ? (emailCsvFileName ? <>CSV — <span className="font-normal">{emailCsvFileName}</span></> : 'CSV upload')
+                              : (emailTargetCity ? <>Find — <span className="font-normal">{emailTargetCity}</span></> : 'Find online')}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-ink-secondary">Leads</span>
+                          <span className="font-semibold text-ink font-mono">{emailCsvLeads.length}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-ink-secondary">Cost</span>
+                          <span className="font-semibold text-accent font-mono">{emailCsvLeads.length * 2} credits</span>
+                        </div>
+                        <div className="flex flex-col items-start gap-1.5">
+                          <span className="text-ink-secondary">Campaign name</span>
+                          <input
+                            type="text"
+                            value={campaignName}
+                            onChange={(e) => { playSoftTap(); setCampaignName(e.target.value); }}
+                            placeholder="e.g. Austin HVAC Outreach May 2026"
+                            maxLength={80}
+                            className="w-full bg-white border border-border-main rounded-lg px-3 py-1.5 text-sm font-semibold text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-all"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* RIGHT — sending accounts + plan */}
+                    <div className="bg-off-white border border-border-main rounded-xl p-4 space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Sending from</p>
+                        <span className="text-[10px] font-bold text-ink-secondary bg-white border border-border-light rounded-full px-2 py-0.5">
+                          {selectedEmailAccountIds.length} account{selectedEmailAccountIds.length === 1 ? '' : 's'}
+                        </span>
+                      </div>
+                      {selectedEmailAccountIds.length === 0 ? (
+                        <p className="text-xs text-danger font-semibold">No email accounts selected — go back to Step 4.</p>
+                      ) : (
+                        <ul className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                          {selectedEmailAccountIds.map((id) => {
+                            const acc = emailAccounts.find((a: any) => a.id === id);
+                            const perAccount = Math.floor(emailCsvLeads.length / selectedEmailAccountIds.length);
+                            const remainder = emailCsvLeads.length % selectedEmailAccountIds.length;
+                            const assigned = selectedEmailAccountIds.indexOf(id) < remainder ? perAccount + 1 : perAccount;
+                            const remaining = Math.max(0, (acc?.daily_cap || 80) - (acc?.sends_today || 0));
+                            const overCap = assigned > remaining;
+                            return (
+                              <li key={id} className="flex items-center justify-between gap-2 bg-white border border-border-light rounded-lg px-2.5 py-1.5">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-6 h-6 rounded-full bg-accent-soft text-accent flex items-center justify-center shrink-0">
+                                    <Mail className="w-3 h-3" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-semibold text-ink truncate" title={acc?.email || id}>{acc?.email || id}</p>
+                                    <p className="text-[10px] text-ink-tertiary truncate">
+                                      {remaining} remaining today
+                                    </p>
+                                  </div>
+                                </div>
+                                <span className={`text-[10px] font-bold font-mono px-1.5 py-0.5 rounded whitespace-nowrap ${overCap ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-accent-soft text-accent border border-accent/20'}`}>
+                                  {assigned} lead{assigned === 1 ? '' : 's'}
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                      {selectedEmailAccountIds.length >= 1 && emailCsvLeads.length > 0 && (
+                        <div className="bg-white border border-border-light rounded-lg p-2 text-[11px] text-ink-secondary flex items-start gap-2">
+                          <Info className="w-3 h-3 text-accent shrink-0 mt-0.5" />
+                          <span>
+                            <span className="font-semibold text-ink">Auto-distribution:</span>{' '}
+                            <span className="font-mono font-bold text-accent">{emailCsvLeads.length}</span> leads across{' '}
+                            <span className="font-mono font-bold text-accent">{selectedEmailAccountIds.length}</span> inbox{selectedEmailAccountIds.length === 1 ? '' : 'es'} ≈{' '}
+                            <span className="font-mono font-bold text-ink">{Math.floor(emailCsvLeads.length / selectedEmailAccountIds.length)}</span> each
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Email preview — subject + scrollable body preview */}
+                  <div className="bg-white border border-border-main rounded-xl p-5 space-y-3">
+                    <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Email preview</p>
+                    <div className="space-y-2">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-[10px] uppercase tracking-widest text-ink-tertiary font-semibold shrink-0">Subject</span>
+                        <p className="text-xs font-semibold text-ink break-words">{emailSubject}</p>
+                      </div>
+                      <div className="bg-off-white rounded-lg p-4 text-xs text-ink leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">{emailBody}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+
+              {/* ============ EMAIL NAV BUTTONS ============ */}
+              {/* Once the campaign is launched the nav footer (Back / Next /
+                  Launch) is hidden so it can't accidentally double-fire.
+                  The celebration card below carries the only "next step"
+                  (View in Recent Campaigns / Edit outreach / Launch another). */}
+              {!emailCampaignCreated && (
+                <div className="mt-8 pt-6 border-t border-border-light flex flex-wrap items-center justify-between gap-3">
+                <button disabled={emailActiveStep === 1} onClick={() => { playGentleChime(); setEmailActiveStep(prev => Math.max(1, prev - 1)); }} className={`text-xs font-semibold px-4 py-2 border border-border-main rounded shadow-xs bg-white text-ink leading-none ${emailActiveStep === 1 ? 'opacity-0 pointer-events-none' : 'hover:bg-off-white'}`}>Back</button>
+                {emailActiveStep < 5 && (
+                  <button
+                    onClick={async () => {
+                      // Guard rails per step
+                      if (emailActiveStep === 1 && !selectedNiche) { playElegantError(); return; }
+                      if (emailActiveStep === 2) {
+                        if (emailInputMethod === 'csv' && emailCsvLeads.length === 0) {
+                          playElegantError();
+                          setEmailCsvError('Please upload a CSV first.');
+                          return;
+                        }
+                        if (emailInputMethod === 'find' && emailCsvLeads.length === 0) {
+                          playElegantError();
+                          setEmailCsvError('Pick a niche, enter a city, and click "Find" to load leads first.');
+                          return;
+                        }
+                      }
+                      if (emailActiveStep === 4 && !emailSubject.trim()) { playElegantError(); return; }
+                      if (emailActiveStep === 4 && selectedEmailAccountIds.length === 0) {
+                        playElegantError();
+                        return;
+                      }
+                      if (emailActiveStep === 4) {
+                        // Re-probe tokens right before advancing. If any
+                        // account's refresh_token is dead, block the
+                        // transition and refresh the error card so the
+                        // user can reconnect before launching.
+                        setProbingTokens(true);
+                        try {
+                          const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
+                          const probeResults = await probeAllEmailAccounts(ownerKey);
+                          const dead = probeResults.filter((r: any) => !r.ok);
+                          setExpiredEmailAccounts(dead);
+                          if (dead.length > 0) {
+                            playElegantError();
+                            // Refresh the picker list so the UI agrees
+                            // with what we just learned from the probe.
+                            const list = await listEmailAccounts(ownerKey);
+                            const seen = new Set<string>();
+                            const deduped = list.filter((acc: any) => {
+                              const key = `${acc.provider}::${(acc.email || '').toLowerCase()}`;
+                              if (seen.has(key)) return false;
+                              seen.add(key);
+                              return true;
+                            });
+                            setEmailAccounts(deduped);
+                            return;
+                          }
+                        } catch (err) {
+                          // Probe network error — let them proceed; the
+                          // backend will surface a clean error on send if
+                          // the token is actually dead.
+                        } finally {
+                          setProbingTokens(false);
+                        }
+                      }
+                      playGentleChime();
+                      setEmailActiveStep(prev => prev + 1);
+                      setEmailCsvError(null);
+                    }}
+                    className="text-xs font-semibold px-5 py-2.5 rounded shadow-sm flex items-center gap-1.5 cursor-pointer transition-all bg-accent hover:bg-accent-hover text-white"
+                  >
+                    <span>Next Step</span><ChevronRight className="w-4 h-4" />
+                  </button>
+                )}
+                {emailActiveStep === 5 && !emailCampaignCreated && !emailIsLaunching && (
+                  <button type="button" onClick={async () => {
+                    // Top-level guard so literally ANY throw inside this
+                    // async handler — even synchronous errors before we
+                    // reach the existing try/catch — can never blank the
+                    // React tree. Without this, the user sees a white page
+                    // when "Launch Campaign" is clicked and the only way
+                    // out is a hard refresh.
+                    try {
+                    if (emailCsvLeads.length === 0) { playElegantError(); setEmailLaunchError('Upload a CSV first'); return; }
+                    const cost = emailCsvLeads.length * 2;
+                    if (userCredits < cost) { playElegantError(); setEmailLaunchError(`Insufficient credits: need ${cost}, have ${userCredits}`); return; }
+
+                    // v3: Soft warning for unhealthy accounts (low battery / ruined Gmail
+                    // health). Per spec, this does NOT block launch — the user
+                    // can still press Launch and the sends go through. We
+                    // just flash a short, dismissible warning card so the
+                    // choice is conscious.
+                    const riskySelected = selectedEmailAccountIds
+                      .map((id) => emailAccounts.find((a: any) => a.id === id))
+                      .filter((a: any) => {
+                        if (!a) return false;
+                        const hp = typeof a.health_percent === 'number' ? a.health_percent : 100;
+                        const hl = a.health_label || (hp <= 0 ? 'health_ruined' : 'healthy');
+                        const bp = typeof a.battery_percent === 'number' ? a.battery_percent : 100;
+                        return hl === 'health_ruined' || hl === 'critical' || bp <= 20;
+                      });
+                    if (riskySelected.length > 0) {
+                      // Build a concise label list so the warning card text is
+                      // readable in one breath.
+                      const labels = riskySelected
+                        .map((a: any) => {
+                          const why = (typeof a.health_percent === 'number' && a.health_percent <= 0)
+                              ? 'health ruined'
+                              : (typeof a.battery_percent === 'number' && a.battery_percent <= 20)
+                                ? `battery ${a.battery_percent}%`
+                                : a.health_label || 'unhealthy';
+                          return `${a.email} (${why})`;
+                        })
+                        .join(', ');
+                      playSoftTap();
+                      setEmailLaunchMessage(
+                        `Heads up — ${riskySelected.length} account${riskySelected.length === 1 ? ' is' : 's are'} not at 100%: ${labels}. Sending anyway per your settings.`,
+                      );
+                      // Brief delay so the user can see the warning before the
+                      // celebration card takes over the screen.
+                      await new Promise((r) => setTimeout(r, 700));
+                    }
+
+                    // Optimistic local debit so the UI updates instantly.
+                    setUserCredits((prev) => {
+                      const next = Math.max(0, prev - cost);
+                      localStorage.setItem('lunao_user_credits', next.toString());
+                      return next;
+                    });
+
+                    // Register the campaign immediately as Active so it shows
+                    // in Recent Campaigns right away and we can reconcile the
+                    // row when the pipeline finishes.
+                    // Store the id in sessionStorage immediately so View Details
+                    // always works even before the server confirms the campaign.
+                    try { sessionStorage.setItem('lunao_pending_open_campaign', localId); } catch { /* ignore */ }
+                    const localId = 'em_' + Date.now();
+                    let emailCampId = localId;
+                    setCampaigns((prev) => [
+                      {
+                        id: localId,
+                        name: campaignName || `${selectedNiche} Email Campaign`,
+                        niche: selectedNiche,
+                        leadsFound: emailCsvLeads.length,
+                        sites: 0,
+                        sitesGenerated: 0,
+                        smsSent: 0,
+                        claimed: 0,
+                        emailsSent: 0,
+                        emailsFailed: 0,
+                        status: 'Active' as const,
+                        createdAt: new Date().toISOString().split('T')[0],
+                        templateId: emailSelectedTemplateId,
+                        type: 'email' as const,
+                      },
+                      ...prev,
+                    ]);
+                    // Insert Active Campaigns card row immediately so the
+                    // user can stop the run from the Active card.
+                    const emailRunName = campaignName || `${selectedNiche} Email Campaign`;
+                    upsertActiveRun?.({ id: localId, kind: 'email', name: emailRunName, niche: selectedNiche, total: emailCsvLeads.length, done: 0, status: 'starting', startedAt: Date.now() });
+
+                    setEmailIsLaunching(true);
+                    setEmailLaunchProgress(0);
+                    setEmailLaunchMessage('Creating campaign...');
+                    setEmailResults(null);
+                    setEmailLaunchError(null);
+                    setEmailLaunchSuccess(null);
+                    setEmailLiveSitesCount(0);
+                    setEmailLiveSentCount(0);
+                    setEmailLiveFailedCount(0);
+                    playLaunchSwell();
+                    try {
+                      const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
+                      const campaign = await createEmailCampaign(ownerKey, {
+                        niche: selectedNiche,
+                        templateKey: emailSelectedTemplateId,
+                        leadSource: emailInputMethod,
+                        targetVolume: emailCsvLeads.length,
+                        emailSubject,
+                        emailBody,
+                        sendingAccountId: selectedEmailAccountIds[0] || undefined,
+                      }, emailCsvLeads);
+                      const campaignId = campaign?.id || campaign?.campaign?.id;
+                      if (!campaignId) throw new Error('Campaign created but no ID returned');
+                      // Re-key the local row to the server's id so the user
+                      // can click into it for details later. Also re-key the
+                      // Active Campaigns card row to the same id so the Stop
+                      // button targets the right server campaign.
+                      emailCampId = campaignId;
+                      setEmailBackendCampaignId(campaignId);
+                      setCampaigns((prev) =>
+                        prev.map((c) => (c.id === localId ? { ...c, id: campaignId, serverCampaignId: campaignId } : c)),
+                      );
+                      updateActiveRun?.(localId, { id: campaignId, status: 'running' });
+
+                      // Server accepted the run — show inline success banner
+                      // immediately, independent of how long the per-lead
+                      // pipeline takes (8-12 min in practice).
+                      setEmailIsLaunching(false);
+                      setEmailCampaignCreated(true);
+                      setEmailLaunchSuccess(`Email campaign launched! ${emailCsvLeads.length} prospect${emailCsvLeads.length === 1 ? '' : 's'} queued for discovery, site-build, and send.`);
+                      playVictoryCelebration();
+
+                      setEmailLaunchProgress(15);
+                      setEmailLaunchMessage('Starting per-lead pipeline...');
+
+                      // Stream the pipeline. Capture every per-lead event so the
+                      // result card can show which account actually sent each email.
+                      const perLead: any[] = [];
+                      // Wrap the SSE stream in a try/catch so a malformed chunk
+                      // or aborted stream can NEVER bubble up as an unhandled
+                      // rejection — that would crash the entire React tree and
+                      // leave the user staring at a blank white page.
+                      let streamResult: { sent: number; failed: number } = { sent: 0, failed: 0 };
+                      try {
+                        streamResult = await runEmailCampaign(
+                        campaignId,
+                        selectedEmailAccountIds,
+                        (e: EmailCampaignEvent) => {
+                          // ---- Smooth progress on every event ----
+                          if (typeof e.index === 'number' && typeof e.total === 'number') {
+                            setEmailLaunchProgress(prev => {
+                              if (!e.total || e.total <= 0) return Math.min(100, prev + 5);
+                              const elapsed = (Math.max(1, e.index!) - 1) / e.total!;
+                              let stage = 0.05;
+                              const t = e.type;
+                            if (t === 'site:compiling')    stage = 0.20;
+                            else if (t === 'site:staged')  stage = 0.45;
+                            else if (t === 'deploy:start') stage = 0.50;
+                            else if (t === 'deploy:done')  stage = 0.65;
+                            else if (t === 'send:sent')   stage = 1.00;
+                            else if (t === 'send:failed' || t === 'send:error') stage = 1.00;
+                              else if (t === 'discovery:found' || t === 'discovery:not_found') stage = 0.15;
+                              const next = Math.round((elapsed + stage / e.total!) * 100);
+                              return Math.min(100, Math.max(prev, next));
+                            });
+                          }
+
+                          // ---- Live counters: tick the moment each event fires ----
+                          if (e.type === 'send:sent') {
+                            setEmailLiveSentCount(c => c + 1);
+                            // Tick the Active Campaigns card counter on every
+                            // send so the top progress bar moves live. We use
+                            // the ref-tracked run instead of a closure lookup
+                            // so the value is always fresh — the closure
+                            // captures `activeCampaignRuns` at render time and
+                            // would otherwise see stale `done` values.
+                            const cur = activeRunRef.current;
+                            const total = cur?.total ?? (e.total || 0);
+                            const nextDone = Math.min(total, e.index || 0);
+                            if (nextDone > 0) {
+                              updateActiveRun?.(campaignId, { done: nextDone, status: 'running' });
+                            }
+                          } else if (e.type === 'send:failed' || e.type === 'send:error') {
+                            setEmailLiveFailedCount(c => c + 1);
+                          } else if (e.type === 'site:staged') {
+                            // Bump the live-sites counter on every site:staged
+                            // event. We also bump the Active card `done`
+                            // here so the top bar moves the moment a site
+                            // goes live — not only when an email sends.
+                            const cur = activeRunRef.current;
+                            const total = cur?.total ?? (e.total || 0);
+                            const nextDone = Math.min(total, e.index || 0);
+                            if (nextDone > 0) {
+                              updateActiveRun?.(campaignId, { done: nextDone, status: 'running' });
+                            }
+                          }
+
+                          if (e.type === 'lead:start') {
+                            setEmailLaunchMessage(`Lead ${e.index}/${e.total}: ${e.name} — discovering, building site, publishing, then sending email...`);
+                          } else if (e.type === 'send:sent') {
+                            perLead.push({
+                              leadId: e.leadId,
+                              name: e.name,
+                              email: e.email,
+                              accountEmail: e.accountEmail,
+                              accountName: e.accountName,
+                              subject: e.subject,
+                              siteUrl: e.siteUrl,
+                              status: 'sent',
+                            });
+                            setEmailLaunchMessage(`Sent ${e.index}/${e.total}: ${e.name} from ${e.accountEmail}`);
+                          } else if (e.type === 'send:failed') {
+                            perLead.push({
+                              leadId: e.leadId,
+                              name: e.name,
+                              accountEmail: e.accountEmail,
+                              status: 'failed',
+                              reason: e.reason,
+                            });
+                          } else if (e.type === 'send:queued') {
+                            perLead.push({
+                              leadId: e.leadId,
+                              name: e.name,
+                              accountEmail: emailAccounts.find((a: any) => a.id === e.accountId)?.email,
+                              status: 'queued',
+                              reason: e.reason,
+                            });
+                          } else if (e.type === 'send:error') {
+                            perLead.push({
+                              leadId: e.leadId,
+                              name: e.name,
+                              accountEmail: e.accountEmail,
+                              status: 'failed',
+                              reason: e.error || e.message,
+                            });
+                          } else if (e.type === 'site:staged') {
+                            setEmailLaunchMessage(`Site live for ${e.name}: ${e.siteUrl}`);
+                            // Capture the deployed URL on the per-lead row so
+                            // the Recent Campaigns card can show "Live" links.
+                            // The per-lead row may not exist yet (Phase 1 fires
+                            // `site:staged` before Phase 3 fires `send:sent`),
+                            // so create it as a placeholder if needed.
+                            let found = perLead.find((p: any) => p.leadId === e.leadId);
+                            if (found) {
+                              found.siteUrl = e.siteUrl;
+                            } else {
+                              perLead.push({
+                                leadId: e.leadId,
+                                name: e.name,
+                                siteUrl: e.siteUrl,
+                                status: 'pending',
+                              });
+                            }
+                            // Bump the live-sites counter for the celebration card
+                            // so it reflects the real deployed count instantly.
+                            setEmailLiveSitesCount((c) => c + 1);
+                          } else if (e.type === 'cancelled') {
+                            // Soft cancel — flip Active card to cancelled + mark Recent row.
+                            updateActiveRun?.(campaignId, { status: 'cancelled' });
+                            setCampaigns((prev) =>
+                              prev.map((c) =>
+                                c.id === emailCampId || c.id === campaignId
+                                  ? { ...c, status: 'Crashed' as const, errorReason: 'Stopped by user' }
+                                  : c,
+                              ),
+                            );
+                            const unprocessed = Math.max(0, emailCsvLeads.length - (e.processed || 0));
+                            if (unprocessed > 0) {
+                              setUserCredits((prev) => {
+                                const next = prev + unprocessed * 2;
+                                localStorage.setItem('lunao_user_credits', next.toString());
+                                return next;
+                              });
+                            }
+                            setTimeout(() => removeActiveRun?.(campaignId), 1500);
+                          } else if (e.type === 'complete') {
+                            const sent = e.sent || 0;
+                            const failed = e.failed || 0;
+                            // Persist per-lead rows + per-account breakdown
+                            // onto the Recent Campaigns row so the card can
+                            // render prospect emails, from-accounts, live
+                            // links and per-account counts without a second
+                            // round-trip to the server.
+                            const sitesLive = perLead.filter((p: any) => p.status === 'sent' && p.siteUrl).length;
+                            const accountsUsed = (e.perAccount || []).map((acc: any) => ({
+                              accountId: acc.accountId,
+                              accountEmail: emailAccounts.find((a: any) => a.id === acc.accountId)?.email || acc.accountEmail || acc.accountId,
+                              sent: acc.sent || 0,
+                              failed: acc.failed || 0,
+                            }));
+                            // Reconcile live counters with canonical server
+                            // totals so the celebration card snaps to truth.
+                            setEmailLiveSentCount(sent);
+                            setEmailLiveFailedCount(failed);
+                            setEmailLiveSitesCount(sitesLive);
+                            setEmailResults({
+                              sent,
+                              failed,
+                              status: e.status || 'completed',
+                              perAccount: e.perAccount || [],
+                              perLead,
+                              sitesLive,
+                            });
+                            setEmailLaunchProgress(100);
+                            setEmailLaunchMessage(
+                              sent > 0
+                                ? `Sent ${sent} email${sent === 1 ? '' : 's'}!`
+                                : `Campaign finished — ${sent} sent, ${failed} failed.`,
+                            );
+                            // Reconcile the row in Recent Campaigns so the
+                            // user sees the final outcome there.
+                            const finalStatus: 'Active' | 'Completed' | 'Crashed' =
+                              sent > 0 ? 'Completed' : (failed === 0 ? 'Completed' : 'Crashed');
+                            setCampaigns((prev) =>
+                              prev.map((c) =>
+                                c.id === emailCampId || c.id === campaignId
+                                  ? {
+                                      ...c,
+                                      status: finalStatus,
+                                      emailsSent: sent,
+                                      emailsFailed: failed,
+                                      sites: sitesLive,
+                                      sitesGenerated: sitesLive,
+                                      emailLeads: perLead,
+                                      emailAccountsUsed: accountsUsed,
+                                    }
+                                  : c,
+                              ),
+                            );
+                            if (sent > 0) {
+                              playVictoryCelebration();
+                            } else {
+                              playElegantError();
+                              // Refund the optimistic debit since nothing
+                              // actually went out.
+                              setUserCredits((prev) => {
+                                const next = prev + cost;
+                                localStorage.setItem('lunao_user_credits', next.toString());
+                                return next;
+                              });
+                            }
+                            setEmailCampaignCreated(true);
+                            // Active card: mark completed, then drop after a brief pause.
+                            updateActiveRun?.(campaignId, { done: sent, status: 'completed' });
+                            setTimeout(() => removeActiveRun?.(campaignId), 1500);
+                          }
+                        }
+                      );
+                      } catch (streamErr: any) {
+                        // Stream-level error (network blip, malformed chunks,
+                        // server crash). We swallow this so the React tree
+                        // never goes blank — instead we drop into the safety
+                        // net below and mark the campaign accordingly.
+                        console.warn('[email-campaign] stream error:', streamErr);
+                      }
+                      // Safety net: if the SSE stream ended without emitting
+                      // `complete` (rare — proxy dropped, network blip), still
+                      // close out the row so the user doesn't see "Active" forever.
+                      if (!emailResults) {
+                        setEmailLaunchProgress(100);
+                        setEmailLaunchMessage('Campaign finished (stream interrupted). Check Recent Campaigns.');
+                        const sentPartial = perLead.filter((p: any) => p.status === 'sent').length;
+                        const failedPartial = perLead.filter((p: any) => p.status === 'failed').length;
+                        const sitesPartial = perLead.filter((p: any) => p.status === 'sent' && p.siteUrl).length;
+                        setCampaigns((prev) =>
+                          prev.map((c) =>
+                            c.id === emailCampId || c.id === campaignId
+                              ? {
+                                  ...c,
+                                  status: 'Completed' as const,
+                                  emailsSent: sentPartial,
+                                  emailsFailed: failedPartial,
+                                  sites: sitesPartial,
+                                  sitesGenerated: sitesPartial,
+                                  emailLeads: perLead,
+                                }
+                              : c,
+                          ),
+                        );
+                        playElegantError();
+                      }
+                    } catch (err: any) {
+                      // Active run didn't survive — drop it.
+                      updateActiveRun?.(emailCampId, { status: 'cancelled' });
+                      setTimeout(() => removeActiveRun?.(emailCampId), 1500);
+                      playElegantError();
+                      setEmailLaunchError(err.message || 'Failed to launch campaign');
+                      // Refund the optimistic debit on error.
+                      setUserCredits((prev) => {
+                        const next = prev + cost;
+                        localStorage.setItem('lunao_user_credits', next.toString());
+                        return next;
+                      });
+                      // Mark the row as Crashed so it doesn't sit as Active.
+                      setCampaigns((prev) =>
+                        prev.map((c) =>
+                          c.id === emailCampId || c.id === campaignId
+                            ? { ...c, status: 'Crashed' as const, errorReason: err?.message || 'Launch failed' }
+                            : c,
+                        ),
+                      );
+                    }
+                    finally { setEmailIsLaunching(false); }
+                    } catch (fatal: any) {
+                      // Last-resort net so a synchronous throw before the
+                      // main try block still surfaces a clean error rather
+                      // than blanking the React tree.
+                      console.error('[email-campaign] fatal launch error:', fatal);
+                      try { setEmailIsLaunching(false); } catch { /* ignore */ }
+                      try {
+                        setEmailLaunchError(fatal?.message || 'Unexpected error launching campaign');
+                        setEmailCampaignCreated(false);
+                      } catch { /* ignore */ }
+                      playElegantError();
+                    }
+                  }} className="px-6 py-2.5 bg-accent hover:bg-accent-hover text-white text-xs font-bold rounded-lg tracking-wider uppercase transition-all cursor-pointer flex items-center gap-2">
+                    <Mail className="w-3.5 h-3.5" /> Launch Campaign
+                  </button>
+                )}
+              </div>
+              )}
+              {/* The green "Email campaign launched successfully!" banner that
+                  used to live here was removed because the celebration card
+                  immediately below already carries the same message and
+                  would visually double-up. Kept the error banner because
+                  it surfaces launch failures that the celebration card
+                  (which assumes success) cannot. */}
+              {emailLaunchError && <div className="mt-4 p-4 bg-danger/5 border border-danger/30 rounded-xl flex items-start gap-3 animate-fade-in"><AlertCircle className="w-5 h-5 text-danger shrink-0 mt-0.5" /><div className="flex-1"><p className="text-sm font-bold text-danger">Email campaign failed to launch</p><p className="text-xs text-ink-secondary mt-0.5">{emailLaunchError}</p></div><button type="button" aria-label="Dismiss" onClick={() => setEmailLaunchError(null)} className="text-ink-tertiary hover:text-ink transition-colors cursor-pointer"><X className="w-4 h-4" /></button></div>}
+              {/* Active Campaigns card — same component as the site-deploy
+                  wizard, so both flows share one Stop button + progress bar. */}
+              <ActiveCampaignsCard
+                runs={activeCampaignRuns}
+                onStop={async (id, kind) => {
+                  try {
+                    updateActiveRun?.(id, { status: 'cancelling' });
+                    if (kind === 'email') {
+                      await cancelEmailCampaign(id);
+                    } else {
+                      await cancelCampaign(id);
+                    }
+                    playCancelTone();
+                  } catch (e: any) {
+                    updateActiveRun?.(id, { status: 'running' });
+                    playElegantError();
+                    console.error('[campaigns] cancel failed:', e);
+                  }
+                }}
+              />
+
+              {/* ===== EMAIL CAMPAIGN LAUNCHED — celebration card =====
+                  Designed to be the FIRST thing the user sees after pressing
+                  Launch. Step 5 hides instantly on `emailIsLaunching` so there
+                  is NO flash of the inline progress bar — the celebration
+                  card animates in from the location Step 5 used to occupy
+                  (`animate-celebrate-in`), giving a clean fade-up entry.
+                  Live counters (sent/failed/sites) update in place as the
+                  SSE stream delivers events. Full per-lead + per-account
+                  detail lives in the Recent Campaigns card below — no
+                  duplication. */}
+              {(emailIsLaunching || emailResults || emailCampaignCreated) && (
+                <div className="mt-4 animate-celebrate-in">
+                  {(() => {
+                    // Counter resolution order:
+                    //   1. emailLiveSentCount / emailLiveFailedCount / emailLiveSitesCount
+                    //      (real-time SSE-driven, ticks during the run)
+                    //   2. emailResults (canonical totals from the `complete` event)
+                    // This way the cards tick up the instant each lead finishes,
+                    // AND they snap to the canonical final count once the run ends.
+                    const sent      = emailResults?.sent      ?? emailLiveSentCount   ?? 0;
+                    const failed    = emailResults?.failed    ?? emailLiveFailedCount ?? 0;
+                    const sitesLive = emailResults?.sitesLive ?? emailLiveSitesCount  ?? 0;
+                    // Defensive null-safe access — `emailResults?.perAccount`
+                    // alone is not enough: if the state object exists but
+                    // is missing `perAccount` for any reason, `.length` would
+                    // throw and blank the whole React tree (white screen).
+                    const perAcc = emailResults?.perAccount;
+                    const accountsUsed = Array.isArray(perAcc) && perAcc.length > 0
+                      ? perAcc.length
+                      : (selectedEmailAccountIds?.length ?? 0);
+                    const isRunning = emailIsLaunching && !emailResults;
+                    const isDone = !!emailResults;
+                    return (
+                      <div className="relative overflow-hidden rounded-2xl border border-success/25 bg-gradient-to-br from-success-soft via-white to-accent-soft/60 shadow-sm">
+                        {/* Subtle decorative blob */}
+                        <div className="absolute -top-12 -right-12 w-40 h-40 bg-success/10 rounded-full blur-3xl pointer-events-none" />
+                        <div className="relative p-5 sm:p-6 space-y-4">
+                          {/* Heading row */}
+                          <div className="flex items-start gap-3">
+                            <div className="relative shrink-0">
+                              <div className="w-11 h-11 rounded-full bg-success text-white flex items-center justify-center shadow-sm">
+                                <CheckCircle className="w-6 h-6" />
+                              </div>
+                              {isRunning && (
+                                <span className="absolute inset-0 rounded-full border-2 border-success animate-campaign-running-ring" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-lg sm:text-xl font-serif font-semibold text-ink leading-tight">
+                                  Campaign launched successfully!
+                                </p>
+                                {isRunning && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                                    Running
+                                  </span>
+                                )}
+                                {isDone && (
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
+                                    failed === 0
+                                      ? 'bg-success-soft text-success border-success/25'
+                                      : sent === 0
+                                        ? 'bg-danger/10 text-danger border-danger/25'
+                                        : 'bg-amber-50 text-amber-700 border-amber-200'
+                                  }`}>
+                                    {failed === 0 ? 'Completed' : sent === 0 ? 'Failed' : 'Partial'}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-ink-secondary mt-1 leading-snug">
+                                {isRunning
+                                  ? emailLaunchMessage || 'Sending personalized emails to each prospect…'
+                                  : emailLaunchMessage || `Campaign finished — ${sent} sent, ${failed} failed.`}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Live counters — update in place as SSE events
+                              arrive. Three brand tokens (success / danger /
+                              ink) keep this consistent with the rest of
+                              the dashboard. */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+                            <div className="bg-white/80 border border-border-light rounded-xl p-3 text-center">
+                              <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Sites</p>
+                              {/* Key the number on sitesLive so React remounts the span
+                                  on every increment, which re-triggers the counter-pop
+                                  keyframe — giving a satisfying "tick" every time a
+                                  new site goes live. */}
+                              <p key={`sites-${sitesLive}`} className="text-2xl font-bold text-accent font-mono mt-0.5 animate-counter-pop">{sitesLive}</p>
+                              <p className="text-[9px] text-ink-tertiary mt-0.5">Live pages built</p>
+                            </div>
+                            <div className="bg-white/80 border border-border-light rounded-xl p-3 text-center">
+                              <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Emails</p>
+                              <p className="text-2xl font-bold text-success font-mono mt-0.5">{sent}</p>
+                              <p className="text-[9px] text-ink-tertiary mt-0.5">Delivered</p>
+                            </div>
+                            <div className="bg-white/80 border border-border-light rounded-xl p-3 text-center">
+                              <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Failed</p>
+                              <p className={`text-2xl font-bold font-mono mt-0.5 ${failed > 0 ? 'text-danger' : 'text-ink-tertiary'}`}>{failed}</p>
+                              <p className="text-[9px] text-ink-tertiary mt-0.5">{failed > 0 ? 'See reasons below' : 'All clean'}</p>
+                            </div>
+                            <div className="bg-white/80 border border-border-light rounded-xl p-3 text-center">
+                              <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Accounts</p>
+                              <p className="text-2xl font-bold text-ink font-mono mt-0.5">{accountsUsed}</p>
+                              <p className="text-[9px] text-ink-tertiary mt-0.5">Sending inboxes</p>
+                            </div>
+                          </div>
+
+                          {/* Live streaming progress chip — only shown while
+                              the campaign is actively running. Stays compact
+                              so it never crowds the celebration card. */}
+                          {isRunning && (
+                            <div className="flex items-center gap-2 text-[11px] text-ink-secondary bg-white/70 border border-border-light rounded-lg px-3 py-2">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-accent shrink-0" />
+                              <span className="font-mono truncate">{emailLaunchMessage || 'Deploying sites and sending emails in parallel…'}</span>
+                              <span className="ml-auto text-[10px] text-ink-tertiary font-bold shrink-0">{emailLaunchProgress}%</span>
+                            </div>
+                          )}
+
+                          {/* Latest failure reason chip — surfaces the most
+                              common error message so the user doesn't have
+                              to dig through Recent Campaigns to know why
+                              something failed. */}
+                          {isDone && failed > 0 && (() => {
+                            const failures = (emailResults?.perLead || []).filter((r: any) => r.status === 'failed' && r.reason);
+                            if (failures.length === 0) return null;
+                            const reasonCounts: Record<string, number> = {};
+                            for (const f of failures) {
+                              const r = (f.reason || 'unknown').trim();
+                              reasonCounts[r] = (reasonCounts[r] || 0) + 1;
+                            }
+                            const top = Object.entries(reasonCounts).sort((a, b) => b[1] - a[1])[0];
+                            if (!top) return null;
+                            const [reasonText, count] = top;
+                            return (
+                              <div className="flex items-start gap-2 text-[11px] bg-danger/5 border border-danger/20 rounded-lg px-3 py-2">
+                                <AlertCircle className="w-3.5 h-3.5 text-danger shrink-0 mt-0.5" />
+                                <div className="flex-1 min-w-0">
+                                  <span className="font-semibold text-danger">Top failure reason: </span>
+                                  <span className="text-ink break-words">{reasonText}</span>
+                                  {count < failures.length && (
+                                    <span className="text-ink-tertiary ml-1">({count} of {failures.length})</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          {/* Footer — single action to reset the wizard and launch another. */}
+                          <div className="flex items-center justify-end pt-3 border-t border-border-light/80">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEmailResults(null);
+                                setEmailCampaignCreated(false);
+                                setEmailBackendCampaignId(null);
+                                setEmailCsvLeads([]);
+                                setEmailCsvFileName(null);
+                                setEmailLiveSitesCount(0);
+                                setEmailLiveSentCount(0);
+                                setEmailLiveFailedCount(0);
+                                setEmailLaunchMessage('');
+                                setEmailLaunchProgress(0);
+                                setEmailActiveStep(1);
+                              }}
+                              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-white border border-border-main text-xs font-semibold text-ink hover:bg-off-white transition-all"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              Launch another campaign
+                            </button>
+                          </div>
+                          <div className="pb-5 sm:pb-6" />
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
               )}
             </>
           ) : (
@@ -1541,167 +3446,44 @@ export const Campaigns: React.FC<CampaignsProps> = ({
         </div>
       </section>
 
-      {/* RECENT CAMPAIGNS FULL LOG TABLE */}
-      <section id="campaigns-full-repository-card" className="bg-white border border-border-main rounded-xl shadow-sm p-6 space-y-4 animate-fade-in">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-0.5">
-            <h2 className="text-xl font-serif text-ink tracking-tight font-normal">Campaign Repositories</h2>
-            <p className="text-xs text-ink-secondary">Audit and monitor all historical campaigns.</p>
-          </div>
-
-          {/* Filtering tabs */}
-          <div className="flex bg-off-white border border-border-light p-1 rounded-md shrink-0 hide-scrollbar overflow-x-auto max-w-full">
-            {['All', 'Active', 'Completed', 'Queued', 'Crashed'].map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setFilterTab(tab as any)}
-                className={`px-3 py-1 text-xs font-semibold rounded ${
-                  filterTab === tab
-                    ? 'bg-white shadow-xs text-ink'
-                    : 'text-ink-secondary hover:text-ink'
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Site Deploy campaigns: dedicated card strip ── */}
-        {(() => {
-          const sdCampaigns = campaigns.filter(c => c.type === 'site-deploy').slice(0, 5);
-          if (sdCampaigns.length === 0) return null;
-          return (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-accent-soft border border-accent/20 flex items-center justify-center shrink-0">
-                  <Globe className="w-4 h-4 text-accent" />
-                </div>
-                <span className="text-sm font-semibold text-ink">Site Deploy Campaigns</span>
-                <span className="text-[10px] bg-accent-soft text-accent font-semibold px-1.5 py-0.5 rounded-full border border-accent/20">{sdCampaigns.length}</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                {sdCampaigns.map((camp) => {
-                  const tpl = [...templates, ...(customTemplates.map(t => ({ ...t, preview: '' })))].find(t => t.id === camp.templateId);
-                  const statusColor = camp.status === 'Completed' ? 'bg-success-soft text-success border-success/20'
-                    : camp.status === 'Active' ? 'bg-blue-50 text-blue-700 border-blue-200'
-                    : camp.status === 'Crashed' ? 'bg-danger/5 text-danger border-danger/20'
-                    : 'bg-amber-50 text-amber-700 border-amber-200';
-                  return (
-                    <div key={camp.id} onClick={() => setSelectedSdCampaign(camp)}
-                      className="relative bg-white border border-border-light rounded-xl overflow-hidden shadow-2xs hover:shadow-sm hover:-translate-y-0.5 transition-all group cursor-pointer">
-                      {/* Mini template thumbnail */}
-                      <div className="h-16 bg-gradient-to-br from-accent/10 to-accent/5 border-b border-border-light flex items-center justify-center relative overflow-hidden">
-                        {tpl ? (
-                          <div className="absolute inset-0 opacity-30">
-                            <TemplateSimPreview
-                              id={tpl.id}
-                              name={tpl.name}
-                              niche={tpl.niche}
-                              badge=""
-                              isMostUsed={tpl.isMostUsed}
-                            />
-                          </div>
-                        ) : (
-                          <Globe className="w-6 h-6 text-accent/40" />
-                        )}
-                        {/* Badge overlay */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-white/80 to-transparent" />
-                        {/* Status pill */}
-                        <span className={`absolute top-2 right-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${statusColor}`}>
-                          {camp.status}
-                        </span>
-                      </div>
-                      {/* Card body */}
-                      <div className="p-3 space-y-1.5">
-                        <p className="text-xs font-semibold text-ink leading-tight line-clamp-1" title={camp.name}>{camp.name}</p>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] bg-surface text-ink-secondary px-1.5 py-0.5 rounded font-medium border border-border-light">{camp.niche}</span>
-                        </div>
-                        <div className="flex items-center justify-between pt-1 border-t border-border-light">
-                          <div className="flex items-center gap-3">
-                            <div className="flex flex-col items-center">
-                              <span className="text-[10px] font-bold text-ink font-mono">{camp.sites}</span>
-                              <span className="text-[8px] text-ink-tertiary uppercase tracking-wider">Sites</span>
-                            </div>
-                            <div className="w-px h-4 bg-border-light" />
-                            <div className="flex flex-col items-center">
-                              <span className="text-[10px] font-bold text-ink font-mono">{camp.leadsFound ?? Math.floor(camp.sites * 1.2)}</span>
-                              <span className="text-[8px] text-ink-tertiary uppercase tracking-wider">Leads</span>
-                            </div>
-                          </div>
-                          <span className="text-[9px] text-ink-tertiary font-mono">{camp.createdAt}</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Campaign History Log Table */}
-        <div className="border border-border-light rounded-lg overflow-x-auto text-sm" style={{ WebkitOverflowScrolling: 'touch' }}>
-          <table className="w-full text-left min-w-[600px]">
-            <thead>
-              <tr className="bg-off-white border-b border-border-light text-[10px] font-semibold text-ink-secondary uppercase tracking-wider">
-                <th className="py-3 px-4">Campaign Title</th>
-                <th className="py-3 px-4">Niche Focus</th>
-                <th className="py-3 px-3 text-center">Type</th>
-                <th className="py-3 px-3 text-center">Leads</th>
-                <th className="py-3 px-3 text-center">Sites</th>
-                <th className="py-3 px-3 text-center">SMS</th>
-                <th className="py-3 px-4 text-center">Status</th>
-                <th className="py-3 px-4 text-right">Date</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-light text-ink">
-              {filteredCampaigns.map((camp) => (
-                <tr key={camp.id} className="hover:bg-off-white/30">
-                  <td className="py-3 px-4 font-semibold">{camp.name}</td>
-                  <td className="py-3 px-4">
-                    <span className="inline-flex px-1.5 py-0.5 rounded bg-surface text-ink text-xs font-medium">{camp.niche}</span>
-                  </td>
-                  <td className="py-3 px-3 text-center">
-                    {camp.type === 'site-deploy' ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent-soft text-accent text-[10px] font-semibold">
-                        <Globe className="w-3 h-3" /> Site Deploy
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-semibold">
-                        <MessageSquare className="w-3 h-3" /> SMS
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3 px-3 text-center font-mono text-xs">{camp.leadsFound || Math.floor(camp.sites * 1.2)}</td>
-                  <td className="py-3 px-3 text-center font-mono text-xs">{camp.sites}</td>
-                  <td className="py-3 px-3 text-center font-mono text-xs">{camp.smsSent}</td>
-                  <td className="py-3 px-4 text-center">
-                    {isWaitingForLast(camp.id) ? (
-                      <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-800 border border-amber-500/15">Queued</span>
-                    ) : (
-                      <div className="flex flex-col items-center gap-1">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${getStatusStyle(camp.status)}`}>{camp.status}</span>
-                        {camp.status === 'Crashed' && camp.errorReason && (
-                          <span className="text-[9px] text-danger font-medium leading-tight max-w-[150px] truncate" title={camp.errorReason}>{camp.errorReason}</span>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                  <td className="py-3 px-4 text-right text-xs text-ink-secondary font-mono">{camp.createdAt}</td>
-                </tr>
-              ))}
-              {filteredCampaigns.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-ink-secondary">No campaigns found.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      {/* UNIFIED RECENT CAMPAIGNS — one surface for site-deploy + email.
+          Replaces the previous separate card strips + history table.
+          The dashboard version sits inside a "compact" tile; the full
+          Campaigns tab version here gets the rich layout (filter tabs,
+          per-card badge, multi-select, bulk-delete, detail modal). */}
+      <UnifiedRecentCampaigns
+        id="campaigns-unified-recent"
+        campaigns={campaigns}
+        setCampaigns={setCampaigns}
+        templates={templates}
+        customTemplates={customTemplates}
+        initialOpenId={pendingOpenId}
+        onConsumedInitialOpen={() => setPendingOpenId(null)}
+        onViewDetails={(id) => {
+          // User clicked "View details" on a row — set the scroll target
+          // so the section lands itself at the top, and briefly pulse
+          // the matching card (handled inside UnifiedRecentCampaigns).
+          setScrollTarget?.('rcard-section');
+        }}
+        onEditOutreach={(camp) => {
+          // User clicked "Edit outreach" on an email row — pre-fill the
+          // email sub-wizard and jump to the message step. We use
+          // `pendingOpenId`/`setPendingOpenId` only for auto-open, so
+          // instead we rely on the parent bumping `initialEmailNonce`
+          // (see App.tsx) which re-triggers our effect above.
+          const subj = (camp as any).emailSubject || '';
+          const body = (camp as any).emailBody || '';
+          setEmailSubject(subj);
+          setEmailBody(body);
+          setActiveCampaignType('email');
+          setEmailActiveStep(4);
+          // Scroll to the email wizard so the user sees the pre-filled
+          // message without scrolling for it.
+          setScrollTarget?.('sd-campaigns-card-strip');
+          // Bump nonce via parent — handled by App.tsx threading
+          // initialEmailNonce through this component.
+        }}
+      />
 
       {/* TEMPLATE DETAIL PREVIEW MODAL */}
       {selectedTemplateForPreview && (() => {
@@ -1803,173 +3585,96 @@ export const Campaigns: React.FC<CampaignsProps> = ({
         );
       })()}
 
-      {/* ── Campaign Detail Modal ─────────────────────────────────── */}
-      {selectedSdCampaign && (() => {
-        const camp = selectedSdCampaign;
-        // Pull stored results from localStorage keyed by campaign id
-        let results: any[] = [];
-        try {
-          const stored = JSON.parse(localStorage.getItem('lunao_sd_results') || '{}');
-          results = stored[camp.id] || [];
-        } catch { /* ignore */ }
-
-        const tpl = [...templates, ...(customTemplates.map(t => ({ ...t, preview: '' })))].find(t => t.id === camp.templateId);
-        const okCount = results.filter((r: any) => r.siteStatus === 'generated').length;
-        const failedCount = results.filter((r: any) => r.siteStatus === 'failed').length;
-
-        const statusMeta = {
-          Completed: { bg: 'bg-success-soft', text: 'text-success', border: 'border-success/20', dot: 'bg-success' },
-          Active:   { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', dot: 'bg-blue-500' },
-          Crashed:  { bg: 'bg-danger/5', text: 'text-danger', border: 'border-danger/20', dot: 'bg-danger' },
-          Queued:   { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', dot: 'bg-amber-500' },
-        }[camp.status as string] ?? { bg: 'bg-surface', text: 'text-ink', border: 'border-border-main', dot: 'bg-ink-tertiary' };
-
-        return (
-          <div
-            className="fixed inset-0 bg-ink/50 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto animate-fade-in"
-            onClick={(e) => { if (e.target === e.currentTarget) setSelectedSdCampaign(null); }}
-          >
-            <div className="bg-white border border-border-main rounded-2xl shadow-2xl w-full max-w-2xl my-6 flex flex-col overflow-hidden animate-slide-up">
-
-              {/* Modal header */}
-              <div className="relative px-6 pt-6 pb-5 bg-gradient-to-br from-accent-soft/60 to-white border-b border-border-light">
-                {/* Background texture accent */}
-                <div className="absolute top-0 right-0 w-32 h-32 bg-accent/5 rounded-full blur-2xl pointer-events-none" />
-                <div className="absolute top-4 right-4">
-                  <button
-                    onClick={() => setSelectedSdCampaign(null)}
-                    className="w-8 h-8 rounded-lg bg-white border border-border-light flex items-center justify-center text-ink-secondary hover:text-ink hover:bg-off-white transition-all shadow-sm cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="flex items-start gap-4 pr-10">
-                  {/* Template mini preview */}
-                  <div className="w-20 h-14 rounded-xl overflow-hidden border-2 border-accent/20 shadow-sm shrink-0 bg-surface flex items-center justify-center">
-                    {tpl ? (
-                      <TemplateSimPreview id={tpl.id} name={tpl.name} niche={tpl.niche} badge="" isMostUsed={tpl.isMostUsed} />
-                    ) : (
-                      <Globe className="w-8 h-8 text-accent/30" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <h3 className="text-lg font-serif font-semibold text-ink leading-tight truncate">{camp.name}</h3>
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${statusMeta.bg} ${statusMeta.text} ${statusMeta.border}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${statusMeta.dot}`} />
-                        {camp.status}
-                      </span>
-                    </div>
-                    <p className="text-xs text-ink-secondary">{camp.niche} · {camp.createdAt}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Stats strip */}
-              <div className="grid grid-cols-3 divide-x divide-border-light border-b border-border-light">
-                {[
-                  { label: 'Sites Deployed', value: camp.sites || okCount, icon: <Globe className="w-4 h-4" />, color: 'text-accent' },
-                  { label: 'Leads Processed', value: camp.leadsFound || results.length || 0, icon: <Users className="w-4 h-4" />, color: 'text-blue-600' },
-                  { label: 'Failed', value: failedCount, icon: <X className="w-4 h-4" />, color: failedCount > 0 ? 'text-danger' : 'text-ink-tertiary' },
-                ].map((stat) => (
-                  <div key={stat.label} className="flex flex-col items-center justify-center py-4 gap-1.5">
-                    <div className={`${stat.color} opacity-60`}>{stat.icon}</div>
-                    <span className="text-xl font-bold font-mono text-ink">{stat.value}</span>
-                    <span className="text-[10px] text-ink-tertiary uppercase tracking-wider font-semibold">{stat.label}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Deployed sites list */}
-              <div className="flex-1 overflow-y-auto">
-                <div className="px-6 py-4 space-y-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Globe className="w-4 h-4 text-accent" />
-                    <h4 className="text-sm font-bold text-ink">Deployed Sites</h4>
-                  </div>
-                  {results.length === 0 ? (
-                    <div className="text-center py-8 text-ink-secondary">
-                      <Globe className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                      <p className="text-sm">No site data yet. Results are saved after deployment.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {results.map((r: any, idx: number) => {
-                        const lead = sdCsvLeads.find(l => l.index === r.index) || { business_name: r.name, city: r.city, phone_number: r.phone };
-                        const isGenerated = r.siteStatus === 'generated';
-                        return (
-                          <div key={r.index ?? idx} className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${isGenerated ? 'bg-white border-border-main hover:border-accent/30' : 'bg-danger/5 border-danger/20'}`}>
-                            {/* Status icon */}
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${isGenerated ? 'bg-accent-soft text-accent' : 'bg-danger/10 text-danger'}`}>
-                              {isGenerated ? <CheckCircle className="w-4 h-4" /> : <X className="w-4 h-4" />}
-                            </div>
-                            {/* Business info */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <p className="text-xs font-bold text-ink leading-tight">{lead.business_name || r.name || `Business ${idx + 1}`}</p>
-                                <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold border ${isGenerated ? 'bg-success-soft text-success border-success/20' : 'bg-danger/10 text-danger border-danger/20'}`}>
-                                  {isGenerated ? 'Live' : 'Failed'}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-3 mt-0.5 text-[11px] text-ink-secondary">
-                                {lead.city && (
-                                  <span className="flex items-center gap-1">
-                                    <MapPin className="w-3 h-3 shrink-0" />{lead.city}
-                                  </span>
-                                )}
-                                {lead.phone_number && (
-                                  <span className="flex items-center gap-1">
-                                    <Smartphone className="w-3 h-3 shrink-0" />{lead.phone_number}
-                                  </span>
-                                )}
-                              </div>
-                              {isGenerated && r.siteUrl && (
-                                <a
-                                  href={r.siteUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 mt-1.5 text-[11px] text-accent font-semibold hover:underline truncate max-w-[240px]"
-                                >
-                                  <ExternalLink className="w-3 h-3 shrink-0" />
-                                  <span className="truncate">{r.siteUrl.replace('https://', '')}</span>
-                                </a>
-                              )}
-                              {r.error && (
-                                <p className="mt-1 text-[10px] text-danger font-medium">{r.error}</p>
-                              )}
-                            </div>
-                            {/* Site index badge */}
-                            <div className="shrink-0">
-                              <span className="inline-flex w-6 h-6 rounded-full bg-surface border border-border-light text-[10px] font-bold text-ink-tertiary items-center justify-center">
-                                {idx + 1}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Modal footer */}
-              <div className="px-6 py-4 border-t border-border-light bg-off-white flex items-center justify-between gap-3 shrink-0">
-                <div className="flex items-center gap-2 text-[11px] text-ink-secondary">
-                  <Globe className="w-4 h-4" />
-                  <span>Site Deploy Campaign · {camp.templateId ? `Template: ${tpl?.name ?? camp.templateId}` : 'Template unknown'}</span>
-                </div>
-                <button
-                  onClick={() => setSelectedSdCampaign(null)}
-                  className="px-5 py-2 bg-accent hover:bg-accent-hover text-white text-xs font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all cursor-pointer"
-                >
-                  Done
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {/* The legacy standalone SD detail modal was removed when we
+          consolidated Recent Campaigns — the unified component owns its
+          own detail modal now (CampaignDetailModal). */}
 
     </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// ActiveCampaignsCard
+// Single, shared progress card that lists every campaign currently in flight
+// (both site-deploy and email). Lives inside both wizards so the user can
+// stop a runaway run without leaving the page. The Stop button calls
+// cancelCampaign / cancelEmailCampaign on the backend, which sets the DB
+// row to 'cancelled'; the in-flight pipeline picks that up on its next
+// lead boundary and exits cleanly (soft cancel — current lead finishes).
+// ---------------------------------------------------------------------------
+const ActiveCampaignsCard: React.FC<{
+  runs: ActiveCampaignRun[];
+  onStop: (id: string, kind: 'site-deploy' | 'email') => Promise<void> | void;
+}> = ({ runs, onStop }) => {
+  if (runs.length === 0) return null;
+
+  return (
+    <section id="active-campaigns-card" className="mt-6 bg-white border border-border-main rounded-xl shadow-sm p-4 sm:p-5 space-y-3 animate-fade-in">
+      <header className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-full bg-accent-soft flex items-center justify-center">
+            <Activity className="w-4 h-4 text-accent animate-pulse" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-ink leading-none">Active campaigns</h4>
+            <p className="text-[11px] text-ink-tertiary mt-0.5">
+              {runs.length} run{runs.length === 1 ? '' : 's'} in flight
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <ul className="space-y-2.5">
+        {runs.map((run) => {
+          const pct = run.total > 0 ? Math.min(100, Math.round((run.done / run.total) * 100)) : 0;
+          const isCancelling = run.status === 'cancelling' || run.status === 'cancelled';
+          return (
+            <li key={run.id} className={`border rounded-lg p-3 transition-colors ${isCancelling ? 'bg-danger-soft/30 border-danger/30' : 'bg-blue-50/40 border-blue-200/60'}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${run.kind === 'email' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                      {run.kind === 'email' ? 'Email' : 'Site Deploy'}
+                    </span>
+                    <p className="text-sm font-bold text-ink truncate">{run.name}</p>
+                  </div>
+                  <div className="mt-2 h-2 w-full bg-blue-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-500 ease-out rounded-full ${isCancelling ? 'bg-danger' : 'bg-accent'}`}
+                      style={{ width: `${pct}%` }}
+                      aria-valuenow={pct}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                    />
+                  </div>
+                  <div className="mt-1.5 flex items-center justify-between text-[11px] text-ink-secondary">
+                    <span className="font-mono">
+                      {run.done}/{run.total} ({pct}%)
+                    </span>
+                    <span className="font-mono uppercase tracking-wider">
+                      {run.status === 'cancelling' && 'Cancelling…'}
+                      {run.status === 'cancelled' && 'Cancelled'}
+                      {run.status === 'completed' && 'Completed'}
+                      {run.status === 'starting' && 'Starting…'}
+                      {run.status === 'running' && 'Running'}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={isCancelling}
+                  onClick={() => onStop(run.id, run.kind)}
+                  className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${isCancelling ? 'bg-danger-soft text-danger border border-danger/30 cursor-not-allowed' : 'bg-danger text-white hover:bg-danger/90 border border-danger shadow-xs active:scale-95'}`}
+                  aria-label={`Stop ${run.name}`}
+                >
+                  <Square className="w-3 h-3 fill-current" />
+                  {isCancelling ? 'Stopping' : 'Stop'}
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 };

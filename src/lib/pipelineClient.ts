@@ -41,7 +41,17 @@ export interface PipelineSummary {
   cloudflare: string;
 }
 
-const API_BASE = ''; // same origin; Vite proxies /api -> backend
+// In dev: '' (same-origin via Vite proxy to localhost:8787).
+// In prod / tunnel: use the public API tunnel URL so the browser can
+// call the API from any origin without CORS or proxy issues.
+const API_BASE = (() => {
+  // If we're not on localhost, use the public API tunnel.
+  if (typeof window !== 'undefined' && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1')) {
+    // The API tunnel URL — update this when you restart the tunnel.
+    return 'https://slow-lines-start.loca.lt';
+  }
+  return ''; // same-origin dev proxy
+})();
 
 export async function getHealth(): Promise<any | null> {
   try {
@@ -99,12 +109,22 @@ export async function validateCsvFile(file: File): Promise<CsvValidation> {
 
 // Run the full pipeline, streaming Server-Sent Events back to onEvent.
 // Resolves with the final { summary, results } payload.
+//
+// Uses the unified `templateKey` parameter. The server's templates.js
+// registry knows how to resolve any of:
+//   - built-in slug ("barber-dark-luxury")
+//   - custom DB id ("tmpl_xxx")
+//   - legacy niche string ("Barber")
+// Legacy `templateId` + `templateFile` props are still accepted for
+// back-compat.
 export async function runCampaign(
   params: {
     businesses?: PipelineLead[];
     csv?: string;
     niche?: string;
-    templateId?: string; // custom template ID (tmpl_xxx) — overrides niche template
+    templateKey?: string;
+    templateId?: string; // legacy — custom template ID (tmpl_xxx)
+    templateFile?: string; // legacy — raw file name under /public/templates-raw/
     smsTemplate?: string;
     name?: string;
     ownerKey?: string;
@@ -177,7 +197,13 @@ export async function runSiteDeployCampaign(
     businesses?: PipelineLead[];
     csv?: string;
     niche?: string;
-    templateId?: string;
+    // Unified template key: built-in slug ("hvac-everest"),
+    // custom DB id ("tmpl_xxx"), or legacy niche ("HVAC").
+    // The server's templates.js resolver handles all three forms.
+    templateKey?: string;
+    // Legacy fields kept for back-compat with the older API surface.
+    templateId?: string; // custom template ID (tmpl_xxx) — overrides niche template
+    templateFile?: string; // raw file name under /public/templates-raw/ (e.g. dentist-template-01.html)
     name?: string;
     ownerKey?: string;
     plan?: string;
@@ -593,6 +619,34 @@ export async function getCampaign(id: string): Promise<{
     leads: (data.leads || []) as CampaignLead[],
     sms: (data.sms || []) as SmsLogEntry[],
   };
+}
+
+// Soft-cancel an in-flight SMS / site-deploy campaign. The server flips
+// the row to 'cancelled'; the pipeline loop exits cleanly at the next
+// lead boundary. Idempotent — calling twice is a no-op.
+export async function cancelCampaign(id: string): Promise<{ ok: boolean; status: string; alreadyTerminal?: boolean }> {
+  const res = await fetch(`${API_BASE}/api/campaigns/${encodeURIComponent(id)}/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Failed to cancel campaign (${res.status})`);
+  }
+  return res.json();
+}
+
+// Soft-cancel an in-flight email campaign. Same semantics.
+export async function cancelEmailCampaign(id: string): Promise<{ ok: boolean; status: string; alreadyTerminal?: boolean }> {
+  const res = await fetch(`${API_BASE}/api/email-campaigns/${encodeURIComponent(id)}/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Failed to cancel email campaign (${res.status})`);
+  }
+  return res.json();
 }
 
 export async function listOwnerSms(ownerKey: string, limit = 100): Promise<SmsLogEntry[]> {
@@ -1067,4 +1121,569 @@ export async function processUploadedHtml(params: {
   }
   const d = await res.json();
   return { rawHtml: d.rawHtml as string, previewHtml: d.previewHtml as string };
+}
+
+// =============================================================================
+// Email Campaign Client Functions
+// =============================================================================
+
+export interface EmailCampaignPayload {
+  niche: string;
+  templateId?: string;
+  templateKey?: string;
+  leadSource: 'csv' | 'places_api';
+  targetVolume: number;
+  city: string;
+  category?: string;
+  emailSubject?: string;
+  emailBody?: string;
+  csvSnapshot?: string;
+}
+
+export interface EmailAccountPayload {
+  provider: 'gmail' | 'outlook';
+  email: string;
+  displayName: string;
+  refreshToken: string;
+  dailyCap?: number;
+}
+
+export interface EmailCampaignEvent {
+  type: string;
+  campaignId?: string;
+  count?: number;
+  index?: number;
+  total?: number;
+  name?: string;
+  email?: string;
+  source?: string;
+  reason?: string;
+  siteUrl?: string;
+  slug?: string;
+  status?: string;
+  sent?: number;
+  failed?: number;
+  error?: string;
+  [key: string]: any;
+}
+
+// List email campaigns for an owner
+export async function listEmailCampaigns(ownerKey: string, limit = 50): Promise<any[]> {
+  const qs = new URLSearchParams({ ownerKey, limit: String(limit) });
+  const res = await fetch(`${API_BASE}/api/email-campaigns?${qs.toString()}`);
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Failed to load email campaigns (${res.status})`);
+  }
+  const d = await res.json();
+  return d.campaigns || [];
+}
+
+// Get a single email campaign with its leads
+export async function getEmailCampaign(id: string): Promise<{ campaign: any; leads: any[] } | null> {
+  const res = await fetch(`${API_BASE}/api/email-campaigns/${encodeURIComponent(id)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Failed to load email campaign (${res.status})`);
+  }
+  const d = await res.json();
+  return { campaign: d.campaign, leads: d.leads || [] };
+}
+
+// Create a new email campaign
+export async function createEmailCampaign(
+  ownerKey: string,
+  payload: EmailCampaignPayload,
+  leads?: PipelineLead[]
+): Promise<any> {
+  const res = await fetch(`${API_BASE}/api/email-campaigns`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ownerKey, ...payload, leads: leads || [] }),
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Failed to create email campaign (${res.status})`);
+  }
+  const d = await res.json();
+  return d.campaign;
+}
+
+// Update an email campaign
+export async function updateEmailCampaign(id: string, updates: Partial<EmailCampaignPayload>): Promise<any> {
+  const res = await fetch(`${API_BASE}/api/email-campaigns/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Failed to update email campaign (${res.status})`);
+  }
+  const d = await res.json();
+  return d.campaign;
+}
+
+// Delete an email campaign
+export async function deleteEmailCampaign(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/email-campaigns/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Failed to delete email campaign (${res.status})`);
+  }
+}
+
+// Run email campaign pipeline (SSE)
+export async function runEmailCampaign(
+  campaignId: string,
+  accountIds: string[],
+  onEvent: (e: EmailCampaignEvent) => void
+): Promise<{ campaignId: string; sent: number; failed: number }> {
+  const res = await fetch(`${API_BASE}/api/email-campaigns/${encodeURIComponent(campaignId)}/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accountIds }),
+  });
+
+  if (!res.ok || !res.body) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Email campaign run failed (${res.status})`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  let result = { campaignId: '', sent: 0, failed: 0 };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const chunks = buffer.split('\n\n');
+    buffer = chunks.pop() || '';
+
+    for (const chunk of chunks) {
+      const line = chunk.trim();
+      if (!line.startsWith('data:')) continue;
+      const json = line.slice(5).trim();
+      if (!json) continue;
+
+      try {
+        const event: EmailCampaignEvent = JSON.parse(json);
+        onEvent(event);
+
+        if (event.type === 'campaign') {
+          result.campaignId = event.campaignId || '';
+        }
+        if (event.type === 'complete') {
+          result.sent = event.sent || 0;
+          result.failed = event.failed || 0;
+        }
+      } catch {
+        /* ignore malformed chunk */
+      }
+    }
+  }
+
+  return result;
+}
+
+// =============================================================================
+// Email Account Management (OAuth)
+// =============================================================================
+
+export interface ConnectedEmailAccountInfo {
+  id: string;
+  provider: 'gmail' | 'outlook';
+  email: string;
+  displayName: string;
+  dailyCap: number;
+  connectedAt: number;
+  status: 'healthy' | 'warming_up' | 'needs_attention' | 'disconnected';
+  warmupStage: 'stage_1' | 'stage_2' | 'stage_3' | 'steady';
+  sendsToday: number;
+  sendsThisWeek: number;
+  remainingToday: number;
+  bounceRate7d: number;
+  lastSuccessfulSend: number | null;
+  tokenStatus: 'active' | 'needs_reconnect' | 'revoked';
+  // v3: user-controlled Pause/Resume toggle. 1 = paused (soft warning only,
+  // sends still go through if the user clicks Launch anyway).
+  paused?: 0 | 1;
+  // v3: Battery gauge — separate from the Gmail-health formula. 0 sent =
+  // 100% battery; `battery_capacity` sent = 0% battery (default 300).
+  batteryCapacity?: number;
+  batteryPercent?: number | null;
+  batteryLabel?: 'good' | 'low' | 'critical' | 'empty' | 'unknown';
+  healthPercent?: number | null;
+  healthLabel?: 'healthy' | 'warning' | 'critical' | 'health_ruined' | 'unknown';
+  health?: {
+    status: string;
+    warmupStage: string;
+    daysConnected: number;
+    sendsToday: number;
+    dailyCap: number;
+    remainingToday: number;
+    batteryCapacity?: number;
+    batteryPercent?: number;
+    batteryLabel?: string;
+    paused?: number;
+    bounceRate7d: number;
+    lastSuccessfulSend: number | null;
+    recommendation: string;
+  };
+}
+
+// List connected email accounts
+export async function listEmailAccounts(ownerKey: string): Promise<ConnectedEmailAccountInfo[]> {
+  const qs = new URLSearchParams({ ownerKey });
+  const res = await fetch(`${API_BASE}/api/email-accounts?${qs.toString()}`);
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Failed to load email accounts (${res.status})`);
+  }
+  const d = await res.json();
+  return d.accounts || [];
+}
+
+// Get account health metrics
+export async function getEmailAccountHealth(accountId: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/api/email-accounts/${encodeURIComponent(accountId)}/health`);
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Failed to load account health (${res.status})`);
+  }
+  const d = await res.json();
+  return d.health;
+}
+
+// Probe every connected account's refresh token. Cheap — only hits
+// Google's OAuth endpoint, never Gmail itself. Called right before the
+// user moves to the Review step so dead tokens block the transition
+// with a clear "Reconnect" prompt.
+export interface EmailAccountProbeResult {
+  id: string;
+  email: string;
+  provider: string;
+  status: string;
+  ok: boolean;
+  error?: string;
+  code?: string;
+}
+
+export async function probeAllEmailAccounts(ownerKey: string): Promise<EmailAccountProbeResult[]> {
+  const res = await fetch(`${API_BASE}/api/email-accounts/probe-all`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ownerKey }),
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Failed to probe accounts (${res.status})`);
+  }
+  const d = await res.json();
+  return d.results || [];
+}
+
+// Disconnect email account
+export async function disconnectEmailAccount(accountId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/email-accounts/${encodeURIComponent(accountId)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Failed to disconnect email account (${res.status})`);
+  }
+}
+
+// v3: Pause/Resume toggle. Per spec this is SOFT — the campaign still sends
+// even when paused, but the picker shows a warning card. Returns the
+// updated account row + fresh health snapshot so the caller can refresh
+// its local state without a second round-trip to /api/email-accounts.
+export async function toggleEmailAccount(
+  accountId: string,
+  action: 'pause' | 'resume',
+): Promise<{ account: any; health: any }> {
+  const res = await fetch(
+    `${API_BASE}/api/email-accounts/${encodeURIComponent(accountId)}/${action}`,
+    { method: 'POST' },
+  );
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Failed to ${action} email account (${res.status})`);
+  }
+  const d = await res.json();
+  return { account: d.account, health: d.health };
+}
+
+// =============================================================================
+// Suppression List Management
+// =============================================================================
+
+export interface SuppressionEntry {
+  id: number;
+  email: string;
+  reason: 'unsubscribed' | 'bounced' | 'complained';
+  createdAt: number;
+  source: 'manual' | 'webhook';
+}
+
+// Get suppression list
+export async function getSuppressionList(limit = 1000): Promise<SuppressionEntry[]> {
+  const res = await fetch(`${API_BASE}/api/email-suppression?limit=${limit}`);
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Failed to load suppression list (${res.status})`);
+  }
+  const d = await res.json();
+  return d.suppression_list || [];
+}
+
+// Add to suppression list
+export async function addToSuppressionList(
+  email: string,
+  reason: 'unsubscribed' | 'bounced' | 'complained'
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/email-suppression`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, reason }),
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Failed to add to suppression list (${res.status})`);
+  }
+}
+
+// Check if email is suppressed
+export async function checkSuppression(email: string): Promise<{ suppressed: boolean; entry?: SuppressionEntry }> {
+  const qs = new URLSearchParams({ email });
+  const res = await fetch(`${API_BASE}/api/email-suppression/check?${qs.toString()}`);
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Failed to check suppression (${res.status})`);
+  }
+  const d = await res.json();
+  return { suppressed: d.suppressed, entry: d.entry };
+}
+
+// =============================================================================
+// Places API Discovery
+// =============================================================================
+
+export interface PlacesDiscoveryResult {
+  discovered: number;
+  message: string;
+}
+
+// Trigger Places API discovery for a campaign
+export async function discoverPlacesLeads(
+  campaignId: string,
+  city: string,
+  category: string,
+  limit = 50
+): Promise<PlacesDiscoveryResult> {
+  const res = await fetch(
+    `${API_BASE}/api/email-campaigns/${encodeURIComponent(campaignId)}/discover-places`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ city, category, limit }),
+    }
+  );
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Places discovery failed (${res.status})`);
+  }
+  const d = await res.json();
+  return { discovered: d.discovered || 0, message: d.message || '' };
+}
+
+// =============================================================================
+// OAuth Helpers
+// =============================================================================
+
+// Build OAuth URL for Gmail
+export function getGmailOAuthUrl(redirectUri: string, state: string): string {
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+  const scope = encodeURIComponent('https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly');
+  
+  return `https://accounts.google.com/o/oauth2/v2/auth?` +
+    `client_id=${clientId}&` +
+    `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+    `response_type=code&` +
+    `scope=${scope}&` +
+    `access_type=offline&` +
+    `prompt=consent&` +
+    `state=${encodeURIComponent(state)}`;
+}
+
+// Build OAuth URL for Outlook/Microsoft
+export function getOutlookOAuthUrl(redirectUri: string, state: string): string {
+  const clientId = import.meta.env.VITE_MICROSOFT_CLIENT_ID || '';
+  const scope = encodeURIComponent('https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/User.Read');
+  
+  return `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?` +
+    `client_id=${clientId}&` +
+    `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+    `response_type=code&` +
+    `scope=${scope}&` +
+    `access_type=offline&` +
+    `prompt=consent&` +
+    `state=${encodeURIComponent(state)}`;
+}
+
+// Exchange OAuth code for tokens (handled by backend)
+export async function exchangeOAuthCode(
+  provider: 'gmail' | 'outlook',
+  code: string,
+  redirectUri: string
+): Promise<{ refreshToken: string; email: string; displayName: string }> {
+  const res = await fetch(`${API_BASE}/api/email-accounts/connect`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, code, redirectUri }),
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `OAuth exchange failed (${res.status})`);
+  }
+  const d = await res.json();
+  return {
+    refreshToken: d.refreshToken,
+    email: d.email,
+    displayName: d.displayName,
+  };
+}
+
+// Initiate OAuth flow from frontend
+export function initiateOAuthFlow(provider: 'gmail' | 'outlook'): void {
+  const redirectUri = `${window.location.origin}/api/email-accounts/callback`;
+  const state = btoa(JSON.stringify({ provider, timestamp: Date.now() }));
+
+  const url = provider === 'gmail'
+    ? getGmailOAuthUrl(redirectUri, state)
+    : getOutlookOAuthUrl(redirectUri, state);
+
+  window.location.href = url;
+}
+
+// =============================================================================
+// Dashboard counters
+// =============================================================================
+//
+// Lightweight "today vs lifetime" stats for the Dashboard's metric cards and
+// the celebration card on the new EmailCampaignWizard. The dashboard polls
+// this endpoint every ~5 seconds so the counters stay live while a campaign
+// is running; the celebration card ALSO receives per-event increments
+// through the SSE stream so the user sees digits move instantly without
+// waiting for the next poll.
+
+export interface DashboardStats {
+  sitesDeployedToday: number;
+  sitesDeployedTotal: number;
+  emailsSentToday: number;
+  emailsSentTotal: number;
+  asOf: number;          // server clock at snapshot (unix seconds)
+  windowStart: number;   // start-of-today (unix seconds) used as the cutoff
+}
+
+export async function fetchDashboardStats(ownerKey: string): Promise<DashboardStats | null> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/stats/dashboard?ownerKey=${encodeURIComponent(ownerKey)}`
+    );
+    if (!res.ok) return null;
+    const d = await res.json();
+    return d.stats || null;
+  } catch {
+    // Network blip → return null so the caller keeps the previous snapshot
+    // rather than blanking the UI. Dashboard retries on the next tick.
+    return null;
+  }
+}
+
+export interface EmailLogEntry {
+  id: number;
+  campaign_id: string;
+  campaign_name: string;
+  account_id: string;
+  account_email: string;
+  recipient_email: string;
+  recipient_name: string;
+  subject: string;
+  sent_at: number;
+  delivery_status: string;
+  generated_site_url: string;
+}
+
+export async function fetchEmailLogsToday(ownerKey: string): Promise<EmailLogEntry[]> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/email-logs/today?ownerKey=${encodeURIComponent(ownerKey)}`
+    );
+    if (!res.ok) return [];
+    const d = await res.json();
+    return d.logs || [];
+  } catch {
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sites directory — every site ever generated for this owner, regardless of
+// whether it came from a Site Deploy campaign or an Email Campaign. Used by
+// the Dashboard's "Sites Generated" panel so the user can audit, copy, and
+// open every deployed mockup from one place.
+// ---------------------------------------------------------------------------
+
+export type SiteSource = 'site-deploy' | 'email';
+
+export interface SiteRow {
+  source: SiteSource;
+  lead_id: number;
+  campaign_id: string;
+  campaign_name: string | null;
+  niche: string | null;
+  campaign_status: string | null;
+  campaign_started_at: number | null;
+  business_name: string;
+  city: string | null;
+  phone: string | null;
+  lead_niche: string | null;
+  site_url: string;
+  slug: string | null;
+  lead_status: string | null;
+  created_at: number;
+}
+
+export interface SitesCounts {
+  total: number;
+  siteDeploy: number;
+  email: number;
+}
+
+export async function fetchAllSites(
+  ownerKey: string,
+  opts?: { source?: SiteSource; limit?: number },
+): Promise<{ sites: SiteRow[]; counts: SitesCounts }> {
+  try {
+    const qs = new URLSearchParams({ ownerKey });
+    if (opts?.source) qs.set('source', opts.source);
+    if (opts?.limit) qs.set('limit', String(opts.limit));
+    const res = await fetch(`${API_BASE}/api/sites/all?${qs.toString()}`);
+    if (!res.ok) return { sites: [], counts: { total: 0, siteDeploy: 0, email: 0 } };
+    const d = await res.json();
+    return {
+      sites: Array.isArray(d.sites) ? d.sites : [],
+      counts: d.counts || { total: 0, siteDeploy: 0, email: 0 },
+    };
+  } catch {
+    return { sites: [], counts: { total: 0, siteDeploy: 0, email: 0 } };
+  }
 }

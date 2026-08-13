@@ -1,0 +1,3859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Dentist — Clinical Luxury Dental Studio</title>
+  
+  <!-- Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      /* Backgrounds */
+      --white:      #FFFFFF;
+      --off-white:  #F7F8FA;       /* alternating sections */
+      --surface:    #EFF1F5;       /* subtle surface, trust badges bg */
+      --navy:       #0A1628;       /* primary text, key UI elements */
+      --navy-mid:   #1E2F4A;       /* secondary headings */
+      --navy-light: #344D6E;       /* body text */
+      --navy-faint: #6B82A0;       /* muted / captions */
+      --ghost:      #B8C4D4;       /* placeholders, very light labels */
+
+      /* Accent */
+      --teal:       #0EA5A0;       /* THE accent — used like a scalpel */
+      --teal-light: #14C4BE;       /* hover */
+      --teal-dark:  #0B8581;       /* pressed */
+      --teal-tint:  #EBF8F7;       /* background tint */
+      --teal-soft:  #D1F0EE;       /* chips, tags */
+
+      /* Emergency accent — used ONLY for emergency CTA */
+      --urgent:     #DC4A2D;
+      --urgent-soft:#FEF0EC;
+
+      /* Borders — THE SEPARATOR SYSTEM */
+      --rule:       1px solid #DDE2EC;    /* primary section divider */
+      --rule-light: 1px solid #E8ECF3;    /* between items within section */
+      --rule-ghost: 1px solid #F0F2F7;    /* inside cards */
+
+      /* Shadows */
+      --shadow-xs:  0 1px 3px rgba(10,22,40,0.06);
+      --shadow-sm:  0 2px 10px rgba(10,22,40,0.08);
+      --shadow-md:  0 8px 28px rgba(10,22,40,0.10);
+      --shadow-lg:  0 20px 56px rgba(10,22,40,0.12);
+      --shadow-teal:0 8px 24px rgba(14,165,160,0.22);
+
+      /* Radii */
+      --r-xs:   3px;
+      --r-sm:   6px;
+      --r-md:   12px;
+      --r-lg:   20px;
+      --r-xl:   32px;
+      --r-pill: 100px;
+
+      /* Transitions */
+      --t-fast: 0.15s ease;
+      --t-base: 0.25s ease;
+      --t-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Base Reset */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: var(--white);
+      color: var(--navy);
+      overflow-x: hidden;
+      line-height: 1.5;
+    }
+
+    /* Structure Boundaries Mobile First */
+    section {
+      border-top: var(--rule);
+      padding: 64px 24px;
+      position: relative;
+    }
+
+    @media (min-width: 768px) {
+      section {
+        padding: 96px 48px;
+      }
+    }
+
+    section:not(#home):not(#nav) {
+      content-visibility: auto;
+      contain-intrinsic-size: 0 600px;
+    }
+
+    /* Helpers & Container */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .flex-center {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Typo Styles */
+    .eyebrow {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--teal);
+      display: block;
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-size: clamp(28px, 4vw, 48px);
+      font-weight: 700;
+      color: var(--navy);
+      line-height: 1.15;
+    }
+
+    .section-desc {
+      font-weight: 300;
+      font-size: 15px;
+      color: var(--navy-faint);
+      margin-top: 12px;
+      max-width: 640px;
+    }
+
+    /* Navigation */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 60px;
+      background: var(--white);
+      z-index: 1000;
+      border-bottom: var(--rule);
+      transition: var(--t-base);
+    }
+
+    @media (min-width: 1024px) {
+      nav {
+        height: 68px;
+        padding: 0 48px;
+      }
+    }
+
+    nav.scrolled {
+      box-shadow: var(--shadow-sm);
+    }
+
+    .nav-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 100%;
+      padding: 0 24px;
+      max-width: 1440px;
+      margin: 0 auto;
+    }
+
+    @media (min-width: 1024px) {
+      .nav-container {
+        padding: 0;
+      }
+    }
+
+    /* Logo structure */
+    .logo-box {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+    }
+
+    .tooth-logo {
+      width: 20px;
+      height: 20px;
+      border-radius: 40% 40% 50% 50%;
+      background: var(--teal);
+      position: relative;
+    }
+
+    .tooth-logo::after {
+      content: '';
+      position: absolute;
+      bottom: -4px;
+      left: 2px;
+      width: 16px;
+      height: 4px;
+      background: transparent;
+      border-left: 4px solid var(--teal-dark);
+      border-right: 4px solid var(--teal-dark);
+      border-radius: 2px;
+    }
+
+    .logo-text {
+      font-weight: 600;
+      font-size: 17px;
+      color: var(--navy);
+      letter-spacing: -0.02em;
+    }
+
+    /* Links Zone */
+    .nav-links {
+      display: none;
+      align-items: center;
+      gap: 24px;
+    }
+
+    @media (min-width: 1024px) {
+      .nav-links {
+        display: flex;
+      }
+    }
+
+    .nav-link {
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--navy-faint);
+      transition: var(--t-fast);
+    }
+
+    .nav-link:hover, .nav-link.active {
+      color: var(--teal);
+    }
+
+    /* Right utilities */
+    .nav-actions {
+      display: none;
+      align-items: center;
+      gap: 24px;
+    }
+
+    @media (min-width: 1024px) {
+      .nav-actions {
+        display: flex;
+      }
+    }
+
+    .nav-phone {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--navy);
+      text-decoration: none;
+      transition: var(--t-fast);
+    }
+
+    .nav-phone:hover {
+      color: var(--teal);
+    }
+
+    /* Button styles */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--r-sm);
+      font-weight: 600;
+      font-size: 13px;
+      padding: 10px 22px;
+      text-decoration: none;
+      transition: var(--t-base);
+      cursor: pointer;
+      border: none;
+      outline: none;
+    }
+
+    .btn-teal {
+      background: var(--teal);
+      color: white;
+      box-shadow: var(--shadow-teal);
+    }
+
+    .btn-teal:hover {
+      background: var(--teal-dark);
+    }
+
+    .btn-large {
+      padding: 15px 32px;
+      font-size: 15px;
+    }
+
+    /* Mobile three-dot menu trigger */
+    .hamburger {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      width: 32px;
+      height: 32px;
+      background: var(--surface);
+      border-radius: var(--r-sm);
+      border: none;
+      cursor: pointer;
+      outline: none;
+      transition: var(--t-fast);
+    }
+
+    @media (min-width: 1024px) {
+      .hamburger {
+        display: none;
+      }
+    }
+
+    .hamburger:hover {
+      background: var(--teal-soft);
+    }
+
+    .hamburger span {
+      width: 4px;
+      height: 4px;
+      background: var(--navy);
+      border-radius: 50%;
+      display: block;
+      transition: var(--t-base);
+    }
+
+    /* Emergency Banner */
+    .emergency-banner {
+      background: var(--urgent-soft);
+      border-bottom: 1px solid rgba(220,74,45,0.15);
+      padding: 12px 24px;
+      text-align: center;
+      margin-top: 60px;
+    }
+
+    @media (min-width: 768px) {
+      .emergency-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 48px;
+        margin-top: 68px;
+        text-align: left;
+      }
+    }
+
+    .emergency-text {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--urgent);
+    }
+
+    .emergency-cta {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--urgent);
+      text-decoration: none;
+      border-bottom: 1.5px solid var(--urgent);
+      display: inline-block;
+      margin-top: 4px;
+    }
+
+    @media (min-width: 768px) {
+      .emergency-cta {
+        margin-top: 0;
+      }
+    }
+
+    /* HERO */
+    #home {
+      border-top: none;
+      padding: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    @media (min-width: 1024px) {
+      #home {
+        flex-direction: row;
+      }
+    }
+
+    .hero-content {
+      width: 100%;
+      padding: 40px 24px 64px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    @media (min-width: 1024px) {
+      .hero-content {
+        width: 55%;
+        padding: 140px 64px 80px 64px;
+      }
+    }
+
+    .hero-headline {
+      margin-top: 12px;
+    }
+
+    .hero-title-bold {
+      font-size: clamp(38px, 5.5vw, 68px);
+      font-weight: 700;
+      color: var(--navy);
+      line-height: 1.05;
+      display: block;
+    }
+
+    .hero-title-light {
+      font-size: clamp(34px, 5vw, 62px);
+      font-weight: 300;
+      color: var(--navy-faint);
+      line-height: 1.1;
+      display: block;
+      margin-top: 4px;
+    }
+
+    .hero-subhead {
+      font-size: 17px;
+      font-weight: 300;
+      color: var(--navy-light);
+      line-height: 1.75;
+      margin-top: 36px;
+      max-width: 480px;
+    }
+
+    .hero-cta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-top: 44px;
+    }
+
+    .btn-urgent-outline {
+      background: var(--urgent-soft);
+      color: var(--urgent);
+      border: 1.5px solid var(--urgent);
+    }
+
+    .btn-urgent-outline:hover {
+      background: var(--urgent);
+      color: white;
+    }
+
+    .btn-ghost {
+      font-size: 15px;
+      font-weight: 400;
+      color: var(--navy-faint);
+      border-bottom: 1px solid var(--ghost);
+      border-radius: 0;
+      padding: 4px 0;
+    }
+
+    .btn-ghost:hover {
+      color: var(--teal);
+      border-color: var(--teal);
+    }
+
+    /* Stats strip at bottom of hero */
+    .hero-stats {
+      border-top: var(--rule);
+      padding: 28px 0;
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+      margin-top: 48px;
+    }
+
+    @media (min-width: 768px) {
+      .hero-stats {
+        grid-template-columns: repeat(4, 1fr);
+        padding: 28px 24px;
+        margin-top: 64px;
+      }
+    }
+
+    .stat-box {
+      border-top: var(--rule-light);
+      padding-top: 16px;
+    }
+
+    @media (min-width: 768px) {
+      .stat-box {
+        border-top: none;
+        border-left: var(--rule);
+        padding: 0 32px;
+      }
+      .stat-box:first-child {
+        border-left: none;
+        padding-left: 0;
+      }
+    }
+
+    .stat-number {
+      font-size: 40px;
+      font-weight: 700;
+      color: var(--navy);
+      display: block;
+      line-height: 1;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      font-weight: 300;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--navy-faint);
+      margin-top: 8px;
+      display: block;
+    }
+
+    /* HERO Right Visual CSS artwork */
+    .hero-artwork {
+      display: none;
+      width: 45%;
+      position: relative;
+      background: var(--off-white);
+      overflow: hidden;
+      min-height: 500px;
+    }
+
+    @media (min-width: 1024px) {
+      .hero-artwork {
+        display: block;
+      }
+    }
+
+    .art-halo {
+      position: absolute;
+      top: 10%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 300px;
+      height: 300px;
+      border-radius: 50%;
+      background: var(--teal-tint);
+    }
+
+    .art-chair {
+      position: absolute;
+      bottom: 20%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 120px;
+      height: 160px;
+      border-radius: var(--r-xl);
+      background: var(--surface);
+      box-shadow: var(--shadow-md);
+    }
+
+    .art-arm {
+      position: absolute;
+      top: 35%;
+      left: 50%;
+      transform: translateX(-10%);
+      width: 160px;
+      height: 2px;
+      background: var(--teal);
+      opacity: 0.3;
+    }
+
+    .art-panel {
+      position: absolute;
+      top: 45%;
+      left: 20%;
+      width: 28px;
+      height: 28px;
+      background: white;
+      border: var(--rule);
+      box-shadow: var(--shadow-sm);
+      border-radius: var(--r-sm);
+    }
+
+    .art-panel-right {
+      position: absolute;
+      top: 30%;
+      right: 20%;
+      width: 28px;
+      height: 28px;
+      background: white;
+      border: var(--rule);
+      box-shadow: var(--shadow-sm);
+      border-radius: var(--r-sm);
+    }
+
+    .art-dots {
+      position: absolute;
+      bottom: 15%;
+      right: 15%;
+      width: 8px;
+      height: 8px;
+      border: 1.5px solid var(--teal-soft);
+      border-radius: 50%;
+      background: var(--teal-tint);
+    }
+
+    /* TRUST BADGES */
+    .trust-badges {
+      border-top: var(--rule);
+      background: var(--surface);
+      padding: 28px 24px;
+      overflow-x: auto;
+      white-space: nowrap;
+      scrollbar-width: none;
+    }
+
+    .trust-badges::-webkit-scrollbar {
+      display: none;
+    }
+
+    .trust-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 32px;
+      justify-content: center;
+      width: 100%;
+    }
+
+    .trust-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--navy-faint);
+    }
+
+    .trust-bullet {
+      width: 10px;
+      height: 10px;
+      background: var(--teal);
+      transform: rotate(45deg);
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .trust-sep {
+      color: var(--ghost);
+      font-weight: 300;
+    }
+
+    /* SERVICES */
+    .services-nav {
+      border-bottom: var(--rule);
+      margin-top: 40px;
+      display: flex;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .services-nav::-webkit-scrollbar {
+      display: none;
+    }
+
+    .services-tab {
+      font-size: 14px;
+      font-weight: 500;
+      padding: 14px 0;
+      margin-right: 36px;
+      color: var(--navy-faint);
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      position: relative;
+      white-space: nowrap;
+      outline: none;
+    }
+
+    .services-tab.active {
+      color: var(--teal);
+    }
+
+    .services-tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background: var(--teal);
+    }
+
+    .services-panels {
+      margin-top: 16px;
+    }
+
+    .service-panel {
+      display: none;
+    }
+
+    .service-panel.active {
+      display: block;
+    }
+
+    .service-row {
+      border-bottom: var(--rule-light);
+      padding: 22px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: var(--t-fast);
+    }
+
+    @media (min-width: 768px) {
+      .service-row {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        padding: 22px 24px;
+      }
+    }
+
+    .service-row:hover {
+      background: var(--teal-tint);
+    }
+
+    .service-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    @media (min-width: 768px) {
+      .service-info {
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
+      }
+    }
+
+    .service-name {
+      font-weight: 600;
+      font-size: 18px;
+      color: var(--navy);
+      transition: var(--t-fast);
+    }
+
+    .service-row:hover .service-name {
+      color: var(--teal);
+    }
+
+    .service-dash {
+      display: none;
+      color: var(--navy-faint);
+    }
+
+    @media (min-width: 768px) {
+      .service-dash {
+        display: inline;
+      }
+    }
+
+    .service-desc {
+      font-weight: 300;
+      font-size: 13px;
+      color: var(--navy-faint);
+    }
+
+    .service-duration {
+      font-size: 13px;
+      color: var(--navy-faint);
+      white-space: nowrap;
+    }
+
+    /* TEAM */
+    #team {
+      background: var(--off-white);
+    }
+
+    .team-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1px;
+      background: var(--rule);
+      margin-top: 48px;
+    }
+
+    @media (min-width: 768px) {
+      .team-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .team-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    .team-card {
+      background: var(--white);
+      padding: 36px 32px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .team-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+    }
+
+    .portrait {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: 3px solid var(--white);
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 0px;
+      color: transparent;
+      flex-shrink: 0;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+
+    .portrait-1 { background-image: url('https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=400'); }
+    .portrait-2 { background-image: url('https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=400'); }
+    .portrait-3 { background-image: url('https://images.unsplash.com/photo-1594824813573-246434de83fb?auto=format&fit=crop&q=80&w=400'); }
+    .portrait-4 { background-image: url('https://images.unsplash.com/photo-1622902046580-2b47f47f0471?auto=format&fit=crop&q=80&w=400'); }
+    .portrait-5 { background-image: url('https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&q=80&w=400'); }
+
+    .team-info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .team-name {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--navy);
+    }
+
+    .team-role {
+      font-size: 12px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--teal);
+      margin-top: 2px;
+    }
+
+    .team-edu {
+      font-size: 12px;
+      font-weight: 300;
+      color: var(--navy-faint);
+      margin-top: 2px;
+    }
+
+    .team-line {
+      border-top: var(--rule-ghost);
+      margin: 20px 0;
+    }
+
+    .team-bio {
+      font-weight: 300;
+      font-size: 14px;
+      color: var(--navy-light);
+      line-height: 1.7;
+      flex-grow: 1;
+    }
+
+    .team-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 24px;
+    }
+
+    .team-tag {
+      background: var(--teal-soft);
+      color: var(--teal-dark);
+      border-radius: var(--r-pill);
+      font-size: 11px;
+      padding: 4px 10px;
+      font-weight: 500;
+    }
+
+    /* GALLERY */
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2px;
+      background: var(--rule);
+      margin-top: 48px;
+    }
+
+    @media (min-width: 768px) {
+      .gallery-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .gallery-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    .gallery-item {
+      aspect-ratio: 4/3;
+      position: relative;
+      overflow: hidden;
+      background: var(--white);
+      transition: var(--t-base);
+    }
+
+    .before-half, .after-half {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 50%;
+      background-size: 200% 100%;
+      background-repeat: no-repeat;
+    }
+
+    .before-half {
+      left: 0;
+      background-position: left center;
+      filter: grayscale(0.2) sepia(0.35) saturate(0.85) brightness(0.92);
+    }
+
+    .after-half {
+      right: 0;
+      background-position: right center;
+      filter: brightness(1.08) contrast(1.04) saturate(1.02);
+    }
+
+    .gallery-divider {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: white;
+      z-index: 2;
+    }
+
+    .gallery-label {
+      position: absolute;
+      top: 12px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      color: white;
+      background: rgba(10,22,40,0.5);
+      padding: 3px 8px;
+      border-radius: var(--r-pill);
+      z-index: 3;
+    }
+
+    .label-before {
+      left: 12px;
+    }
+
+    .label-after {
+      right: 12px;
+    }
+
+    .gallery-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(10,22,40,0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: var(--t-base);
+      z-index: 4;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .gallery-item:hover .gallery-overlay {
+      opacity: 1;
+    }
+
+    .gallery-title {
+      color: white;
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    /* TECHNOLOGY */
+    #technology {
+      background: var(--off-white);
+    }
+
+    .tech-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 24px;
+      margin-top: 48px;
+    }
+
+    @media (min-width: 1024px) {
+      .tech-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .tech-card {
+      background: var(--white);
+      border: var(--rule);
+      border-radius: var(--r-lg);
+      padding: 36px 32px;
+      box-shadow: var(--shadow-xs);
+    }
+
+    .tech-icon-box {
+      width: 44px;
+      height: 44px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+    }
+
+    .tech-mark-1 {
+      width: 40px;
+      height: 40px;
+      border-radius: 4px;
+      background: var(--teal-tint);
+      border: 1.5px solid var(--teal-soft);
+      position: relative;
+    }
+
+    .tech-mark-1::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--teal);
+    }
+
+    .tech-mark-2 {
+      width: 24px;
+      height: 24px;
+      background: var(--teal);
+      position: relative;
+    }
+
+    .tech-mark-2::after {
+      content: '';
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      width: 24px;
+      height: 24px;
+      background: var(--teal-light);
+      opacity: 0.7;
+      transform: rotate(45deg);
+    }
+
+    .tech-mark-3 {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 2px dashed var(--teal);
+    }
+
+    .tech-mark-4 {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .tech-mark-4 span {
+      display: block;
+      height: 4px;
+      background: var(--teal);
+    }
+
+    .tech-name {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--navy);
+      margin-bottom: 12px;
+    }
+
+    .tech-desc {
+      font-weight: 300;
+      font-size: 14px;
+      color: var(--navy-light);
+      line-height: 1.7;
+    }
+
+    /* NEW PATIENT OFFER */
+    #offer {
+      background: var(--navy);
+      color: white;
+      border-top: var(--rule);
+      padding: 80px 24px;
+    }
+
+    @media (min-width: 1024px) {
+      #offer {
+        padding: 80px 48px;
+      }
+    }
+
+    .offer-container {
+      display: flex;
+      flex-direction: column;
+      gap: 48px;
+    }
+
+    @media (min-width: 1024px) {
+      .offer-container {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+      }
+    }
+
+    .offer-left {
+      width: 100%;
+    }
+
+    @media (min-width: 1024px) {
+      .offer-left {
+        width: 60%;
+      }
+    }
+
+    .offer-tag {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      background: var(--teal);
+      color: white;
+      padding: 5px 12px;
+      border-radius: var(--r-pill);
+      display: inline-block;
+    }
+
+    .offer-title {
+      font-size: clamp(28px, 4vw, 44px);
+      font-weight: 700;
+      line-height: 1.15;
+      margin-top: 20px;
+    }
+
+    .offer-desc {
+      font-weight: 300;
+      font-size: 16px;
+      color: rgba(255,255,255,0.6);
+      margin-top: 16px;
+      max-width: 480px;
+    }
+
+    .offer-prices {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      margin-top: 28px;
+    }
+
+    .price-now {
+      font-size: 52px;
+      font-weight: 300;
+      color: var(--teal-light);
+    }
+
+    .price-was {
+      font-size: 22px;
+      font-weight: 300;
+      color: rgba(255,255,255,0.3);
+      text-decoration: line-through;
+    }
+
+    .offer-fine {
+      font-size: 12px;
+      font-weight: 300;
+      color: rgba(255,255,255,0.3);
+      margin-top: 12px;
+      display: block;
+    }
+
+    .offer-right {
+      display: none;
+      width: 35%;
+      justify-content: flex-end;
+    }
+
+    @media (min-width: 1024px) {
+      .offer-right {
+        display: flex;
+      }
+    }
+
+    .mock-patient-card {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: var(--r-lg);
+      padding: 32px;
+      width: 280px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .mock-line {
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.15);
+    }
+
+    .mock-check {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--teal);
+      align-self: center;
+      position: relative;
+    }
+
+    .mock-check::after {
+      content: '';
+      position: absolute;
+      top: 5px;
+      left: 9px;
+      width: 5px;
+      height: 10px;
+      border-right: 2px solid white;
+      border-bottom: 2px solid white;
+      transform: rotate(45deg);
+    }
+
+    /* REVIEWS / TESTIMONIALS */
+    .reviews-carousel {
+      display: flex;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      gap: 24px;
+      padding: 24px 0;
+      scrollbar-width: none;
+    }
+
+    .reviews-carousel::-webkit-scrollbar {
+      display: none;
+    }
+
+    @media (min-width: 1024px) {
+      .reviews-carousel {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        overflow: visible;
+        scroll-snap-type: none;
+        padding: 48px 0;
+      }
+    }
+
+    .review-card {
+      background: var(--white);
+      border: var(--rule);
+      border-radius: var(--r-lg);
+      padding: 28px;
+      box-shadow: var(--shadow-xs);
+      flex: 0 0 85vw;
+      scroll-snap-align: start;
+    }
+
+    @media (min-width: 1024px) {
+      .review-card {
+        flex: none;
+      }
+    }
+
+    .review-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .stars {
+      display: flex;
+      gap: 3px;
+    }
+
+    .star {
+      width: 12px;
+      height: 12px;
+      display: inline-block;
+      transform: rotate(45deg);
+      border-radius: 2px;
+    }
+
+    .star-filled {
+      background: var(--teal);
+    }
+
+    .star-empty {
+      background: var(--surface);
+    }
+
+    .source-badge {
+      font-size: 10px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--navy-faint);
+      background: var(--surface);
+      padding: 3px 8px;
+      border-radius: var(--r-pill);
+    }
+
+    .review-text {
+      font-weight: 300;
+      font-size: 15px;
+      color: var(--navy-light);
+      line-height: 1.75;
+      margin: 20px 0;
+      min-height: 105px;
+    }
+
+    .review-user {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 14px;
+      color: white;
+      flex-shrink: 0;
+    }
+
+    .avatar-1 { background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%); }
+    .avatar-2 { background: linear-gradient(135deg, #F093FB 0%, #F5576C 100%); }
+    .avatar-3 { background: linear-gradient(135deg, #4FACFE 0%, #00F2FE 100%); }
+    .avatar-4 { background: linear-gradient(135deg, #43E97B 0%, #38F9D7 100%); }
+    .avatar-5 { background: linear-gradient(135deg, #FA709A 0%, #FEE140 100%); }
+    .avatar-6 { background: linear-gradient(135deg, #A18CD1 0%, #FBC2EB 100%); }
+
+    .user-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--navy);
+    }
+
+    /* Review Carousel Nav Buttons */
+    .carousel-nav {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+      margin-top: 24px;
+    }
+
+    @media (min-width: 1024px) {
+      .carousel-nav {
+        display: none !important;
+      }
+    }
+
+    .carousel-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--white);
+      border: var(--rule);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+    }
+
+    .carousel-btn:hover {
+      background: var(--teal-tint);
+      border-color: var(--teal);
+    }
+
+    .carousel-btn:active {
+      transform: scale(0.92);
+    }
+
+    /* Light/disabled button style with smooth scale & fading animation */
+    .carousel-btn.disabled {
+      opacity: 0.35;
+      background: var(--surface);
+      border-color: var(--rule-light);
+      pointer-events: none;
+      transform: scale(0.96);
+    }
+
+    /* Elegant CSS geometry arrows */
+    .arrow-left, .arrow-right {
+      width: 8px;
+      height: 8px;
+      border-left: 2px solid var(--navy);
+      border-bottom: 2px solid var(--navy);
+      display: block;
+      transition: border-color var(--t-fast);
+    }
+
+    .arrow-left {
+      transform: rotate(45deg);
+      margin-left: 3px;
+    }
+
+    .arrow-right {
+      transform: rotate(-135deg);
+      margin-right: 3px;
+    }
+
+    .carousel-btn:hover .arrow-left, .carousel-btn:hover .arrow-right {
+      border-color: var(--teal-dark);
+    }
+
+    /* INSURANCE & FINANCING */
+    #insurance {
+      background: var(--off-white);
+    }
+
+    .insurance-container {
+      display: flex;
+      flex-direction: column;
+      gap: 48px;
+      margin-top: 48px;
+    }
+
+    @media (min-width: 1024px) {
+      .insurance-container {
+        flex-direction: row;
+      }
+    }
+
+    .insurance-left {
+      width: 100%;
+    }
+
+    @media (min-width: 1024px) {
+      .insurance-left {
+        width: 50%;
+      }
+    }
+
+    .insurance-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    .insurance-badge {
+      background: var(--white);
+      border: var(--rule);
+      border-radius: var(--r-md);
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .badge-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--navy);
+    }
+
+    .badge-check {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--teal-tint);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .badge-check::after {
+      content: '';
+      width: 4px;
+      height: 7px;
+      border-right: 2px solid var(--teal);
+      border-bottom: 2px solid var(--teal);
+      transform: rotate(45deg);
+      display: block;
+      margin-top: -2px;
+    }
+
+    .insurance-sub {
+      font-size: 13px;
+      font-weight: 300;
+      color: var(--navy-faint);
+      margin-top: 20px;
+    }
+
+    .insurance-right {
+      width: 100%;
+    }
+
+    @media (min-width: 1024px) {
+      .insurance-right {
+        width: 50%;
+      }
+    }
+
+    .finance-box {
+      background: var(--white);
+      border: var(--rule);
+      border-radius: var(--r-lg);
+      padding: 36px 32px;
+    }
+
+    .finance-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--navy);
+      margin-bottom: 12px;
+    }
+
+    .finance-desc {
+      font-weight: 300;
+      font-size: 14px;
+      color: var(--navy-light);
+      line-height: 1.7;
+      margin-bottom: 24px;
+    }
+
+    .finance-option {
+      border-top: var(--rule-ghost);
+      padding: 16px 0;
+    }
+
+    .finance-opt-title {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--navy);
+    }
+
+    .finance-opt-desc {
+      font-weight: 300;
+      font-size: 13px;
+      color: var(--navy-faint);
+      margin-top: 4px;
+    }
+
+    /* FAQ */
+    .faq-container {
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+      margin-top: 48px;
+    }
+
+    @media (min-width: 1024px) {
+      .faq-container {
+        flex-direction: row;
+      }
+    }
+
+    .faq-col {
+      width: 100%;
+    }
+
+    @media (min-width: 1024px) {
+      .faq-col {
+        width: 50%;
+      }
+    }
+
+    .faq-item {
+      border-bottom: var(--rule-light);
+    }
+
+    .faq-trigger {
+      padding: 20px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      width: 100%;
+      background: transparent;
+      border: none;
+      text-align: left;
+      outline: none;
+    }
+
+    .faq-question {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--navy);
+    }
+
+    .faq-toggle {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .faq-toggle::before, .faq-toggle::after {
+      content: '';
+      position: absolute;
+      background: var(--teal);
+    }
+
+    .faq-toggle::before {
+      width: 10px;
+      height: 2px;
+    }
+
+    .faq-toggle::after {
+      width: 2px;
+      height: 10px;
+      transition: var(--t-fast);
+    }
+
+    .faq-item.open .faq-toggle::after {
+      transform: rotate(90deg);
+      opacity: 0;
+    }
+
+    .faq-answer {
+      font-weight: 300;
+      font-size: 14px;
+      color: var(--navy-light);
+      line-height: 1.75;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+
+    .faq-item.open .faq-answer {
+      padding-bottom: 20px;
+    }
+
+    /* BOOK APPOINTMENT */
+    #book {
+      background: var(--off-white);
+    }
+
+    .book-toggle-wrapper {
+      display: flex;
+      justify-content: center;
+      margin-top: 40px;
+    }
+
+    .book-toggle-container {
+      background: var(--surface);
+      padding: 4px;
+      border-radius: var(--r-pill);
+      display: flex;
+      gap: 4px;
+    }
+
+    .book-toggle-btn {
+      padding: 8px 18px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: var(--r-pill);
+      border: none;
+      background: transparent;
+      color: var(--navy-faint);
+      cursor: pointer;
+      outline: none;
+    }
+
+    .book-toggle-btn.active {
+      background: var(--teal);
+      color: white;
+    }
+
+    .book-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 48px;
+      margin-top: 48px;
+    }
+
+    @media (min-width: 1024px) {
+      .book-grid {
+        grid-template-columns: 1fr 360px;
+      }
+    }
+
+    .book-form-box {
+      width: 100%;
+    }
+
+    .book-form {
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .form-group-half {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .form-group-half {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .form-label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--navy-faint);
+      margin-bottom: 6px;
+    }
+
+    .form-input {
+      border: none;
+      border-bottom: 1px solid var(--ghost);
+      background: transparent;
+      padding: 14px 0;
+      font-family: inherit;
+      font-size: 15px;
+      color: var(--navy);
+      outline: none;
+      width: 100%;
+      border-radius: 0;
+      transition: var(--t-fast);
+    }
+
+    .form-input:focus {
+      border-bottom: 1.5px solid var(--teal);
+    }
+
+    .form-input::placeholder {
+      color: var(--ghost);
+    }
+
+    select.form-input {
+      appearance: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%236B82A0' stroke-width='1.5'><path d='M3 4.5l3 3 3-3'/></svg>");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+    }
+
+    .form-fine {
+      font-weight: 305;
+      font-size: 12px;
+      color: var(--navy-faint);
+      margin-top: 14px;
+      text-align: center;
+    }
+
+    .book-sidebar {
+      background: var(--white);
+      border: var(--rule);
+      border-radius: var(--r-lg);
+      padding: 36px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .sidebar-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--navy);
+    }
+
+    .sidebar-list {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar-item {
+      border-bottom: var(--rule-ghost);
+      padding: 16px 0;
+    }
+
+    .sidebar-item-title {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--navy);
+    }
+
+    .sidebar-item-desc {
+      font-weight: 300;
+      font-size: 13px;
+      color: var(--navy-faint);
+      margin-top: 4px;
+    }
+
+    .hours-block {
+      display: flex;
+      flex-direction: column;
+      margin-top: 8px;
+    }
+
+    .hours-row {
+      border-bottom: var(--rule-ghost);
+      padding: 12px 0;
+      display: flex;
+      justify-content: space-between;
+      font-size: 14px;
+    }
+
+    .hours-day {
+      font-weight: 400;
+      color: var(--navy-light);
+    }
+
+    .hours-time {
+      font-weight: 600;
+      color: var(--navy);
+    }
+
+    .sidebar-phone {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--navy);
+      text-decoration: none;
+      text-align: center;
+      display: block;
+      margin-top: 16px;
+      transition: var(--t-fast);
+    }
+
+    .sidebar-phone:hover {
+      color: var(--teal);
+    }
+
+    /* Form Validation animations */
+    .shake {
+      animation: shakeKey 0.4s ease-in-out;
+    }
+
+    @keyframes shakeKey {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-6px); }
+      40%, 80% { transform: translateX(6px); }
+    }
+
+    .highlight-err {
+      border-bottom: 1.5px solid var(--urgent) !important;
+    }
+
+    .success-box {
+      text-align: center;
+      padding: 48px;
+      background: white;
+      border: var(--rule);
+      border-radius: var(--r-lg);
+    }
+
+    .success-box h3 {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--navy);
+    }
+
+    .success-box p {
+      font-weight: 300;
+      font-size: 15px;
+      color: var(--navy-faint);
+      margin-top: 12px;
+    }
+
+    /* BLOG */
+    .blog-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 32px;
+      margin-top: 48px;
+    }
+
+    @media (min-width: 1024px) {
+      .blog-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    .blog-card {
+      background: var(--white);
+      border: var(--rule);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-xs);
+      transition: var(--t-base);
+    }
+
+    .blog-card:hover {
+      box-shadow: var(--shadow-md);
+      transform: translateY(-3px);
+    }
+
+    .blog-cover {
+      height: 160px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+
+    .blog-cover-1 { background-image: url('https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&q=80&w=400'); }
+    .blog-cover-2 { background-image: url('https://images.unsplash.com/photo-1598256989800-fe5f95da9787?auto=format&fit=crop&q=80&w=400'); }
+    .blog-cover-3 { background-image: url('https://images.unsplash.com/photo-1513201099705-a9746e1e201f?auto=format&fit=crop&q=80&w=400'); }
+
+    /* Decorative layout on covers */
+    .blog-dec-tooth, .blog-dec-xray, .blog-dec-smile {
+      display: none !important;
+    }
+
+    .blog-dec-xray {
+      width: 64px;
+      height: 44px;
+      background: var(--navy);
+      border: 2px solid var(--ghost);
+      border-radius: var(--r-xs);
+    }
+
+    .blog-dec-smile {
+      width: 60px;
+      height: 30px;
+      border-bottom: 4px solid var(--teal-dark);
+      border-radius: 50%;
+    }
+
+    .blog-body {
+      padding: 28px;
+    }
+
+    .blog-category {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--teal);
+      background: var(--teal-tint);
+      padding: 4px 10px;
+      border-radius: var(--r-pill);
+      display: inline-block;
+    }
+
+    .blog-date {
+      font-size: 12px;
+      font-weight: 300;
+      color: var(--ghost);
+      margin-top: 10px;
+      display: block;
+    }
+
+    .blog-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--navy);
+      line-height: 1.3;
+      margin: 10px 0;
+    }
+
+    .blog-excerpt {
+      font-weight: 300;
+      font-size: 14px;
+      color: var(--navy-light);
+      line-height: 1.65;
+    }
+
+    .blog-link {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--teal);
+      border-bottom: 1px solid var(--teal-soft);
+      display: inline-block;
+      margin-top: 16px;
+      text-decoration: none;
+      transition: var(--t-fast);
+    }
+
+    .blog-link:hover {
+      border-color: var(--teal);
+    }
+
+    /* CONTACT */
+    #contact {
+      background: var(--off-white);
+    }
+
+    .contact-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 48px;
+      margin-top: 48px;
+    }
+
+    @media (min-width: 1024px) {
+      .contact-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    .contact-col {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    @media (min-width: 1024px) {
+      .contact-col {
+        border-left: var(--rule);
+        padding: 0 48px;
+      }
+      .contact-col:first-child {
+        border-left: none;
+        padding-left: 0;
+      }
+    }
+
+    .contact-label {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--teal);
+    }
+
+    .contact-val {
+      font-size: 34px;
+      font-weight: 700;
+      color: var(--navy);
+      line-height: 1.1;
+    }
+
+    .contact-val-small {
+      font-size: 22px;
+    }
+
+    .contact-val a {
+      color: inherit;
+      text-decoration: none;
+      transition: var(--t-fast);
+    }
+
+    .contact-val a:hover {
+      color: var(--teal);
+    }
+
+    .contact-info-text {
+      font-weight: 300;
+      font-size: 13px;
+      color: var(--navy-faint);
+    }
+
+    .contact-action-btn {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--navy);
+      border-bottom: 1.5px solid var(--navy);
+      text-decoration: none;
+      display: inline-block;
+      align-self: flex-start;
+      transition: var(--t-fast);
+      margin-top: auto;
+    }
+
+    .contact-action-btn:hover {
+      color: var(--teal);
+      border-color: var(--teal);
+    }
+
+    /* FOOTER */
+    footer {
+      background: var(--navy);
+      color: white;
+      border-top: var(--rule);
+      padding: 80px 24px 40px;
+    }
+
+    @media (min-width: 768px) {
+      footer {
+        padding: 80px 48px 40px;
+      }
+    }
+
+    .footer-top {
+      display: flex;
+      flex-direction: column;
+      gap: 48px;
+    }
+
+    @media (min-width: 768px) {
+      .footer-top {
+        flex-direction: row;
+        justify-content: space-between;
+      }
+    }
+
+    .footer-left {
+      max-width: 320px;
+    }
+
+    .footer-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: white;
+    }
+
+    .footer-logo .tooth-logo {
+      background: var(--teal-light);
+    }
+
+    .footer-logo .tooth-logo::after {
+      border-left: 4px solid var(--teal-dark);
+      border-right: 4px solid var(--teal-dark);
+    }
+
+    .footer-logo-text {
+      font-weight: 600;
+      font-size: 18px;
+    }
+
+    .footer-tagline {
+      font-size: 13px;
+      font-weight: 300;
+      color: rgba(255,255,255,0.4);
+      margin-top: 12px;
+    }
+
+    .footer-right {
+      display: flex;
+      gap: 64px;
+    }
+
+    .footer-col {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .footer-col-head {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.3);
+    }
+
+    .footer-col a {
+      font-size: 13px;
+      font-weight: 300;
+      color: rgba(255,255,255,0.45);
+      text-decoration: none;
+      transition: var(--t-fast);
+    }
+
+    .footer-col a:hover {
+      color: white;
+    }
+
+    .footer-div {
+      border-top: 1px solid rgba(255,255,255,0.08);
+      margin: 48px 0 24px;
+    }
+
+    .footer-bottom {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      text-align: center;
+    }
+
+    @media (min-width: 768px) {
+      .footer-bottom {
+        flex-direction: row;
+        justify-content: space-between;
+        text-align: left;
+      }
+    }
+
+    .footer-copy {
+      font-size: 12px;
+      font-weight: 300;
+      color: rgba(255,255,255,0.25);
+    }
+
+    /* SCROLL REVEAL */
+    [data-reveal] {
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    [data-reveal].revealed {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Mobile Nav Overlay */
+    .mobile-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--white);
+      z-index: 1001;
+      transform: translateX(100%);
+      transition: var(--t-slow);
+      display: flex;
+      flex-direction: column;
+      padding: 24px;
+      overflow-y: auto;
+    }
+
+    .mobile-overlay.open {
+      transform: translateX(0);
+    }
+
+    .mobile-overlay-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: var(--rule-light);
+      padding-bottom: 16px;
+    }
+
+    .mobile-close {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 28px;
+      color: var(--navy);
+      line-height: 1;
+      outline: none;
+    }
+
+    .mobile-links {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-top: 32px;
+    }
+
+    .mobile-link {
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--navy);
+      text-decoration: none;
+      padding: 8px 0;
+      border-bottom: var(--rule-light);
+    }
+
+    .mobile-link:hover {
+      color: var(--teal);
+    }
+
+    .mobile-btn-box {
+      margin-top: auto;
+    }
+
+    .mobile-btn-box .btn {
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav id="nav">
+    <div class="nav-container">
+      <a href="#home" class="logo-box">
+        <div class="tooth-logo"></div>
+        <span class="logo-text">Test</span>
+      </a>
+
+      <div class="nav-links">
+        <a href="#home" class="nav-link active">Home</a>
+        <a href="#services" class="nav-link">Services</a>
+        <a href="#team" class="nav-link">Team</a>
+        <a href="#gallery" class="nav-link">Gallery</a>
+        <a href="#technology" class="nav-link">Technology</a>
+        <a href="#reviews" class="nav-link">Reviews</a>
+        <a href="#insurance" class="nav-link">Insurance</a>
+        <a href="#faq" class="nav-link">FAQ</a>
+        <a href="#book" class="nav-link">Book</a>
+        <a href="#blog" class="nav-link">Blog</a>
+        <a href="#contact" class="nav-link">Contact</a>
+      </div>
+
+      <div class="nav-actions">
+        <a href="tel:5125559001" class="nav-phone">(512) 555-9001</a>
+        <button class="btn btn-teal nav-book-btn">Book Now</button>
+      </div>
+
+      <button class="hamburger" id="hamburger">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Mobile Nav Overlay -->
+  <div class="mobile-overlay" id="mobile_overlay">
+    <div class="mobile-overlay-header">
+      <div class="logo-box">
+        <div class="tooth-logo"></div>
+        <span class="logo-text">Test</span>
+      </div>
+      <button class="mobile-close" id="mobile_close">×</button>
+    </div>
+    <div class="mobile-links">
+      <a href="#home" class="mobile-link">Home</a>
+      <a href="#services" class="mobile-link">Services</a>
+      <a href="#team" class="mobile-link">Team</a>
+      <a href="#gallery" class="mobile-link">Gallery</a>
+      <a href="#technology" class="mobile-link">Technology</a>
+      <a href="#reviews" class="mobile-link">Reviews</a>
+      <a href="#insurance" class="mobile-link">Insurance</a>
+      <a href="#faq" class="mobile-link">FAQ</a>
+      <a href="#book" class="mobile-link">Book</a>
+      <a href="#blog" class="mobile-link">Blog</a>
+      <a href="#contact" class="mobile-link">Contact</a>
+    </div>
+    <div class="mobile-btn-box">
+      <button class="btn btn-teal nav-book-btn">Book Appointment</button>
+    </div>
+  </div>
+
+  <!-- Emergency Banner -->
+  <div class="emergency-banner">
+    <span class="emergency-text">🚨 Dental emergency? We see same-day urgent cases.</span>
+    <a href="tel:5125559001" class="emergency-cta">Call Now: (512) 555-9001 📞</a>
+  </div>
+
+  <!-- HERO -->
+  <section id="home">
+    <div class="hero-content">
+      <span class="eyebrow" style="margin-bottom: 0;">DENTAL STUDIO · Austin, TX 📍</span>
+      
+      <h1 class="hero-headline">
+        <span class="hero-title-bold">Test Dentist</span>
+        <span class="hero-title-light">Austin, TX</span>
+      </h1>
+
+      <p class="hero-subhead">
+        General, cosmetic, and family dentistry in Austin, TX. Same-day appointments available. Most insurance accepted. New patients always welcome.
+      </p>
+
+      <div class="hero-cta-row">
+        <button class="btn btn-teal btn-large hero-main-cta">Book an Appointment 📅</button>
+        <button class="btn btn-urgent-outline btn-large hero-emergency-cta">Emergency Appointment 🚨</button>
+        <a href="#services" class="btn btn-ghost hero-services-cta">View Services</a>
+      </div>
+
+      <!-- Stats -->
+      <div class="hero-stats">
+        <div class="stat-box">
+          <span class="stat-number">500+</span>
+          <span class="stat-label">Patients Served</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-number">4.9★</span>
+          <span class="stat-label">Average Rating</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-number">Same-Day</span>
+          <span class="stat-label">Appointments</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-number">10+</span>
+          <span class="stat-label">Years in Austin, TX</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Artwork decoration -->
+    <div class="hero-artwork">
+      <div class="art-halo"></div>
+      <div class="art-chair"></div>
+      <div class="art-arm"></div>
+      <div class="art-panel"></div>
+      <div class="art-panel-right"></div>
+      <div class="art-dots"></div>
+    </div>
+  </section>
+
+  <!-- TRUST BADGES -->
+  <div class="trust-badges">
+    <div class="trust-row">
+      <div class="trust-item"><span class="trust-bullet"></span>ADA Member</div>
+      <span class="trust-sep">|</span>
+      <div class="trust-item"><span class="trust-bullet"></span>Austin, TX Top Dentist 2024</div>
+      <span class="trust-sep">|</span>
+      <div class="trust-item"><span class="trust-bullet"></span>Google 4.9★</div>
+      <span class="trust-sep">|</span>
+      <div class="trust-item"><span class="trust-bullet"></span>HIPAA Compliant</div>
+      <span class="trust-sep">|</span>
+      <div class="trust-item"><span class="trust-bullet"></span>Emergency Same-Day</div>
+      <span class="trust-sep">|</span>
+      <div class="trust-item"><span class="trust-bullet"></span>Most Insurance Accepted</div>
+    </div>
+  </div>
+
+  <!-- SERVICES -->
+  <section id="services">
+    <div class="container" data-reveal>
+      <span class="eyebrow">02 — SERVICES 🦷</span>
+      <h2 class="section-title">What We Treat</h2>
+      <p class="section-desc">From routine cleanings to full smile transformations — all in one practice in Austin, TX.</p>
+
+      <div class="services-nav">
+        <button class="services-tab active" data-tab="general">General</button>
+        <button class="services-tab" data-tab="cosmetic">Cosmetic</button>
+        <button class="services-tab" data-tab="restorative">Restorative</button>
+        <button class="services-tab" data-tab="emergency">Emergency</button>
+      </div>
+
+      <div class="services-panels">
+        <!-- General -->
+        <div class="service-panel active" dataset-tab="general">
+          <div class="service-row">
+            <div class="service-info">
+              <span class="service-name">Comprehensive Exam</span>
+              <span class="service-dash">—</span>
+              <span class="service-desc">Full oral health evaluation, X-rays, and personalized treatment plan</span>
+            </div>
+            <span class="service-duration">60 min</span>
+          </div>
+          <div class="service-row">
+            <div class="service-info">
+              <span class="service-name">Teeth Cleaning</span>
+              <span class="service-dash">—</span>
+              <span class="service-desc">Professional cleaning, scaling, and polish. Every 6 months</span>
+            </div>
+            <span class="service-duration">45 min</span>
+          </div>
+          <div class="service-row">
+            <div class="service-info">
+              <span class="service-name">Dental X-Rays</span>
+              <span class="service-dash">—</span>
+              <span class="service-desc">Digital low-radiation imaging for full diagnostic clarity</span>
+            </div>
+            <span class="service-duration">15 min</span>
+          </div>
+          <div class="service-row">
+            <div class="service-info">
+              <span class="service-name">Children's Dentistry</span>
+              <span class="service-dash">—</span>
+              <span class="service-desc">Gentle care for patients from 3 years old. Parents always welcome</span>
+            </div>
+            <span class="service-duration">45 min</span>
+          </div>
+          <div class="service-row">
+            <div class="service-info">
+              <span class="service-name">Gum Disease Treatment</span>
+              <span class="service-dash">—</span>
+              <span class="service-desc">Scaling, root planing, and periodontal maintenance</span>
+            </div>
+            <span class="service-duration">60–90 min</span>
+          </div>
+          <div class="service-row">
+            <div class="service-info">
+              <span class="service-name">Night Guards</span>
+              <span class="service-dash">—</span>
+              <span class="service-desc">Custom-fitted guards for grinding (bruxism) and clenching</span>
+            </div>
+            <span class="service-duration">30 min</span>
+          </div>
+        </div>
+
+        <!-- Cosmetic -->
+        <div class="service-panel" dataset-tab="cosmetic">
+          <div class="service-row">
+            <div class="service-info">
+              <span class="service-name">Teeth Whitening</span>
+              <span class="service-dash">—</span>
+              <span class="service-desc">In-office bleaching. Up to 8 shades lighter in a single visit</span>
+            </div>
+            <span class="service-duration">60 min</span>
+          </div>
+          <div class="service-row">
+            <div class="service-info">
+              <span class="service-name">Porcelain Veneers</span>
+              <span class="service-dash">—</span>
+              <span class="service-desc">Wafer-thin shells bonded to the front surface. Permanent, natural</span>
+            </div>
+            <span class="service-duration">2 visits</span>
+          </div>
+          <div class="service-row">
+            <div class="service-info">
+              <span class="service-name">Composite Bonding</span>
+              <span class="service-dash">—</span>
+              <span class="service-desc">Tooth-colored resin to repair chips, gaps, and discoloration</span>
+            </div>
+            <span class="service-duration">60 min</span>
+          </div>
+          <div class="service-row">
+            <div class="service-info">
+              <span class="service-name">Invisalign</span>
+              <span class="service-dash">—</span>
+              <span class="service-desc">Clear aligner treatment. Consultation required.</span>
+            </div>
+            <span class="service-duration">Varies</span>
+          </div>
+        </div>
+
+        <!-- Restorative -->
+        <div class="service-panel" dataset-tab="restorative">
+          <div class="service-row">
+            <div class="service-info">
+              <span class="service-name">Tooth-Colored Fillings</span>
+              <span class="service-dash">—</span>
+              <span class="service-desc">Composite resin fillings that match your natural tooth color</span>
+            </div>
+            <span class="service-duration">30-60 min</span>
+          </div>
+          <div class="service-row">
+            <div class="service-info">
+              <span class="service-name">Dental Crowns</span>
+              <span class="service-dash">—</span>
+              <span class="service-desc">Full-coverage cap for damaged or weakened teeth. Same-day available</span>
+            </div>
+            <span class="service-duration">2 visits</span>
+          </div>
+          <div class="service-row">
+            <div class="service-info">
+              <span class="service-name">Dental Implants</span>
+              <span class="service-dash">—</span>
+              <span class="service-desc">Permanent titanium root and crown. Consultation required.</span>
+            </div>
+            <span class="service-duration">3–6 months</span>
+          </div>
+        </div>
+
+        <!-- Emergency -->
+        <div class="service-panel" dataset-tab="emergency">
+          <div class="service-row">
+            <div class="service-info">
+              <span class="service-name">Severe Toothache</span>
+              <span class="service-dash">—</span>
+              <span class="service-desc">Same-day diagnosis and pain relief</span>
+            </div>
+            <span class="service-duration">Same day</span>
+          </div>
+          <div class="service-row">
+            <div class="service-info">
+              <span class="service-name">Broken / Chipped Tooth</span>
+              <span class="service-dash">—</span>
+              <span class="service-desc">Assessment and immediate temporary or permanent repair</span>
+            </div>
+            <span class="service-duration">Same day</span>
+          </div>
+          <div class="service-row">
+            <div class="service-info">
+              <span class="service-name">Lost Crown or Filling</span>
+              <span class="service-dash">—</span>
+              <span class="service-desc">Re-cementation or replacement, often completed same visit</span>
+            </div>
+            <span class="service-duration">1–2 hours</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MEET THE TEAM -->
+  <section id="team">
+    <div class="container" data-reveal>
+      <span class="eyebrow">03 — THE TEAM 🩺</span>
+      <h2 class="section-title">Your Doctors & Staff</h2>
+
+      <div class="team-grid">
+        <!-- SK -->
+        <div class="team-card">
+          <div class="team-top">
+            <div class="portrait portrait-1">SK</div>
+            <div class="team-info">
+              <span class="team-name">Dr. Test</span>
+              <span class="team-role">Lead Dentist</span>
+              <span class="team-edu">Columbia University</span>
+            </div>
+          </div>
+          <div class="team-line"></div>
+          <p class="team-bio">
+            Dr. Kovacs founded Test Dentist after ten years at a group practice in Austin, TX where she discovered her preference for smaller, more personal dentistry. She completed advanced training in cosmetic procedures and implantology at NYU and sees patients of all ages.
+          </p>
+          <div class="team-tags">
+            <span class="team-tag">General Dentistry</span>
+            <span class="team-tag">Cosmetic</span>
+            <span class="team-tag">Implants</span>
+          </div>
+        </div>
+
+        <!-- MC -->
+        <div class="team-card">
+          <div class="team-top">
+            <div class="portrait portrait-2">MC</div>
+            <div class="team-info">
+              <span class="team-name">Dr. Michael Chen, DDS</span>
+              <span class="team-role">Associate Dentist</span>
+              <span class="team-edu">Univ. of Pennsylvania</span>
+            </div>
+          </div>
+          <div class="team-line"></div>
+          <p class="team-bio">
+            Dr. Chen joined the practice in 2021, bringing particular skill in restorative work and patient communication. He is known among patients for his patience with dental anxiety and his ability to explain complex treatment clearly.
+          </p>
+          <div class="team-tags">
+            <span class="team-tag">Restorative</span>
+            <span class="team-tag">Endodontics</span>
+            <span class="team-tag">Anxious Patients</span>
+          </div>
+        </div>
+
+        <!-- PP -->
+        <div class="team-card">
+          <div class="team-top">
+            <div class="portrait portrait-3">PP</div>
+            <div class="team-info">
+              <span class="team-name">Dr. Priya Patel, DMD</span>
+              <span class="team-role">Cosmetic Specialist</span>
+              <span class="team-edu">Boston University</span>
+            </div>
+          </div>
+          <div class="team-line"></div>
+          <p class="team-bio">
+            Dr. Patel's focus is aesthetic dentistry — veneers, bonding, whitening, and smile design. She consults on every cosmetic case with a careful eye for proportion and natural result. Her patients frequently describe their results as looking like themselves, only better.
+          </p>
+          <div class="team-tags">
+            <span class="team-tag">Veneers</span>
+            <span class="team-tag">Whitening</span>
+            <span class="team-tag">Smile Design</span>
+          </div>
+        </div>
+
+        <!-- JT -->
+        <div class="team-card">
+          <div class="team-top">
+            <div class="portrait portrait-4">JT</div>
+            <div class="team-info">
+              <span class="team-name">Jenna Torres, RDH</span>
+              <span class="team-role">Registered Hygienist</span>
+              <span class="team-edu">NYU College of Dentistry</span>
+            </div>
+          </div>
+          <div class="team-line"></div>
+          <p class="team-bio">
+            Jenna has been with the practice since opening day. Her cleanings are thorough and her patient education is practical — she gives advice people actually follow. Patients with gum issues consistently improve under her care.
+          </p>
+          <div class="team-tags">
+            <span class="team-tag">Hygiene</span>
+            <span class="team-tag">Periodontal</span>
+            <span class="team-tag">Education</span>
+          </div>
+        </div>
+
+        <!-- OD -->
+        <div class="team-card">
+          <div class="team-top">
+            <div class="portrait portrait-5">OD</div>
+            <div class="team-info">
+              <span class="team-name">Omar Davis</span>
+              <span class="team-role">Care Coordinator</span>
+              <span class="team-edu">8 Years Management</span>
+            </div>
+          </div>
+          <div class="team-line"></div>
+          <p class="team-bio">
+            Omar manages scheduling, insurance verification, and new patient onboarding. If you have a question about your coverage, your appointment, or anything in between, Omar is who answers. He makes the administrative side of dentistry feel effortless.
+          </p>
+          <div class="team-tags">
+            <span class="team-tag">Insurance</span>
+            <span class="team-tag">Scheduling</span>
+            <span class="team-tag">New Patients</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BEFORE & AFTER GALLERY -->
+  <section id="gallery">
+    <div class="container" data-reveal>
+      <span class="eyebrow">04 — RESULTS 📸</span>
+      <h2 class="section-title">Smile Transformations</h2>
+      <p class="section-desc">Real patients, real results from our Austin, TX practice. All images published with patient consent.</p>
+
+      <div class="services-nav" id="gallery_filters">
+        <button class="services-tab active" data-filter="all">All</button>
+        <button class="services-tab" data-filter="whitening">Whitening</button>
+        <button class="services-tab" data-filter="veneers">Veneers</button>
+        <button class="services-tab" data-filter="bonding">Bonding</button>
+        <button class="services-tab" data-filter="invisalign">Invisalign</button>
+        <button class="services-tab" data-filter="crowns">Crowns</button>
+      </div>
+
+      <div class="gallery-grid" id="gallery_grid">
+        <!-- Item 1: Whitening -->
+        <div class="gallery-item" data-category="whitening">
+          <div class="before-half" style="background-image: url('https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="after-half" style="background-image: url('https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="gallery-divider"></div>
+          <span class="gallery-label label-before">BEFORE</span>
+          <span class="gallery-label label-after">AFTER</span>
+          <div class="gallery-overlay">
+            <span class="gallery-title">In-Office Boost Whitening</span>
+          </div>
+        </div>
+
+        <!-- Item 2: Veneers -->
+        <div class="gallery-item" data-category="veneers">
+          <div class="before-half" style="background-image: url('https://images.unsplash.com/photo-1606811971618-4486d14f3f99?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="after-half" style="background-image: url('https://images.unsplash.com/photo-1606811971618-4486d14f3f99?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="gallery-divider"></div>
+          <span class="gallery-label label-before">BEFORE</span>
+          <span class="gallery-label label-after">AFTER</span>
+          <div class="gallery-overlay">
+            <span class="gallery-title">Porcelain Veneers</span>
+          </div>
+        </div>
+
+        <!-- Item 3: Bonding -->
+        <div class="gallery-item" data-category="bonding">
+          <div class="before-half" style="background-image: url('https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="after-half" style="background-image: url('https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="gallery-divider"></div>
+          <span class="gallery-label label-before">BEFORE</span>
+          <span class="gallery-label label-after">AFTER</span>
+          <div class="gallery-overlay">
+            <span class="gallery-title">Aesthetic Composite Bonding</span>
+          </div>
+        </div>
+
+        <!-- Item 4: Invisalign -->
+        <div class="gallery-item" data-category="invisalign">
+          <div class="before-half" style="background-image: url('https://images.unsplash.com/photo-1598256989800-fe5f95da9787?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="after-half" style="background-image: url('https://images.unsplash.com/photo-1598256989800-fe5f95da9787?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="gallery-divider"></div>
+          <span class="gallery-label label-before">BEFORE</span>
+          <span class="gallery-label label-after">AFTER</span>
+          <div class="gallery-overlay">
+            <span class="gallery-title">Invisalign® Clear Aligners</span>
+          </div>
+        </div>
+
+        <!-- Item 5: Crowns -->
+        <div class="gallery-item" data-category="crowns">
+          <div class="before-half" style="background-image: url('https://images.unsplash.com/photo-1513201099705-a9746e1e201f?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="after-half" style="background-image: url('https://images.unsplash.com/photo-1513201099705-a9746e1e201f?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="gallery-divider"></div>
+          <span class="gallery-label label-before">BEFORE</span>
+          <span class="gallery-label label-after">AFTER</span>
+          <div class="gallery-overlay">
+            <span class="gallery-title">CEREC® Same-Day Crown</span>
+          </div>
+        </div>
+
+        <!-- Item 6: Whitening -->
+        <div class="gallery-item" data-category="whitening">
+          <div class="before-half" style="background-image: url('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="after-half" style="background-image: url('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="gallery-divider"></div>
+          <span class="gallery-label label-before">BEFORE</span>
+          <span class="gallery-label label-after">AFTER</span>
+          <div class="gallery-overlay">
+            <span class="gallery-title">Pre-Event Quick Whitening</span>
+          </div>
+        </div>
+
+        <!-- Item 7: Veneers -->
+        <div class="gallery-item" data-category="veneers">
+          <div class="before-half" style="background-image: url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="after-half" style="background-image: url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="gallery-divider"></div>
+          <span class="gallery-label label-before">BEFORE</span>
+          <span class="gallery-label label-after">AFTER</span>
+          <div class="gallery-overlay">
+            <span class="gallery-title">Minimal Prep Veneers</span>
+          </div>
+        </div>
+
+        <!-- Item 8: Bonding -->
+        <div class="gallery-item" data-category="bonding">
+          <div class="before-half" style="background-image: url('https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="after-half" style="background-image: url('https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="gallery-divider"></div>
+          <span class="gallery-label label-before">BEFORE</span>
+          <span class="gallery-label label-after">AFTER</span>
+          <div class="gallery-overlay">
+            <span class="gallery-title">Diastema Closure (Gap Bonding)</span>
+          </div>
+        </div>
+
+        <!-- Item 9: Crowns -->
+        <div class="gallery-item" data-category="crowns">
+          <div class="before-half" style="background-image: url('https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="after-half" style="background-image: url('https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="gallery-divider"></div>
+          <span class="gallery-label label-before">BEFORE</span>
+          <span class="gallery-label label-after">AFTER</span>
+          <div class="gallery-overlay">
+            <span class="gallery-title">Aesthetic Porcelain Crown</span>
+          </div>
+        </div>
+
+        <!-- Item 10: Invisalign -->
+        <div class="gallery-item" data-category="invisalign">
+          <div class="before-half" style="background-image: url('https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="after-half" style="background-image: url('https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="gallery-divider"></div>
+          <span class="gallery-label label-before">BEFORE</span>
+          <span class="gallery-label label-after">AFTER</span>
+          <div class="gallery-overlay">
+            <span class="gallery-title">Comprehensive Aligner Plan</span>
+          </div>
+        </div>
+
+        <!-- Item 11: Whitening -->
+        <div class="gallery-item" data-category="whitening">
+          <div class="before-half" style="background-image: url('https://images.unsplash.com/photo-1554151228-14d9def656e4?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="after-half" style="background-image: url('https://images.unsplash.com/photo-1554151228-14d9def656e4?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="gallery-divider"></div>
+          <span class="gallery-label label-before">BEFORE</span>
+          <span class="gallery-label label-after">AFTER</span>
+          <div class="gallery-overlay">
+            <span class="gallery-title">Deep Stains Bleaching</span>
+          </div>
+        </div>
+
+        <!-- Item 12: Veneers -->
+        <div class="gallery-item" data-category="veneers">
+          <div class="before-half" style="background-image: url('https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="after-half" style="background-image: url('https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=600')"></div>
+          <div class="gallery-divider"></div>
+          <span class="gallery-label label-before">BEFORE</span>
+          <span class="gallery-label label-after">AFTER</span>
+          <div class="gallery-overlay">
+            <span class="gallery-title">Full Aesthetic Arc Veneers</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TECHNOLOGY & EQUIPMENT -->
+  <section id="technology">
+    <div class="container" data-reveal>
+      <span class="eyebrow">05 — TECHNOLOGY 🔬</span>
+      <h2 class="section-title">Modern Care, Modern Tools</h2>
+      <p class="section-desc">The equipment in our Austin, TX practice is chosen for one reason: better outcomes for patients. Less discomfort, more accuracy, faster recovery.</p>
+
+      <div class="tech-grid">
+        <!-- Tech 1 -->
+        <div class="tech-card">
+          <div class="tech-icon-box">
+            <div class="tech-mark-1"></div>
+          </div>
+          <h3 class="tech-name">Digital X-Rays</h3>
+          <p class="tech-desc">Digital radiography uses 90% less radiation than traditional film X-rays. Images appear on screen instantly and can be zoomed and shared with specialists without degradation.</p>
+        </div>
+
+        <!-- Tech 2 -->
+        <div class="tech-card">
+          <div class="tech-icon-box">
+            <div class="tech-mark-2"></div>
+          </div>
+          <h3 class="tech-name">CEREC Same-Day Crowns</h3>
+          <p class="tech-desc">Our milling unit creates ceramic crowns in-office in under two hours. No temporary crown, no second appointment, no waiting.</p>
+        </div>
+
+        <!-- Tech 3 -->
+        <div class="tech-card">
+          <div class="tech-icon-box">
+            <div class="tech-mark-3"></div>
+          </div>
+          <h3 class="tech-name">Laser Dentistry</h3>
+          <p class="tech-desc">Soft tissue procedures and gum recontouring performed with a dental laser — no scalpel, no sutures, faster healing for most patients.</p>
+        </div>
+
+        <!-- Tech 4 -->
+        <div class="tech-card">
+          <div class="tech-icon-box">
+            <div class="tech-mark-4">
+              <span style="width: 32px;"></span>
+              <span style="width: 24px;"></span>
+              <span style="width: 16px;"></span>
+            </div>
+          </div>
+          <h3 class="tech-name">Intraoral Camera</h3>
+          <p class="tech-desc">A pen-sized camera lets you see exactly what we see. Every exam includes a visual tour of your mouth. Nothing is hidden, nothing is assumed.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- NEW PATIENT OFFER -->
+  <section id="offer">
+    <div class="container offer-container" data-reveal>
+      <div class="offer-left">
+        <span class="offer-tag">New Patients</span>
+        <h2 class="offer-title">New Patient Special:<br>Exam + X-Rays + Cleaning</h2>
+        <p class="offer-desc">First visit to Test Dentist? Your comprehensive new patient appointment — including full digital X-rays, a thorough exam, and professional cleaning — for $99. Regularly $285.</p>
+        <div class="offer-prices">
+          <span class="price-now">$99</span>
+          <span class="price-was">$285</span>
+        </div>
+        <button class="btn btn-teal btn-large hero-main-cta" style="margin-top: 28px;">Book This Appointment</button>
+        <span class="offer-fine">New patients only. One per household. Cannot be combined with other offers. Valid at Austin, TX location.</span>
+      </div>
+
+      <div class="offer-right">
+        <div class="mock-patient-card">
+          <div class="mock-line" style="width: 60%"></div>
+          <div class="mock-line" style="width: 80%"></div>
+          <div class="mock-line" style="width: 40%"></div>
+          <div class="mock-check"></div>
+          <div class="mock-line" style="width: 50%; align-self: center"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PATIENT REVIEWS -->
+  <section id="reviews">
+    <div class="container" data-reveal>
+      <span class="eyebrow">07 — REVIEWS ⭐</span>
+      <h2 class="section-title">What Patients Say</h2>
+      <p class="section-desc">4.9 average · 200+ reviews · Google, Yelp & Healthgrades · Austin, TX</p>
+
+      <div class="reviews-carousel" id="reviews_carousel">
+        <!-- Review 1 -->
+        <div class="review-card">
+          <div class="review-header">
+            <div class="stars">
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+            </div>
+            <span class="source-badge">Google</span>
+          </div>
+          <p class="review-text">
+            "I had serious dental anxiety and had not been to a dentist in four years. Dr. Chen saw me the same week I called. He explained every step before doing it, and I did not feel a thing. I have now been three times and each visit gets easier."
+          </p>
+          <div class="review-user">
+            <div class="avatar avatar-1">M</div>
+            <span class="user-name">Marcus T.</span>
+          </div>
+        </div>
+
+        <!-- Review 2 -->
+        <div class="review-card">
+          <div class="review-header">
+            <div class="stars">
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+            </div>
+            <span class="source-badge">Healthgrades</span>
+          </div>
+          <p class="review-text">
+            "Dr. Kovacs did my veneers over two visits and the result is genuinely life-changing. I had one crooked, slightly grey tooth that I had hidden in photos for years. Now I smile without thinking about it. The price was fair."
+          </p>
+          <div class="review-user">
+            <div class="avatar avatar-2">J</div>
+            <span class="user-name">Jessica Park</span>
+          </div>
+        </div>
+
+        <!-- Review 3 -->
+        <div class="review-card">
+          <div class="review-header">
+            <div class="stars">
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+            </div>
+            <span class="source-badge">Google</span>
+          </div>
+          <p class="review-text">
+            "Had a dental emergency on a Thursday — cracked crown. Called Test Dentist and they saw me the same afternoon. Dr. Kovacs had a new crown milled and placed the same day using their in-office machine. Exceptional."
+          </p>
+          <div class="review-user">
+            <div class="avatar avatar-3">L</div>
+            <span class="user-name">Liam Burke</span>
+          </div>
+        </div>
+
+        <!-- Review 4 -->
+        <div class="review-card">
+          <div class="review-header">
+            <div class="stars">
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+            </div>
+            <span class="source-badge">Yelp</span>
+          </div>
+          <p class="review-text">
+            "Brought both kids for the first time and it went better than any dental visit I can remember. Jenna was incredible with my seven-year-old. The whole office is calm and organized. Omar sorted out our insurance before we arrived."
+          </p>
+          <div class="review-user">
+            <div class="avatar avatar-4">R</div>
+            <span class="user-name">Rachel Okonkwo</span>
+          </div>
+        </div>
+
+        <!-- Review 5 -->
+        <div class="review-card">
+          <div class="review-header">
+            <div class="stars">
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+              <span class="star star-empty"></span>
+            </div>
+            <span class="source-badge">Google</span>
+          </div>
+          <p class="review-text">
+            "Great practice. Dr. Patel did my Invisalign consultation and she was very honest about what it could and couldn't do. I appreciated the straight talk. Currently six months into treatment and seeing real, beautiful movement."
+          </p>
+          <div class="review-user">
+            <div class="avatar avatar-5">A</div>
+            <span class="user-name">Amir Siddiqui</span>
+          </div>
+        </div>
+
+        <!-- Review 6 -->
+        <div class="review-card">
+          <div class="review-header">
+            <div class="stars">
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+              <span class="star star-filled"></span>
+            </div>
+            <span class="source-badge">Healthgrades</span>
+          </div>
+          <p class="review-text">
+            "I have been to many dentists in Austin, TX and this is the best experience I have had. Clean, modern, never rushed. They called the day before to confirm and followed up after my filling to make sure everything felt right."
+          </p>
+          <div class="review-user">
+            <div class="avatar avatar-6">T</div>
+            <span class="user-name">Tanya Morrison</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mobile Carousel Swipe Navigation Buttons -->
+      <div class="carousel-nav">
+        <button class="carousel-btn disabled" id="carousel_prev" aria-label="Previous review">
+          <span class="arrow-left"></span>
+        </button>
+        <button class="carousel-btn" id="carousel_next" aria-label="Next review">
+          <span class="arrow-right"></span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- INSURANCE & FINANCING -->
+  <section id="insurance">
+    <div class="container-full" data-reveal>
+      <div class="container">
+        <span class="eyebrow">08 — INSURANCE & FINANCING 💳</span>
+        <h2 class="section-title">We Work With Your Plan</h2>
+        
+        <div class="insurance-container">
+          <div class="insurance-left">
+            <p class="insurance-sub" style="margin-top: 0; max-width: 500px; font-size: 15px;">
+              Test Dentist accepts most major dental insurance plans. Our team verifies your coverage before every appointment so you know what to expect.
+            </p>
+
+            <div class="insurance-grid">
+              <div class="insurance-badge">
+                <span class="badge-name">Delta Dental</span>
+                <div class="badge-check"></div>
+              </div>
+              <div class="insurance-badge">
+                <span class="badge-name">Cigna</span>
+                <div class="badge-check"></div>
+              </div>
+              <div class="insurance-badge">
+                <span class="badge-name">Aetna</span>
+                <div class="badge-check"></div>
+              </div>
+              <div class="insurance-badge">
+                <span class="badge-name">MetLife</span>
+                <div class="badge-check"></div>
+              </div>
+            </div>
+            <p class="insurance-sub">Not sure if we accept yours? Call us at (512) 555-9001 or ask at booking.</p>
+          </div>
+
+          <div class="insurance-right">
+            <div class="finance-box">
+              <h3 class="finance-title">No Insurance? No Problem.</h3>
+              <p class="finance-desc">We offer in-house financing and work with CareCredit and Lending Club Patient Solutions. Many patients pay $0 down on treatment plans over $500.</p>
+              
+              <div class="finance-option">
+                <h4 class="finance-opt-title">In-House Payment Plans</h4>
+                <p class="finance-opt-desc">Split your treatment cost over 3–12 months, interest-free.</p>
+              </div>
+              <div class="finance-option">
+                <h4 class="finance-opt-title">Senior Discount</h4>
+                <p class="finance-opt-desc">Patients 65 and over receive 10% off all out-of-pocket treatment costs.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section id="faq">
+    <div class="container" data-reveal>
+      <span class="eyebrow">09 — FAQ 💬</span>
+      <h2 class="section-title">Common Questions</h2>
+
+      <div class="faq-container">
+        <div class="faq-col">
+          <div class="faq-item">
+            <button class="faq-trigger">
+              <span class="faq-question">Do you accept walk-ins?</span>
+              <span class="faq-toggle"></span>
+            </button>
+            <div class="faq-answer">
+              <p>We accept walk-ins when appointments are available, but we strongly recommend booking ahead, especially for new patients. Same-day appointments are often available if you call in the morning.</p>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-trigger">
+              <span class="faq-question">How often should I come for a cleaning?</span>
+              <span class="faq-toggle"></span>
+            </button>
+            <div class="faq-answer">
+              <p>Most patients benefit from a cleaning and exam every six months. If you have a history of gum disease, we may recommend every three to four months.</p>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-trigger">
+              <span class="faq-question">Is teeth whitening safe?</span>
+              <span class="faq-toggle"></span>
+            </button>
+            <div class="faq-answer">
+              <p>In-office whitening performed by a dentist is safe for most patients. We check for cavities and gum issues before proceeding. Sensitivity afterward is common and temporary.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="faq-col">
+          <div class="faq-item">
+            <button class="faq-trigger">
+              <span class="faq-question">Do you see children?</span>
+              <span class="faq-toggle"></span>
+            </button>
+            <div class="faq-answer">
+              <p>Yes. We treat patients from age three. Our approach with young patients is patient, low-pressure, and positive. We want the dental visit to be something they look forward to.</p>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-trigger">
+              <span class="faq-question">What is a dental implant?</span>
+              <span class="faq-toggle"></span>
+            </button>
+            <div class="faq-answer">
+              <p>An implant is a titanium post that replaces a missing tooth root, topped with a custom crown. The process takes 3–6 months. It looks and functions just like a natural tooth.</p>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button class="faq-trigger">
+              <span class="faq-question">Do you offer payment plans?</span>
+              <span class="faq-toggle"></span>
+            </button>
+            <div class="faq-answer">
+              <p>Yes. We offer interest-free payment plans for up to 12 months in-house and also accept CareCredit. Staging of complex treatments is also offered to help spread costs.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BOOK APPOINTMENT -->
+  <section id="book">
+    <div class="container" data-reveal>
+      <span class="eyebrow">10 — BOOK 📅</span>
+      <h2 class="section-title" style="text-align: center;">Reserve Your Appointment</h2>
+
+      <div class="book-toggle-wrapper">
+        <div class="book-toggle-container">
+          <button class="book-toggle-btn active" id="toggle_new_patient">New Patient</button>
+          <button class="book-toggle-btn" id="toggle_returning_patient">Returning Patient</button>
+        </div>
+      </div>
+
+      <div class="book-grid">
+        <div class="book-form-box" id="form_container">
+          <form class="book-form" id="booking_form">
+            <div class="form-group-half">
+              <div class="form-group">
+                <label class="form-label">Full Name *</label>
+                <input type="text" class="form-input" id="frm_name" placeholder="John Doe" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Date of Birth</label>
+                <input type="date" class="form-input" id="frm_dob">
+              </div>
+            </div>
+
+            <div class="form-group-half">
+              <div class="form-group">
+                <label class="form-label">Email Address *</label>
+                <input type="email" class="form-input" id="frm_email" placeholder="john@example.com" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Phone Number *</label>
+                <input type="tel" class="form-input" id="frm_phone" placeholder="(512) 555-9001" required>
+              </div>
+            </div>
+
+            <div class="form-group-half">
+              <div class="form-group">
+                <label class="form-label">Service Needed</label>
+                <select class="form-input" id="frm_service">
+                  <option value="Comp Exam">Comprehensive Exam</option>
+                  <option value="Teeth Cleaning">Teeth Cleaning</option>
+                  <option value="Whitening">Teeth Whitening</option>
+                  <option value="Implants">Dental Implants</option>
+                  <option value="Emergency">Emergency Appointment</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Preferred Provider</label>
+                <select class="form-input" id="frm_provider">
+                  <option value="No Preference">No Preference</option>
+                  <option value="Dr. Sarah Kovacs">Dr. Sarah Kovacs</option>
+                  <option value="Dr. Michael Chen">Dr. Michael Chen</option>
+                  <option value="Dr. Priya Patel">Dr. Priya Patel</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group-half">
+              <div class="form-group">
+                <label class="form-label">Preferred Date</label>
+                <input type="date" class="form-input" id="frm_date">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Preferred Time Slot</label>
+                <select class="form-input" id="frm_time">
+                  <option value="Morning">Morning (8:00 AM - 12:00 PM)</option>
+                  <option value="Afternoon">Afternoon (12:00 PM - 4:00 PM)</option>
+                  <option value="Late Afternoon">Late Afternoon (4:00 PM - 6:00 PM)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group" id="hear_about_us_group">
+              <label class="form-label">How did you hear about us?</label>
+              <select class="form-input" id="frm_hear">
+                <option value="Google Search">Google Search</option>
+                <option value="Social Media">Social Media</option>
+                <option value="Friend Referral">Friend Referral</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Additional Notes</label>
+              <input type="text" class="form-input" id="frm_notes" placeholder="Any details or constraints...">
+            </div>
+
+            <button type="submit" class="btn btn-teal btn-large" style="width: 100%; border-radius: var(--r-sm);">Request Appointment</button>
+            <p class="form-fine">We confirm within 1 hour by phone or email. Your information is kept strictly private.</p>
+          </form>
+        </div>
+
+        <div class="book-sidebar">
+          <h3 class="sidebar-title">Before You Arrive</h3>
+          <div class="sidebar-list">
+            <div class="sidebar-item">
+              <h4 class="sidebar-item-title">Insurance Verification</h4>
+              <p class="sidebar-item-desc">We verify your coverage before your appointment. No surprises.</p>
+            </div>
+            <div class="sidebar-item">
+              <h4 class="sidebar-item-title">Cancellations</h4>
+              <p class="sidebar-item-desc">Please give 24 hours notice. We will happily reschedule.</p>
+            </div>
+          </div>
+
+          <div class="hours-block">
+            <div class="hours-row">
+              <span class="hours-day">Mon – Thu:</span>
+              <span class="hours-time">8:00 AM – 6:00 PM</span>
+            </div>
+            <div class="hours-row">
+              <span class="hours-day">Friday:</span>
+              <span class="hours-time">8:00 AM – 4:00 PM</span>
+            </div>
+            <div class="hours-row">
+              <span class="hours-day">Saturday:</span>
+              <span class="hours-time">9:00 AM – 2:00 PM</span>
+            </div>
+            <div class="hours-row">
+              <span class="hours-day">Sunday:</span>
+              <span class="hours-time">Closed</span>
+            </div>
+          </div>
+
+          <a href="tel:5125559001" class="sidebar-phone">(512) 555-9001</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BLOG / JOURNAL -->
+  <section id="blog">
+    <div class="container" data-reveal>
+      <span class="eyebrow">11 — JOURNAL 📝</span>
+      <h2 class="section-title">From Our Practice</h2>
+      <p class="section-desc">Oral health guides, procedure explainers, and what is happening at Test Dentist in Austin, TX.</p>
+
+      <div class="blog-grid">
+        <!-- Post 1 -->
+        <div class="blog-card">
+          <div class="blog-cover blog-cover-1">
+            <div class="blog-dec-tooth"></div>
+          </div>
+          <div class="blog-body">
+            <span class="blog-category">Oral Health</span>
+            <span class="blog-date">Austin, TX · May 2026</span>
+            <h3 class="blog-title">How Often Do You Actually Need a Dental Cleaning?</h3>
+            <p class="blog-excerpt">Twice a year is the standard advice — but it is not the right answer for everyone. Here is what our hygienist team in Austin, TX actually recommends based on individual risk factors.</p>
+            <a href="#blog" class="blog-link">Read Article</a>
+          </div>
+        </div>
+
+        <!-- Post 2 -->
+        <div class="blog-card">
+          <div class="blog-cover blog-cover-2">
+            <div class="blog-dec-xray"></div>
+          </div>
+          <div class="blog-body">
+            <span class="blog-category">Cosmetic</span>
+            <span class="blog-date">Austin, TX · April 2026</span>
+            <h3 class="blog-title">Veneers vs. Bonding: Which One is Right for You?</h3>
+            <p class="blog-excerpt">Both fix chips, gaps, and discoloration. The difference is permanence, cost, and what your teeth actually need. Test Dentist's cosmetic team breaks down the decision honestly.</p>
+            <a href="#blog" class="blog-link">Read Article</a>
+          </div>
+        </div>
+
+        <!-- Post 3 -->
+        <div class="blog-card">
+          <div class="blog-cover blog-cover-3">
+            <div class="blog-dec-smile"></div>
+          </div>
+          <div class="blog-body">
+            <span class="blog-category">Guides</span>
+            <span class="blog-date">Austin, TX · March 2026</span>
+            <h3 class="blog-title">Why Root Canals Have an Unfair Reputation</h3>
+            <p class="blog-excerpt">Most patients who have had a root canal say it was not nearly as bad as they expected. The pain people associate with the procedure is usually the infection before it — not the treatment itself.</p>
+            <a href="#blog" class="blog-link">Read Article</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONTACT -->
+  <section id="contact">
+    <div class="container" data-reveal style="margin-bottom: 40px;">
+      <span class="eyebrow">12 — CONTACT 📍</span>
+      <h2 class="section-title">Find Us</h2>
+    </div>
+    <div class="container flex" style="padding: 0;">
+      <div class="contact-grid">
+        <!-- Col 1 -->
+        <div class="contact-col">
+          <span class="contact-label">TELEPHONE</span>
+          <span class="contact-val"><a href="tel:5125559001">(512) 555-9001</a></span>
+          <p class="contact-info-text">Mon–Sat, 8 AM – 6 PM. Emergencies answered any time.</p>
+          <a href="tel:5125559001" class="contact-action-btn">CALL NOW →</a>
+        </div>
+
+        <!-- Col 2 -->
+        <div class="contact-col">
+          <span class="contact-label">SOCIAL</span>
+          <span class="contact-val contact-val-small">
+            <a href="https://instagram.com/test_dentist" target="_blank">@test_dentist</a>
+          </span>
+          <p class="contact-info-text">Before and after photos, patient stories, and team updates from our Austin, TX practice.</p>
+          <a href="https://instagram.com/test_dentist" class="contact-action-btn" target="_blank">FOLLOW ON INSTAGRAM</a>
+        </div>
+
+        <!-- Col 3 -->
+        <div class="contact-col">
+          <span class="contact-label">LOCATION</span>
+          <span class="contact-val">Austin, TX</span>
+          <p class="contact-info-text">Our practice is centrally located in Austin, TX, accessible by public transit and with street parking.</p>
+          <a href="https://maps.google.com?q=Test Dentist+Austin, TX" class="contact-action-btn" target="_blank">GET DIRECTIONS →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="container">
+      <div class="footer-top">
+        <div class="footer-left">
+          <div class="footer-logo">
+            <div class="tooth-logo"></div>
+            <span class="footer-logo-text">Test</span>
+          </div>
+          <p class="footer-tagline">General, cosmetic & emergency dentistry. Austin, TX.</p>
+        </div>
+
+        <div class="footer-right">
+          <div class="footer-col">
+            <span class="footer-col-head">PRACTICE</span>
+            <a href="#services">Services</a>
+            <a href="#team">Team</a>
+            <a href="#technology">Technology</a>
+            <a href="#gallery">Gallery</a>
+          </div>
+          <div class="footer-col">
+            <span class="footer-col-head">PATIENTS</span>
+            <a href="#reviews">Reviews</a>
+            <a href="#faq">FAQ</a>
+            <a href="#book">Book</a>
+            <a href="#blog">Blog</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-div"></div>
+
+      <div class="footer-bottom">
+        <span class="footer-copy">© 2026 Test Dentist. All rights reserved.</span>
+        <span class="footer-copy">Built by LocalSite</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Sound System and Interactive Scripts -->
+  <script>
+    // 1. Web Audio sound system
+    const Sound = {
+      _ctx: null,
+      _get() {
+        if (!this._ctx) this._ctx = new (window.AudioContext || window.webkitAudioContext)();
+        return this._ctx;
+      },
+
+      click() {
+        try {
+          const c = this._get();
+          const o = c.createOscillator(), g = c.createGain();
+          o.connect(g); g.connect(c.destination);
+          o.type = 'sine';
+          o.frequency.setValueAtTime(660, c.currentTime);
+          o.frequency.exponentialRampToValueAtTime(330, c.currentTime + 0.1);
+          g.gain.setValueAtTime(0.07, c.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.14);
+          o.start(); o.stop(c.currentTime + 0.14);
+        } catch(e) {}
+      },
+
+      tap() {
+        try {
+          const c = this._get();
+          const o = c.createOscillator(), g = c.createGain();
+          o.type = 'sine';
+          o.connect(g); g.connect(c.destination);
+          o.frequency.setValueAtTime(1000, c.currentTime);
+          o.frequency.exponentialRampToValueAtTime(700, c.currentTime + 0.06);
+          g.gain.setValueAtTime(0.035, c.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.08);
+          o.start(); o.stop(c.currentTime + 0.08);
+        } catch(e) {}
+      },
+
+      success() {
+        try {
+          const c = this._get();
+          [[440, 0], [554.37, 0.1], [659.25, 0.2]].forEach(([freq, delay]) => {
+            const o = c.createOscillator(), g = c.createGain();
+            o.type = 'sine'; o.frequency.value = freq;
+            o.connect(g); g.connect(c.destination);
+            const t = c.currentTime + delay;
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(0.055, t + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+            o.start(t); o.stop(t + 0.55);
+          });
+        } catch(e) {}
+      },
+
+      whoosh() {
+        try {
+          const c = this._get();
+          const b = c.createOscillator(), g = c.createGain();
+          b.type = 'triangle';
+          b.connect(g); g.connect(c.destination);
+          b.frequency.setValueAtTime(300, c.currentTime);
+          b.frequency.exponentialRampToValueAtTime(100, c.currentTime + 0.2);
+          g.gain.setValueAtTime(0.025, c.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.2);
+          b.start(); b.stop(c.currentTime + 0.2);
+        } catch(e) {}
+      },
+
+      urgent() {
+        try {
+          const c = this._get();
+          [[800, 0], [900, 0.05]].forEach(([freq, delay]) => {
+            const o = c.createOscillator(), g = c.createGain();
+            o.type = 'square'; o.frequency.value = freq;
+            o.connect(g); g.connect(c.destination);
+            const t = c.currentTime + delay;
+            g.gain.setValueAtTime(0.02, t);
+            g.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+            o.start(t); o.stop(t + 0.07);
+          });
+        } catch(e) {}
+      }
+    };
+
+    // 2. Render Cache System for instant states
+    const RenderCache = {
+      _cache: new Map(),
+      get(key) { return this._cache.get(key) || null; },
+      set(key, val) { this._cache.set(key, val); return val; },
+      has(key) { return this._cache.has(key); }
+    };
+
+    // Service Tab Switches
+    function switchServiceTab(tabName) {
+      const cacheKey = `serv-tab-${tabName}`;
+      
+      if (!RenderCache.has(cacheKey)) {
+        const panels = document.querySelectorAll('.service-panel');
+        const state = Array.from(panels).map(p => ({
+          el: p,
+          show: p.getAttribute('dataset-tab') === tabName
+        }));
+        RenderCache.set(cacheKey, state);
+      }
+      
+      RenderCache.get(cacheKey).forEach(({ el, show }) => {
+        el.style.display = show ? 'block' : 'none';
+      });
+
+      // Update active class on tab buttons
+      document.querySelectorAll('.services-tab[data-tab]').forEach(btn => {
+        if (btn.getAttribute('data-tab') === tabName) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+    }
+
+    // Gallery Filter switching
+    function filterGallery(category) {
+      const cacheKey = `gallery-f-${category}`;
+      const items = document.querySelectorAll('.gallery-item');
+
+      if (RenderCache.has(cacheKey)) {
+        const cached = RenderCache.get(cacheKey);
+        cached.forEach(({ el, visible }) => {
+          el.style.display = visible ? 'block' : 'none';
+        });
+      } else {
+        const state = Array.from(items).map(el => {
+          const cat = el.getAttribute('data-category');
+          const visible = category === 'all' || cat === category;
+          return { el, visible };
+        });
+        RenderCache.set(cacheKey, state);
+        state.forEach(({ el, visible }) => {
+          el.style.display = visible ? 'block' : 'none';
+        });
+      }
+
+      // Update active tab styling
+      document.querySelectorAll('#gallery_filters .services-tab').forEach(btn => {
+        if (btn.getAttribute('data-filter') === category) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+    }
+
+    // Sticky Nav shadow
+    window.addEventListener('scroll', () => {
+      const nav = document.getElementById('nav');
+      if (window.scrollY > 60) {
+        nav.classList.add('scrolled');
+      } else {
+        nav.classList.remove('scrolled');
+      }
+
+      // Highlight active nav links based on intersection
+      const sections = ['home', 'services', 'team', 'gallery', 'technology', 'reviews', 'insurance', 'faq', 'book', 'blog', 'contact'];
+      let currentActive = 'home';
+      for (const sectId of sections) {
+        const el = document.getElementById(sectId);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          if (rect.top <= 120) {
+            currentActive = sectId;
+          }
+        }
+      }
+      document.querySelectorAll('.nav-link').forEach(link => {
+        if (link.getAttribute('href') === `#${currentActive}`) {
+          link.classList.add('active');
+        } else {
+          link.classList.remove('active');
+        }
+      });
+    }, { passive: true });
+
+    // Mobile menu triggers
+    const hamburger = document.getElementById('hamburger');
+    const mobileOverlay = document.getElementById('mobile_overlay');
+    const mobileClose = document.getElementById('mobile_close');
+
+    hamburger.addEventListener('click', () => {
+      Sound.whoosh();
+      mobileOverlay.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    });
+
+    mobileClose.addEventListener('click', () => {
+      Sound.whoosh();
+      mobileOverlay.classList.remove('open');
+      document.body.style.overflow = '';
+    });
+
+    document.querySelectorAll('.mobile-link').forEach(link => {
+      link.addEventListener('click', () => {
+        Sound.tap();
+        mobileOverlay.classList.remove('open');
+        document.body.style.overflow = '';
+      });
+    });
+
+    // Wire up events for service tabs
+    document.querySelectorAll('.services-tab[data-tab]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        Sound.tap();
+        switchServiceTab(tab.getAttribute('data-tab'));
+      });
+    });
+
+    // Wire up events for gallery filters
+    document.querySelectorAll('#gallery_filters .services-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        Sound.tap();
+        filterGallery(tab.getAttribute('data-filter'));
+      });
+    });
+
+    // FAQ toggles
+    document.querySelectorAll('.faq-trigger').forEach(trigger => {
+      trigger.addEventListener('click', () => {
+        Sound.tap();
+        const parent = trigger.parentElement;
+        const isOpen = parent.classList.contains('open');
+        
+        // Close other open ones
+        document.querySelectorAll('.faq-item.open').forEach(opened => {
+          opened.classList.remove('open');
+          opened.querySelector('.faq-answer').style.maxHeight = '0px';
+        });
+
+        if (!isOpen) {
+          parent.classList.add('open');
+          const answer = parent.querySelector('.faq-answer');
+          answer.style.maxHeight = answer.scrollHeight + 100 + 'px';
+        }
+      });
+    });
+
+    // Book toggle button
+    const toggleNew = document.getElementById('toggle_new_patient');
+    const toggleRet = document.getElementById('toggle_returning_patient');
+    const hearGroup = document.getElementById('hear_about_us_group');
+
+    toggleNew.addEventListener('click', () => {
+      Sound.tap();
+      toggleNew.classList.add('active');
+      toggleRet.classList.remove('active');
+      hearGroup.style.display = 'flex';
+    });
+
+    toggleRet.addEventListener('click', () => {
+      Sound.tap();
+      toggleRet.classList.add('active');
+      toggleNew.classList.remove('active');
+      hearGroup.style.display = 'none';
+    });
+
+    // Booking form logic
+    const bookingForm = document.getElementById('booking_form');
+    bookingForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+
+      const requiredInputs = bookingForm.querySelectorAll('[required]');
+      let hasError = false;
+
+      requiredInputs.forEach(inp => {
+        if (!inp.value.trim()) {
+          hasError = true;
+          inp.classList.add('highlight-err');
+        } else {
+          inp.classList.remove('highlight-err');
+        }
+      });
+
+      if (hasError) {
+        Sound.urgent();
+        bookingForm.classList.add('shake');
+        setTimeout(() => bookingForm.classList.remove('shake'), 400);
+        return;
+      }
+
+      Sound.success();
+      const name = document.getElementById('frm_name').value;
+      const email = document.getElementById('frm_email').value;
+      const formContainer = document.getElementById('form_container');
+      
+      formContainer.innerHTML = `
+        <div class="success-box">
+          <h3>Appointment Requested, ${name}!</h3>
+          <p>We have received your requested date slot and will confirm with you at <strong>${email}</strong> within an hour. See you soon!</p>
+        </div>
+      `;
+    });
+
+    // Wire general actions
+    document.querySelectorAll('.nav-book-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        Sound.click();
+        document.getElementById('book').scrollIntoView({ behavior: 'smooth' });
+      });
+    });
+
+    document.querySelectorAll('.hero-main-cta').forEach(btn => {
+      btn.addEventListener('click', () => {
+        Sound.click();
+        document.getElementById('book').scrollIntoView({ behavior: 'smooth' });
+      });
+    });
+
+    document.querySelectorAll('.hero-emergency-cta').forEach(btn => {
+      btn.addEventListener('click', () => {
+        Sound.urgent();
+        document.getElementById('book').scrollIntoView({ behavior: 'smooth' });
+        // Set service to emergency automatic
+        document.getElementById('frm_service').value = 'Emergency';
+      });
+    });
+
+    // Scroll Reveal implementation
+    const revealCallback = (entries, observer) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('revealed');
+          observer.unobserve(entry.target);
+        }
+      });
+    };
+
+    const revealObserver = new IntersectionObserver(revealCallback, {
+      root: null,
+      threshold: 0.12
+    });
+
+    document.querySelectorAll('[data-reveal]').forEach(el => {
+      revealObserver.observe(el);
+    });
+
+    // Touch swipe support on reviews carousel
+    let touchStartX = 0;
+    const carousel = document.querySelector('.reviews-carousel');
+    carousel.addEventListener('touchstart', (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+    }, { passive: true });
+
+    carousel.addEventListener('touchend', (e) => {
+      const touchEndX = e.changedTouches[0].screenX;
+      if (Math.abs(touchEndX - touchStartX) > 50) {
+        Sound.tap();
+      }
+    }, { passive: true });
+
+    // Set minimum preferred date to today
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('frm_date').min = today;
+    } catch(e) {}
+  </script>
+</body>
+</html>

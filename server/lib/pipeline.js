@@ -13,7 +13,7 @@
 // outcome and SMS send is recorded in the database, and SMS failures are
 // auto-refunded (3 credits per lead with no successful SMS).
 import { compileSite } from './compile.js';
-import { stageSite, publishBatch } from './cloudflare.js';
+import { stageSite, publishBatch, validateCloudflareToken } from './cloudflare.js';
 import { sendSms, renderSms, countSegments, toE164, fetchMessageStatus } from './telnyx.js';
 import { slugify } from './slug.js';
 import { cloudflare, telnyx, modeSummary } from './config.js';
@@ -24,6 +24,7 @@ import {
   getCampaign,
   finalizeCampaign,
   markCampaignFailed,
+  markCampaignCancelled,
 } from './campaigns.js';
 import { refund, getAccount } from './credits.js';
 
@@ -42,7 +43,16 @@ export const SITE_COST_PER_LEAD = 1;
 export async function runPipeline({
   businesses = [],
   niche,
-  templateId = null, // explicit custom template ID — overrides niche template lookup
+  // The unified template key — built-in slug ("barber-dark-luxury"),
+  // custom DB id ("tmpl_xxx"), or legacy niche string ("Barber").
+  // The server's templates.js resolver handles all three forms.
+  templateKey = null,
+  // Legacy fields kept for back-compat with the older API surface.
+  // templateId is the old "custom template id or t1..t8 client id";
+  // templateFile is the raw file name under /public/templates-raw/.
+  // Both are normalized through templates.js before use.
+  templateId = null,
+  templateFile = null,
   smsTemplate,
   skipSms = false,   // skip Phase C (SMS dispatch) — sites-only pipeline
   onEvent = () => {},
@@ -51,6 +61,11 @@ export async function runPipeline({
   campaignId = null, // maps businesses[i] to leads[campaignId][i]
   leadIds = [],      // parallel array of DB lead ids; indexed by businesses[i]
 } = {}) {
+  // Resolve the user-supplied template selection into the unified key.
+  // Priority: explicit templateKey > templateFile > templateId > per-row
+  // niche > global niche. templates.js handles each form via its resolver.
+  const resolvedKey = templateKey || templateFile || templateId || niche;
+
   const emit = (type, payload = {}) => onEvent({ type, ts: Date.now(), ...payload });
   const results = [];
   const template = smsTemplate || DEFAULT_SMS;
@@ -81,22 +96,48 @@ export async function runPipeline({
     campaignId,
   });
 
+  // Soft-cancel guard: between every lead boundary, peek at the DB row the
+  // user can flip via POST /api/campaigns/:id/cancel. We never throw — just
+  // bail out cleanly so the SSE stream gets a {type:'cancelled'} event and
+  // closes. The current in-flight lead is allowed to finish naturally (a
+  // Cloudflare deploy or Telnyx send already in progress will complete),
+  // we just stop starting new ones.
+  const checkCancelled = () => {
+    if (!useDb) return false;
+    try {
+      const c = getCampaign(campaignId);
+      if (c && c.status === 'cancelled') {
+        emit('cancelled', { campaignId, processed: results.length, total: businesses.length });
+        markCampaignCancelled(campaignId);
+        return true;
+      }
+    } catch {
+      /* ignore — keep running */
+    }
+    return false;
+  };
+
   // Log to stdout so Railway deploy logs show the pipeline starting.
-  console.log(`[pipeline] start campaignId=${campaignId} leads=${businesses.length} niche=${niche || '(per-row)'} templateId=${templateId || '(default)'}`);
+  console.log(`[pipeline] start campaignId=${campaignId} leads=${businesses.length} niche=${niche || '(per-row)'} templateId=${templateId || '(default)'} templateFile=${templateFile || '(none)'}`);
 
   // Phase A: compile + stage every personalized site.
   for (let i = 0; i < businesses.length; i++) {
+    if (checkCancelled()) return { summary: null, results };
     const biz = businesses[i];
     const index = i + 1;
     const targetNiche = biz.niche || niche;
-    // Use explicit templateId if provided (custom template), otherwise fall back to niche.
-    const templateKey = templateId || targetNiche;
+    // Per-row template override trumps the campaign-wide one when present.
+    // resolvedKey above already picked the best campaign-wide key, but
+    // some flows let individual rows specify their own (e.g. per-row
+    // templateId coming from a rich CSV). Same resolution priority.
+    const rowKey = biz.templateKey || biz.templateFile || biz.templateId || null;
+    const effectiveKey = rowKey || resolvedKey || targetNiche;
     const slug = biz.slug || slugify(biz.name, biz.city);
     const leadId = useDb ? leadIds[i] : null;
 
     emit('site:compiling', { index, name: biz.name, slug });
     try {
-      const { html, templateFile } = await compileSite(biz, templateKey);
+      const { html, resolved } = await compileSite(biz, effectiveKey, ownerKey);
       const siteUrl = await stageSite(slug, html);
       const result = {
         index,
@@ -104,7 +145,9 @@ export async function runPipeline({
         phone: biz.phone || '',
         city: biz.city || '',
         slug,
-        templateFile,
+        templateKey: resolved.key,
+        templateFile: resolved.rawFile || null,
+        templateName: resolved.name,
         siteUrl,
         siteStatus: 'generated',
         smsStatus: 'pending',
@@ -114,7 +157,7 @@ export async function runPipeline({
       if (useDb) {
         recordLeadResult(leadId, { siteStatus: 'generated', siteUrl, smsStatus: 'pending' });
       }
-      emit('site:generated', { index, name: biz.name, slug, siteUrl, templateFile });
+      emit('site:generated', { index, name: biz.name, slug, siteUrl, templateKey: resolved.key, templateFile: resolved.rawFile, templateName: resolved.name });
     } catch (err) {
       // Always log the full error to stdout so it shows up in Railway deploy
       // logs and is easy to diagnose. Previously this was only emitted as an
@@ -148,6 +191,12 @@ export async function runPipeline({
 
   // Phase B: publish the whole staged directory to Cloudflare Pages (once).
   const staged = results.filter((r) => r.siteStatus === 'generated');
+  // Outcome tracker: 'live' if Cloudflare accepted, 'local' if we only
+  // wrote sites to disk (no Cloudflare creds), 'failed' if the upload
+  // threw. The frontend uses this to flip the campaign row to a terminal
+  // state so the wizard never gets stuck on "Deploying…".
+  let deployOutcome = 'skipped';
+  let deployError = null;
   if (staged.length) {
     emit('deploy:start', { count: staged.length, live: cloudflare.live });
     // Pre-flight: validate the Cloudflare token + project before invoking
@@ -172,21 +221,30 @@ export async function runPipeline({
     }
     try {
       const publish = await publishBatch();
-      emit('deploy:done', { ...publish, count: staged.length });
+      emit('deploy:done', { ...publish, count: staged.length, outcome: cloudflare.live ? 'live' : 'local' });
+      deployOutcome = cloudflare.live ? 'live' : 'local';
     } catch (err) {
       // Log loudly: a deploy error is the #1 cause of "blank site" reports.
       // The site HTML was written locally, but Cloudflare never received it.
       console.error(`[pipeline] deploy:error -> ${err.message}`);
       if (err.stack) console.error(err.stack);
+      deployError = err.message;
       emit('deploy:error', { error: err.message });
       // Sites are still staged locally; mark but continue (SMS may be skipped).
+      deployOutcome = 'failed';
     }
+  } else {
+    // No sites were generated — every row failed. Still emit a synthetic
+    // deploy:done so the frontend's UI knows the campaign is finished.
+    emit('deploy:done', { count: 0, outcome: 'failed', error: 'No sites were generated.' });
+    deployOutcome = 'failed';
   }
 
   // Phase C: dispatch SMS — skipped when skipSms (sites-only pipeline).
   if (!skipSms) {
   for (const result of results) {
     if (result.siteStatus !== 'generated') continue;
+    if (checkCancelled()) return { summary: null, results };
     const text = renderSms(template, {
       businessName: result.name,
       city: result.city,

@@ -5,7 +5,6 @@ import { Dashboard } from './components/Dashboard';
 import { Campaigns } from './components/Campaigns';
 import { Templates } from './components/Templates';
 import { Editor } from './components/Editor';
-import { Messages } from './components/Messages';
 import { Settings } from './components/Settings';
 import { Plans } from './components/Plans';
 import { playTiktokLike, playSoftTap } from './utils/audio';
@@ -20,6 +19,25 @@ import {
 import { SidebarTab, Campaign, Business, SmsLog } from './types';
 
 const ROUTE_STORAGE = 'lunao_route';
+
+// ---------------------------------------------------------------------------
+// ActiveCampaignRun: in-memory registry of campaigns currently being processed
+// by the backend pipeline. The wizard pushes a row here the moment the server
+// returns the campaignId, ticks the counters as SSE events stream in, and the
+// user can click Stop to soft-cancel the run. Lifted to the App root so the
+// wizard and the Active Campaigns card stay in sync without prop drilling.
+// ---------------------------------------------------------------------------
+export interface ActiveCampaignRun {
+  id: string;
+  kind: 'site-deploy' | 'email';
+  name: string;
+  niche: string;
+  total: number;
+  done: number;
+  status: 'starting' | 'running' | 'cancelling' | 'cancelled' | 'completed';
+  startedAt: number;
+  errorMessage?: string;
+}
 
 const readRoute = (): '/' | '/app' => {
   try {
@@ -95,13 +113,102 @@ function AppRouter() {
 function DashboardApp() {
   const [activeTab, setActiveTab] = useState<SidebarTab>('dashboard');
   const [bouncingTab, setBouncingTab] = useState<string | null>(null);
+  // Optional scroll-to target id. When the dashboard's "Manage all
+  // campaigns" link (or any other cross-tab jump) sets this before
+  // switching tabs, the scroll effect below lands on the matching
+  // element instead of resetting to the page top. One-shot — cleared
+  // right after the scroll so a subsequent tab switch behaves normally.
+  const [scrollTarget, setScrollTarget] = useState<string | null>(null);
 
   useEffect(() => {
     const mainEl = document.getElementById('main-content-flow');
-    if (mainEl) mainEl.scrollTop = 0;
-  }, [activeTab]);
+    if (!mainEl) return;
+    if (scrollTarget) {
+      // Defer to the next frame so the newly-rendered tab has time to
+      // mount its target element before we try to scroll to it.
+      const id = scrollTarget;
+      window.requestAnimationFrame(() => {
+        // For Recent Campaigns, try to land directly on the matching
+        // CARD (`rcard-<campaignId>`) before falling back to the section
+        // anchor. The card-level target gives a clean "you arrived at
+        // this campaign" feeling with the pulse ring centered on it.
+        const isRcardCampaignView = id.startsWith('rcard-campaign-');
+        const candidateId = isRcardCampaignView ? id : id;
+        const targetEl = document.getElementById(candidateId) || document.getElementById(id);
+        if (targetEl) {
+          // Per-card targets (sd-card-*, rcard-<campaignId>) are individual
+          // rows, so we center them in the viewport for a clean "you
+          // arrived here" feeling. Section-level targets align to the top
+          // so the heading + filter tabs are both visible above the fold.
+          const isCard = candidateId.startsWith('sd-card-')
+            || candidateId.startsWith('rcard-')
+            || candidateId.startsWith('rcard-campaign-');
+          targetEl.scrollIntoView({ behavior: 'smooth', block: isCard ? 'center' : 'start' });
+          // Briefly highlight the target so the user sees where they
+          // landed. The class is removed after the animation finishes.
+          targetEl.classList.add('scroll-target-pulse');
+          window.setTimeout(() => targetEl.classList.remove('scroll-target-pulse'), 1400);
+        }
+        mainEl.scrollTop = Math.max(0, mainEl.scrollTop - 80);
+        setScrollTarget(null);
+      });
+    } else {
+      mainEl.scrollTop = 0;
+    }
+  }, [activeTab, scrollTarget]);
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // One-click "View details" handler. Used by both the Dashboard's
+  // Recent Campaign rows and the EmailCampaignWizard's celebration card.
+  // Lands the user DIRECTLY on the matching card (`rcard-<id>`) inside
+  // the Recent Campaigns section, centers it in the viewport, and
+  // briefly pulses the card with the existing `scroll-target-pulse`
+  // keyframe so they see exactly where they arrived.
+  const handleViewCampaign = (campaignId: string) => {
+    // Defer to the next frame so the Campaigns tab has time to mount
+    // before we try to scroll to the card. This avoids the
+    // "scroll target not found" race when the user is on Dashboard.
+    window.requestAnimationFrame(() => {
+      // Prefer the card-level target so we land exactly on the campaign
+      // row. If the card isn't mounted yet (filtered list, etc.), the
+      // App.tsx scroll effect falls back to the section anchor below.
+      setScrollTarget(`rcard-${campaignId}`);
+      // Safety fallback in case the campaign id doesn't match any card
+      // (e.g. local optimistic id before server returns the real one):
+      // schedule a second pass that targets the section so the user
+      // still lands on the Recent Campaigns surface.
+      window.setTimeout(() => {
+        const stillTarget = document.getElementById('rcard-section');
+        if (stillTarget && !document.getElementById(`rcard-${campaignId}`)) {
+          setScrollTarget('rcard-section');
+        }
+      }, 400);
+    });
+    setActiveTab('campaigns');
+  };
+
+  // One-click "Edit outreach" handler. Used by Recent Campaign rows
+  // (the pencil button on email rows). Stores the source campaign's
+  // subject/body so the Campaigns tab's email sub-wizard picks them up
+  // via the `initialEmailSubject`/`initialEmailBody` props below. We
+  // also bump `initialEmailNonce` so the receiving effect re-fires
+  // even when the user re-edits the same campaign (same string → no
+  // identity change otherwise).
+  const [editOutreachPayload, setEditOutreachPayload] = useState<{
+    subject: string;
+    body: string;
+    nonce: number;
+  } | null>(null);
+  const handleEditOutreach = (camp: Campaign) => {
+    const subject = (camp as any).emailSubject || '';
+    const body = (camp as any).emailBody || '';
+    setEditOutreachPayload({ subject, body, nonce: Date.now() });
+    setActiveTab('campaigns');
+    // Scroll to the email wizard area so the user sees the pre-filled
+    // message without scrolling for it.
+    setScrollTarget('sd-campaigns-card-strip');
+  };
 
   const loadPersisted = <T,>(key: string, fallback: T): T => {
     try {
@@ -112,10 +219,38 @@ function DashboardApp() {
     }
   };
 
-  const [campaigns, setCampaigns] = useState<Campaign[]>(() => loadPersisted('lunao_campaigns', initialCampaigns));
+  const [campaigns, setCampaigns] = useState<Campaign[]>(() => {
+    const persisted = loadPersisted('lunao_campaigns', initialCampaigns);
+    // Reconcile stale Site Deploy rows on load: any campaign with type
+    // 'site-deploy' and a persisted result in localStorage is definitively
+    // finished (Cloudflare has already responded). Promoting those rows to
+    // 'Completed' prevents the dashboard from forever showing the
+    // "deploying…" shimmer for campaigns the user ran in earlier sessions.
+    let sdResults: Record<string, unknown> = {};
+    try {
+      sdResults = JSON.parse(localStorage.getItem('lunao_sd_results') || '{}') || {};
+    } catch {
+      sdResults = {};
+    }
+    return (persisted || []).map((c) => {
+      if (c.type === 'site-deploy' && c.status === 'Active') {
+        // Has persisted results → Cloudflare definitely finished it.
+        if (sdResults[c.id]) return { ...c, status: 'Completed' as const };
+        // No results AND the campaign is older than 10 minutes → the user
+        // closed the tab mid-deploy. Flip to Crashed so the row stops
+        // showing the forever-running spinner and the user can delete it.
+        const created = c.createdAt ? Date.parse(c.createdAt) : 0;
+        const tenMin = 10 * 60 * 1000;
+        if (created && Date.now() - created > tenMin) {
+          return { ...c, status: 'Crashed' as const, errorReason: 'Deploy interrupted (browser closed)' };
+        }
+      }
+      return c;
+    });
+  });
   const [businesses, setBusinesses] = useState<Business[]>(() => loadPersisted('lunao_businesses', initialBusinesses));
   const [smsLogs, setSmsLogs] = useState<SmsLog[]>(() => loadPersisted('lunao_sms_logs', initialSmsLogs));
-  const [sharedNiche, setSharedNiche] = useState<string>('Barber');
+  const [sharedNiche, setSharedNiche] = useState<string>('All');
 
   useEffect(() => {
     localStorage.setItem('lunao_campaigns', JSON.stringify(campaigns));
@@ -161,6 +296,35 @@ function DashboardApp() {
     };
     return defaultMap[userPlan] || 5;
   });
+
+  // -----------------------------------------------------------------------
+  // Active Campaigns registry. Lifted here so the wizard in Campaigns.tsx
+  // and the Active Campaigns progress card (also rendered inside Campaigns)
+  // share one source of truth. Pure-state operations — no side effects —
+  // so the wizard can call them freely without worrying about cascading
+  // re-renders.
+  // -----------------------------------------------------------------------
+  const [activeCampaignRuns, setActiveCampaignRuns] = useState<ActiveCampaignRun[]>([]);
+
+  const upsertActiveRun = (run: ActiveCampaignRun) => {
+    setActiveCampaignRuns((prev) => {
+      const idx = prev.findIndex((r) => r.id === run.id);
+      if (idx === -1) return [run, ...prev];
+      const next = prev.slice();
+      next[idx] = { ...next[idx], ...run };
+      return next;
+    });
+  };
+
+  const updateActiveRun = (id: string, patch: Partial<ActiveCampaignRun>) => {
+    setActiveCampaignRuns((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+    );
+  };
+
+  const removeActiveRun = (id: string) => {
+    setActiveCampaignRuns((prev) => prev.filter((r) => r.id !== id));
+  };
 
   const handleSetUserPlan = (plan: string) => {
     let normalized = plan;
@@ -262,19 +426,48 @@ function DashboardApp() {
       <main id="main-content-flow" className="flex-1 overflow-y-auto h-[calc(100vh-56px)] md:h-screen p-6 md:p-12 relative flex flex-col justify-between">
         <div id="routed-module-wrapper" className="flex-1 pb-24 md:pb-16">
           <div className={activeTab === 'dashboard' ? 'block animate-fade-in' : 'hidden'}>
-            <Dashboard campaigns={campaigns} setCampaigns={setCampaigns} setActiveTab={setActiveTab} setPreviewTemplateId={setPreviewTemplateId} businesses={businesses} />
+            <Dashboard
+              campaigns={campaigns}
+              setCampaigns={setCampaigns}
+              setActiveTab={setActiveTab}
+              setPreviewTemplateId={setPreviewTemplateId}
+              businesses={businesses}
+              setScrollTarget={setScrollTarget}
+              onViewDetails={handleViewCampaign}
+              onEditOutreach={handleEditOutreach}
+            />
           </div>
           <div className={activeTab === 'campaigns' ? 'block animate-fade-in' : 'hidden'}>
-            <Campaigns campaigns={campaigns} setCampaigns={setCampaigns} templates={initialTemplates} businesses={businesses} setBusinesses={setBusinesses} addSmsLog={addSmsLog} setActiveTab={setActiveTab} selectedNiche={sharedNiche === 'All' ? 'Barber' : sharedNiche} setSelectedNiche={setSharedNiche} userPlan={userPlan} userCredits={userCredits} setUserCredits={setUserCredits} telnyxKey={telnyxKey} telnyxPhone={telnyxPhone} />
+            <Campaigns
+              campaigns={campaigns}
+              setCampaigns={setCampaigns}
+              templates={initialTemplates}
+              businesses={businesses}
+              setBusinesses={setBusinesses}
+              addSmsLog={addSmsLog}
+              setActiveTab={setActiveTab}
+              selectedNiche={sharedNiche === 'All' ? 'All' : sharedNiche}
+              setSelectedNiche={setSharedNiche}
+              userPlan={userPlan}
+              userCredits={userCredits}
+              setUserCredits={setUserCredits}
+              telnyxKey={telnyxKey}
+              telnyxPhone={telnyxPhone}
+              setScrollTarget={setScrollTarget}
+              activeCampaignRuns={activeCampaignRuns}
+              upsertActiveRun={upsertActiveRun}
+              updateActiveRun={updateActiveRun}
+              removeActiveRun={removeActiveRun}
+              initialEmailSubject={editOutreachPayload?.subject}
+              initialEmailBody={editOutreachPayload?.body}
+              initialEmailNonce={editOutreachPayload?.nonce}
+            />
           </div>
           <div className={activeTab === 'templates' ? 'block animate-fade-in' : 'hidden'}>
             <Templates templates={initialTemplates} previewTemplateId={previewTemplateId} setPreviewTemplateId={setPreviewTemplateId} selectedNicheFilter={sharedNiche} setSelectedNicheFilter={setSharedNiche} setActiveTab={setActiveTab} />
           </div>
           <div className={activeTab === 'editor' ? 'block animate-fade-in' : 'hidden'}>
             <Editor active={activeTab === 'editor'} />
-          </div>
-          <div className={activeTab === 'messages' ? 'block animate-fade-in' : 'hidden'}>
-            <Messages businesses={businesses} setBusinesses={setBusinesses} setActiveTab={setActiveTab} />
           </div>
           <div className={activeTab === 'settings' ? 'block animate-fade-in' : 'hidden'}>
             <Settings userName={userName} setUserName={setUserName} userEmail={userEmail} setUserEmail={setUserEmail} userPlan={userPlan} setUserPlan={handleSetUserPlan} userCredits={userCredits} telnyxKey={telnyxKey} setTelnyxKey={setTelnyxKey} telnyxPhone={telnyxPhone} setTelnyxPhone={setTelnyxPhone} setActiveTab={setActiveTab} />

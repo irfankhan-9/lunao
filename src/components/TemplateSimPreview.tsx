@@ -15,6 +15,22 @@ import { Eye, ExternalLink } from 'lucide-react';
 import { getTemplateContent } from './Templates';
 import { getNicheBgImage } from './Templates';
 
+// Built-in templates use semantic keys (e.g. "barber-dark-luxury") but the
+// rich per-template mockups below were written against the old t1..t8
+// identifiers. This map lets us reuse the exact same visuals without
+// touching the hand-tuned mockup JSX.
+const KEY_TO_LEGACY_ID = {
+  'barber-dark-luxury': 't1',
+  'barber-editorial': 't2',
+  'salon-maison': 't3',
+  'dentist-clarity': 't4',
+  'roofing-ironclad': 't5',
+  'hvac-everest': 't6',
+  'gym-iron-grit': 't7',
+  'realestate-glass': 't8',
+};
+const legacyIdFor = (key) => KEY_TO_LEGACY_ID[key] || key;
+
 interface TemplateSimPreviewProps {
   id: string;
   name: string;
@@ -56,17 +72,26 @@ const getNicheEmoji = (niche: string) => {
   }
 };
 
-const previewUrl = (id: string) => {
-  switch (id) {
-    case 't2': return '/barber-template-02.html';
-    case 't3': return '/salon-template-01.html';
-    case 't4': return '/dentist-template-01.html';
-    case 't5': return '/roofing-template-01.html';
-    case 't6': return '/hvac-template-01.html';
-    case 't7': return '/gym-template-01.html';
-    case 't8': return '/realestate-template-01.html';
-    default: return '/barber-template.html';
-  }
+// Live preview URL for a built-in template. The dashboard iframe renders
+// the unified preview endpoint, which returns demo-filled HTML for any
+// built-in key. Falls back to the standing "/barber-template.html" if
+// the key is unknown (very defensive — should never happen).
+const LEGACY_PREVIEW_FILE = {
+  'barber-dark-luxury': '/barber-template.html',
+  'barber-editorial': '/barber-template-02.html',
+  'salon-maison': '/salon-template-01.html',
+  'dentist-clarity': '/dentist-template-01.html',
+  'roofing-ironclad': '/roofing-template-01.html',
+  'hvac-everest': '/hvac-template-01.html',
+  'gym-iron-grit': '/gym-template-01.html',
+  'realestate-glass': '/realestate-template-01.html',
+};
+const previewUrl = (id) => {
+  // Prefer the unified live-preview endpoint when the template is a known
+  // built-in. Fall back to the legacy static file (a copy of the same HTML
+  // that lives at /public/barber-template.html etc.) for back-compat.
+  if (LEGACY_PREVIEW_FILE[id]) return `/api/templates/${encodeURIComponent(id)}/preview`;
+  return LEGACY_PREVIEW_FILE[id] || '/barber-template.html';
 };
 
 export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
@@ -85,9 +110,13 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
   subLabel,
 }) => {
   const content = getTemplateContent(id, name, niche);
+  // Mockup visuals were authored against the legacy t1..t8 ids. Map the
+  // new semantic keys back to those ids so all the rich visuals render
+  // untouched.
+  const legacy = legacyIdFor(id);
 
   const bgImage = (() => {
-    switch (id) {
+    switch (legacy) {
       case 't3': return '/salon_template_cover.png';
       case 't5': return '/roofing_cover.png';
       case 't6': return '/hvac_cover.png';
@@ -129,7 +158,7 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
           </div>
           {/* Desktop content */}
           <div className="flex-1 overflow-hidden bg-[#111110] relative">
-            {id === 't2' ? (
+            {legacy === 't2' ? (
               <div className="h-full p-2 flex flex-col gap-1 bg-[#FAF6ED] text-[#121F1A] text-[5px] font-mono">
                 <div className="border-b border-[#D9CDBC] pb-0.5 flex justify-between items-center bg-[#F2EAD8]/50 px-0.5">
                   <span className="font-bold font-serif italic tracking-tight text-[5.5px]">FRANKLIN &amp; SONS</span>
@@ -151,7 +180,7 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
                   ))}
                 </div>
               </div>
-            ) : id === 't3' ? (
+            ) : legacy === 't3' ? (
               <div className="h-full p-2 flex flex-col gap-1 bg-[#FAF8F4] text-[#1C1A17] text-[5px] font-mono">
                 <div className="border-b border-[#D6CFC5] pb-0.5 flex justify-between items-center bg-[#F3EFE7]/50 px-0.5">
                   <span className="font-bold font-serif italic text-[5.5px] text-[#C4856A]">MAISON AURÉLIE</span>
@@ -170,7 +199,7 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
                   ))}
                 </div>
               </div>
-            ) : id === 't4' ? (
+            ) : legacy === 't4' ? (
               <div className="h-full p-2 flex flex-col gap-1 bg-[#FFFFFF] text-[#0A1628] text-[5px] font-mono">
                 <div className="border-b border-[#DDE2EC] pb-0.5 flex justify-between items-center bg-white px-0.5">
                   <span className="text-[5px] font-bold flex items-center gap-0.5">
@@ -191,7 +220,7 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
                   ))}
                 </div>
               </div>
-            ) : id === 't5' ? (
+            ) : legacy === 't5' ? (
               <div className="h-full p-2 flex flex-col gap-1 bg-[#161614] text-[#F5F4F0] text-[5px] font-sans">
                 <div className="border-b border-[#2A2A26] pb-0.5 flex justify-between items-center bg-[#0C0C0B] px-0.5">
                   <span className="text-[5.5px] font-extrabold text-white tracking-wider">🏠 IRONCLAD</span>
@@ -210,7 +239,7 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
                   ))}
                 </div>
               </div>
-            ) : id === 't6' ? (
+            ) : legacy === 't6' ? (
               <div className="h-full p-2 flex flex-col gap-1 bg-[#0F172A] text-[#F1F5F9] text-[5px] font-sans">
                 <div className="bg-[#F97316] text-[#0F172A] px-1 py-0.5 text-center font-bold text-[3px] rounded-xs uppercase tracking-wide leading-none">🚨 24/7 EMERGENCY</div>
                 <div className="border-b border-[#334155] pb-0.5 flex justify-between items-center bg-[#0F172A] px-0.5">
@@ -230,7 +259,7 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
                   ))}
                 </div>
               </div>
-            ) : id === 't7' ? (
+            ) : legacy === 't7' ? (
               <div className="h-full p-2 flex flex-col gap-1 bg-[#111827] text-[#F3F4F6] text-[5px] font-sans">
                 <div className="bg-[#EF4444] text-white px-1 py-0.5 text-center font-bold text-[3px] rounded-xs uppercase tracking-wide leading-none">⚡ FREE 1-DAY PASS</div>
                 <div className="border-b border-[#374151] pb-0.5 flex justify-between items-center bg-[#111827] px-0.5">
@@ -250,7 +279,7 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
                   ))}
                 </div>
               </div>
-            ) : id === 't8' ? (
+            ) : legacy === 't8' ? (
               <div className="h-full p-2 flex flex-col gap-1 bg-[#111111] text-[#C9A86A] text-[5px] font-sans">
                 <div className="bg-[#C9A86A] text-[#111111] px-1 py-0.5 text-center font-bold text-[3px] uppercase leading-none rounded-xs">🔑 PREMIUM BROKERAGE</div>
                 <div className="border-b border-white/5 pb-0.5 flex justify-between items-center bg-[#111111] px-0.5">
@@ -304,7 +333,7 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
             <span className="w-0.5 h-0.5 bg-zinc-700 rounded-full block mx-auto mt-0.5" />
           </div>
           <div className="flex-1 w-full bg-[#111110] relative pt-2">
-            {id === 't2' ? (
+            {legacy === 't2' ? (
               <div className="h-full p-1 pt-3 flex flex-col gap-1 bg-[#FAF6ED] text-[#121F1A] text-[4.5px] font-mono">
                 <div className="flex justify-between items-center border-b border-[#D9CDBC] pb-0.5 bg-[#F2EAD8]/50 px-0.5">
                   <span className="font-bold font-serif italic text-[4px]">FRANKLIN</span>
@@ -320,7 +349,7 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
                 </div>
                 <div className="mt-auto bg-[#121F1A] text-white text-center py-0.5 rounded-sm"><span className="text-[3px] tracking-widest uppercase">CALL NOW</span></div>
               </div>
-            ) : id === 't3' ? (
+            ) : legacy === 't3' ? (
               <div className="h-full p-1 pt-3 flex flex-col gap-1 bg-[#FAF8F4] text-[#1C1A17] text-[4.5px] font-mono">
                 <div className="flex justify-between items-center border-b border-[#D6CFC5] pb-0.5 bg-[#F3EFE7]/50 px-0.5">
                   <span className="font-bold text-[4px] text-[#C4856A] italic">MAISON</span>
@@ -332,7 +361,7 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
                 </div>
                 <div className="mt-auto bg-[#1C1A17] text-white text-center py-0.5 rounded-sm"><span className="text-[3px] tracking-widest uppercase">CALL</span></div>
               </div>
-            ) : id === 't4' ? (
+            ) : legacy === 't4' ? (
               <div className="h-full p-1 pt-3 flex flex-col gap-1 bg-[#FFFFFF] text-[#0A1628] text-[4.5px] font-mono">
                 <div className="flex justify-between items-center border-b border-[#DDE2EC] pb-0.5 bg-white px-0.5">
                   <span className="font-bold text-[4px]">CLARITY</span>
@@ -344,7 +373,7 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
                 </div>
                 <div className="mt-auto bg-[#0A1628] text-white text-center py-0.5 rounded-sm"><span className="text-[3px] tracking-widest uppercase">CALL</span></div>
               </div>
-            ) : id === 't5' ? (
+            ) : legacy === 't5' ? (
               <div className="h-full p-1 pt-3 flex flex-col gap-1 bg-[#161614] text-[#F5F4F0] text-[4.5px] font-sans">
                 <div className="flex justify-between items-center border-b border-[#2A2A26] pb-0.5 bg-[#0C0C0B] px-0.5">
                   <span className="font-extrabold text-[4px] text-white">🏠 Ironclad</span>
@@ -356,7 +385,7 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
                 </div>
                 <div className="mt-auto bg-[#E8760A] text-black text-center py-0.5 rounded-sm"><span className="text-[3px] font-bold uppercase">CALL</span></div>
               </div>
-            ) : id === 't6' ? (
+            ) : legacy === 't6' ? (
               <div className="h-full p-1 pt-3 flex flex-col gap-1 bg-[#0F172A] text-[#F1F5F9] text-[4.5px] font-sans">
                 <div className="flex justify-between items-center border-b border-[#334155] pb-0.5 bg-[#0F172A] px-0.5">
                   <span className="font-extrabold text-[4px] text-white">❄️🔥 VENTUS</span>
@@ -368,7 +397,7 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
                 </div>
                 <div className="mt-auto bg-[#F97316] text-[#0F172A] text-center py-0.5 rounded-sm"><span className="text-[3px] font-bold uppercase">CALL</span></div>
               </div>
-            ) : id === 't7' ? (
+            ) : legacy === 't7' ? (
               <div className="h-full p-1 pt-3 flex flex-col gap-1 bg-[#111827] text-[#F3F4F6] text-[4.5px] font-sans">
                 <div className="flex justify-between items-center border-b border-[#374151] pb-0.5 bg-[#111827] px-0.5">
                   <span className="font-extrabold text-[4px] text-white">💪 PULSE</span>
@@ -380,7 +409,7 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
                 </div>
                 <div className="mt-auto bg-[#EF4444] text-white text-center py-0.5 rounded-sm"><span className="text-[3px] font-bold uppercase">JOIN</span></div>
               </div>
-            ) : id === 't8' ? (
+            ) : legacy === 't8' ? (
               <div className="h-full p-1 pt-3 flex flex-col gap-1 bg-[#111111] text-[#C9A86A] text-[4.5px] font-sans">
                 <div className="flex justify-between items-center border-b border-white/5 pb-0.5 bg-[#111111] px-0.5">
                   <span className="font-extrabold text-[4px] text-white">🏡 AURA</span>

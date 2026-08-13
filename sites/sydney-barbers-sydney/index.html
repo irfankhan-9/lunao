@@ -1,0 +1,2650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sydney Barbers — Sydney</title>
+    <meta name="description" content="Sydney Barbers — Sydney. Haircuts. Fades. Shaves. Precision craft.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Luxury Apothecary & Premium High-End Editorial Color System */
+            --white:        #FAF6ED;        /* Rich, warm alabaster/silk cream */
+            --paper:        #F2EAD8;        /* Exquisite luxury vintage book/cream paper background */
+            --paper-dark:   #EDE2CA;        /* Slightly deeper coffee contrast */
+            --ink:          #121F1A;        /* Midnight forest cedar (extremely deep pine, replaces harsh black) */
+            --ink-mid:      #26332E;        /* Luxurious charcoal green for highly readable text */
+            --ink-light:    #556960;        /* Muted sage-gold tinted captions */
+            --ink-ghost:    #D9CDBC;        /* Beautiful gold-grey hairline separators */
+            --gold:         #AD8C58;        /* Matte vintage champagne gold for premium borders and crests */
+            --gold-hover:   #947343;
+            --gold-soft:    #FAF2E2;        /* Deluxe warm gold wash */
+            --red:          #9E3C30;        /* Crimson clay / terracotta red for signature branding accents */
+            --red-hover:    #7A2A20;
+            --red-tint:     #F9F0EB;        /* Soft vermillion cream highlights */
+
+            /* Borders */
+            --rule:         1.5px solid var(--ink);                  /* Traditional hand-ruled high-density line */
+            --rule-light:   1.0px solid var(--ink-ghost);            /* Soft golden paper screen line */
+            --rule-ghost:   1.0px solid rgba(18, 31, 26, 0.08);      /* Deluxe fine bounding box gray */
+
+            /* Radius & Shadows - Maintaining crisp printed editorial look with rounded-sm modernism */
+            --r-xs:  4px;
+            --r-sm:  8px;
+            --r-md:  12px;
+            --r-tag: 100px;
+            --shadow-lift:  0 4px 20px rgba(18, 31, 26, 0.04);
+            --shadow-deep:  0 12px 48px rgba(18, 31, 26, 0.09);
+
+            /* Typography scale */
+            --text-10:   10px;
+            --text-11:   11px;
+            --text-13:   13px;
+            --text-15:   15px;
+            --text-17:   17px;
+            --text-20:   20px;
+            --text-24:   24px;
+            --text-32:   32px;
+            --text-48:   48px;
+            --text-64:   64px;
+            --text-hero: clamp(52px, 11vw, 115px);
+        }
+
+        /* Base Resets */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            max-width: 100%;
+            overflow-x: hidden;
+            position: relative;
+            overscroll-behavior-x: none;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            scroll-padding-top: 60px;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        body {
+            background-color: var(--white);
+            color: var(--ink-mid);
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 300;
+            font-size: var(--text-15);
+            line-height: 1.6;
+        }
+
+        /* Typography Helper Classes */
+        h1, h2, h3, h4, h5, h6 {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-weight: 400;
+            line-height: 1.1;
+            color: var(--ink);
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        ul {
+            list-style: none;
+        }
+
+        button {
+            background: none;
+            border: none;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1440px;
+            margin: 0 auto;
+            padding-left: 20px;
+            padding-right: 20px;
+        }
+        @media (min-width: 768px) {
+            .container {
+                padding-left: 40px;
+                padding-right: 40px;
+            }
+        }
+
+        /* Rule system styles */
+        .major-rule {
+            border-top: var(--rule);
+        }
+        .minor-rule {
+            border-top: var(--rule-light);
+        }
+
+        /* Sticky Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: rgba(250, 246, 237, 0.94);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            z-index: 100;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            border-bottom: 1px solid rgba(18, 31, 26, 0.05);
+        }
+        nav.scrolled {
+            background: var(--white);
+            box-shadow: 0 4px 20px rgba(18, 31, 26, 0.04);
+            border-bottom: 1px solid var(--ink-ghost);
+        }
+        .nav-wrapper {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+        }
+        @media (min-width: 768px) {
+            .nav-wrapper {
+                padding: 0 32px;
+            }
+        }
+        .nav-logo {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-weight: 700;
+            font-style: italic;
+            font-size: var(--text-20);
+            letter-spacing: -0.01em;
+            color: var(--ink);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .nav-menu {
+            display: none;
+        }
+        @media (min-width: 1024px) {
+            .nav-menu {
+                display: flex;
+                align-items: center;
+                gap: 16px;
+            }
+            .nav-menu a {
+                font-family: 'IBM Plex Mono', monospace;
+                font-weight: 400;
+                font-size: var(--text-11);
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+                color: var(--ink-mid);
+                padding: 6px 4px;
+            }
+            .nav-menu a:hover, .nav-menu a.active {
+                color: var(--red);
+            }
+            .nav-separator {
+                color: var(--ink-ghost);
+                font-size: var(--text-10);
+            }
+        }
+        .nav-cta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .btn-book {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 500;
+            font-size: var(--text-11);
+            letter-spacing: 0.1em;
+            color: var(--white);
+            background: var(--ink);
+            padding: 10px 22px;
+            border-radius: var(--r-sm);
+            text-transform: uppercase;
+            transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.1s ease;
+        }
+        .btn-book:hover {
+            background-color: var(--red);
+            transform: translateY(-1px);
+        }
+        .btn-book:active {
+            transform: scale(0.97) translateY(0);
+        }
+
+        /* Hamburger button */
+        .nav-toggle {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 44px;
+            height: 44px;
+            background: none;
+            border: none;
+            position: relative;
+            z-index: 1001;
+        }
+        @media (min-width: 1024px) {
+            .nav-toggle {
+                display: none;
+            }
+        }
+        .nav-toggle span {
+            display: block;
+            width: 22px;
+            height: 1px;
+            background-color: var(--ink);
+            transition: transform 0.25s ease, opacity 0.25s ease;
+        }
+        .nav-toggle span:first-child {
+            transform: translateY(-3px);
+        }
+        .nav-toggle span:last-child {
+            transform: translateY(3px);
+        }
+        .nav-toggle.open span:first-child {
+            transform: rotate(45deg);
+        }
+        .nav-toggle.open span:last-child {
+            transform: rotate(-45deg);
+        }
+
+        /* Mobile Overlay Nav Menu */
+        .mobile-nav-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            background: var(--white);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            padding: 80px 24px 40px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            overflow-y: auto;
+        }
+        .mobile-nav-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .mobile-links-stacked {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            margin-top: 20px;
+        }
+        .mobile-link-row {
+            border-bottom: var(--rule-light);
+            padding: 18px 0;
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+        }
+        .mobile-link-row:last-child {
+            border-bottom: var(--rule);
+        }
+        .mobile-link-anchor {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-weight: 300;
+            font-size: var(--text-48);
+            font-style: italic;
+            color: var(--ink);
+            line-height: 1;
+        }
+        .mobile-link-anchor:hover {
+            color: var(--red);
+        }
+        .mobile-link-num {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: var(--text-10);
+            color: var(--ink-light);
+            vertical-align: super;
+        }
+
+        /* SECTION REVEAL ANIMATION */
+        [data-reveal] {
+            opacity: 0;
+            transform: translateY(24px);
+            transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        [data-reveal].in-view {
+            opacity: 1;
+            transform: none;
+        }
+
+        /* SECTION ONE: HERO */
+        #home {
+            min-height: 100vh;
+            background: var(--white);
+            padding-top: 56px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+        }
+        .hero-top-bar {
+            padding-top: 40px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            width: 100%;
+        }
+        .hero-line {
+            flex-grow: 1;
+            border-top: var(--rule-light);
+        }
+        .hero-index {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 300;
+            font-size: var(--text-11);
+            color: var(--ink-light);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .hero-content {
+            margin-top: 48px;
+            margin-bottom: 64px;
+        }
+        @media (min-width: 1024px) {
+            .hero-content {
+                display: grid;
+                grid-template-columns: repeat(12, 1fr);
+                gap: 40px;
+            }
+            .hero-typography-container {
+                grid-column: 1 / span 9;
+            }
+        }
+
+        /* Split Business name typo */
+        .hero-business-title {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-size: var(--text-hero);
+            line-height: 0.95;
+            letter-spacing: -0.02em;
+            color: var(--ink);
+        }
+        .title-light {
+            font-weight: 300;
+            font-style: italic;
+        }
+        .title-slash {
+            color: var(--red);
+            font-weight: 300;
+            display: inline-block;
+            margin: 0 4px;
+            transform: scaleX(0.7);
+        }
+        .title-bold {
+            font-weight: 700;
+            display: block;
+        }
+        
+        /* Cursor Blinking effect */
+        .cursor-blink::after {
+            content: '|';
+            color: var(--red);
+            font-weight: 300;
+            animation: blink 1.1s step-end infinite;
+            margin-left: 2px;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        .hero-meta {
+            margin-top: 32px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: var(--text-11);
+            color: var(--ink-mid);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .hero-ctas {
+            margin-top: 40px;
+            display: flex;
+            align-items: center;
+            gap: 32px;
+        }
+        .link-text-underline {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 500;
+            font-size: var(--text-13);
+            color: var(--ink);
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            border-bottom: 1px solid var(--ink);
+            padding-bottom: 2px;
+        }
+        .link-text-underline:hover {
+            color: var(--red);
+            border-bottom-color: var(--red);
+        }
+        .link-text-underline span.arrow {
+            display: inline-block;
+            transition: transform 0.2s ease;
+        }
+        .link-text-underline:hover span.arrow {
+            transform: translateX(4px);
+        }
+
+        .link-text-muted {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 300;
+            font-size: var(--text-13);
+            color: var(--ink-light);
+            border-bottom: 1px solid transparent;
+            padding-bottom: 2px;
+        }
+        .link-text-muted:hover {
+            color: var(--ink);
+            border-bottom-color: var(--ink);
+        }
+
+        /* Hero bottom stats strip */
+        .hero-stats-strip {
+            border-top: var(--rule);
+            padding: 24px 0;
+            width: 100%;
+            margin-top: auto;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 24px;
+        }
+        @media (min-width: 768px) {
+            .stats-grid {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 0;
+            }
+        }
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+        @media (min-width: 768px) {
+            .stat-item {
+                padding-left: 24px;
+                border-left: var(--rule-light);
+            }
+            .stat-item:first-child {
+                padding-left: 0;
+                border-left: none;
+            }
+        }
+        @media (max-width: 767px) {
+            .stat-item {
+                border-top: var(--rule-light);
+                padding-top: 16px;
+            }
+            .stat-item:first-child {
+                border-top: none;
+                padding-top: 0;
+            }
+        }
+        .stat-num {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-weight: 700;
+            font-size: var(--text-48);
+            line-height: 1;
+            color: var(--ink);
+        }
+        .stat-label {
+            margin-top: 4px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 300;
+            font-size: var(--text-11);
+            letter-spacing: 0.1em;
+            color: var(--ink-light);
+            text-transform: uppercase;
+        }
+
+        /* SECTION HEADERS */
+        .section-header-wrapper {
+            margin-bottom: 48px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        @media (min-width: 768px) {
+            .section-header-wrapper {
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: flex-end;
+            }
+        }
+        .section-index-box {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .section-index-text {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: var(--text-11);
+            color: var(--ink-light);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+        }
+        .section-header-desc {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 500;
+            font-size: var(--text-10);
+            letter-spacing: 0.1em;
+            color: var(--ink-mid);
+            text-transform: uppercase;
+        }
+        .section-title-editorial {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-weight: 300;
+            font-size: var(--text-48);
+            font-style: italic;
+            color: var(--ink);
+            line-height: 1;
+        }
+
+        /* SECTION TWO: SERVICES (Table menu) */
+        #services {
+            padding: 80px 0;
+            background: var(--white);
+        }
+        .services-menu-container {
+            border-top: var(--rule);
+        }
+        .service-menu-row {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 16px 12px;
+            border-bottom: var(--rule-light);
+            transition: background-color 0.15s ease;
+        }
+        @media (min-width: 768px) {
+            .service-menu-row {
+                flex-direction: row;
+                align-items: baseline;
+                padding: 20px 32px;
+            }
+        }
+        .service-menu-row:hover {
+            background-color: var(--red-tint);
+        }
+        .service-menu-left {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        @media (min-width: 768px) {
+            .service-menu-left {
+                flex-direction: row;
+                align-items: baseline;
+                gap: 16px;
+                max-width: 80%;
+            }
+        }
+        .service-menu-name {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-weight: 600;
+            font-size: var(--text-24);
+            color: var(--ink);
+            transition: color 0.15s ease;
+        }
+        .service-menu-row:hover .service-menu-name {
+            color: var(--red);
+        }
+        .service-menu-desc {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 300;
+            font-size: var(--text-11);
+            color: var(--ink-light);
+            letter-spacing: 0.04em;
+        }
+        @media (min-width: 768px) {
+            .service-menu-desc {
+                margin-left: 4px;
+            }
+        }
+        .service-menu-price {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-weight: 300;
+            font-style: italic;
+            font-size: var(--text-24);
+            color: var(--ink-mid);
+            margin-top: 4px;
+            align-self: flex-end;
+        }
+        @media (min-width: 768px) {
+            .service-menu-price {
+                margin-top: 0;
+                align-self: baseline;
+            }
+        }
+
+        /* SECTION THREE: SPECIAL OFFERS */
+        #offers {
+            padding: 80px 0;
+            background-color: var(--paper);
+        }
+        .offers-block-container {
+            display: flex;
+            flex-direction: column;
+        }
+        .offer-block-row {
+            border-bottom: var(--rule-light);
+            padding: 40px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .offer-block-row:first-child {
+            border-top: var(--rule-light);
+        }
+        @media (min-width: 768px) {
+            .offer-block-row {
+                display: grid;
+                grid-template-columns: 80px 1fr auto;
+                gap: 40px;
+                padding: 48px 32px;
+                align-items: start;
+            }
+        }
+        .offer-block-index {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-weight: 700;
+            font-size: var(--text-48);
+            color: var(--ink-ghost);
+            line-height: 1;
+            display: none;
+        }
+        @media (min-width: 768px) {
+            .offer-block-index {
+                display: block;
+            }
+        }
+        .offer-block-content {
+            display: flex;
+            flex-direction: column;
+        }
+        .offer-tag {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 500;
+            font-size: var(--text-10);
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--red);
+            background: var(--red-tint);
+            padding: 3px 8px;
+            border-radius: var(--r-tag);
+            align-self: flex-start;
+        }
+        .offer-title {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-weight: 700;
+            font-size: var(--text-32);
+            color: var(--ink);
+            margin-top: 12px;
+            line-height: 1.2;
+        }
+        .offer-desc {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 300;
+            font-size: var(--text-13);
+            color: var(--ink-mid);
+            line-height: 1.7;
+            margin-top: 8px;
+            max-width: 520px;
+        }
+        .offer-cta-col {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-top: 12px;
+        }
+        @media (min-width: 768px) {
+            .offer-cta-col {
+                flex-direction: column;
+                align-items: flex-end;
+                justify-content: flex-start;
+                margin-top: 0;
+                gap: 12px;
+            }
+        }
+        .offer-price {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-weight: 300;
+            font-style: italic;
+            font-size: var(--text-48);
+            color: var(--ink);
+            line-height: 1;
+        }
+        .offer-cta-link {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 500;
+            font-size: var(--text-11);
+            letter-spacing: 0.1em;
+            color: var(--red);
+            text-transform: uppercase;
+            border-bottom: 1px solid transparent;
+            padding-bottom: 1px;
+        }
+        .offer-cta-link:hover {
+            border-bottom-color: var(--red);
+        }
+
+        /* SECTION FOUR: REVIEWS */
+        #reviews {
+            padding: 80px 0;
+            background: var(--white);
+        }
+        .reviews-summary-line {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: var(--text-11);
+            color: var(--ink-light);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin-top: -36px;
+            margin-bottom: 40px;
+            padding: 0 12px;
+        }
+        @media (min-width: 768px) {
+            .reviews-summary-line {
+                padding: 0 32px;
+            }
+        }
+        .reviews-list-container {
+            display: flex;
+            flex-direction: column;
+        }
+        .review-item-row {
+            background: rgba(255, 255, 255, 0.45);
+            border: 1px solid var(--ink-ghost);
+            border-radius: var(--r-md);
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .review-item-row:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-deep);
+            border-color: var(--ink-mid);
+        }
+        @media (min-width: 768px) {
+            .review-item-row {
+                display: grid;
+                grid-template-columns: 200px 1fr;
+                gap: 40px;
+                padding: 32px 40px;
+            }
+        }
+        .review-meta-col {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .reviewer-name {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 500;
+            font-size: var(--text-13);
+            color: var(--ink);
+            text-transform: uppercase;
+        }
+        .review-source {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: var(--text-11);
+            color: var(--ink-light);
+        }
+        .review-stars {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        /* Custom CSS diamond stars (8px x 8px) */
+        .diamond-star {
+            width: 7px;
+            height: 7px;
+            background: var(--ink-ghost);
+            transform: rotate(45deg);
+        }
+        .diamond-star.filled {
+            background: var(--ink);
+        }
+        .review-date {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: var(--text-11);
+            color: var(--ink-ghost);
+            margin-top: 2px;
+        }
+        
+        .review-quote-col {
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        .quote-icon {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-weight: 300;
+            font-size: var(--text-64);
+            color: var(--red);
+            line-height: 0.6;
+            margin-bottom: 4px;
+            display: block;
+            height: 24px;
+        }
+        .review-text-editorial {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-weight: 400;
+            font-style: italic;
+            font-size: var(--text-20);
+            color: var(--ink-mid);
+            line-height: 1.6;
+        }
+
+        /* SECTION FIVE: BOOK NOW */
+        #book {
+            padding: 80px 0;
+            background-color: var(--paper);
+        }
+        .booking-grid-layout {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 48px;
+        }
+        @media (min-width: 1024px) {
+            .booking-grid-layout {
+                grid-template-columns: 1fr 400px;
+                gap: 64px;
+            }
+        }
+        
+        /* Form stylings */
+        .booking-form-box {
+            display: flex;
+            flex-direction: column;
+        }
+        .booking-form-title {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-weight: 600;
+            font-size: var(--text-32);
+            color: var(--ink);
+            margin-bottom: 32px;
+        }
+        .form-field-group {
+            margin-bottom: 24px;
+            position: relative;
+        }
+        .form-field-label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 400;
+            font-size: var(--text-11);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--ink-mid);
+            display: block;
+            margin-bottom: 8px;
+        }
+        .form-input-editorial {
+            width: 100%;
+            background: var(--white);
+            border: none;
+            border-bottom: var(--rule);
+            border-radius: 0;
+            padding: 12px 12px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: var(--text-15);
+            color: var(--ink);
+            outline: none;
+            transition: border-bottom-color 0.15s ease, background-color 0.15s ease;
+        }
+        .form-input-editorial:focus {
+            border-bottom-color: var(--red);
+            background-color: var(--white);
+        }
+        .form-input-editorial::placeholder {
+            color: var(--ink-ghost);
+            opacity: 0.7;
+        }
+
+        /* Custom dropdown arrow using pure CSS styling and appearance none */
+        select.form-input-editorial {
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%230E0E0C%22%20stroke-width%3D%221.5%22%253E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E");
+            background-repeat: no-repeat;
+            background-position: calc(100% - 12px) center;
+            padding-right: 32px;
+        }
+        textarea.form-input-editorial {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .btn-submit-booking {
+            display: block;
+            width: 100%;
+            background: var(--ink);
+            color: var(--white);
+            border: none;
+            padding: 16px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 500;
+            font-size: var(--text-13);
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            border-radius: var(--r-sm);
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            margin-top: 32px;
+        }
+        .btn-submit-booking:hover {
+            background-color: var(--red);
+        }
+        .btn-submit-booking:active {
+            transform: scale(0.99);
+        }
+
+        .booking-terms-note {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: var(--text-11);
+            color: var(--ink-light);
+            margin-top: 12px;
+            display: block;
+        }
+
+        /* Shake animation for validation failures */
+        .shake-form {
+            animation: shake 0.4s ease;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-8px); }
+            40%, 80% { transform: translateX(8px); }
+        }
+
+        /* Success screen format */
+        .booking-success-box {
+            background: var(--white);
+            border: var(--rule);
+            padding: 48px 24px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            align-items: center;
+        }
+        .booking-success-title {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-style: italic;
+            font-size: var(--text-32);
+            color: var(--ink);
+            line-height: 1.2;
+            max-width: 480px;
+        }
+        .booking-success-sub {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: var(--text-13);
+            color: var(--ink-light);
+            letter-spacing: 0.05em;
+        }
+
+        /* Right side info panel */
+        .booking-info-panel {
+            background-color: var(--ink);
+            padding: 40px 24px;
+            color: var(--white);
+            height: fit-content;
+        }
+        @media (min-width: 768px) {
+            .booking-info-panel {
+                padding: 48px 40px;
+            }
+        }
+        
+        .panel-section-title {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 500;
+            font-size: var(--text-10);
+            letter-spacing: 0.15em;
+            color: var(--ink-ghost);
+            text-transform: uppercase;
+            margin-bottom: 16px;
+        }
+        .hours-list {
+            display: flex;
+            flex-direction: column;
+        }
+        .hours-row {
+            padding: 14px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+        }
+        .hours-row:last-child {
+            border-bottom: none;
+        }
+        .hours-day {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 300;
+            font-size: var(--text-13);
+            color: rgba(255, 255, 255, 0.5);
+        }
+        .hours-time {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 400;
+            font-size: var(--text-13);
+            color: var(--white);
+        }
+
+        .panel-divider {
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            margin: 32px 0;
+        }
+
+        .walkins-text {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 300;
+            font-size: var(--text-13);
+            color: rgba(255, 255, 255, 0.65);
+            line-height: 1.7;
+        }
+        .phone-display-large {
+            display: block;
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-weight: 600;
+            font-size: var(--text-32);
+            color: var(--white);
+            margin-top: 16px;
+            transition: color 0.15s ease;
+        }
+        .phone-display-large:hover {
+            color: var(--red);
+        }
+
+        /* SECTION SIX: CONTACT US */
+        #contact {
+            padding: 80px 0;
+            background: var(--white);
+        }
+        .contact-grid-layout {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 40px;
+        }
+        @media (min-width: 1024px) {
+            .contact-grid-layout {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 0;
+            }
+        }
+        .contact-column {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        @media (min-width: 1024px) {
+            .contact-column {
+                padding: 0 40px;
+                border-left: var(--rule);
+            }
+            .contact-column:first-child {
+                padding-left: 0;
+                padding-right: 40px;
+                border-left: none;
+            }
+        }
+        @media (max-width: 1023px) {
+            .contact-column {
+                border-top: var(--rule-light);
+                padding-top: 32px;
+            }
+            .contact-column:first-child {
+                border-top: none;
+                padding-top: 0;
+            }
+        }
+        .contact-col-lbl {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 500;
+            font-size: var(--text-10);
+            letter-spacing: 0.15em;
+            color: var(--ink-light);
+            text-transform: uppercase;
+        }
+        .contact-col-val {
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            font-weight: 700;
+            font-size: var(--text-32);
+            color: var(--ink);
+            line-height: 1.1;
+        }
+        .contact-col-val a:hover {
+            color: var(--red);
+        }
+        .contact-col-sub {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 300;
+            font-size: var(--text-11);
+            color: var(--ink-light);
+            line-height: 1.5;
+        }
+        .contact-col-link {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 500;
+            font-size: var(--text-11);
+            letter-spacing: 0.08em;
+            color: var(--ink);
+            text-transform: uppercase;
+            align-self: flex-start;
+            border-bottom: 1px solid var(--ink);
+            padding-bottom: 2px;
+            margin-top: 8px;
+        }
+        .contact-col-link:hover {
+            color: var(--red);
+            border-bottom-color: var(--red);
+        }
+        .fb-section-mini {
+            border-top: var(--rule-light);
+            padding-top: 16px;
+            margin-top: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        /* FOOTER */
+        footer {
+            background-color: var(--ink);
+            color: var(--white);
+            padding: 64px 20px 40px;
+            border-top: var(--rule);
+        }
+        @media (min-width: 768px) {
+            footer {
+                padding: 64px 40px 40px;
+            }
+        }
+        .footer-top-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .footer-logo {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 500;
+            font-size: var(--text-13);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--white);
+        }
+        .footer-city {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 300;
+            font-size: var(--text-11);
+            color: rgba(255, 255, 255, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+        }
+
+        .footer-nav-row {
+            margin-top: 48px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px 32px;
+        }
+        .footer-nav-link {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 300;
+            font-size: var(--text-11);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.45);
+        }
+        .footer-nav-link:hover {
+            color: var(--white);
+        }
+
+        .footer-divider {
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            margin: 40px 0 24px;
+        }
+
+        .footer-bottom-row {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            align-items: center;
+            text-align: center;
+        }
+        @media (min-width: 768px) {
+            .footer-bottom-row {
+                flex-direction: row;
+                justify-content: space-between;
+                text-align: left;
+            }
+        }
+        .footer-copyright {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: var(--text-11);
+            color: rgba(255, 255, 255, 0.25);
+        }
+        .footer-credit {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: var(--text-11);
+            color: rgba(255, 255, 255, 0.2);
+        }
+
+        /* 
+           PRISTINE MASTER MOBILE VIEWPORT & SCROLL OVERRIDES BY THE CRAFT 
+           Eliminates horizontal wobble/offsets, refines margins, stabilizes fonts 
+        */
+        @media (max-width: 767px) {
+            html {
+                scroll-padding-top: 100px !important;
+            }
+            :root {
+                --text-hero: clamp(34px, 10vw, 48px);
+            }
+            
+            /* --- ULTRA LUXURY MOBILE GLASS NAVBAR --- */
+            #nav-header {
+                background: rgba(250, 246, 237, 0.90) !important;
+                backdrop-filter: blur(20px) !important;
+                -webkit-backdrop-filter: blur(20px) !important;
+                border-bottom: 1px solid rgba(139, 38, 62, 0.08) !important;
+                z-index: 1005 !important;
+            }
+            .nav-logo {
+                font-size: clamp(15px, 4.2vw, 18px) !important;
+                white-space: nowrap !important;
+                letter-spacing: -0.01em !important;
+            }
+            
+            /* Tactical high-contrast pill-shaped booking link at top */
+            .btn-book {
+                background: var(--red) !important;
+                color: var(--white) !important;
+                border: none !important;
+                border-radius: var(--r-full) !important;
+                padding: 6px 12px !important;
+                font-size: 9px !important;
+                font-family: 'IBM Plex Mono', monospace !important;
+                font-weight: 600 !important;
+                letter-spacing: 0.05em !important;
+                text-transform: uppercase !important;
+                box-shadow: 0 4px 12px rgba(139, 38, 62, 0.18) !important;
+                display: block !important;
+            }
+            
+            .nav-cta {
+                gap: 8px !important;
+                display: flex !important;
+                align-items: center !important;
+            }
+            
+            /* Circular luxury mechanical toggle toggling code */
+            .nav-toggle {
+                border: 1px solid var(--ink-ghost) !important;
+                border-radius: 50% !important;
+                background: rgba(255, 255, 255, 0.45) !important;
+                backdrop-filter: blur(8px) !important;
+                -webkit-backdrop-filter: blur(8px) !important;
+                box-shadow: var(--shadow-sm) !important;
+                width: 40px !important;
+                height: 40px !important;
+                display: flex !important;
+                justify-content: center !important;
+                align-items: center !important;
+                transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+            }
+            .nav-toggle span {
+                width: 16px !important;
+                background-color: var(--ink) !important;
+                height: 1.5px !important;
+            }
+            .nav-toggle span:first-child {
+                transform: translateY(-2.5px) !important;
+            }
+            .nav-toggle span:last-child {
+                transform: translateY(2.5px) !important;
+            }
+            .nav-toggle.open {
+                background: rgba(255, 255, 255, 0.08) !important;
+                border: 1px solid rgba(255, 255, 255, 0.2) !important;
+                backdrop-filter: blur(12px) !important;
+                -webkit-backdrop-filter: blur(12px) !important;
+                z-index: 1001 !important;
+            }
+            .nav-toggle.open span {
+                background-color: var(--paper) !important;
+            }
+            .nav-toggle.open span:first-child {
+                transform: rotate(45deg) !important;
+            }
+            .nav-toggle.open span:last-child {
+                transform: rotate(-45deg) !important;
+            }
+
+            /* --- FULL SCREEN OVERLAY MOBILE MENU REINVENTION --- */
+            .mobile-nav-overlay {
+                background: var(--ink) !important;
+                padding: 110px 24px 40px 24px !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: flex-start !important;
+                box-sizing: border-box !important;
+                height: 100vh !important;
+                gap: 40px !important;
+            }
+            .mobile-links-stacked {
+                margin-top: 0 !important;
+                display: flex !important;
+                flex-direction: column !important;
+                gap: 0 !important;
+            }
+            .mobile-link-row {
+                border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+                padding: 14px 0 !important;
+            }
+            .mobile-link-row:last-child {
+                border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
+            }
+            .mobile-link-anchor {
+                font-family: 'Cormorant Garamond', Georgia, serif !important;
+                font-size: 30px !important;
+                font-weight: 300 !important;
+                color: var(--paper) !important;
+                text-decoration: none !important;
+                transition: color 0.15s ease !important;
+            }
+            .mobile-link-anchor:active, .mobile-link-anchor:hover {
+                color: var(--gold) !important;
+            }
+            .mobile-link-num {
+                color: var(--gold) !important;
+                font-family: 'IBM Plex Mono', monospace !important;
+                font-size: 11px !important;
+            }
+
+            /* --- HERO & STATS SECTION OVERRIDES --- */
+            .hero-content {
+                padding: 24px 16px !important;
+                margin: 24px 0 !important;
+            }
+            .hero-ctas {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 16px !important;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr !important;
+                gap: 16px !important;
+            }
+            .stat-item {
+                background: rgba(255, 255, 255, 0.45) !important;
+                border: 1px solid var(--ink-ghost) !important;
+                border-radius: var(--r-md) !important;
+                padding: 24px 20px !important;
+                box-shadow: var(--shadow-sm) !important;
+                text-align: center !important;
+                align-items: center !important;
+                margin-top: 0 !important;
+                border-top: 1px solid var(--ink-ghost) !important;
+            }
+            .service-menu-name {
+                font-size: 18px !important;
+            }
+            .service-menu-price {
+                font-size: 18px !important;
+            }
+            .service-menu-desc {
+                font-size: 11px !important;
+            }
+
+            /* --- SPECIAL OFFERS CARD CONSISTENCY --- */
+            .offer-block-row {
+                background: rgba(255, 255, 255, 0.45) !important;
+                border: 1px solid var(--ink-ghost) !important;
+                border-radius: var(--r-md) !important;
+                padding: 24px 20px !important;
+                margin-bottom: 16px !important;
+                box-shadow: var(--shadow-sm) !important;
+                transform: none !important;
+            }
+            .offer-title {
+                font-size: clamp(20px, 6vw, 24px) !important;
+                margin-top: 8px !important;
+            }
+            .offer-desc {
+                font-size: 13px !important;
+                line-height: 1.5 !important;
+            }
+            .offer-cta-col {
+                margin-top: 16px !important;
+                display: flex !important;
+                flex-direction: row !important;
+                justify-content: space-between !important;
+                align-items: center !important;
+            }
+            .offer-price {
+                font-size: 32px !important;
+            }
+            .services-filter-group {
+                gap: 8px !important;
+                margin-top: -12px !important;
+                margin-bottom: 20px !important;
+            }
+            .filter-btn {
+                padding: 8px 14px !important;
+                font-size: 11px !important;
+            }
+            .container {
+                padding-left: 16px !important;
+                padding-right: 16px !important;
+            }
+            #home {
+                padding: 85px 0 24px 0 !important;
+            }
+            #services {
+                padding: 24px 0 !important;
+            }
+            #offers, #reviews, #book, #contact {
+                padding: 36px 0 !important;
+            }
+            .section-header-wrapper {
+                margin-bottom: 20px !important;
+            }
+
+            /* --- REVIEWS CARD CONSISTENCY --- */
+            .reviews-summary-line {
+                margin-top: -16px !important;
+                margin-bottom: 24px !important;
+                padding: 0 !important;
+            }
+            .review-item-row {
+                background: rgba(255, 255, 255, 0.45) !important;
+                border: 1px solid var(--ink-ghost) !important;
+                border-radius: var(--r-md) !important;
+                padding: 24px 20px !important;
+                margin-bottom: 16px !important;
+                box-shadow: var(--shadow-sm) !important;
+                display: flex !important;
+                flex-direction: column !important;
+                gap: 16px !important;
+            }
+            .review-meta-col {
+                margin-bottom: 0 !important;
+                gap: 12px !important;
+            }
+            .review-quote-col {
+                padding-left: 0 !important;
+            }
+            .review-text-editorial {
+                font-size: 16px !important;
+                line-height: 1.5 !important;
+            }
+
+            /* --- ULTRA PREMIUM MOBILE FORM & BOOKING --- */
+            .booking-form-box {
+                padding: 24px 20px !important;
+                background: var(--white) !important;
+                border: 1.5px solid var(--ink) !important;
+                border-radius: var(--r-lg) !important;
+                box-shadow: var(--shadow-deep) !important;
+            }
+            .booking-form-title {
+                font-size: 24px !important;
+                line-height: 1.3 !important;
+                margin-bottom: 20px !important;
+                font-weight: 700 !important;
+            }
+            /* Style inputs to feel luxurious and big enough for mobile thumbs */
+            .form-input-editorial {
+                font-size: 15px !important;
+                padding: 14px !important;
+                border-radius: var(--r-sm) !important;
+                border: 1px solid var(--ink-ghost) !important;
+                background-color: var(--white) !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+            }
+            .form-input-editorial:focus {
+                border-color: var(--red) !important;
+                box-shadow: 0 0 0 4px rgba(139, 38, 62, 0.08) !important;
+            }
+            .form-field-label {
+                font-size: 10px !important;
+                font-weight: 600 !important;
+                letter-spacing: 0.1em !important;
+                color: var(--ink-mid) !important;
+                margin-bottom: 6px !important;
+            }
+            .btn-submit-booking {
+                padding: 16.5px !important;
+                font-size: 13px !important;
+                font-weight: 600 !important;
+                letter-spacing: 0.1em !important;
+                border-radius: var(--r-sm) !important;
+            }
+            .booking-info-panel {
+                padding: 24px 20px !important;
+                background: var(--paper-dark) !important;
+                border: 1px solid var(--ink-ghost) !important;
+                border-radius: var(--r-lg) !important;
+                box-shadow: var(--shadow-sm) !important;
+                display: flex !important;
+                flex-direction: column !important;
+                gap: 24px !important;
+            }
+            .phone-display-large {
+                font-size: 30px !important;
+            }
+
+            /* --- CONTACT & SOCIAL MOBILE REDESIGN --- */
+            .contact-grid-layout {
+                grid-template-columns: 1fr !important;
+                gap: 20px !important;
+            }
+            .contact-column {
+                background: rgba(255, 255, 255, 0.45) !important;
+                border: 1px solid var(--ink-ghost) !important;
+                border-radius: var(--r-md) !important;
+                padding: 24px 20px !important;
+                box-shadow: var(--shadow-sm) !important;
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                gap: 8px !important;
+            }
+            .contact-col-lbl {
+                font-size: 10px !important;
+                letter-spacing: 0.1em !important;
+            }
+            .contact-col-val {
+                font-size: 24px !important;
+                margin: 4px 0 !important;
+                font-weight: 700 !important;
+            }
+            .contact-col-sub {
+                font-size: 13px !important;
+                margin-bottom: 12px !important;
+            }
+            
+            /* Responsive social block card on mobile */
+            #contact div[style*="grid-column: 1 / -1"] {
+                grid-column: auto !important;
+                padding: 24px 20px !important;
+                border-radius: var(--r-md) !important;
+                gap: 12px !important;
+            }
+            #contact div[style*="grid-column: 1 / -1"] h3 {
+                font-size: clamp(22px, 6.5vw, 26px) !important;
+                line-height: 1.3 !important;
+            }
+            #contact div[style*="grid-column: 1 / -1"] p {
+                font-size: 13px !important;
+                line-height: 1.5 !important;
+                margin: 4px 0 12px 0 !important;
+            }
+            #contact div[style*="grid-column: 1 / -1"] a {
+                width: 100% !important;
+                text-align: center !important;
+                box-sizing: border-box !important;
+            }
+        }   }
+    </style>
+</head>
+<body>
+
+    <!-- STICKY HEADER -->
+    <nav id="nav-header">
+        <div class="nav-wrapper">
+            <!-- LOGO_AREA -->
+            <a href="#home" class="nav-logo"><span>💈</span> Sydney</a>
+            
+            <div class="nav-menu">
+                <a href="#home" class="nav-anchor">Home</a>
+                <span class="nav-separator">·</span>
+                <a href="#services" class="nav-anchor">Services</a>
+                <span class="nav-separator">·</span>
+                <a href="#offers" class="nav-anchor">Offers</a>
+                <span class="nav-separator">·</span>
+                <a href="#reviews" class="nav-anchor">Reviews</a>
+                <span class="nav-separator">·</span>
+                <a href="#book" class="nav-anchor">Book</a>
+                <span class="nav-separator">·</span>
+                <a href="#contact" class="nav-anchor">Contact</a>
+            </div>
+
+            <div class="nav-cta">
+                <a href="#book" class="btn-book">Book Now</a>
+                <button class="nav-toggle" id="js-menu-toggle" aria-label="Toggle navigation menu">
+                    <span></span>
+                    <span></span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- MOBILE OVERLAY NAVIGATION -->
+    <div class="mobile-nav-overlay" id="js-nav-overlay">
+        <div class="mobile-links-stacked">
+            <!-- Modern Close / Exit Option in the Card list -->
+            <div class="mobile-link-row" id="js-mobile-close-action" style="cursor: pointer; border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important; padding-bottom: 14px !important; margin-bottom: 20px !important; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <span style="color: var(--gold) !important; font-family: 'DM Sans', sans-serif !important; font-size: 16px !important; font-weight: 700 !important; text-transform: uppercase; cursor: pointer;">✕ Exit Menu</span>
+                <span class="mobile-link-num" style="color: rgba(255, 255, 255, 0.4) !important; font-size: 11px !important; font-family: 'IBM Plex Mono', monospace !important;">CLOSE</span>
+            </div>
+            <div class="mobile-link-row">
+                <a href="#home" class="mobile-link-anchor">Home 🏠</a>
+                <span class="mobile-link-num">01</span>
+            </div>
+            <div class="mobile-link-row">
+                <a href="#services" class="mobile-link-anchor">Services 💇‍♂️</a>
+                <span class="mobile-link-num">02</span>
+            </div>
+            <div class="mobile-link-row">
+                <a href="#offers" class="mobile-link-anchor">Offers 🏷️</a>
+                <span class="mobile-link-num">03</span>
+            </div>
+            <div class="mobile-link-row">
+                <a href="#reviews" class="mobile-link-anchor">Reviews ⭐</a>
+                <span class="mobile-link-num">04</span>
+            </div>
+            <div class="mobile-link-row">
+                <a href="#book" class="mobile-link-anchor">Book Now 📅</a>
+                <span class="mobile-link-num">05</span>
+            </div>
+            <div class="mobile-link-row">
+                <a href="#contact" class="mobile-link-anchor">Contact 📞</a>
+                <span class="mobile-link-num">06</span>
+            </div>
+        </div>
+        
+        <!-- MOBILE OVERLAY FOOTER BY THE CRAFT -->
+        <div class="mobile-overlay-footer" style="padding-top: 24px; display: flex; flex-direction: column; gap: 16px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10B981; box-shadow: 0 0 12px #10B981;"></span>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; color: var(--gold); letter-spacing: 0.05em;">Open Until 7:00 PM Today</span>
+            </div>
+            <a href="tel:61280213371" style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: var(--r-sm); color: var(--paper); font-family: 'Cormorant Garamond', Georgia, serif; font-size: 20px; font-weight: 700; text-decoration: none;">
+                📞 Call 61280213371
+            </a>
+            <div style="display: flex; gap: 10px;">
+                <a href="https://instagram.com/sydney_barbers" target="_blank" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; background: rgba(197,168,128,0.12); border: 1px solid var(--gold); border-radius: var(--r-sm); color: var(--gold); font-family: 'IBM Plex Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; text-decoration: none;">
+                    📸 Instagram
+                </a>
+                <a href="#book" class="mobile-link-anchor" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; background: var(--red); border-radius: var(--r-sm); color: var(--white); font-family: 'IBM Plex Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; text-decoration: none; font-style: normal !important; font-weight: 600;">
+                    📅 Book Chair
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN BODY SECTIONS -->
+    <main>
+
+        <!-- SECTION 01: HERO -->
+        <section id="home">
+            <div class="container" style="flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; padding-top: 15px; padding-bottom: 25px;">
+                
+                <div class="hero-top-bar">
+                    <span class="hero-index">✨ 01 &mdash; INTRODUCTION 💈</span>
+                    <div class="hero-line"></div>
+                </div>
+
+                <div class="hero-content" style="border: 1px solid var(--ink-ghost); padding: 48px 32px; background: rgba(255, 255, 255, 0.4); border-radius: var(--r-md); box-shadow: var(--shadow-lift); margin: 32px 0;">
+                    <div class="hero-typography-container" data-reveal>
+                        <h1 class="hero-business-title">
+                            <span class="title-light">Franklin /</span>
+                            <span class="title-bold cursor-blink">Franklin & Sons 💈✂️</span>
+                        </h1>
+                        
+                        <p class="hero-meta">EST. &mdash; Sydney &mdash; Premium Haircuts, Precise Fades & Traditional Hot Shaves 🪒🔥</p>
+                        
+                        <div class="hero-ctas">
+                            <a href="#book" class="link-text-underline">Book your chair now <span class="arrow">&rarr;</span></a>
+                            <a href="#services" class="link-text-muted">Explore Services 📋</a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hero-stats-strip" data-reveal style="border-bottom: var(--rule); margin-bottom: 15px;">
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <span class="stat-num">⭐ 200+</span>
+                            <span class="stat-label">Verified Five-Star Reviews</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-num">🔄 96.7%</span>
+                            <span class="stat-label">Client Return Loyalty Rate</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-num">📅 7 Days</span>
+                            <span class="stat-label">A Week, Walk-ins Warmly Welcome 👋</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- SECTION 02: SERVICES -->
+        <section id="services" class="major-rule">
+            <div class="container">
+                
+                <div class="section-header-wrapper" data-reveal>
+                    <div class="section-index-box">
+                        <span class="section-index-text">✨ 02</span>
+                        <span class="section-header-desc">The Craft / Our Services 💈</span>
+                    </div>
+                    <h2 class="section-title-editorial">Services 💇‍♂️✂️</h2>
+                </div>
+
+                <!-- Services Filter Menu -->
+                <div class="services-filter-group" data-reveal style="display: flex; gap: 12px; margin-bottom: 32px; flex-wrap: wrap; justify-content: center;">
+                    <button class="filter-btn active" data-filter="all">All Crafts 💈</button>
+                    <button class="filter-btn" data-filter="haircuts">Haircuts ✂️</button>
+                    <button class="filter-btn" data-filter="beards">Beards & Shaves 🪒</button>
+                    <button class="filter-btn" data-filter="treatments">Treatments 🌿</button>
+                </div>
+
+                <style>
+                    .filter-btn {
+                        padding: 10px 20px;
+                        font-family: 'IBM Plex Mono', monospace;
+                        font-size: 13px;
+                        font-weight: 500;
+                        text-transform: uppercase;
+                        border-radius: var(--r-full);
+                        border: 1.5px solid var(--ink-ghost);
+                        background: transparent;
+                        color: var(--ink);
+                        cursor: pointer;
+                        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+                    }
+                    .filter-btn:hover:not(.active) {
+                        border-color: var(--ink);
+                        transform: translateY(-2px);
+                        box-shadow: 0 4px 12px rgba(26,25,22, 0.08);
+                    }
+                    .filter-btn.active {
+                        background: var(--ink) !important;
+                        color: var(--gold-soft) !important;
+                        border-color: var(--ink) !important;
+                        transform: translateY(-2px) scale(1.02);
+                        box-shadow: 0 6px 16px rgba(26,25,22, 0.2);
+                    }
+                    .service-menu-row {
+                        transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), padding 0.4s cubic-bezier(0.4, 0, 0.2, 1), margin 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+                        opacity: 1;
+                        transform: translateY(0);
+                        max-height: 200px; /* arbitrary max-height for completely revealing */
+                        overflow: hidden;
+                    }
+                    .service-menu-row.hidden {
+                        opacity: 0;
+                        transform: translateY(10px) scale(0.98);
+                        max-height: 0;
+                        padding-top: 0;
+                        padding-bottom: 0;
+                        border-bottom-color: transparent;
+                    }
+                </style>
+
+                <div class="services-menu-container" id="services-list" data-reveal style="border: 2px solid var(--ink); background: rgba(255, 255, 255, 0.45); border-radius: var(--r-md); overflow: hidden; box-shadow: var(--shadow-deep);">
+                    
+                    <div class="service-menu-row" data-category="haircuts" style="--i: 1">
+                        <div class="service-menu-left">
+                            <span class="service-menu-name">Classic Cut 💇‍♂️</span>
+                            <span class="service-menu-desc">&mdash; Precision scissor cut, shaped to your face shape and personal intention</span>
+                        </div>
+                        <span class="service-menu-price">From $25</span>
+                    </div>
+
+                    <div class="service-menu-row" data-category="haircuts" style="--i: 2">
+                        <div class="service-menu-left">
+                            <span class="service-menu-name">Skin Fade 💈</span>
+                            <span class="service-menu-desc">&mdash; Low, mid, or high. Clean gradient blending perfectly from skin up</span>
+                        </div>
+                        <span class="service-menu-price">From $30</span>
+                    </div>
+
+                    <div class="service-menu-row" data-category="beards" style="--i: 3">
+                        <div class="service-menu-left">
+                            <span class="service-menu-name">Beard Architecture 🧔</span>
+                            <span class="service-menu-desc">&mdash; Shaped, lined, and detailed. Not merely trimmed &mdash; custom designed</span>
+                        </div>
+                        <span class="service-menu-price">From $20</span>
+                    </div>
+
+                    <div class="service-menu-row" data-category="beards" style="--i: 4">
+                        <div class="service-menu-left">
+                            <span class="service-menu-name">Straight Shave 🪒</span>
+                            <span class="service-menu-desc">&mdash; Hot towel, straight razor blade, cold compress finish. The full ultimate ritual</span>
+                        </div>
+                        <span class="service-menu-price">From $35</span>
+                    </div>
+
+                    <div class="service-menu-row" data-category="haircuts" style="--i: 5">
+                        <div class="service-menu-left">
+                            <span class="service-menu-name">Cut & Beard 👑</span>
+                            <span class="service-menu-desc">&mdash; One complete executive package. Haircut paired with refined beard grooming</span>
+                        </div>
+                        <span class="service-menu-price">From $45</span>
+                    </div>
+
+                    <div class="service-menu-row" data-category="haircuts" style="--i: 6">
+                        <div class="service-menu-left">
+                            <span class="service-menu-name">The Taper ✂️</span>
+                            <span class="service-menu-desc">&mdash; Gradual length reduction with natural flow and texture preserved</span>
+                        </div>
+                        <span class="service-menu-price">From $28</span>
+                    </div>
+
+                    <div class="service-menu-row" data-category="haircuts" style="--i: 7">
+                        <div class="service-menu-left">
+                            <span class="service-menu-name">Line-Up 📐</span>
+                            <span class="service-menu-desc">&mdash; Sharp hairline, temples, and neck. Laser edges that hold for weeks</span>
+                        </div>
+                        <span class="service-menu-price">From $15</span>
+                    </div>
+
+                    <div class="service-menu-row" data-category="haircuts" style="--i: 8">
+                        <div class="service-menu-left">
+                            <span class="service-menu-name">Youth Cut 👦</span>
+                            <span class="service-menu-desc">&mdash; For clients under 12. Exceptionally calm, patient, and precise</span>
+                        </div>
+                        <span class="service-menu-price">From $18</span>
+                    </div>
+
+                    <div class="service-menu-row" data-category="treatments" style="--i: 9">
+                        <div class="service-menu-left">
+                            <span class="service-menu-name">Color Work 🎨</span>
+                            <span class="service-menu-desc">&mdash; Subtle grey coverage or bold statements. Formulated and applied custom</span>
+                        </div>
+                        <span class="service-menu-price">From $50</span>
+                    </div>
+
+                    <div class="service-menu-row" data-category="treatments" style="--i: 10">
+                        <div class="service-menu-left">
+                            <span class="service-menu-name">Scalp Treatment 🧼</span>
+                            <span class="service-menu-desc">&mdash; Organic exfoliation, deep cleanse, and a soothing neck & scalp massage</span>
+                        </div>
+                        <span class="service-menu-price">From $25</span>
+                    </div>
+
+                    <div class="service-menu-row" data-category="treatments" style="--i: 11">
+                        <div class="service-menu-left">
+                            <span class="service-menu-name">Loc Maintenance 🌪️</span>
+                            <span class="service-menu-desc">&mdash; Professional retwisting, precise parting, and long-term loc health care</span>
+                        </div>
+                        <span class="service-menu-price">From $40</span>
+                    </div>
+
+                    <div class="service-menu-row" data-category="haircuts" style="--i: 12">
+                        <div class="service-menu-left">
+                            <span class="service-menu-name">Senior Service 👴</span>
+                            <span class="service-menu-desc">&mdash; Handsome haircuts for veterans of style over 60, always given our full time</span>
+                        </div>
+                        <span class="service-menu-price">From $20</span>
+                    </div>
+
+                </div>
+
+            </div>
+        </section>
+
+        <!-- SECTION 03: SPECIAL OFFERS -->
+        <section id="offers" class="major-rule">
+            <div class="container">
+                
+                <div class="section-header-wrapper" data-reveal>
+                    <div class="section-index-box">
+                        <span class="section-index-text">🎁 03</span>
+                        <span class="section-header-desc">Exclusive Benefits</span>
+                    </div>
+                    <h2 class="section-title-editorial">Special Offers 🏷️✨</h2>
+                </div>
+
+                <div class="offers-block-container" data-reveal>
+                    
+                    <!-- Offer I -->
+                    <div class="offer-block-row" style="background: rgba(255, 255, 255, 0.4); border: 1px solid var(--ink-ghost); border-radius: var(--r-md); padding: 32px; margin-bottom: 20px; box-shadow: var(--shadow-lift);">
+                        <span class="offer-block-index" style="color: var(--gold); display: block; font-size: 32px; font-weight: 700; margin-bottom: 8px;">✨ I</span>
+                        <div class="offer-block-content">
+                            <span class="offer-tag">🏷️ First Visit</span>
+                            <h3 class="offer-title">Welcome Cut, Reduced Rate 🎉</h3>
+                            <p class="offer-desc">New to Sydney Barbers? Your introductory haircut is $15 off our standard rate. No coupon code needed &mdash; just mention this offer at the chair.</p>
+                        </div>
+                        <div class="offer-cta-col">
+                            <span class="offer-price" style="color: var(--red); font-weight: 700;">&ndash;$15</span>
+                            <a href="#book" class="offer-cta-link" style="color: var(--ink); border-bottom: 2px solid var(--gold); font-weight: 600;">Reserve Spot &rarr;</a>
+                        </div>
+                    </div>
+
+                    <!-- Offer II -->
+                    <div class="offer-block-row" style="background: rgba(255, 255, 255, 0.4); border: 1px solid var(--ink-ghost); border-radius: var(--r-md); padding: 32px; margin-bottom: 20px; box-shadow: var(--shadow-lift);">
+                        <span class="offer-block-index" style="color: var(--gold); display: block; font-size: 32px; font-weight: 700; margin-bottom: 8px;">✨ II</span>
+                        <div class="offer-block-content">
+                            <span class="offer-tag">📅 Tuesday Special</span>
+                            <h3 class="offer-title">Midweek Clean-Up: Cut & Beard 👑</h3>
+                            <p class="offer-desc">Every Tuesday, enjoy a full haircut service plus detailed beard sculpture work for just $35. Walk in before 6:00 PM or secure your chair ahead.</p>
+                        </div>
+                        <div class="offer-cta-col">
+                            <span class="offer-price" style="color: var(--red); font-weight: 700;">$35</span>
+                            <a href="#book" class="offer-cta-link" style="color: var(--ink); border-bottom: 2px solid var(--gold); font-weight: 600;">Reserve Spot &rarr;</a>
+                        </div>
+                    </div>
+
+                    <!-- Offer III -->
+                    <div class="offer-block-row" style="background: rgba(255, 255, 255, 0.4); border: 1px solid var(--ink-ghost); border-radius: var(--r-md); padding: 32px; box-shadow: var(--shadow-lift);">
+                        <span class="offer-block-index" style="color: var(--gold); display: block; font-size: 32px; font-weight: 700; margin-bottom: 8px;">✨ III</span>
+                        <div class="offer-block-content">
+                            <span class="offer-tag">👑 Royalty Program</span>
+                            <h3 class="offer-title">Every Tenth Haircut: Fully Free 🎁</h3>
+                            <p class="offer-desc">We respect loyalty. We track it automatically in our system. After nine visits, your tenth booking is on us &mdash; no complicated stamp cards required.</p>
+                        </div>
+                        <div class="offer-cta-col">
+                            <span class="offer-price" style="color: var(--red); font-weight: 700;">10th Free</span>
+                            <a href="#book" class="offer-cta-link" style="color: var(--ink); border-bottom: 2px solid var(--gold); font-weight: 600;">Reserve Spot &rarr;</a>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </section>
+
+        <!-- SECTION 04: REVIEWS -->
+        <section id="reviews" class="major-rule">
+            <div class="container">
+                
+                <div class="section-header-wrapper" data-reveal>
+                    <div class="section-index-box">
+                        <span class="section-index-text">04</span>
+                        <span class="section-header-desc">Client Words</span>
+                    </div>
+                    <h2 class="section-title-editorial">Reviews</h2>
+                </div>
+
+                <p class="reviews-summary-line" data-reveal>200+ verified reviews &mdash; 4.9 average &mdash; Google &amp; Yelp</p>
+
+                <div class="reviews-list-container" data-reveal>
+                    
+                    <!-- Review 1 -->
+                    <div class="review-item-row">
+                        <div class="review-meta-col" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                            <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="Marcus T." style="width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid var(--gold); background: var(--white); object-fit: cover;">
+                            <div style="display: flex; flex-direction: column;">
+                                <span class="reviewer-name">Marcus T.</span>
+                            <span class="review-source">Google Review</span>
+                            <div class="review-stars">
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                            </div>
+                            <span class="review-date">March 2026</span>
+                            </div>
+                        </div>
+                        <div class="review-quote-col">
+                            <span class="quote-icon">&ldquo;</span>
+                            <p class="review-text-editorial">"Best fade I have sat in the chair for in three years. Clean shop, no wait, barber listened to exactly what I described. Left looking like a different person. Already came back twice."</p>
+                        </div>
+                    </div>
+
+                    <!-- Review 2 -->
+                    <div class="review-item-row">
+                        <div class="review-meta-col" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                            <img src="https://randomuser.me/api/portraits/men/22.jpg" alt="Jordan K." style="width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid var(--gold); background: var(--white); object-fit: cover;">
+                            <div style="display: flex; flex-direction: column;">
+                                <span class="reviewer-name">Jordan K.</span>
+                            <span class="review-source">Google Review</span>
+                            <div class="review-stars">
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                            </div>
+                            <span class="review-date">February 2026</span>
+                            </div>
+                        </div>
+                        <div class="review-quote-col">
+                            <span class="quote-icon">&ldquo;</span>
+                            <p class="review-text-editorial">"The straight shave is the real reason I keep coming back. Hot towel, straight razor, no nicks. Felt like a ritual, not a service. I do not know why I ever shaved myself at home."</p>
+                        </div>
+                    </div>
+
+                    <!-- Review 3 -->
+                    <div class="review-item-row">
+                        <div class="review-meta-col" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                            <img src="https://randomuser.me/api/portraits/men/45.jpg" alt="David R." style="width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid var(--gold); background: var(--white); object-fit: cover;">
+                            <div style="display: flex; flex-direction: column;">
+                                <span class="reviewer-name">David R.</span>
+                            <span class="review-source">Yelp Review</span>
+                            <div class="review-stars">
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                            </div>
+                            <span class="review-date">January 2026</span>
+                            </div>
+                        </div>
+                        <div class="review-quote-col">
+                            <span class="quote-icon">&ldquo;</span>
+                            <p class="review-text-editorial">"Brought my son for his first real haircut. The barber was calm and patient the entire time. My son, who never sits still for anything, did not move. The result was perfect."</p>
+                        </div>
+                    </div>
+
+                    <!-- Review 4 -->
+                    <div class="review-item-row">
+                        <div class="review-meta-col" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                            <img src="https://randomuser.me/api/portraits/women/44.jpg" alt="Amara S." style="width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid var(--gold); background: var(--white); object-fit: cover;">
+                            <div style="display: flex; flex-direction: column;">
+                                <span class="reviewer-name">Amara S.</span>
+                            <span class="review-source">Google Review</span>
+                            <div class="review-stars">
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                            </div>
+                            <span class="review-date">April 2026</span>
+                            </div>
+                        </div>
+                        <div class="review-quote-col">
+                            <span class="quote-icon">&ldquo;</span>
+                            <p class="review-text-editorial">"I moved to the city and spent six months looking for a consistent barber. This is the one. Every cut lands exactly where the last one did. They remember. That matters."</p>
+                        </div>
+                    </div>
+
+                    <!-- Review 5 -->
+                    <div class="review-item-row">
+                        <div class="review-meta-col" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                            <img src="https://randomuser.me/api/portraits/men/29.jpg" alt="Tyler M." style="width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid var(--gold); background: var(--white); object-fit: cover;">
+                            <div style="display: flex; flex-direction: column;">
+                                <span class="reviewer-name">Tyler M.</span>
+                            <span class="review-source">Google Review</span>
+                            <div class="review-stars">
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star"></div>
+                            </div>
+                            <span class="review-date">March 2026</span>
+                            </div>
+                        </div>
+                        <div class="review-quote-col">
+                            <span class="quote-icon">&ldquo;</span>
+                            <p class="review-text-editorial">"Beard trim was on point. Tight lines, no over-shaping. The shop has good energy without being loud. Easy to book, no games. Will be my regular."</p>
+                        </div>
+                    </div>
+
+                    <!-- Review 6 -->
+                    <div class="review-item-row">
+                        <div class="review-meta-col" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                            <img src="https://randomuser.me/api/portraits/women/68.jpg" alt="Dani P." style="width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid var(--gold); background: var(--white); object-fit: cover;">
+                            <div style="display: flex; flex-direction: column;">
+                                <span class="reviewer-name">Dani P.</span>
+                            <span class="review-source">Yelp Review</span>
+                            <div class="review-stars">
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                                <div class="diamond-star filled"></div>
+                            </div>
+                            <span class="review-date">February 2026</span>
+                            </div>
+                        </div>
+                        <div class="review-quote-col">
+                            <span class="quote-icon">&ldquo;</span>
+                            <p class="review-text-editorial">"Showed a photo. They looked at it once and put the scissors down and just worked from memory after that. The result matched better than I expected. These people know what they are doing."</p>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </section>
+
+        <!-- SECTION 05: BOOK NOW -->
+        <section id="book" class="major-rule" style="background: var(--paper); padding: 80px 0;">
+            <div class="container">
+                
+                <div class="section-header-wrapper" data-reveal>
+                    <div class="section-index-box">
+                        <span class="section-index-text">📅 05</span>
+                        <span class="section-header-desc">Reserve Your Chair</span>
+                    </div>
+                    <h2 class="section-title-editorial">Book a Cut 💈🎟️</h2>
+                </div>
+
+                <div class="booking-grid-layout" data-reveal style="display: grid; grid-template-columns: 1fr; gap: 40px; margin-top: 32px;">
+                    <!-- Style script extension in stylesheet or here directly -->
+                    <style>
+                        @media (min-width: 1024px) {
+                            .booking-grid-layout {
+                                grid-template-columns: 1.5fr 1fr !important;
+                            }
+                        }
+                        .booking-form-box {
+                            background: var(--white);
+                            border: 2px solid var(--ink);
+                            border-radius: var(--r-md);
+                            padding: 40px;
+                            box-shadow: var(--shadow-deep);
+                        }
+                        .booking-info-panel {
+                            background: var(--paper-dark);
+                            border: 1px solid var(--ink-ghost);
+                            border-radius: var(--r-md);
+                            padding: 40px;
+                            box-shadow: var(--shadow-lift);
+                            display: flex;
+                            flex-direction: column;
+                            justify-content: space-between;
+                        }
+                    </style>
+                    
+                    <!-- Booking Form -->
+                    <div class="booking-form-box" id="js-booking-container">
+                        <h3 class="booking-form-title" style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 28px; font-weight: 700; margin-bottom: 24px; color: var(--ink);">Your Appointment Information ✍️</h3>
+                        
+                        <form id="js-booking-form" novalidate>
+                            <div class="form-field-group" style="margin-bottom: 20px;">
+                                <label for="name" class="form-field-label" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-light); display: block; margin-bottom: 8px;">👤 Full Name</label>
+                                <input type="text" id="name" name="name" class="form-input-editorial" placeholder="e.g. Marcus Aurelius" required style="width: 100%; padding: 12px; background: var(--white); border: 1px solid var(--ink-ghost); border-radius: var(--r-xs); font-family: inherit; font-size: 14px; color: var(--ink);">
+                            </div>
+
+                            <div class="form-field-group" style="margin-bottom: 20px;">
+                                <label for="phone" class="form-field-label" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-light); display: block; margin-bottom: 8px;">📱 Mobile Phone Number</label>
+                                <input type="tel" id="phone" name="phone" class="form-input-editorial" placeholder="e.g. 61280213371" required style="width: 100%; padding: 12px; background: var(--white); border: 1px solid var(--ink-ghost); border-radius: var(--r-xs); font-family: inherit; font-size: 14px; color: var(--ink);">
+                            </div>
+
+                            <div class="form-field-group" style="margin-bottom: 20px;">
+                                <label for="service" class="form-field-label" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-light); display: block; margin-bottom: 8px;">💈 Selected Service Ritual</label>
+                                <select id="service" name="service" class="form-input-editorial" required style="width: 100%; padding: 12px; background: var(--white); border: 1px solid var(--ink-ghost); border-radius: var(--r-xs); font-family: inherit; font-size: 14px; color: var(--ink);">
+                                    <option value="" disabled selected>Choose a premium haircut ritual...</option>
+                                    <option value="classic">Classic Cut 💇‍♂️ — $25</option>
+                                    <option value="fade">Skin Fade 💈 — $30</option>
+                                    <option value="beard">Beard Architecture 🧔 — $20</option>
+                                    <option value="shave">Straight Shave 🪒 — $35</option>
+                                    <option value="combo">Cut &amp; Beard Combo 👑 — $45</option>
+                                    <option value="taper">The Taper ✂️ — $28</option>
+                                    <option value="lineup">Line-Up 📐 — $15</option>
+                                    <option value="other">Other services</option>
+                                </select>
+                            </div>
+
+                            <div class="form-field-group" style="margin-bottom: 20px;">
+                                <label for="date-input" class="form-field-label" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-light); display: block; margin-bottom: 8px;">📅 Preferred Booking Date</label>
+                                <input type="date" id="date-input" name="date" class="form-input-editorial" required style="width: 100%; padding: 12px; background: var(--white); border: 1px solid var(--ink-ghost); border-radius: var(--r-xs); font-family: inherit; font-size: 14px; color: var(--ink);">
+                            </div>
+
+                            <div class="form-field-group" style="margin-bottom: 20px;">
+                                <label for="time" class="form-field-label" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-light); display: block; margin-bottom: 8px;">🕒 Preferred Hour Slot</label>
+                                <select id="time" name="time" class="form-input-editorial" required style="width: 100%; padding: 12px; background: var(--white); border: 1px solid var(--ink-ghost); border-radius: var(--r-xs); font-family: inherit; font-size: 14px; color: var(--ink);">
+                                    <option value="" disabled selected>Select an hour slot...</option>
+                                    <option value="09:00">9:00 AM</option>
+                                    <option value="09:30">9:30 AM</option>
+                                    <option value="10:00">10:00 AM</option>
+                                    <option value="10:30">10:30 AM</option>
+                                    <option value="11:00">11:00 AM</option>
+                                    <option value="11:30">11:30 AM</option>
+                                    <option value="12:00">12:00 PM</option>
+                                    <option value="12:30">12:30 PM</option>
+                                    <option value="13:00">1:00 PM</option>
+                                    <option value="13:30">1:30 PM</option>
+                                    <option value="14:00">2:00 PM</option>
+                                    <option value="14:30">2:30 PM</option>
+                                    <option value="15:00">3:00 PM</option>
+                                    <option value="15:30">3:30 PM</option>
+                                    <option value="16:00">4:00 PM</option>
+                                    <option value="16:30">4:30 PM</option>
+                                    <option value="17:00">5:00 PM</option>
+                                    <option value="17:30">5:30 PM</option>
+                                    <option value="18:00">6:00 PM</option>
+                                    <option value="18:30">6:30 PM</option>
+                                </select>
+                            </div>
+
+                            <div class="form-field-group" style="margin-bottom: 24px;">
+                                <label for="notes" class="form-field-label" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-light); display: block; margin-bottom: 8px;">📝 Personal Style Notes (Optional)</label>
+                                <textarea id="notes" name="notes" class="form-input-editorial" placeholder="Any special requirements, styles, hair conditions or preferences..." style="width: 100%; padding: 12px; background: var(--white); border: 1px solid var(--ink-ghost); border-radius: var(--r-xs); font-family: inherit; font-size: 14px; color: var(--ink); min-height: 80px; resize: vertical;"></textarea>
+                            </div>
+
+                            <button type="submit" class="btn-submit-booking" style="width: 100%; padding: 16px; background: var(--red); color: var(--white); font-family: inherit; font-weight: 500; font-size: 14px; text-transform: uppercase; letter-spacing: 0.15em; border-radius: var(--r-sm); transition: all 0.2s ease;">Confirm Booking Appointment 🎟️</button>
+                            <span class="booking-terms-note" style="display: block; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-light); text-align: center; margin-top: 12px;">We will confirm back immediately by SMS or phone. Appointments held for 15 min.</span>
+                        </form>
+                    </div>
+
+                    <!-- Info Panel (Right side) -->
+                    <div class="booking-info-panel">
+                        <div>
+                            <h4 class="panel-section-title" style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; font-weight: 700; color: var(--ink); margin-bottom: 16px;">🕰️ Barber shop Hours</h4>
+                            <div class="hours-list" style="border-top: 1px solid var(--ink-ghost); padding-top: 12px;">
+                                <div class="hours-row" style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px;">
+                                    <span class="hours-day" style="font-weight: 400; color: var(--ink-mid);">Mon &mdash; Fri 💼</span>
+                                    <span class="hours-time" style="color: var(--ink-mid); font-weight: 500;">9:00 AM &ndash; 7:00 PM</span>
+                                </div>
+                                <div class="hours-row" style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px;">
+                                    <span class="hours-day" style="font-weight: 400; color: var(--ink-mid);">Saturday ⚡</span>
+                                    <span class="hours-time" style="color: var(--ink-mid); font-weight: 500;">9:00 AM &ndash; 6:00 PM</span>
+                                </div>
+                                <div class="hours-row" style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px;">
+                                    <span class="hours-day" style="font-weight: 400; color: var(--ink-mid);">Sunday ✨</span>
+                                    <span class="hours-time" style="color: var(--ink-mid); font-weight: 500;">10:00 AM &ndash; 4:00 PM</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="panel-divider" style="border-top: 1px solid var(--ink-ghost); margin: 24px 0;"></div>
+
+                        <div>
+                            <h4 class="panel-section-title" style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; font-weight: 700; color: var(--ink); margin-bottom: 12px;">🚶‍♂️ Walk-Ins Welcome</h4>
+                            <p class="walkins-text" style="font-size: 13px; margin-bottom: 16px; color: var(--ink-mid);">Walk-ins are warmly accepted all day. If you want to check the current waiting queue or wait-list before you arrive, simply dial or text:</p>
+                            <a href="tel:61280213371" class="phone-display-large" style="display: block; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 36px; font-weight: 700; color: var(--red); line-height: 1; border-bottom: 2px solid var(--red); width: max-content; padding-bottom: 4px;">📞 61280213371</a>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </section>
+
+        <!-- SECTION 06: CONTACT -->
+        <section id="contact" class="major-rule" style="padding: 80px 0;">
+            <div class="container">
+                
+                <div class="section-header-wrapper" data-reveal>
+                    <div class="section-index-box">
+                        <span class="section-index-text">📞 06</span>
+                        <span class="section-header-desc">Find Us</span>
+                    </div>
+                    <h2 class="section-title-editorial">Contact &amp; Hours 📍</h2>
+                </div>
+
+                <div class="contact-grid-layout" data-reveal style="display: grid; grid-template-columns: 1fr; gap: 32px; margin-top: 32px;">
+                    <style>
+                        @media (min-width: 768px) {
+                            .contact-grid-layout {
+                                grid-template-columns: repeat(3, 1fr) !important;
+                            }
+                        }
+                    </style>
+
+                    <!-- Instagram Fast Response Callout -->
+                    <div style="grid-column: 1 / -1; background: var(--gold-soft); border: 1.5px solid var(--gold); border-radius: var(--r-md); padding: 32px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 8px; box-shadow: var(--shadow-lift);">
+                        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--gold-hover); letter-spacing: 0.1em; margin-bottom: 4px;">📸 Active On Instagram</span>
+                        <h3 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 28px; font-weight: 700; color: var(--ink); margin: 0;">Prefer instant messaging on social media?</h3>
+                        <p style="font-size: 14px; color: var(--ink-mid); max-width: 800px; line-height: 1.5; margin: 8px 0 16px 0;">Drop us a line on Instagram at <strong style="color: var(--ink);">@sydney_barbers</strong>! Our front desk monitors DMs live, and you will receive a response very fast (usually inside 3-5 minutes).</p>
+                        <a href="https://instagram.com/sydney_barbers" target="_blank" style="display: inline-block; padding: 12px 24px; background: var(--ink); color: var(--gold-soft); font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; border-radius: var(--r-sm); transition: transform 0.2s ease;">Message Us Now &rarr;</a>
+                    </div>
+                    
+                    <!-- Column 1: Call -->
+                    <div class="contact-column" style="background: rgba(255, 255, 255, 0.4); border: 1px solid var(--ink-ghost); border-radius: var(--r-md); padding: 32px; box-shadow: var(--shadow-lift);">
+                        <span class="contact-col-lbl" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; color: var(--ink-light); letter-spacing: 0.1em;">📞 Telephone</span>
+                        <h3 class="contact-col-val" style="margin: 12px 0; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 28px; font-weight: 700;">
+                            <a href="tel:61280213371" style="color: var(--red);">61280213371</a>
+                        </h3>
+                        <p class="contact-col-sub" style="font-size: 13px; color: var(--ink-mid); margin-bottom: 16px;">We answer calls and texts seven days a week from 9:00 AM to 7:00 PM.</p>
+                        <a href="tel:61280213371" class="contact-col-link" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; text-transform: uppercase;">Call Now &rarr;</a>
+                    </div>
+
+                    <!-- Column 2: Social -->
+                    <div class="contact-column" style="background: rgba(255, 255, 255, 0.4); border: 1px solid var(--ink-ghost); border-radius: var(--r-md); padding: 32px; box-shadow: var(--shadow-lift);">
+                        <span class="contact-col-lbl" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; color: var(--ink-light); letter-spacing: 0.1em;">📸 Social media</span>
+                        <h3 class="contact-col-val" style="margin: 12px 0; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 28px; font-weight: 700;">
+                            <a href="https://instagram.com/sydney_barbers" target="_blank" style="color: var(--ink);">@sydney_barbers</a>
+                        </h3>
+                        <p class="contact-col-sub" style="font-size: 13px; color: var(--ink-mid); margin-bottom: 16px;">Clean cuts, premium fades, and daily style inspirations. Follow along.</p>
+                        <a href="https://instagram.com/sydney_barbers" target="_blank" class="contact-col-link" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; text-transform: uppercase;">Instagram &rarr;</a>
+                        
+                        <div class="fb-section-mini" style="margin-top: 15px; border-top: 1px solid var(--ink-ghost); padding-top: 15px;">
+                            <span class="contact-col-lbl" style="font-size: 9px; text-transform: uppercase; color: var(--ink-light);">👥 Facebook Page</span>
+                            <a href="https://facebook.com/sydney_barbers" target="_blank" class="contact-col-link" style="display: block; margin-top: 4px; font-size: 12px;">Visit our Facebook &rarr;</a>
+                        </div>
+                    </div>
+
+                    <!-- Column 3: Location -->
+                    <div class="contact-column" style="background: rgba(255, 255, 255, 0.4); border: 1px solid var(--ink-ghost); border-radius: var(--r-md); padding: 32px; box-shadow: var(--shadow-lift);">
+                        <span class="contact-col-lbl" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; color: var(--ink-light); letter-spacing: 0.1em;">📍 Location</span>
+                        <h3 class="contact-col-val" style="margin: 12px 0; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 28px; font-weight: 700; color: var(--ink);">Sydney</h3>
+                        <p class="contact-col-sub" style="font-size: 13px; color: var(--ink-mid); margin-bottom: 16px;">Walk-ins welcome all day long. Book to guarantee zero wait-time.</p>
+                        <a href="https://maps.google.com?q=Sydney Barbers+Sydney" target="_blank" class="contact-col-link" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; text-transform: uppercase;">Get Directions &rarr;</a>
+                    </div>
+
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer style="background: var(--ink); color: var(--white); padding: 60px 0;">
+        <div class="container">
+            
+            <div class="footer-top-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px;">
+                <!-- LOGO_AREA -->
+                <span class="footer-logo" style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; font-weight: 700; font-[style]: italic;">💈 Sydney</span>
+                <span class="footer-city" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gold);">📍 Sydney</span>
+            </div>
+
+            <nav class="footer-nav-row" aria-label="Footer navigation links" style="display: flex; flex-wrap: wrap; gap: 20px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 40px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 24px;">
+                <a href="#home" class="footer-nav-link" style="color: rgba(255,255,255,0.6); transition: color 0.2s;">Home</a>
+                <a href="#services" class="footer-nav-link" style="color: rgba(255,255,255,0.6); transition: color 0.2s;">Services</a>
+                <a href="#offers" class="footer-nav-link" style="color: rgba(255,255,255,0.6); transition: color 0.2s;">Offers</a>
+                <a href="#reviews" class="footer-nav-link" style="color: rgba(255,255,255,0.6); transition: color 0.2s;">Reviews</a>
+                <a href="#book" class="footer-nav-link" style="color: rgba(255,255,255,0.6); transition: color 0.2s;">Book Now</a>
+                <a href="#contact" class="footer-nav-link" style="color: rgba(255,255,255,0.6); transition: color 0.2s;">Contact</a>
+            </nav>
+
+            <div class="footer-divider" style="height: 1px; background: rgba(255,255,255,0.1); margin-bottom: 24px;"></div>
+
+            <div class="footer-bottom-row" style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; font-size: 11px;">
+                <span class="footer-copyright" style="color: rgba(255,255,255,0.4);">&copy; 2026 Sydney Barbers. Built &amp; Crafted to perfection. ✨</span>
+                <span class="footer-credit" style="color: rgba(255,255,255,0.3);">Designed &amp; Powered by Lunao ⚡</span>
+            </div>
+
+        </div>
+    </footer>
+
+    <!-- INTERACTIVE JAVASCRIPT EXECUTIONS -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // 1. Mobile Menu Toggle & Navigation Overlay
+            const toggleBtn = document.getElementById('js-menu-toggle');
+            const overlayNav = document.getElementById('js-nav-overlay');
+            const navAnchors = document.querySelectorAll('.mobile-link-anchor');
+
+            const toggleMobileMenu = () => {
+                const isOpen = toggleBtn.classList.toggle('open');
+                overlayNav.classList.toggle('open', isOpen);
+                document.body.style.overflow = isOpen ? 'hidden' : '';
+            };
+
+            const closeMobileMenu = () => {
+                toggleBtn.classList.remove('open');
+                overlayNav.classList.remove('open');
+                document.body.style.overflow = '';
+            };
+
+            toggleBtn.addEventListener('click', toggleMobileMenu);
+
+            // Close option inside the card
+            const internalCloseBtn = document.getElementById('js-mobile-close-action');
+            if (internalCloseBtn) {
+                internalCloseBtn.addEventListener('click', closeMobileMenu);
+            }
+
+            navAnchors.forEach(anchor => {
+                anchor.addEventListener('click', (e) => {
+                    closeMobileMenu();
+                });
+            });
+
+            // Close on Escape key
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && overlayNav.classList.contains('open')) {
+                    closeMobileMenu();
+                }
+            });
+
+            // Calm Audio Synth for UI interactions
+            let audioCtx = null;
+            const playCalmSound = () => {
+                try {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (!AudioContext) return;
+                    if (!audioCtx) audioCtx = new AudioContext(); // Reuse context to prevent limiting
+                    
+                    if (audioCtx.state === 'suspended') {
+                        audioCtx.resume();
+                    }
+
+                    const osc = audioCtx.createOscillator();
+                    const gainNode = audioCtx.createGain();
+
+                    osc.type = 'sine';
+                    // Sweet, calm pluck sound
+                    osc.frequency.setValueAtTime(500, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.1);
+
+                    // Very soft volume
+                    gainNode.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+
+                    osc.connect(gainNode);
+                    gainNode.connect(audioCtx.destination);
+
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.1);
+                } catch (e) {
+                    console.error("Audio error:", e);
+                }
+            };
+
+            // Filtering for Services Section
+            const filterBtns = document.querySelectorAll('.filter-btn');
+            const serviceRows = document.querySelectorAll('.service-menu-row');
+
+            filterBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    // Play calm sound effect
+                    playCalmSound();
+
+                    // Update active state
+                    filterBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+
+                    // Filter Logic
+                    const targetCategory = btn.getAttribute('data-filter');
+                    let visibleIndex = 1;
+
+                    serviceRows.forEach(row => {
+                        const rowCategory = row.getAttribute('data-category');
+                        if (targetCategory === 'all' || targetCategory === rowCategory) {
+                            row.classList.remove('hidden');
+                            // Stagger re-animation by updating --i
+                            row.style.setProperty('--i', visibleIndex);
+                            visibleIndex++;
+                        } else {
+                            row.classList.add('hidden');
+                        }
+                    });
+                });
+            });
+
+            // 2. Sticky Header shadows on Scroll behavior
+            const navHeader = document.getElementById('nav-header');
+            const handleScrollShadow = () => {
+                if (window.scrollY > 40) {
+                    navHeader.classList.add('scrolled');
+                } else {
+                    navHeader.classList.remove('scrolled');
+                }
+            };
+            window.addEventListener('scroll', handleScrollShadow);
+            handleScrollShadow(); // Trigger instantly in case loaded mid-page
+
+            // 3. Active Nav Anchor Highlights inside IntersectionObserver
+            const sections = document.querySelectorAll('section');
+            const desktopNavLinks = document.querySelectorAll('.nav-menu .nav-anchor');
+
+            const observerOptions = {
+                root: null,
+                threshold: 0.35, // highlighted when substantial block is visible
+                rootMargin: '-56px 0px 0px 0px' // adjust for nav height
+            };
+
+            const sectionObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const id = entry.target.getAttribute('id');
+                        desktopNavLinks.forEach(link => {
+                            if (link.getAttribute('href') === `#${id}`) {
+                                link.classList.add('active');
+                            } else {
+                                link.classList.remove('active');
+                            }
+                        });
+                    }
+                });
+            }, observerOptions);
+
+            sections.forEach(sec => sectionObserver.observe(sec));
+
+            // 4. Smooth scroll offsetting for navigation anchors
+            const allAnchors = document.querySelectorAll('a[href^="#"]');
+            allAnchors.forEach(lnk => {
+                lnk.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const targetId = this.getAttribute('href');
+                    if (targetId === '#') return;
+                    
+                    const targetElem = document.querySelector(targetId);
+                    if (!targetElem) return;
+
+                    const navOffset = 56;
+                    const elemPos = targetElem.getBoundingClientRect().top + window.scrollY;
+                    
+                    window.scrollTo({
+                        top: elemPos - navOffset,
+                        behavior: 'smooth'
+                    });
+                });
+            });
+
+            // 5. Booking Form validations & Success Transitions
+            const bookingForm = document.getElementById('js-booking-form');
+            const bookingContainer = document.getElementById('js-booking-container');
+
+            bookingForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                
+                // Fetch fields
+                const nameField = document.getElementById('name');
+                const phoneField = document.getElementById('phone');
+                const serviceField = document.getElementById('service');
+                const dateField = document.getElementById('date-input');
+                const timeField = document.getElementById('time');
+
+                const requiredFields = [nameField, phoneField, serviceField, dateField, timeField];
+                let isFormValid = true;
+
+                // Reset field highlight borders
+                requiredFields.forEach(fld => {
+                    fld.style.borderBottomColor = '';
+                });
+
+                // Check field entries
+                requiredFields.forEach(fld => {
+                    if (!fld.value || fld.value.trim() === '') {
+                        fld.style.borderBottomColor = 'var(--red)';
+                        isFormValid = false;
+                    }
+                });
+
+                if (!isFormValid) {
+                    // Shake entire container layout
+                    bookingForm.classList.remove('shake-form');
+                    void bookingForm.offsetWidth; // Force CSS reflow
+                    bookingForm.classList.add('shake-form');
+                    return;
+                }
+
+                // If perfectly valid, replace container with sleek succès state
+                const clientName = nameField.value.trim();
+                const clientPhone = phoneField.value.trim();
+                
+                bookingContainer.innerHTML = `
+                    <div class="booking-success-box" data-reveal style="text-align: center; padding: 32px 16px;">
+                        <span style="font-size: 56px; display: block; margin-bottom: 16px;">🎉💈✂️</span>
+                        <h3 class="booking-success-title" style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 32px; font-weight: 700; color: var(--ink); margin-bottom: 12px;">We have reserved your chair, ${clientName}!</h3>
+                        <p class="booking-success-sub" style="font-size: 14px; color: var(--ink-mid); margin-bottom: 8px;">Expect a warm confirmation call or SMS text at <strong>${clientPhone}</strong> within the hour. 📞</p>
+                        <p class="booking-success-sub" style="font-size: 12px; color: var(--gold); font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; margin-top: 20px;">We look forward to giving you an exceptional experience! ✨</p>
+                    </div>
+                `;
+                
+                // Trigger reveal for success box
+                const newSuccessBox = bookingContainer.querySelector('.booking-success-box');
+                setTimeout(() => {
+                    newSuccessBox.classList.add('in-view');
+                }, 100);
+            });
+
+            // 6. Scroll Reveal Observer
+            const revealElements = document.querySelectorAll('[data-reveal]');
+            const revealObserverOptions = {
+                root: null,
+                threshold: 0.08,
+                rootMargin: '0px 0px -40px 0px'
+            };
+
+            const revealObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('in-view');
+                        // Stagger children triggers if list-like structure
+                        const index = entry.target.style.getPropertyValue('--i');
+                        if (index) {
+                            entry.target.style.transitionDelay = `${index * 0.05}s`;
+                        }
+                        revealObserver.unobserve(entry.target);
+                    }
+                });
+            }, revealObserverOptions);
+
+            revealElements.forEach(el => revealObserver.observe(el));
+
+            // 7. Input Date Constraints (Block previous calendars)
+            const dateInput = document.getElementById('date-input');
+            if (dateInput) {
+                const today = new Date();
+                const year = today.getFullYear();
+                let month = today.getMonth() + 1;
+                let day = today.getDate();
+
+                if (month < 10) month = '0' + month;
+                if (day < 10) day = '0' + day;
+
+                const minDateString = `${year}-${month}-${day}`;
+                dateInput.setAttribute('min', minDateString);
+            }
+        });
+    </script>
+</body>
+</html>

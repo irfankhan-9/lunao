@@ -1,56 +1,23 @@
 // Template compilation engine.
-// Reads a PRISTINE raw template from /public/templates-raw, fills every
-// {{PLACEHOLDER}} with verified business data, and guarantees zero brackets
-// remain. Raw templates are never modified (per AGENTS.md absolute rules).
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { TEMPLATES_RAW_DIR } from './config.js';
+//
+// All template resolution goes through server/lib/templates.js so the
+// picker UI, deploy pipeline, and preview iframe always agree on which
+// raw HTML file gets used. This module is only responsible for:
+//   - picking a raw HTML body from a resolved template
+//   - filling {{PLACEHOLDER}} tokens with business data
+//   - guaranteeing zero leftover brackets in the final output
+import { resolveTemplate, loadRawHtml, recordTemplateUse } from './templates.js';
 import { db } from './db.js';
 
-// Maps a niche (case-insensitive) to its raw template file name.
-export const NICHE_TEMPLATE_MAP = {
-  barber: 'barber-template.html',
-  'barber-02': 'barber-template-02.html',
-  salon: 'salon-template-01.html',
-  dentist: 'dentist-template-01.html',
-  hvac: 'hvac-template-01.html',
-  gym: 'gym-template-01.html',
-  roofing: 'roofing-template-01.html',
-  'real estate': 'realestate-template-01.html',
-  realestate: 'realestate-template-01.html',
-};
-
-export function resolveTemplateFile(nicheOrFile) {
-  if (!nicheOrFile) return NICHE_TEMPLATE_MAP.barber;
-  const key = String(nicheOrFile).trim().toLowerCase();
-  if (key.endsWith('.html')) return key; // explicit file name passed
-  return NICHE_TEMPLATE_MAP[key] || NICHE_TEMPLATE_MAP.barber;
-}
-
-function digitsOnly(str) {
-  return String(str || '').replace(/\D/g, '');
-}
-
-function firstWord(str) {
-  return String(str || '').trim().split(/\s+/)[0] || '';
-}
-
-function splitCityState(city) {
-  // "Austin, TX" -> { city: "Austin, TX", state: "TX" }
-  const parts = String(city || '').split(',').map((p) => p.trim());
-  const state = parts.length > 1 ? parts[parts.length - 1] : '';
-  return { state };
-}
-
-// Build the full placeholder manifest from a (possibly sparse) business record.
-// Sensible defaults are derived so a minimal CSV (name, phone, city) still
-// produces a fully populated, bracket-free site.
+// Build the full placeholder manifest from a (possibly sparse) business
+// record. Sensible defaults are derived so a minimal CSV (name, phone,
+// city) still produces a fully populated, bracket-free site.
 export function buildPlaceholders(biz) {
   const name = biz.name || biz.business_name || 'Local Business';
   const city = biz.city || '';
-  const { state: derivedState } = splitCityState(city);
   const phoneDisplay = biz.phone || biz.phone_display || '';
   const phoneRaw = biz.phone_raw || digitsOnly(phoneDisplay);
+  const firstWordOf = (str) => String(str || '').trim().split(/\s+/)[0] || '';
   const igHandle =
     biz.instagram_handle ||
     biz.instagram ||
@@ -59,12 +26,16 @@ export function buildPlaceholders(biz) {
     biz.facebook_url ||
     biz.facebook ||
     `https://facebook.com/${igHandle}`;
-
   const rating = String(biz.google_rating || biz.rating || '4.9');
+  const splitCityState = (c) => {
+    const parts = String(c || '').split(',').map((p) => p.trim());
+    return { state: parts.length > 1 ? parts[parts.length - 1] : '' };
+  };
+  const { state: derivedState } = splitCityState(city);
 
   return {
     BUSINESS_NAME: name,
-    BUSINESS_NAME_SHORT: biz.business_name_short || biz.short || firstWord(name),
+    BUSINESS_NAME_SHORT: biz.business_name_short || biz.short || firstWordOf(name),
     CITY: city || 'your city',
     STATE: biz.state || derivedState || '',
     YEARS_IN_BUSINESS: String(biz.years_in_business || biz.years || '2015'),
@@ -79,25 +50,26 @@ export function buildPlaceholders(biz) {
     INSTAGRAM_HANDLE: String(igHandle).replace(/^@/, ''),
     FACEBOOK_URL: fbUrl,
     // Niche-specific placeholders found in some templates (dentist/gym/realestate).
-    DOCTOR_NAME: biz.doctor_name || biz.owner || `Dr. ${firstWord(name)}`,
+    DOCTOR_NAME: biz.doctor_name || biz.owner || `Dr. ${firstWordOf(name)}`,
     AVERAGE_RATING: biz.average_rating || rating,
     MEMBERS_COUNT: String(biz.members_count || '2,400'),
     TRAINERS_COUNT: String(biz.trainers_count || '18'),
   };
 }
 
-// Last-resort default for any UPPER_SNAKE placeholder not in the manifest, so a
-// future template addition never produces a broken (bracketed) page.
-function fallbackFor(key) {
-  return key
-    .toLowerCase()
-    .split('_')
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
+function digitsOnly(str) {
+  return String(str || '').replace(/\D/g, '');
 }
 
-// Only strict {{UPPER_SNAKE}} tokens are treated as placeholders. This ignores
-// in-template JavaScript such as `{{${pName}}}` used by the live tooltip code.
+// Last-resort default for any UPPER_SNAKE placeholder not in the manifest,
+// so a future template addition never produces a broken (bracketed) page.
+function fallbackFor(key) {
+  return key.toLowerCase().split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+// Only strict {{UPPER_SNAKE}} tokens are treated as placeholders. This
+// ignores in-template JavaScript such as `{{${pName}}}` used by the live
+// tooltip code.
 const PLACEHOLDER_RE = /\{\{\s*([A-Z][A-Z0-9_]*)\s*\}\}/g;
 
 function applyPlaceholders(html, placeholders) {
@@ -106,45 +78,20 @@ function applyPlaceholders(html, placeholders) {
   );
 }
 
-// Find a custom template by its DB id or its unique slug.
-function findCustomTemplate(idOrSlug) {
-  return db.prepare(
-    'SELECT * FROM custom_templates WHERE id = ? OR slug = ? LIMIT 1',
-  ).get(idOrSlug, idOrSlug);
-}
-
-// Compile a single personalized page. Returns { html, placeholders, templateFile }.
-// Checks custom_templates DB first, then falls back to the built-in /public/templates-raw/ files.
-export async function compileSite(biz, nicheOrFile) {
-  // 1. Try custom template (by explicit ID/slug passed as nicheOrFile)
-  const custom = findCustomTemplate(nicheOrFile);
-  if (custom) {
-    const html = applyPlaceholders(custom.raw_html, buildPlaceholders(biz));
-    const leftovers = html.match(PLACEHOLDER_RE);
-    if (leftovers && leftovers.length) {
-      const unique = [...new Set(leftovers)];
-      throw new Error(
-        `Compilation incomplete for "${biz.name}". Unresolved placeholders: ${unique.join(', ')}`,
-      );
-    }
-    return { html, placeholders: buildPlaceholders(biz), templateFile: `custom:${custom.id}` };
-  }
-
-  // 2. Fall back to built-in niche template
-  const templateFile = resolveTemplateFile(nicheOrFile || biz.niche);
-  const rawPath = path.join(TEMPLATES_RAW_DIR, templateFile);
-
-  let raw;
-  try {
-    raw = await fs.readFile(rawPath, 'utf8');
-  } catch (err) {
-    throw new Error(`Raw template not found: ${templateFile} (${rawPath})`);
-  }
-
+// Compile a single personalized page.
+// Returns { html, placeholders, resolved } where `resolved` is the full
+// template descriptor (so the caller can stamp it onto the campaign row).
+//
+// `templateKey` is the unified template id (e.g. 'barber-dark-luxury' for
+// built-ins, 'tmpl_xxx' for custom). For back-compat, a niche string
+// ('Barber') also works via the templates.js fallback map.
+export async function compileSite(biz, templateKey, ownerKey = null) {
+  const resolved = await resolveTemplate(templateKey, ownerKey);
+  const raw = await loadRawHtml(resolved);
   const placeholders = buildPlaceholders(biz);
   const html = applyPlaceholders(raw, placeholders);
 
-  // Absolute safety rule: zero leftover {{UPPER_SNAKE}} placeholders allowed.
+  // Absolute safety rule: zero leftover {{UPPER_SNAKE}} placeholders.
   const leftovers = html.match(PLACEHOLDER_RE);
   if (leftovers && leftovers.length) {
     const unique = [...new Set(leftovers)];
@@ -153,5 +100,15 @@ export async function compileSite(biz, nicheOrFile) {
     );
   }
 
-  return { html, placeholders, templateFile };
+  // Bump usage counter (custom only — built-ins skip).
+  recordTemplateUse(resolved.key);
+
+  return { html, placeholders, resolved };
 }
+
+// Re-export for legacy callers (custom-templates routes, Site Lab, etc.)
+// that import from compile.js directly.
+export { resolveTemplate, loadRawHtml };
+// Keep db exported in case other modules used it (no longer required by
+// this file, but harmless to keep available).
+export { db };

@@ -20,9 +20,14 @@ import './landing/index.css';
 // to /site-gate where the visitor enters the password to unlock the cookie, then
 // the SPA at /app loads with the authenticated session.
 function openDashboard() {
-  // Go directly to /site-gate so Vite doesn't intercept and serve the SPA.
-  // After entering the password the gate page redirects to /app and the dashboard loads.
-  window.location.href = '/site-gate';
+  // For localhost development: bypass the password gate and go directly to the dashboard.
+  // In production, this navigates to /site-gate to enter the shared password first.
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  if (isLocalhost) {
+    window.location.href = '/app';
+  } else {
+    window.location.href = '/site-gate';
+  }
 }
 
 export const Landing: React.FC = () => {

@@ -23,7 +23,16 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
   const [unlocked, setUnlocked] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  const isLocalhost = typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
   const refresh = useCallback(async () => {
+    // For localhost development: skip the gate check and unlock directly.
+    if (isLocalhost) {
+      setUnlocked(true);
+      return;
+    }
+
     try {
       const r = await fetch('/api/site-gate/status', { credentials: 'include' });
       if (!r.ok) {
@@ -37,7 +46,7 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
       // is the real source of truth.
       setUnlocked(false);
     }
-  }, []);
+  }, [isLocalhost]);
 
   useEffect(() => {
     (async () => {

@@ -66,8 +66,52 @@ import {
   logSmsAttempt,
   logInbound,
   markCampaignFailed,
+  markCampaignCancelled,
 } from './lib/campaigns.js';
 import { sendSms, toE164, countSegments } from './lib/telnyx.js';
+import {
+  // Email Campaign imports
+  createEmailCampaign,
+  getEmailCampaign,
+  listEmailCampaigns,
+  updateEmailCampaignStatus,
+  updateEmailCampaignCounts,
+  addEmailLead,
+  listEmailLeads,
+  getLeadsPendingEmailDiscovery,
+  getLeadsPendingSend,
+  updateLeadEmail,
+  updateLeadSiteUrl,
+  assignLeadToAccount,
+  updateLeadSendStatus,
+  logEmailSend,
+  addToSuppression,
+  isEmailSuppressed,
+  recordSend,
+  canAccountSend,
+  getNextAvailableAccount,
+  markEmailCampaignCancelled,
+  // Connected Email Accounts
+  createEmailAccount,
+  getEmailAccount,
+  listEmailAccounts,
+  updateEmailAccountStatus,
+  updateAccountBounceRate,
+  updateAccountLastSuccessfulSend,
+  deleteEmailAccount,
+  getAccountHealth,
+  setEmailAccountPaused,
+  probeEmailAccountToken,
+  probeAllEmailAccountTokens,
+} from './lib/emailCampaigns.js';
+import {
+  buildGmailAuthUrl,
+  exchangeGmailCode,
+  getGmailUserProfile,
+  encryptRefreshTokenForStorage,
+  decryptRefreshTokenForUse,
+} from './lib/gmail.js';
+import { googleOAuth } from './lib/config.js';
 import {
   gateProtected,
   handleSiteGateLogin,
@@ -75,6 +119,10 @@ import {
   handleSiteGateStatus,
   gateHealth,
 } from './lib/siteGate.js';
+import {
+  parseSessionCookie,
+  verifySessionToken,
+} from './lib/_archive_auth.js';
 
 const app = express();
 // Trust the first proxy hop (Railway / Cloudflare) so `req.secure`,
@@ -157,8 +205,15 @@ app.post('/api/compile', async (req, res) => {
     if (!business || !business.name) {
       return res.status(400).json({ ok: false, error: 'business.name is required' });
     }
-    const { html, placeholders, templateFile } = await compileSite(business, niche);
-    res.json({ ok: true, templateFile, placeholders, html });
+    const { html, placeholders, resolved } = await compileSite(business, niche);
+    res.json({
+      ok: true,
+      templateFile: resolved?.rawFile || null,
+      templateKey: resolved?.key || null,
+      templateName: resolved?.name || null,
+      placeholders,
+      html,
+    });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -192,6 +247,8 @@ app.post('/api/campaign/run', async (req, res) => {
     csv,
     niche,
     templateId,
+    templateKey,
+    templateFile,
     smsTemplate,
     name,
     plan,
@@ -269,6 +326,8 @@ app.post('/api/campaign/run', async (req, res) => {
       businesses: leads,
       niche,
       templateId,
+      templateKey,
+      templateFile,
       smsTemplate,
       onEvent: send,
       ownerKey,
@@ -292,6 +351,8 @@ app.post('/api/site-deploy/run', async (req, res) => {
     csv,
     niche,
     templateId,
+    templateKey,
+    templateFile,
     name,
     plan,
   } = req.body || {};
@@ -355,6 +416,8 @@ app.post('/api/site-deploy/run', async (req, res) => {
       businesses: leads,
       niche,
       templateId,
+      templateKey,
+      templateFile,
       skipSms: true,
       onEvent: send,
       ownerKey,
@@ -370,6 +433,105 @@ app.post('/api/site-deploy/run', async (req, res) => {
 });
 
 // ---- Site Editor API -------------------------------------------------------
+
+// All sites ever generated for this owner — across BOTH site-deploy campaigns
+// AND email campaigns. Powers the Dashboard's "Sites Generated" panel so the
+// user can see every deployed site, regardless of which campaign type
+// produced it. Each row carries its `source` ('site-deploy' | 'email') so
+// the UI can render separated badges and filter pills.
+//
+// IMPORTANT: this MUST be registered BEFORE the `/api/sites/:slug` catch-all
+// below — otherwise Express matches "all" as a slug and returns 404.
+app.get('/api/sites/all', authenticate, (req, res) => {
+  try {
+    const ownerKey = (() => {
+      if (req.userId) return `user_${req.userId}`;
+      const explicit = req.headers['x-owner-key'] || req.query.ownerKey || req.body?.ownerKey;
+      if (explicit) return String(explicit).trim();
+      return req.ownerKey || 'dashboard';
+    })();
+    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+
+    const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
+    const sourceFilter = req.query.source; // 'site-deploy' | 'email' | undefined (all)
+
+    const rows = [];
+
+    if (!sourceFilter || sourceFilter === 'site-deploy') {
+      // Site-deploy campaigns → live URLs in `campaign_leads.site_url`.
+      const sdRows = db.prepare(`
+        SELECT
+          'site-deploy'                                  AS source,
+          cl.id                                          AS lead_id,
+          cl.campaign_id                                 AS campaign_id,
+          c.name                                         AS campaign_name,
+          c.niche                                        AS niche,
+          c.status                                       AS campaign_status,
+          c.started_at                                   AS campaign_started_at,
+          cl.name                                        AS business_name,
+          cl.city                                        AS city,
+          cl.phone                                       AS phone,
+          cl.niche                                       AS lead_niche,
+          cl.site_url                                    AS site_url,
+          cl.slug                                        AS slug,
+          cl.site_status                                 AS lead_status,
+          cl.created_at                                  AS created_at
+        FROM campaign_leads cl
+        JOIN campaigns c ON c.id = cl.campaign_id
+        WHERE c.owner_key = ?
+          AND cl.site_url IS NOT NULL
+          AND cl.site_url != ''
+        ORDER BY cl.created_at DESC
+        LIMIT ?
+      `).all(ownerKey, limit);
+      rows.push(...sdRows);
+    }
+
+    if (!sourceFilter || sourceFilter === 'email') {
+      // Email campaigns → live URLs in `email_leads.generated_site_url`.
+      const emRows = db.prepare(`
+        SELECT
+          'email'                                        AS source,
+          el.id                                          AS lead_id,
+          el.campaign_id                                 AS campaign_id,
+          ec.email_subject                               AS campaign_name,
+          ec.niche                                       AS niche,
+          ec.status                                      AS campaign_status,
+          ec.started_at                                  AS campaign_started_at,
+          el.business_name                               AS business_name,
+          el.city                                        AS city,
+          el.phone                                       AS phone,
+          ec.niche                                       AS lead_niche,
+          el.generated_site_url                          AS site_url,
+          el.slug                                        AS slug,
+          el.send_status                                 AS lead_status,
+          COALESCE(el.sent_at, el.created_at)            AS created_at
+        FROM email_leads el
+        JOIN email_campaigns ec ON ec.id = el.campaign_id
+        WHERE ec.user_id = ?
+          AND el.generated_site_url IS NOT NULL
+          AND el.generated_site_url != ''
+        ORDER BY COALESCE(el.sent_at, el.created_at) DESC
+        LIMIT ?
+      `).all(ownerKey, limit);
+      rows.push(...emRows);
+    }
+
+    // Aggregate counts for the header pills.
+    const counts = {
+      total: rows.length,
+      siteDeploy: rows.filter(r => r.source === 'site-deploy').length,
+      email: rows.filter(r => r.source === 'email').length,
+    };
+
+    // Sort merged rows newest-first so the UI shows the freshest site at the top.
+    rows.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+
+    res.json({ ok: true, sites: rows, counts });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
 
 // List all deployed sites (for the "Get HTML Code" picker).
 app.get('/api/sites', async (_req, res) => {
@@ -1003,6 +1165,716 @@ app.post('/api/campaigns/:id/refund', authenticate, (req, res) => {
   }
 });
 
+// Soft-cancel an in-flight campaign. The runPipeline() loop checks the
+// campaign status column on every lead boundary and exits cleanly when it
+// sees 'cancelled'. The current lead in flight is allowed to finish
+// (Cloudflare deploy / Telnyx send already in progress) — we just stop
+// starting new ones. Idempotent: cancelling twice is a no-op.
+app.post('/api/campaigns/:id/cancel', authenticate, (req, res) => {
+  try {
+    const c = getCampaign(req.params.id);
+    if (!c) return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    if (c.status === 'completed' || c.status === 'failed' || c.status === 'cancelled') {
+      return res.json({ ok: true, status: c.status, alreadyTerminal: true });
+    }
+    markCampaignCancelled(c.id);
+    res.json({ ok: true, status: 'cancelled' });
+  } catch (err) {
+    res.status(err.status || 500).json({ ok: false, error: err.message });
+  }
+});
+
+// Soft-cancel an in-flight email campaign. Same semantics as the SMS
+// cancel route — the runEmailPipeline() loop exits cleanly at the next
+// lead boundary.
+app.post('/api/email-campaigns/:id/cancel', authenticate, (req, res) => {
+  try {
+    const c = getEmailCampaign(req.params.id);
+    if (!c) return res.status(404).json({ ok: false, error: 'Email campaign not found' });
+    if (c.status === 'completed' || c.status === 'failed' || c.status === 'cancelled') {
+      return res.json({ ok: true, status: c.status, alreadyTerminal: true });
+    }
+    markEmailCampaignCancelled(c.id);
+    res.json({ ok: true, status: 'cancelled' });
+  } catch (err) {
+    res.status(err.status || 500).json({ ok: false, error: err.message });
+  }
+});
+
+// =============================================================================
+// EMAIL CAMPAIGN API ENDPOINTS
+// =============================================================================
+
+// ---- Dashboard Stats ----
+//
+// One-shot read for the Dashboard's "Today" counters and the celebration
+// card on the new EmailCampaignWizard. All four queries use columns that
+// already exist on `site_history`, `campaigns`, `email_campaigns`, and
+// `email_leads` — no new tables, no migrations.
+//
+// "Today" is computed as midnight (local server time) → now, in unix epoch
+// seconds, matching the INTEGER epoch columns used throughout the schema.
+
+app.get('/api/stats/dashboard', authenticate, (req, res) => {
+  try {
+    // Prefer an explicit ownerKey (X-Owner-Key header / query / body) for
+    // localStorage-style callers. Fall back to the gate-only `dashboard`
+    // namespace so the live dashboard works even without per-user auth.
+    const ownerKey = (() => {
+      if (req.userId) return `user_${req.userId}`;
+      const explicit = req.headers['x-owner-key'] || req.query.ownerKey || req.body?.ownerKey;
+      if (explicit) return String(explicit).trim();
+      return req.ownerKey || 'dashboard';
+    })();
+    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+
+    const startOfToday = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
+    const now = Math.floor(Date.now() / 1000);
+
+    // Sites deployed today: any site_history row stamped today for this owner.
+    const sitesDeployedTodayRow = db.prepare(
+      'SELECT COUNT(*) AS n FROM site_history WHERE owner_key = ? AND created_at >= ?'
+    ).get(ownerKey, startOfToday);
+    const sitesDeployedToday = Number(sitesDeployedTodayRow?.n) || 0;
+
+    // Lifetime sites generated: sum the cached counters on the user's two
+    // campaign tables. site_history itself isn't a perfect lifetime counter
+    // (Studio saves can re-write history for the same slug), so we lean on
+    // the aggregated per-campaign columns which are updated whenever a real
+    // lead finishes the deploy phase.
+    const sitesEmailRow = db.prepare(
+      'SELECT COALESCE(SUM(sites_generated), 0) AS n FROM email_campaigns WHERE user_id = ?'
+    ).get(ownerKey);
+    const sitesSmsRow = db.prepare(
+      'SELECT COALESCE(SUM(sites_generated), 0) AS n FROM campaigns WHERE owner_key = ?'
+    ).get(ownerKey);
+    const sitesDeployedTotal =
+      (Number(sitesEmailRow?.n) || 0) + (Number(sitesSmsRow?.n) || 0);
+
+    // Emails sent today: per-lead send_status rows for this owner's campaigns
+    // that were stamped with a sent_at timestamp today.
+    const emailsSentTodayRow = db.prepare(
+      `SELECT COUNT(*) AS n
+         FROM email_leads l
+         JOIN email_campaigns c ON c.id = l.campaign_id
+        WHERE c.user_id = ?
+          AND l.send_status IN ('sent', 'delivered')
+          AND l.sent_at IS NOT NULL
+          AND l.sent_at >= ?`
+    ).get(ownerKey, startOfToday);
+    const emailsSentToday = Number(emailsSentTodayRow?.n) || 0;
+
+    // Lifetime emails sent — cached counter on the email_campaigns row.
+    const emailsTotalRow = db.prepare(
+      'SELECT COALESCE(SUM(emails_sent), 0) AS n FROM email_campaigns WHERE user_id = ?'
+    ).get(ownerKey);
+    const emailsSentTotal = Number(emailsTotalRow?.n) || 0;
+
+    res.json({
+      ok: true,
+      stats: {
+        sitesDeployedToday,
+        sitesDeployedTotal,
+        emailsSentToday,
+        emailsSentTotal,
+        // Surface a couple of helpful metadata fields for the UI:
+        // `asOf` is the server clock the snapshot was taken at (seconds).
+        // `windowStart` is the start-of-today epoch the "today" counters
+        // are anchored to — clients use it for any client-side sanity
+        // checks (e.g. hidden by an hour or stale).
+        asOf: now,
+        windowStart: startOfToday,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Today's email send log — used by the EmailsTodayLog component on the
+// Dashboard so the user can see per-send details without opening a campaign.
+app.get('/api/email-logs/today', authenticate, (req, res) => {
+  try {
+    const ownerKey = (() => {
+      if (req.userId) return `user_${req.userId}`;
+      const explicit = req.headers['x-owner-key'] || req.query.ownerKey || req.body?.ownerKey;
+      if (explicit) return String(explicit).trim();
+      return req.ownerKey || 'dashboard';
+    })();
+    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+
+    const startOfToday = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
+
+    const rows = db.prepare(`
+      SELECT
+        el.id,
+        el.campaign_id,
+        ec.email_subject  AS campaign_name,
+        el.account_id,
+        ea.email          AS account_email,
+        ll.email          AS recipient_email,
+        ll.business_name  AS recipient_name,
+        el.subject,
+        el.sent_at,
+        el.delivery_status,
+        ll.generated_site_url
+      FROM email_logs el
+      JOIN email_campaigns ec  ON ec.id = el.campaign_id
+      JOIN email_leads   ll   ON ll.id = el.lead_id
+      LEFT JOIN email_accounts ea ON ea.id = el.account_id
+      WHERE ec.user_id  = ?
+        AND el.sent_at   >= ?
+      ORDER BY el.sent_at DESC
+      LIMIT 200
+    `).all(ownerKey, startOfToday);
+
+    res.json({ ok: true, logs: rows });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ---- Email Campaigns CRUD ----
+
+// List email campaigns for a user
+app.get('/api/email-campaigns', authenticate, (req, res) => {
+  try {
+    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+    const limit = parseInt(req.query.limit, 10) || 50;
+    const campaigns = listEmailCampaigns(ownerKey, limit);
+    res.json({ ok: true, campaigns });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Get single email campaign with leads
+app.get('/api/email-campaigns/:id', authenticate, (req, res) => {
+  try {
+    const campaign = getEmailCampaign(req.params.id);
+    if (!campaign) return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    const leads = listEmailLeads(campaign.id);
+    res.json({ ok: true, campaign, leads });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Create a new email campaign (draft)
+app.post('/api/email-campaigns', authenticate, (req, res) => {
+  try {
+    const ownerKey = req.userId ? `user_${req.userId}` : String(req.body?.ownerKey || '').trim();
+    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+    
+    const csvLeads = Array.isArray(req.body?.leads) ? req.body.leads : [];
+    
+    const campaign = createEmailCampaign({
+      userId: ownerKey,
+      niche: req.body?.niche,
+      templateId: req.body?.templateId,
+      templateKey: req.body?.templateKey,
+      leadSource: req.body?.leadSource || 'csv',
+      targetVolume: csvLeads.length || req.body?.targetVolume || 0,
+      city: req.body?.city,
+      category: req.body?.category,
+      emailSubject: req.body?.emailSubject,
+      emailBody: req.body?.emailBody,
+      csvSnapshot: req.body?.csvSnapshot,
+      leads: csvLeads,
+    });
+    
+    res.json({ ok: true, campaign });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Update email campaign
+app.put('/api/email-campaigns/:id', authenticate, (req, res) => {
+  try {
+    const campaign = getEmailCampaign(req.params.id);
+    if (!campaign) return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    
+    // Update allowed fields
+    const allowedFields = ['niche', 'template_id', 'template_key', 'lead_source', 'target_volume', 
+      'city', 'category', 'email_subject', 'email_body', 'status'];
+    
+    const updates = [];
+    const values = [];
+    
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates.push(`${field} = ?`);
+        values.push(req.body[field]);
+      }
+    }
+    
+    if (updates.length > 0) {
+      values.push(req.params.id);
+      db.prepare(`UPDATE email_campaigns SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+    }
+    
+    const updated = getEmailCampaign(req.params.id);
+    res.json({ ok: true, campaign: updated });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Delete email campaign
+app.delete('/api/email-campaigns/:id', authenticate, (req, res) => {
+  try {
+    const campaign = getEmailCampaign(req.params.id);
+    if (!campaign) return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    
+    // Delete associated leads and logs
+    db.prepare('DELETE FROM email_leads WHERE campaign_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM email_logs WHERE campaign_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM email_campaigns WHERE id = ?').run(req.params.id);
+    
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ---- Email Account Management ----
+
+// List connected email accounts for a user
+app.get('/api/email-accounts', authenticate, (req, res) => {
+  try {
+    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+    
+    const accounts = listEmailAccounts(ownerKey);
+
+    // Defensive dedupe by (provider, email): last-connected wins. The
+    // unique index in db.js prevents new dupes, but legacy rows from before
+    // the index existed could still show up twice. The wizard MUST never
+    // surface two cards for the same address.
+    const dedupByEmail = new Map();
+    for (const acc of accounts) {
+      const key = `${acc.provider}::${(acc.email || '').toLowerCase()}`;
+      const existing = dedupByEmail.get(key);
+      if (!existing || (acc.connected_at || 0) > (existing.connected_at || 0)) {
+        dedupByEmail.set(key, acc);
+      }
+    }
+    const deduped = Array.from(dedupByEmail.values());
+
+    // Add computed fields for client display.
+    // The health math (rolling 24h, non-linear %, health_ruined warning) lives
+    // entirely on the server so every page that shows this card agrees.
+    const accountsWithMetrics = deduped.map(acc => {
+      const health = getAccountHealth(acc.id);
+      return {
+        id: acc.id,
+        user_id: acc.user_id,
+        provider: acc.provider,
+        email: acc.email,
+        display_name: acc.display_name,
+        daily_cap: health?.dailyCap ?? acc.daily_cap,
+        connected_at: acc.connected_at,
+        status: acc.status,
+        // Rolling 24h, not calendar day:
+        sends_today: health?.sendsToday ?? acc.sends_today,
+        sends_this_week: acc.sends_this_week,
+        remaining_today: health?.remainingToday ?? 0,
+        // v3: pause toggle + battery gauge — surfaced alongside the
+        // pre-existing Gmail-health math so the picker can render both.
+        paused: health?.paused ?? acc.paused ?? 0,
+        battery_capacity: health?.batteryCapacity ?? acc.battery_capacity ?? 300,
+        battery_percent: health?.batteryPercent ?? null,
+        battery_label: health?.batteryLabel ?? 'unknown',
+        health_percent: health?.healthPercent ?? null,
+        health_label: health?.healthLabel ?? 'unknown',
+        bounce_rate_7d: acc.bounce_rate_7d,
+        last_successful_send: acc.last_successful_send,
+        token_status: acc.status === 'needs_attention' ? 'needs_reconnect' : 'active',
+        health,
+      };
+    });
+    
+    res.json({ ok: true, accounts: accountsWithMetrics });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Get single account health
+app.get('/api/email-accounts/:id/health', authenticate, (req, res) => {
+  try {
+    const health = getAccountHealth(req.params.id);
+    if (!health) return res.status(404).json({ ok: false, error: 'Account not found' });
+    res.json({ ok: true, health });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Probe every connected account's refresh token. Lightweight — only
+// validates against Google's OAuth endpoint, never Gmail itself. Designed
+// to be called right before the user moves to the next step in the Email
+// Campaign wizard so dead tokens block the transition with a clear error.
+app.post('/api/email-accounts/probe-all', authenticate, async (req, res) => {
+  try {
+    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || req.body?.ownerKey || '').trim();
+    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+    const out = await probeAllEmailAccountTokens(ownerKey);
+    res.json(out);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Probe a single account's token.
+app.post('/api/email-accounts/:id/probe', authenticate, async (req, res) => {
+  try {
+    const account = getEmailAccount(req.params.id);
+    if (!account) return res.status(404).json({ ok: false, error: 'Account not found' });
+    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    if (ownerKey && account.user_id !== ownerKey) {
+      return res.status(403).json({ ok: false, error: 'Not your account' });
+    }
+    const result = await probeEmailAccountToken(req.params.id);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Pause/Resume toggle — user-controlled per-account. Soft warning only.
+// Per the spec: "users can still use emails even after running out of 100%
+// battery — let them use it". We don't gate `canAccountSend` on this; we
+// only mark the row so the picker UI can show the Pause badge + warning
+// card. The campaign will still send if the user clicks Launch.
+app.post('/api/email-accounts/:id/pause', authenticate, (req, res) => {
+  try {
+    const account = getEmailAccount(req.params.id);
+    if (!account) return res.status(404).json({ ok: false, error: 'Account not found' });
+    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || req.body?.ownerKey || '').trim();
+    if (ownerKey && account.user_id !== ownerKey) {
+      return res.status(403).json({ ok: false, error: 'Not your account' });
+    }
+    const updated = setEmailAccountPaused(req.params.id, true);
+    const health = getAccountHealth(req.params.id);
+    res.json({ ok: true, account: updated, health });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/email-accounts/:id/resume', authenticate, (req, res) => {
+  try {
+    const account = getEmailAccount(req.params.id);
+    if (!account) return res.status(404).json({ ok: false, error: 'Account not found' });
+    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || req.body?.ownerKey || '').trim();
+    if (ownerKey && account.user_id !== ownerKey) {
+      return res.status(403).json({ ok: false, error: 'Not your account' });
+    }
+    const updated = setEmailAccountPaused(req.params.id, false);
+    const health = getAccountHealth(req.params.id);
+    res.json({ ok: true, account: updated, health });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Delete/Disconnect email account
+app.delete('/api/email-accounts/:id', authenticate, (req, res) => {
+  try {
+    const account = getEmailAccount(req.params.id);
+    if (!account) return res.status(404).json({ ok: false, error: 'Account not found' });
+    
+    deleteEmailAccount(req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ---- Gmail OAuth flow (Connect Gmail button) ----
+
+// Build the provider's authorization URL. The frontend opens this URL, the
+// user approves on Google's own consent screen, and Google redirects back to
+// /api/email-accounts/callback with a one-time `code`.
+const oauthStateStore = new Map(); // state -> { ownerKey, createdAt }
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+
+function ownerKeyForCallback(req) {
+  const legacyKey = req.headers['x-owner-key'] || req.query.ownerKey || req.body?.ownerKey;
+  if (legacyKey) return String(legacyKey);
+  return req.userId ? `user_${req.userId}` : 'dashboard';
+}
+
+function redirectBase() {
+  return process.env.OAUTH_REDIRECT_BASE || `http://localhost:${PORT}`;
+}
+
+app.get('/api/email-accounts/oauth/url', authenticate, (req, res) => {
+  try {
+    const provider = String(req.query.provider || '');
+    if (provider !== 'gmail' && provider !== 'outlook') {
+      return res.status(400).json({ ok: false, error: 'Unsupported provider' });
+    }
+    if (provider === 'gmail' && !googleOAuth.enabled) {
+      return res.status(503).json({
+        ok: false,
+        error: 'Gmail OAuth not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.local.',
+      });
+    }
+
+    const ownerKey = ownerKeyForCallback(req);
+    const state = `lk_${Date.now()}_${Math.random().toString(36).slice(2, 14)}`;
+    oauthStateStore.set(state, { ownerKey, createdAt: Date.now() });
+
+    const redirectUri = `${redirectBase()}/api/email-accounts/callback`;
+    let url;
+    if (provider === 'gmail') {
+      url = buildGmailAuthUrl({ redirectUri, state });
+    } else {
+      // Placeholder for Outlook until Microsoft Graph is wired.
+      url = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?state=${encodeURIComponent(state)}`;
+    }
+
+    res.json({ ok: true, url, redirectUri });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Provider redirect target. Exchanges the one-time code for tokens, looks up
+// the user's Gmail profile, encrypts the refresh_token with AES-256-GCM, and
+// stores it in email_accounts. Then shows a friendly page that bounces back
+// to the dashboard (window.close) and tells the user it worked.
+app.get('/api/email-accounts/callback', async (req, res) => {
+  const { code, state, error } = req.query;
+  
+  // Friendly HTML shell so the user always sees SOMETHING, even on errors.
+  const sendHtml = (title, body, autoClose = true) => {
+    const html = `<!doctype html><html><head><meta charset="utf-8" /><title>${title}</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f7f6f3; color: #1f2937; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 24px; }
+      .card { background: white; padding: 32px 40px; border-radius: 14px; box-shadow: 0 8px 30px rgba(15,23,42,0.08); max-width: 480px; text-align: center; }
+      h1 { font-size: 20px; margin: 0 0 8px; }
+      p { color: #6b7280; margin: 0 0 16px; line-height: 1.5; }
+      .spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid #e5e7eb; border-top: #1f2937 solid; animation: spin 0.8s linear infinite; margin: 8px auto 0; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .ok { color: #047857; }
+      .err { color: #b91c1c; }
+    </style></head>
+    <body><div class="card"><h1>${title}</h1>${body}${autoClose ? '<div class="spinner"></div>' : ''}</div>
+    <script>
+      ${autoClose ? `setTimeout(function(){ try { window.close(); } catch(e) {} }, 1500);` : ''}
+    </script></body></html>`;
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  };
+  
+  if (error) {
+    return sendHtml(
+      'Connection cancelled',
+      `<p class="err">Google returned: <strong>${escapeHtml(String(error))}</strong></p><p>Close this window and try again from the dashboard.</p>`,
+      false,
+    );
+  }
+  if (!code || !state) {
+    return sendHtml('Invalid callback', '<p class="err">Missing code or state from Google.</p>', false);
+  }
+  
+  const stateData = oauthStateStore.get(String(state));
+  if (!stateData) {
+    return sendHtml('Session expired', '<p class="err">Please return to the dashboard and click Connect again.</p>', false);
+  }
+  if (Date.now() - stateData.createdAt > OAUTH_STATE_TTL_MS) {
+    oauthStateStore.delete(String(state));
+    return sendHtml('Session timed out', '<p class="err">Restart the connection from the dashboard.</p>', false);
+  }
+  
+  try {
+    const redirectUri = `${redirectBase()}/api/email-accounts/callback`;
+    
+    // Gmail only for now
+    const tokens = await exchangeGmailCode({ code: String(code), redirectUri });
+    const profile = await getGmailUserProfile(tokens.access_token);
+    
+    const encrypted = encryptRefreshTokenForStorage(tokens.refresh_token);
+    if (!encrypted) {
+      throw new Error('Failed to encrypt refresh token. Check EMAIL_TOKEN_ENCRYPTION_KEY.');
+    }
+    
+    const userId = stateData.ownerKey;
+    const account = createEmailAccount({
+      userId,
+      provider: 'gmail',
+      email: profile.email,
+      displayName: profile.displayName,
+      encryptedRefreshToken: encrypted,
+      dailyCap: 80,
+    });
+    
+    oauthStateStore.delete(String(state));
+    
+    return sendHtml(
+      'Gmail connected',
+      `<p class="ok"><strong>${escapeHtml(profile.email)}</strong> is ready to send.</p><p>You can close this window — your dashboard has updated.</p>`,
+      true,
+    );
+  } catch (err) {
+    return sendHtml('Connection failed', `<p class="err">${escapeHtml(err.message)}</p><p>Close this window and try again.</p>`, false);
+  }
+});
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+// ---- Suppression List ----
+
+// Get suppression list
+app.get('/api/email-suppression', authenticate, (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit, 10) || 1000;
+    const list = getSuppressionList(limit);
+    res.json({ ok: true, suppression_list: list });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Add to suppression list
+app.post('/api/email-suppression', authenticate, (req, res) => {
+  try {
+    const { email, reason, source } = req.body || {};
+    if (!email || !reason) {
+      return res.status(400).json({ ok: false, error: 'email and reason are required' });
+    }
+    
+    addToSuppression(email, reason, source || 'manual');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Check if email is suppressed
+app.get('/api/email-suppression/check', authenticate, (req, res) => {
+  try {
+    const email = req.query.email;
+    if (!email) return res.status(400).json({ ok: false, error: 'email query param is required' });
+    
+    const entry = isEmailSuppressed(email);
+    res.json({ ok: true, suppressed: !!entry, entry });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ---- Email Discovery (Places API + Crawler) ----
+
+// Discover leads via Places API
+app.post('/api/email-campaigns/:id/discover-places', authenticate, async (req, res) => {
+  try {
+    const campaign = getEmailCampaign(req.params.id);
+    if (!campaign) return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    
+    const { city, category, limit = 50 } = req.body || {};
+    if (!city || !category) {
+      return res.status(400).json({ ok: false, error: 'city and category are required' });
+    }
+    
+    // This will be handled by the Places API crawler module
+    // For now, return a placeholder response
+    res.json({ 
+      ok: true, 
+      discovered: 0,
+      message: 'Places API discovery is queued. The pipeline will discover leads with websites.' 
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Get leads pending email discovery for a campaign
+app.get('/api/email-campaigns/:id/pending-discovery', authenticate, (req, res) => {
+  try {
+    const leads = getLeadsPendingEmailDiscovery(req.params.id);
+    res.json({ ok: true, leads });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ---- Email Campaign Run (SSE) ----
+
+// Run email campaign pipeline
+app.post('/api/email-campaigns/:id/run', async (req, res) => {
+  const campaignId = req.params.id;
+  const { accountIds } = req.body || {};
+  
+  const campaign = getEmailCampaign(campaignId);
+  if (!campaign) {
+    return res.status(404).json({ ok: false, error: 'Campaign not found' });
+  }
+  
+  if (!accountIds || !Array.isArray(accountIds) || accountIds.length === 0) {
+    return res.status(400).json({ ok: false, error: 'At least one email account is required' });
+  }
+  
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // disable nginx buffering (Railway/Cloudflare)
+  res.flushHeaders?.();
+
+  const send = (event) => {
+    try {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    } catch (err) {
+      // Client disconnected mid-write — swallow so the server pipeline
+      // keeps running in the background and the campaign completes.
+      console.warn(`[email-run] SSE write failed for ${campaignId}: ${err.message}`);
+    }
+  };
+
+  // Heartbeat keeps the connection alive during long Cloudflare deploys
+  // (60-90s) so the browser/proxy doesn't time out the stream.
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(`: heartbeat ${Date.now()}\n\n`);
+    } catch {}
+  }, 15000);
+
+  // Clean up the heartbeat if the browser closes the connection early.
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    // Don't end the response — the pipeline itself decides when to close.
+  });
+
+  try {
+    send({ type: 'campaign', campaignId });
+
+    // Import the email pipeline runner
+    const { runEmailPipeline } = await import('./lib/emailPipeline.js');
+
+    await runEmailPipeline({
+      campaignId,
+      accountIds,
+      onEvent: send,
+    });
+
+  } catch (err) {
+    send({ type: 'error', error: err.message });
+    updateEmailCampaignStatus(campaignId, 'cancelled');
+  } finally {
+    clearInterval(heartbeat);
+    try { res.end(); } catch {}
+  }
+});
+
 // ---- Test SMS (Settings "Send test message" button) ----------------------
 
 app.post('/api/test-sms', authenticate, async (req, res) => {
@@ -1466,6 +2338,71 @@ CRITICAL RULES:
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Processing failed';
     res.status(500).json({ ok: false, error: msg });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Unified template registry — the ONE source of truth
+// ---------------------------------------------------------------------------
+//
+// Returns BOTH the 8 built-in templates and the user's own custom
+// templates (uploads, AI generations, Studio history conversions) in a
+// single payload. The frontend uses this to populate the picker, the
+// preview iframe, and the campaign wizard — all from the same list.
+//
+//   GET /api/templates           -> { builtins: [...], customs: [...], all: [...] }
+//   GET /api/templates/:key/preview -> { html, name, niche, key, source }
+//
+// `key` is the unified template identifier:
+//   - built-in: "barber-dark-luxury", "hvac-everest", ...
+//   - custom:   "tmpl_xxx" (matches custom_templates.id)
+
+import { resolveTemplate, listTemplates, loadPreviewHtml, NICHE_LIST } from './lib/templates.js';
+
+// Back-compat: expose the niche list derived from the built-in registry.
+// The frontend can fall back to its own static list if this 404s.
+app.get('/api/niches', (req, res) => {
+  res.json({ ok: true, niches: NICHE_LIST });
+});
+
+// Unified list — built-ins + this user's customs.
+app.get('/api/templates', authenticate, async (req, res) => {
+  try {
+    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    const payload = await listTemplates(ownerKey || null);
+    res.json({ ok: true, ...payload });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Built-in preview iframe source. Always public — the demo data has no
+// PII. Custom templates are previewed through the auth-gated
+// /api/custom-templates/:id/preview route instead, so we never accidentally
+// serve someone else's uploaded HTML to a different user.
+app.get('/api/templates/:key/preview', async (req, res) => {
+  try {
+    const resolved = await resolveTemplate(req.params.key, null);
+    if (resolved.source !== 'builtin') {
+      return res.status(404).json({ ok: false, error: 'Custom templates must be previewed through /api/custom-templates/:id/preview' });
+    }
+    const html = await loadPreviewHtml(resolved);
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.set('X-Frame-Options', 'SAMEORIGIN');
+    res.send(html);
+  } catch (err) {
+    res.status(404).json({ ok: false, error: err.message });
+  }
+});
+
+// Resolve a single template descriptor (no HTML body).
+app.get('/api/templates/:key', authenticate, async (req, res) => {
+  try {
+    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    const resolved = await resolveTemplate(req.params.key, ownerKey || null);
+    res.json({ ok: true, template: resolved });
+  } catch (err) {
+    res.status(404).json({ ok: false, error: err.message });
   }
 });
 

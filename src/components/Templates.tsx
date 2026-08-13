@@ -5,8 +5,8 @@ import { nicheList } from '../data';
 
 // Helper to retrieve gorgeous, realistic, personalized real-world content for each of the 14 niche templates
 export const getTemplateContent = (templateId: string, name: string, niche: string) => {
-  const isClassic = templateId === 't1' || templateId === 't3' || templateId === 't5' || templateId === 't7' || templateId === 't9' || templateId === 't11' || templateId === 't13';
-  
+  const isClassic = templateId === 'barber-dark-luxury' || templateId === 'salon-maison' || templateId === 'roofing-ironclad' || templateId === 'gym-iron-grit';
+
   if (niche === 'Barber') {
     return {
       heroTitle: "BARBER DARK LUXURY · THE PERFECT CUT",
@@ -164,6 +164,24 @@ export const getTemplateContent = (templateId: string, name: string, niche: stri
     author: "Jordan Smith",
     city: "Local Area"
   };
+};
+
+// Built-in preview URL mapping — same logic as the Campaigns.tsx picker.
+// Custom templates go through the unified /api/templates/:key/preview
+// endpoint so the same code path serves both built-in and custom demos.
+const BUILTIN_PREVIEW_FILE = {
+  'barber-dark-luxury': '/barber-template.html',
+  'barber-editorial': '/barber-template-02.html',
+  'salon-maison': '/salon-template-01.html',
+  'dentist-clarity': '/dentist-template-01.html',
+  'roofing-ironclad': '/roofing-template-01.html',
+  'hvac-everest': '/hvac-template-01.html',
+  'gym-iron-grit': '/gym-template-01.html',
+  'realestate-glass': '/realestate-template-01.html',
+};
+export const previewUrlForKey = (id: string) => {
+  if (BUILTIN_PREVIEW_FILE[id]) return BUILTIN_PREVIEW_FILE[id];
+  return `/api/templates/${encodeURIComponent(id)}/preview`;
 };
 
 export const getNicheBgImage = (niche: string) => {
@@ -328,7 +346,7 @@ export const Templates: React.FC<TemplatesProps> = ({
               {/* Template simulation banner with premium realistic dual-device mockups */}
               <div 
                 className="h-48 relative overflow-hidden flex flex-col justify-between shrink-0 select-none group-hover:scale-[1.01] transition-all duration-300 border-b border-border-light bg-cover bg-center"
-                style={{ backgroundImage: `url(${temp.id === 't3' ? '/salon_template_cover.png' : temp.id === 't5' ? '/roofing_cover.png' : temp.id === 't6' ? '/hvac_cover.png' : temp.id === 't7' ? '/gym_cover.png' : temp.id === 't8' ? '/realestate_cover.png' : getNicheBgImage(temp.niche)})` }}
+                style={{ backgroundImage: `url(${temp.id === 'salon-maison' ? '/salon_template_cover.png' : temp.id === 'roofing-ironclad' ? '/roofing_cover.png' : temp.id === 'hvac-everest' ? '/hvac_cover.png' : temp.id === 'gym-iron-grit' ? '/gym_cover.png' : temp.id === 'realestate-glass' ? '/realestate_cover.png' : getNicheBgImage(temp.niche)})` }}
               >
                 {/* Visual dark backdrop gradient */}
                 <div className="absolute inset-0 bg-ink/50 backdrop-blur-[0.5px] group-hover:bg-ink/40 transition-all duration-300 z-[1]" />
@@ -346,7 +364,7 @@ export const Templates: React.FC<TemplatesProps> = ({
                   </div>
                   {/* Mock content OR generated image */}
                   <div className="flex-1 overflow-hidden bg-[#161512] relative">
-                    {temp.id === 't2' ? (
+                    {temp.id === 'barber-editorial' ? (
                       <div className="h-full p-2.5 flex flex-col gap-1.5 bg-[#FAF6ED] text-[#121F1A]">
                         {/* Header */}
                         <div className="border-b border-[#D9CDBC] pb-1 flex justify-between items-center bg-[#F2EAD8]/50">
@@ -382,7 +400,7 @@ export const Templates: React.FC<TemplatesProps> = ({
                           <span>📞 (512) 555-0198</span>
                         </div>
                       </div>
-                    ) : temp.id === 't3' ? (
+                    ) : temp.id === 'salon-maison' ? (
                       <div className="h-full p-2.5 flex flex-col gap-1.5 bg-[#FAF8F4] text-[#1C1A17]">
                         {/* Header */}
                         <div className="border-b border-[#D6CFC5] pb-1 flex justify-between items-center bg-[#F3EFE7]/50 px-1">
@@ -413,7 +431,7 @@ export const Templates: React.FC<TemplatesProps> = ({
                           <span>📞 (310) 555-0193</span>
                         </div>
                       </div>
-                    ) : temp.id === 't4' ? (
+                    ) : temp.id === 'dentist-clarity' ? (
                       <div className="h-full p-2.5 flex flex-col gap-1 bg-[#FFFFFF] text-[#0A1628]">
                         {/* Header */}
                         <div className="border-b border-[#DDE2EC] pb-1 flex justify-between items-center bg-white">
@@ -444,7 +462,7 @@ export const Templates: React.FC<TemplatesProps> = ({
                           <span>📞 (646) 555-0182</span>
                         </div>
                       </div>
-                    ) : temp.id === 't5' ? (
+                    ) : temp.id === 'roofing-ironclad' ? (
                       <div className="h-full p-2.5 flex flex-col gap-1 bg-[#161614] text-[#F5F4F0] text-[4.5px]">
                         <div className="border-b border-[#2A2A26] pb-1 flex justify-between items-center bg-[#0C0C0B] px-1">
                           <span className="text-[5.5px] font-extrabold tracking-wider text-white">🏠 IRONCLAD</span>
@@ -469,7 +487,7 @@ export const Templates: React.FC<TemplatesProps> = ({
                           <span>📞 (512) 555-0199</span>
                         </div>
                       </div>
-                    ) : temp.id === 't6' ? (
+                    ) : temp.id === 'hvac-everest' ? (
                       <div className="h-full p-2.5 flex flex-col gap-1 bg-[#0F172A] text-[#F1F5F9] text-[4.5px]">
                         <div className="bg-[#F97316] text-[#0F172A] px-1 py-0.5 text-center font-bold text-[3.5px] rounded-xs uppercase tracking-wide leading-none select-none">
                           🚨 24/7 HVAC EMERGENCY SERVICE AVAILABLE
@@ -497,7 +515,7 @@ export const Templates: React.FC<TemplatesProps> = ({
                           <span>📞 (404) 555-0118</span>
                         </div>
                       </div>
-                    ) : temp.id === 't7' ? (
+                    ) : temp.id === 'gym-iron-grit' ? (
                       <div className="h-full p-2.5 flex flex-col gap-1 bg-[#111827] text-[#F3F4F6] text-[4.5px]">
                         <div className="bg-[#EF4444] text-white px-1 py-0.5 text-center font-bold text-[3.5px] rounded-xs uppercase tracking-wide leading-none select-none">
                           ⚡ GET 1-DAY FREE PASS WITH PERSONAL TRAINER
@@ -525,7 +543,7 @@ export const Templates: React.FC<TemplatesProps> = ({
                           <span>📞 (305) 555-0145</span>
                         </div>
                       </div>
-                    ) : temp.id === 't8' ? (
+                    ) : temp.id === 'realestate-glass' ? (
                       <div className="h-full p-2.5 flex flex-col gap-1 bg-[#111111] text-[#FAFAF8] text-[4.5px]">
                         <div className="bg-[#C9A86A] text-[#111111] px-1 py-0.5 text-center font-bold text-[3.5px] rounded-xs uppercase tracking-wide leading-none select-none">
                           🔑 PREMIUM REAL ESTATE EXPERTISE
@@ -593,7 +611,7 @@ export const Templates: React.FC<TemplatesProps> = ({
                   </div>
                   {/* Phone screen content OR generated image */}
                   <div className="flex-1 w-full bg-[#111110] relative">
-                    {temp.id === 't2' ? (
+                    {temp.id === 'barber-editorial' ? (
                       <div className="h-full p-1.5 pt-3.5 flex flex-col gap-1.5 bg-[#FAF6ED] text-[#121F1A] text-[5px] select-none font-mono">
                         {/* Tiny header */}
                         <div className="flex justify-between items-center border-b border-[#D9CDBC] pb-0.5 bg-[#F2EAD8]/50">
@@ -624,7 +642,7 @@ export const Templates: React.FC<TemplatesProps> = ({
                            <span className="text-[3px] tracking-widest uppercase">CALL NOW</span>
                         </div>
                       </div>
-                    ) : temp.id === 't3' ? (
+                    ) : temp.id === 'salon-maison' ? (
                       <div className="h-full p-1.5 pt-3.5 flex flex-col gap-1 bg-[#FAF8F4] text-[#1C1A17] text-[5px] select-none font-mono">
                         {/* Tiny header */}
                         <div className="flex justify-between items-center border-b border-[#D6CFC5] pb-0.5 bg-[#F3EFE7]/50">
@@ -648,7 +666,7 @@ export const Templates: React.FC<TemplatesProps> = ({
                            <span className="text-[3px] tracking-widest uppercase">CALL (310) 555-0193</span>
                         </div>
                       </div>
-                    ) : temp.id === 't4' ? (
+                    ) : temp.id === 'dentist-clarity' ? (
                       <div className="h-full p-1.5 pt-3.5 flex flex-col gap-1 bg-[#FFFFFF] text-[#0A1628] text-[5px] select-none font-mono">
                         {/* Tiny header */}
                         <div className="flex justify-between items-center border-b border-[#DDE2EC] pb-0.5 bg-white">
@@ -672,7 +690,7 @@ export const Templates: React.FC<TemplatesProps> = ({
                            <span className="text-[3px] tracking-widest uppercase">CALL (646) 555-0182</span>
                         </div>
                       </div>
-                    ) : temp.id === 't5' ? (
+                    ) : temp.id === 'roofing-ironclad' ? (
                       <div className="h-full p-1.5 pt-3.5 flex flex-col gap-1 bg-[#161614] text-[#F5F4F0] text-[5px] select-none font-sans">
                         <div className="flex justify-between items-center border-b border-[#2A2A26] pb-0.5 bg-[#0C0C0B]">
                           <span className="font-extrabold text-[4.5px] tracking-wider text-white">🏠 Ironclad</span>
@@ -692,7 +710,7 @@ export const Templates: React.FC<TemplatesProps> = ({
                            <span className="text-[3px] font-bold tracking-widest uppercase">CALL (512) 555-0199</span>
                         </div>
                       </div>
-                    ) : temp.id === 't6' ? (
+                    ) : temp.id === 'hvac-everest' ? (
                       <div className="h-full p-1.5 pt-3.5 flex flex-col gap-1 bg-[#0F172A] text-[#F1F5F9] text-[5px] select-none font-sans">
                         <div className="flex justify-between items-center border-b border-[#334155] pb-0.5 bg-[#0F172A]">
                           <span className="font-extrabold text-[4.5px] tracking-wider text-white">❄️🔥 VENTUS CO.</span>
@@ -712,7 +730,7 @@ export const Templates: React.FC<TemplatesProps> = ({
                            <span className="text-[3px] font-bold tracking-widest uppercase">CALL (404) 555-0118</span>
                         </div>
                       </div>
-                    ) : temp.id === 't7' ? (
+                    ) : temp.id === 'gym-iron-grit' ? (
                       <div className="h-full p-1.5 pt-3.5 flex flex-col gap-1 bg-[#111827] text-[#F3F4F6] text-[5px] select-none font-sans">
                         <div className="flex justify-between items-center border-b border-[#374151] pb-0.5 bg-[#111827]">
                           <span className="font-extrabold text-[4.5px] tracking-wider text-white">💪 IRON PULSE</span>
@@ -732,7 +750,7 @@ export const Templates: React.FC<TemplatesProps> = ({
                            <span className="text-[3px] font-bold tracking-widest uppercase">CALL (305) 555-0145</span>
                         </div>
                       </div>
-                    ) : temp.id === 't8' ? (
+                    ) : temp.id === 'realestate-glass' ? (
                       <div className="h-full p-1.5 pt-3.5 flex flex-col gap-1 bg-[#111111] text-[#FAFAF8] text-[5px] select-none font-sans">
                         <div className="flex justify-between items-center border-b border-white/5 pb-0.5 bg-[#111111]">
                           <span className="font-extrabold text-[4.5px] tracking-wider text-white">🏡 AURA PROPS</span>
@@ -881,7 +899,7 @@ export const Templates: React.FC<TemplatesProps> = ({
                   }}
                 >
                   <iframe
-                    src={selectedTemplateForPreview.id === 't2' ? "/barber-template-02.html" : selectedTemplateForPreview.id === 't3' ? "/salon-template-01.html" : selectedTemplateForPreview.id === 't4' ? "/dentist-template-01.html" : selectedTemplateForPreview.id === 't5' ? "/roofing-template-01.html" : selectedTemplateForPreview.id === 't6' ? "/hvac-template-01.html" : selectedTemplateForPreview.id === 't7' ? "/gym-template-01.html" : selectedTemplateForPreview.id === 't8' ? "/realestate-template-01.html" : "/barber-template.html"}
+                    src={previewUrlForKey(selectedTemplateForPreview.id)}
                     className="w-full h-full border-0 flex-1"
                     title="Live Template Preview"
                     referrerPolicy="no-referrer"
@@ -914,7 +932,7 @@ export const Templates: React.FC<TemplatesProps> = ({
               )}
               <button
                 onClick={() => {
-                  window.open(selectedTemplateForPreview.id === 't2' ? '/barber-template-02.html' : selectedTemplateForPreview.id === 't3' ? '/salon-template-01.html' : selectedTemplateForPreview.id === 't4' ? '/dentist-template-01.html' : selectedTemplateForPreview.id === 't5' ? '/roofing-template-01.html' : selectedTemplateForPreview.id === 't6' ? '/hvac-template-01.html' : selectedTemplateForPreview.id === 't7' ? '/gym-template-01.html' : selectedTemplateForPreview.id === 't8' ? '/realestate-template-01.html' : '/barber-template.html', '_blank');
+                  window.open(previewUrlForKey(selectedTemplateForPreview.id), '_blank');
                 }}
                 className="px-5 py-2 bg-accent hover:bg-accent-hover text-white font-semibold text-xs uppercase tracking-wider rounded shadow-sm flex items-center gap-1.5 cursor-pointer"
               >

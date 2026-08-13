@@ -3,7 +3,7 @@ import {
   ArrowLeft, Key, ChevronDown, Loader2, Sparkles, AlertCircle,
   FlaskConical, Layout, Monitor, Smartphone, Upload, Copy,
   CheckSquare, RotateCcw, BookmarkPlus, X, Code2, Check, Plus,
-  RefreshCw, Wand2,
+  RefreshCw, Wand2, PanelLeft, PanelLeftClose,
 } from 'lucide-react';
 import {
   AiChatMessage, SiteHistoryEntry,
@@ -186,6 +186,7 @@ export const TemplateLabPage: React.FC<{
   const [titleDraft, setTitleDraft] = useState('');
   const [niche, setNiche] = useState('');
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [labError, setLabError] = useState<string | null>(null);
@@ -536,9 +537,13 @@ export const TemplateLabPage: React.FC<{
       <div className="flex flex-1 overflow-hidden">
 
         {/* ----------------------------------------------------
-            LEFT SIDEBAR — always visible, adapts to context
+            LEFT SIDEBAR — always visible in idle; collapsible in active mode
         ---------------------------------------------------- */}
-        <div className="w-[320px] shrink-0 flex flex-col overflow-hidden bg-white border-r border-border-main">
+        <div className={`shrink-0 flex flex-col overflow-hidden bg-white border-r border-border-main transition-all duration-300 ease-in-out ${
+          !isActive ? 'w-[320px]' : sidebarCollapsed ? 'w-0 border-0 overflow-hidden' : 'w-[320px]'
+        }`}>
+          {(!isActive || !sidebarCollapsed) && (
+          <div className="flex flex-col h-full overflow-hidden">
 
           {/* ---- API Key ---- */}
           <div className="px-4 pt-4 pb-3 border-b border-border-light">
@@ -762,6 +767,8 @@ export const TemplateLabPage: React.FC<{
           </div>
             </>
           )}
+          </div>
+          )}
         </div>
 
         {/* ----------------------------------------------------
@@ -774,21 +781,21 @@ export const TemplateLabPage: React.FC<{
             <div className="flex-1 overflow-y-auto flex justify-center items-start pt-8 pb-6 px-6">
               <div className="w-full max-w-3xl animate-editor-rise space-y-5">
 
-                {/* Hero — dark gradient */}
-                <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-[#1A1916] via-[#252320] to-[#1A1916] border border-white/10 p-7">
-                  <div className="pointer-events-none absolute -top-16 -right-16 w-56 h-56 bg-accent/15 rounded-full blur-3xl" />
-                  <div className="pointer-events-none absolute -bottom-12 -left-12 w-44 h-44 bg-violet-500/8 rounded-full blur-2xl" />
+                {/* Hero — brand-consistent white card, no dark gradients */}
+                <div className="relative rounded-3xl overflow-hidden bg-white border border-border-main p-7 shadow-sm">
+                  <div className="pointer-events-none absolute -top-8 -right-8 w-40 h-40 bg-accent/5 rounded-full blur-3xl" />
+                  <div className="pointer-events-none absolute -bottom-6 -left-6 w-32 h-32 bg-accent/4 rounded-full blur-2xl" />
                   <div className="relative">
-                    <div className="flex items-center gap-2.5 mb-3">
-                      <div className="w-10 h-10 rounded-xl bg-accent/20 border border-accent/30 flex items-center justify-center">
-                        <FlaskConical className="w-5 h-5 text-accent" />
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-11 h-11 rounded-2xl bg-accent-soft border border-accent/20 flex items-center justify-center">
+                        <FlaskConical className="w-5.5 h-5.5 text-accent" />
                       </div>
                       <div>
-                        <span className="block text-[10px] font-bold font-sans text-white/60 uppercase tracking-widest leading-none">AI Site Builder</span>
-                        <span className="block text-base font-bold font-sans text-white leading-tight mt-1">Vibe Code a website</span>
+                        <span className="block text-[10px] font-bold font-sans text-ink-secondary uppercase tracking-widest leading-none">AI Site Builder</span>
+                        <span className="block text-xl font-serif font-semibold text-ink leading-tight mt-1">Vibe Code a website</span>
                       </div>
                     </div>
-                    <p className="text-sm font-sans text-white/60 max-w-lg leading-relaxed mb-5">
+                    <p className="text-sm font-sans text-ink-secondary max-w-lg leading-relaxed mb-5">
                       Copy a single prompt, paste it into any coding IDE (Cursor, Windsurf, Claude Code), and the AI generates a complete production-ready website. Upload the HTML back here to turn it into a reusable Lunao template in one click.
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -797,13 +804,13 @@ export const TemplateLabPage: React.FC<{
                         { n: '2', t: 'Vibe code', d: 'In your IDE of choice' },
                         { n: '3', t: 'Upload HTML', d: 'Turn into template' },
                       ].map(s => (
-                        <div key={s.n} className="flex items-start gap-2.5 rounded-xl bg-white/5 border border-white/10 p-2.5">
+                        <div key={s.n} className="flex items-start gap-2.5 rounded-xl bg-off-white border border-border-light p-2.5">
                           <div className="w-7 h-7 rounded-lg bg-accent text-white text-xs font-bold font-sans flex items-center justify-center shrink-0">
                             {s.n}
                           </div>
                           <div className="min-w-0">
-                            <p className="text-[12px] font-bold font-sans text-white leading-tight">{s.t}</p>
-                            <p className="text-[10px] font-sans text-white/50 leading-tight mt-0.5">{s.d}</p>
+                            <p className="text-[12px] font-bold font-sans text-ink leading-tight">{s.t}</p>
+                            <p className="text-[10px] font-sans text-ink-secondary leading-tight mt-0.5">{s.d}</p>
                           </div>
                         </div>
                       ))}
@@ -889,22 +896,31 @@ export const TemplateLabPage: React.FC<{
               {/* Toolbar */}
               <div className="flex items-center gap-3 px-5 py-2.5 bg-white border-b border-border-main shrink-0">
                 {/* Device toggle */}
-                <div className="flex items-center bg-off-white rounded-xl p-1 gap-0.5">
+                <div className="flex items-center gap-1">
                   <button
                     onClick={() => { sfx.toggle(); setDevice('desktop'); }}
-                    className={`p-2 rounded-lg transition-all ${device === 'desktop' ? 'bg-white shadow-sm text-accent' : 'text-ink-tertiary hover:text-ink'}`}
+                    className={`p-2 rounded-xl transition-all ${device === 'desktop' ? 'bg-white shadow-sm text-accent' : 'text-ink-tertiary hover:text-ink'}`}
                     title="Desktop"
                   >
                     <Monitor className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => { sfx.toggle(); setDevice('mobile'); }}
-                    className={`p-2 rounded-lg transition-all ${device === 'mobile' ? 'bg-white shadow-sm text-accent' : 'text-ink-tertiary hover:text-ink'}`}
+                    className={`p-2 rounded-xl transition-all ${device === 'mobile' ? 'bg-white shadow-sm text-accent' : 'text-ink-tertiary hover:text-ink'}`}
                     title="Mobile"
                   >
                     <Smartphone className="w-4 h-4" />
                   </button>
                 </div>
+
+                {/* Collapse sidebar toggle */}
+                <button
+                  onClick={() => { sfx.tap(); setSidebarCollapsed(!sidebarCollapsed); }}
+                  title={sidebarCollapsed ? 'Show editor sidebar' : 'Hide editor sidebar'}
+                  className="p-2 rounded-xl border border-border-main text-ink-secondary hover:text-ink hover:border-ink-tertiary active:scale-[0.97] transition-all bg-white shadow-sm"
+                >
+                  {sidebarCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+                </button>
 
                 {/* Site title — click to edit */}
                 {editingTitle ? (

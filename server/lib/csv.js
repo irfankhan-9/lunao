@@ -3,45 +3,93 @@
 // aliases (Name/Business, Phone/Tel, City/Location, etc.) to a normalized
 // business record consumed by the compile engine.
 const HEADER_ALIASES = {
+  // Name variants
   name: 'name',
   business: 'name',
   business_name: 'name',
+  businessname: 'name',
   'business name': 'name',
   company: 'name',
+  company_name: 'name',
+  'company name': 'name',
+  // Short / brand variants
   short: 'business_name_short',
   business_name_short: 'business_name_short',
+  short_name: 'business_name_short',
+  brand: 'business_name_short',
+  // Owner / contact
   owner: 'owner',
   contact: 'owner',
+  contact_name: 'owner',
+  // Phone variants
   phone: 'phone',
+  phone_number: 'phone',
+  phonenumber: 'phone',
+  'phone number': 'phone',
   tel: 'phone',
   telephone: 'phone',
-  'phone number': 'phone',
   mobile: 'phone',
+  cell: 'phone',
+  // City variants
   city: 'city',
+  city_name: 'city',
   'city name': 'city',
   town: 'city',
   location: 'city',
   'city/state': 'city',
+  // State
   state: 'state',
+  state_code: 'state',
+  region: 'state',
+  // Niche / category
   niche: 'niche',
   category: 'niche',
   industry: 'niche',
+  type: 'niche',
+  // Email
   email: 'email',
+  email_address: 'email',
+  'email address': 'email',
+  // Address
   address: 'address',
   street: 'address',
+  street_address: 'address',
+  // Years in business
   years: 'years_in_business',
   years_in_business: 'years_in_business',
+  years_in_operation: 'years_in_business',
+  established: 'years_in_business',
+  // Instagram
   instagram: 'instagram_handle',
   instagram_handle: 'instagram_handle',
+  instagram_handle: 'instagram_handle',
   ig: 'instagram_handle',
+  // Facebook
   facebook: 'facebook_url',
   facebook_url: 'facebook_url',
+  facebook_url: 'facebook_url',
+  // Google rating / reviews
   rating: 'rating',
   google_rating: 'rating',
+  score: 'rating',
   reviews: 'reviews',
   review_count: 'reviews',
   google_review_count: 'reviews',
+  review_count: 'reviews',
+  number_of_reviews: 'reviews',
 };
+
+// Normalize a header string: lowercase, strip BOM, collapse whitespace,
+// and replace common separators with underscores so that
+// "Phone Number", "phone-number", "phone_number", "Phone-Number"
+// all resolve to the same canonical key.
+function normalizeHeader(raw) {
+  return String(raw || '')
+    .toLowerCase()
+    .replace(/^\uFEFF/, '')       // strip BOM
+    .replace(/[_\-\s]+/g, '_')    // separators → underscore
+    .replace(/^_+|_+$/g, '');    // trim leading/trailing underscores
+}
 
 function parseLine(line) {
   const out = [];
@@ -78,8 +126,11 @@ export function parseCsv(text) {
   const lines = clean.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length < 2) return [];
 
-  const rawHeaders = parseLine(lines[0]).map((h) => h.toLowerCase());
-  const headers = rawHeaders.map((h) => HEADER_ALIASES[h] || h.replace(/\s+/g, '_'));
+  const rawHeaders = parseLine(lines[0]);
+  const headers = rawHeaders.map((h) => {
+    const norm = normalizeHeader(h);
+    return HEADER_ALIASES[norm] || norm;
+  });
 
   const rows = [];
   for (let i = 1; i < lines.length; i++) {
@@ -106,7 +157,7 @@ const REQUIRED_FIELDS = [
 
 // God-level CSV validator (no LLM). Confirms the sheet has the three required
 // columns and that every row carries a usable business name, city and phone.
-// Returns a structured report the UI renders into brand-consistent messages.
+// Handles flexible header casing, spacing, separators, and BOM.
 export function validateCsv(text) {
   const clean = String(text || '').replace(/^\uFEFF/, '');
   const lines = clean.split(/\r?\n/).filter((l) => l.trim().length > 0);
@@ -132,8 +183,11 @@ export function validateCsv(text) {
     return report;
   }
 
-  const rawHeaders = parseLine(lines[0]).map((h) => h.toLowerCase());
-  const headers = rawHeaders.map((h) => HEADER_ALIASES[h] || h.replace(/\s+/g, '_'));
+  const rawHeaders = parseLine(lines[0]);
+  const headers = rawHeaders.map((h) => {
+    const norm = normalizeHeader(h);
+    return HEADER_ALIASES[norm] || norm;
+  });
   report.detectedColumns = headers;
 
   // Which required columns are present?
@@ -167,7 +221,7 @@ export function validateCsv(text) {
     if (!rec.phone || !String(rec.phone).trim()) {
       issues.push('Missing phone number');
     } else if (digitCount(rec.phone) < 7) {
-      issues.push('Phone number looks invalid (needs at least 7 digits)');
+      issues.push('Phone number needs at least 7 digits');
     }
 
     if (issues.length === 0) {

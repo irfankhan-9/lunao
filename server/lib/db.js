@@ -237,6 +237,146 @@ const SCHEMA_SQL = `
     created_at       INTEGER NOT NULL,
     FOREIGN KEY (template_id) REFERENCES custom_templates(id)
   );
+
+  -- Email Campaign Tables --
+
+  -- Connected email accounts (OAuth refresh tokens stored encrypted)
+  CREATE TABLE IF NOT EXISTS email_accounts (
+    id                      TEXT    PRIMARY KEY,
+    user_id                 TEXT    NOT NULL,
+    provider                TEXT    NOT NULL,
+    email                   TEXT    NOT NULL,
+    display_name            TEXT    NOT NULL DEFAULT '',
+    encrypted_refresh_token TEXT    NOT NULL,
+    daily_cap               INTEGER NOT NULL DEFAULT 30,
+    connected_at            INTEGER NOT NULL,
+    status                  TEXT    NOT NULL DEFAULT 'healthy',
+    warmup_stage            TEXT    NOT NULL DEFAULT 'stage_1',
+    sends_today             INTEGER NOT NULL DEFAULT 0,
+    sends_this_week        INTEGER NOT NULL DEFAULT 0,
+    last_reset_at           INTEGER NOT NULL,
+    bounce_rate_7d          REAL    NOT NULL DEFAULT 0,
+    last_successful_send    INTEGER,
+    -- v3: per-account Pause/Resume toggle (user-controlled). When 1, the
+    -- picker still shows the account but a small warning card surfaces on
+    -- launch. Sends still go through — pausing is advisory only, not a hard
+    -- block, per the user's "let them use it" spec.
+    paused                  INTEGER NOT NULL DEFAULT 0,
+    -- v3: Battery capacity for the 0–100% "battery" health bar shown in the
+    -- picker + dashboard. Default 300 = "300 sends = empty battery". Stored
+    -- per account so future builds can scale it up/down per provider.
+    battery_capacity        INTEGER NOT NULL DEFAULT 300
+  );
+  CREATE INDEX IF NOT EXISTS idx_email_accounts_user ON email_accounts(user_id);
+  CREATE INDEX IF NOT EXISTS idx_email_accounts_status ON email_accounts(status);
+  -- One connected account per (user, provider, email). Re-connecting the
+  -- same Gmail address now upserts the refresh_token instead of creating a
+  -- duplicate row that confuses the picker UI.
+  --
+  -- First collapse any pre-existing duplicates (keep the most-recently
+  -- connected row, drop the rest). email_logs.account_id references are
+  -- left as-is — stale ids are harmless because the log rows are
+  -- append-only history and the picker never joins against them.
+  DELETE FROM email_accounts
+    WHERE id NOT IN (
+      SELECT MAX(id) FROM email_accounts GROUP BY user_id, provider, email
+    );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_email_accounts_user_provider_email
+    ON email_accounts(user_id, provider, email);
+
+  -- Email campaigns
+  CREATE TABLE IF NOT EXISTS email_campaigns (
+    id               TEXT    PRIMARY KEY,
+    user_id          TEXT    NOT NULL,
+    niche            TEXT    NOT NULL DEFAULT '',
+    template_id      TEXT    NOT NULL DEFAULT '',
+    template_key     TEXT    NOT NULL DEFAULT '',
+    lead_source      TEXT    NOT NULL DEFAULT 'csv',
+    target_volume    INTEGER NOT NULL DEFAULT 0,
+    city             TEXT    NOT NULL DEFAULT '',
+    category         TEXT    NOT NULL DEFAULT '',
+    status           TEXT    NOT NULL DEFAULT 'draft',
+    email_subject    TEXT    NOT NULL DEFAULT '',
+    email_body       TEXT    NOT NULL DEFAULT '',
+    csv_snapshot     TEXT,
+    created_at       INTEGER NOT NULL,
+    scheduled_at     INTEGER,
+    started_at       INTEGER,
+    completed_at     INTEGER,
+    credits_charged  INTEGER NOT NULL DEFAULT 0,
+    credits_refunded INTEGER NOT NULL DEFAULT 0,
+    leads_found      INTEGER NOT NULL DEFAULT 0,
+    emails_found     INTEGER NOT NULL DEFAULT 0,
+    sites_generated  INTEGER NOT NULL DEFAULT 0,
+    emails_sent      INTEGER NOT NULL DEFAULT 0,
+    emails_delivered INTEGER NOT NULL DEFAULT 0,
+    emails_bounced   INTEGER NOT NULL DEFAULT 0,
+    emails_failed    INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_email_campaigns_user ON email_campaigns(user_id);
+  CREATE INDEX IF NOT EXISTS idx_email_campaigns_status ON email_campaigns(status);
+
+  -- Email leads within campaigns
+  CREATE TABLE IF NOT EXISTS email_leads (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id         TEXT    NOT NULL,
+    business_name       TEXT    NOT NULL DEFAULT '',
+    phone               TEXT    NOT NULL DEFAULT '',
+    city                TEXT    NOT NULL DEFAULT '',
+    website             TEXT    NOT NULL DEFAULT '',
+    email               TEXT    NOT NULL DEFAULT '',
+    email_source        TEXT    NOT NULL DEFAULT 'csv',
+    verification_status TEXT    NOT NULL DEFAULT 'pending',
+    generated_site_url  TEXT,
+    slug                TEXT    NOT NULL DEFAULT '',
+    assigned_account_id TEXT,
+    send_status         TEXT    NOT NULL DEFAULT 'pending',
+    send_error          TEXT,
+    sent_at             INTEGER,
+    index_in_campaign   INTEGER NOT NULL DEFAULT 0,
+    created_at          INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_email_leads_campaign ON email_leads(campaign_id, index_in_campaign);
+  CREATE INDEX IF NOT EXISTS idx_email_leads_email ON email_leads(email);
+
+  -- Email send logs
+  CREATE TABLE IF NOT EXISTS email_logs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    lead_id         INTEGER NOT NULL,
+    campaign_id     TEXT    NOT NULL,
+    account_id      TEXT    NOT NULL,
+    sent_at         INTEGER NOT NULL,
+    delivery_status TEXT    NOT NULL DEFAULT 'pending',
+    bounce_status   TEXT,
+    error_code      TEXT,
+    error_message   TEXT,
+    subject         TEXT    NOT NULL DEFAULT '',
+    body_preview    TEXT    NOT NULL DEFAULT ''
+  );
+  CREATE INDEX IF NOT EXISTS idx_email_logs_campaign ON email_logs(campaign_id);
+  CREATE INDEX IF NOT EXISTS idx_email_logs_lead ON email_logs(lead_id);
+  CREATE INDEX IF NOT EXISTS idx_email_logs_account ON email_logs(account_id);
+
+  -- Suppression list (unsubscribed, bounced, complained)
+  CREATE TABLE IF NOT EXISTS email_suppression (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    email      TEXT    NOT NULL,
+    reason     TEXT    NOT NULL,
+    source     TEXT    NOT NULL DEFAULT 'manual',
+    created_at INTEGER NOT NULL,
+    UNIQUE(email, reason)
+  );
+  CREATE INDEX IF NOT EXISTS idx_email_suppression_email ON email_suppression(email);
+
+  -- Account send history for rate limiting (rolling 24-hour window)
+  CREATE TABLE IF NOT EXISTS email_send_history (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id  TEXT    NOT NULL,
+    sent_at     INTEGER NOT NULL,
+    lead_id     INTEGER,
+    campaign_id TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_email_send_history_account ON email_send_history(account_id, sent_at DESC);
 `;
 
 // ---------------------------------------------------------------------------
@@ -311,6 +451,36 @@ function makePgAdapter(pool) {
 // ---------------------------------------------------------------------------
 let _db;
 
+// ---- SQLite migrations ----------------------------------------------------
+// Older databases were created before some columns existed (e.g. `type` on
+// `campaigns`). `CREATE TABLE IF NOT EXISTS` is a no-op for those rows, so
+// we need explicit ALTER TABLE statements to bring legacy schemas up to
+// date. Each migration is idempotent — it skips if the column already exists.
+function columnExists(table, col) {
+  const rows = _db.prepare(`PRAGMA table_info(${table})`).all();
+  return rows.some((r) => r.name === col);
+}
+
+function migrateSqlite() {
+  const migrations = [
+    { table: 'campaigns', col: 'type', ddl: `ALTER TABLE campaigns ADD COLUMN type TEXT NOT NULL DEFAULT 'sms'` },
+    // v3: Pause/Resume + battery capacity for connected email accounts.
+    // Existing rows pick up the defaults (unpaused, battery = 300).
+    { table: 'email_accounts', col: 'paused',           ddl: `ALTER TABLE email_accounts ADD COLUMN paused INTEGER NOT NULL DEFAULT 0` },
+    { table: 'email_accounts', col: 'battery_capacity', ddl: `ALTER TABLE email_accounts ADD COLUMN battery_capacity INTEGER NOT NULL DEFAULT 300` },
+  ];
+  for (const m of migrations) {
+    if (!columnExists(m.table, m.col)) {
+      try {
+        _db.exec(m.ddl);
+        console.log(`[db] migration: added column ${m.table}.${m.col}`);
+      } catch (err) {
+        console.error(`[db] migration failed (${m.table}.${m.col}): ${err.message}`);
+      }
+    }
+  }
+}
+
 if (HAS_PG && pgPool) {
   _db = makePgAdapter(pgPool);
   await _db.exec(SCHEMA_SQL);
@@ -321,6 +491,7 @@ if (HAS_PG && pgPool) {
   _db.pragma('journal_mode = WAL');
   _db.pragma('foreign_keys = ON');
   _db.exec(SCHEMA_SQL);
+  if (typeof _db.exec === 'function' && _db.pragma) migrateSqlite();
   console.log(`[db] SQLite at ${DB_PATH}`);
 }
 
