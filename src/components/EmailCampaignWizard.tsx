@@ -6,7 +6,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Mail, Send, Upload, Globe, Check, ChevronRight, ChevronLeft, AlertCircle,
   CheckCircle, Loader2, X, ShieldAlert, Plus, Trash2, Eye, ExternalLink,
-  RefreshCw, Link2, AlertTriangle, Zap, Clock, Pencil
+  RefreshCw, Link2, AlertTriangle, Zap, Clock, Pencil, Sparkles, FileSpreadsheet,
+  Smartphone, Monitor, Maximize2
 } from 'lucide-react';
 import { playGentleChime, playLaunchSwell, playVictoryCelebration, playSoftTap, playElegantError, playSoftBubble, playElegantBell } from '../utils/audio';
 import { validateCsvFile, CsvValidation, PipelineLead, runEmailCampaign, probeAllEmailAccounts, initiateOAuthFlow, EmailAccountProbeResult, EmailCampaignEvent } from '../lib/pipelineClient';
@@ -14,6 +15,7 @@ import { Template } from '../types';
 import { nicheList } from '../data';
 import { TemplateSimPreview } from './TemplateSimPreview';
 import { CsvPreview } from './CsvPreview';
+import { TemplatePreviewModal } from './TemplatePreviewModal';
 
 // Types
 interface EmailAccount {
@@ -40,20 +42,13 @@ interface EmailCampaignWizardProps {
   userCredits: number;
   onCreditsChange?: (credits: number) => void;
   onLaunch?: () => void;
-  // Fired when the user clicks "View in Recent Campaigns" on the
-  // celebration card. App.tsx uses it to scroll to the campaign in the
-  // Recent Campaigns section and trigger the scroll-target-pulse flash.
   onViewDetails?: (campaignId: string) => void;
-  // Fired when the user clicks "Edit outreach" on a Recent Campaigns row.
-  // App.tsx uses it to re-open this wizard with the source campaign's
-  // subject/body pre-filled.
   initialSubject?: string;
   initialBody?: string;
 }
 
-const COST_PER_EMAIL = 2; // Email campaign cost
+const COST_PER_EMAIL = 2;
 
-// Default email templates
 const DEFAULT_EMAIL_SUBJECT = "Quick question about {{business_name}}";
 const DEFAULT_EMAIL_BODY = `Hi {{business_name}} team,
 
@@ -67,7 +62,6 @@ It only takes a moment to review, and there's no commitment.
 Best regards,
 The Lunao Team`;
 
-// Step definitions
 const EMAIL_STEPS = [
   { step: 1, name: 'Select Niche' },
   { step: 2, name: 'Choose Lead Source' },
@@ -89,7 +83,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
 }) => {
   const isPro = userPlan === 'Pro Plan' || userPlan === 'Agency Plan';
   
-  // Step state
   const [activeStep, setActiveStep] = useState<number>(1);
   const stepRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
   
@@ -115,6 +108,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   // Template selection
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('barber-dark-luxury');
   const [selectedTemplateForPreview, setSelectedTemplateForPreview] = useState<Template | null>(null);
+  const [previewModalOpen, setPreviewModalOpen] = useState<boolean>(false);
+  const [previewTemplateIndex, setPreviewTemplateIndex] = useState<number>(0);
   
   // Connected accounts
   const [connectedAccounts, setConnectedAccounts] = useState<EmailAccount[]>([]);
@@ -143,71 +138,42 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     perAccount: any[];
   } | null>(null);
 
-  // Live counters that tick up the moment each SSE event arrives. These
-  // are populated during the run so the celebration card shows real-time
-  // progress instead of a frozen "0 / 0 / 0" until `complete` fires.
-  // Once the final `complete` event lands we still defer to
-  // `launchResults` for the canonical count, but `liveCounters` drives
-  // the UI throughout the run.
   const [liveCounters, setLiveCounters] = useState<{
-    sitesStaged: number;   // Phase 1: sites compiled + staged (pre-deploy)
-    emailsSent: number;   // Phase 3: emails successfully sent
-    emailsFailed: number; // Phase 3: emails that failed
-    deploying: boolean;   // True during Cloudflare batch deploy (Phase 2)
+    sitesStaged: number;
+    emailsSent: number;
+    emailsFailed: number;
+    deploying: boolean;
   }>({ sitesStaged: 0, emailsSent: 0, emailsFailed: 0, deploying: false });
 
-  // Celebrated campaign — set the moment `createEmailCampaign` returns.
-  // Drives the celebration card that replaces the wizard UI. Holds the
-  // subject/body so the user can one-click back into "Edit outreach".
   const [celebratedCampaign, setCelebratedCampaign] = useState<{
     id: string;
     subject: string;
     body: string;
   } | null>(null);
   
-  // Campaign name
   const [campaignName, setCampaignName] = useState<string>(`${selectedNiche} Email Campaign`);
-  
-  // Auto-scroll to current step content when step changes
   const stepContentRef = useRef<HTMLDivElement>(null);
+
+  // Template list for preview navigation
+  const nicheTemplates = templates.filter(t => t.niche === selectedNiche);
+  const nicheCustom = customTemplates.filter(t => t.niche === selectedNiche);
+  const allTemplates = [...nicheTemplates, ...nicheCustom];
   
   useEffect(() => {
-    // Scroll to the absolute top of the page so the user always sees the
-    // step indicator + the new step title together. The old behavior
-    // (scroll to #email-wizard-content) only nudged the viewport up a few
-    // hundred pixels which made the transition feel choppy.
-    window.scrollTo({
-      top: 0,
-      left: 0,
-      behavior: 'smooth',
-    });
-
-    // Play a gentle chime sound when the step changes
+    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
     playGentleChime(activeStep);
   }, [activeStep]);
   
-  // Load connected accounts
   useEffect(() => {
     loadConnectedAccounts();
   }, []);
 
-  // Apply initialSubject/initialBody when the parent flips them. Used by
-  // the "Edit outreach" flow: a parent that owns the wizard passes a
-  // source campaign's subject/body in, and we pre-fill the email editor
-  // + jump to step 4 so the user can iterate the message.
   useEffect(() => {
     if (typeof initialSubject === 'string') setEmailSubject(initialSubject);
     if (typeof initialBody === 'string') setEmailBody(initialBody);
     if (initialSubject || initialBody) setActiveStep(4);
-    // We intentionally do NOT depend on initialSubject/initialBody —
-    // the parent passes these in ONCE when the user clicks Edit, and
-    // we never want to clobber local edits if the parent re-renders.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSubject, initialBody]);
   
-  // Defensive dedupe by (provider,email). The server already enforces this
-  // with a unique index, but legacy rows + optimistic local state can still
-  // produce two cards for the same Gmail — never let that reach the UI.
   const dedupeAccounts = (rows: any[]): any[] => {
     const seen = new Map<string, any>();
     for (const row of rows) {
@@ -250,8 +216,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     }
   };
 
-  // Hit the OAuth endpoint once per connected account to confirm the
-  // refresh token is still valid. Cheaper than letting send-time fail.
   const probeAllTokens = async () => {
     const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
     setIsProbingTokens(true);
@@ -260,8 +224,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       const map: Record<string, EmailAccountProbeResult> = {};
       for (const r of results) map[r.id] = r;
       setAccountProbes(map);
-      // Refresh the account list so the server-side status column also
-      // reflects "needs_attention" for any token we just confirmed dead.
       await loadConnectedAccounts();
     } catch (err) {
       console.error('Token probe failed:', err);
@@ -270,15 +232,12 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     }
   };
 
-  // Auto-probe every time the user lands on step 4 (Connect Accounts).
   useEffect(() => {
     if (activeStep === 4 && connectedAccounts.length > 0) {
       probeAllTokens();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStep, connectedAccounts.length]);
   
-  // Handle CSV file upload
   const handleCsvFile = async (file: File) => {
     if (!file.name.toLowerCase().endsWith('.csv')) {
       playElegantError();
@@ -318,7 +277,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     }
   };
   
-  // Toggle account selection
   const toggleAccount = (accountId: string) => {
     playSoftTap();
     setSelectedAccountIds(prev => {
@@ -332,7 +290,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     });
   };
   
-  // Insert token helper
   const insertToken = (token: string) => {
     if (textareaRef.current) {
       const start = textareaRef.current.selectionStart;
@@ -341,15 +298,49 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       const before = text.substring(0, start);
       const after = text.substring(end, text.length);
       setEmailBody(before + token + after);
-      
       setTimeout(() => {
         textareaRef.current?.focus();
         textareaRef.current?.setSelectionRange(start + token.length, start + token.length);
       }, 0);
     }
   };
+
+  // Template preview navigation
+  const openPreviewModal = (templateId: string, index: number) => {
+    const tpl = allTemplates.find(t => t.id === templateId);
+    if (tpl) {
+      setSelectedTemplateForPreview(tpl as Template);
+      setPreviewTemplateIndex(index);
+      setPreviewModalOpen(true);
+    }
+  };
+
+  const handlePrevTemplate = () => {
+    if (previewTemplateIndex > 0) {
+      const newIndex = previewTemplateIndex - 1;
+      setPreviewTemplateIndex(newIndex);
+      setSelectedTemplateForPreview(allTemplates[newIndex] as Template);
+      setSelectedTemplateId(allTemplates[newIndex].id);
+    }
+  };
+
+  const handleNextTemplate = () => {
+    if (previewTemplateIndex < allTemplates.length - 1) {
+      const newIndex = previewTemplateIndex + 1;
+      setPreviewTemplateIndex(newIndex);
+      setSelectedTemplateForPreview(allTemplates[newIndex] as Template);
+      setSelectedTemplateId(allTemplates[newIndex].id);
+    }
+  };
+
+  const handleSelectTemplate = () => {
+    if (selectedTemplateForPreview) {
+      playElegantBell();
+      setSelectedTemplateId(selectedTemplateForPreview.id);
+      setPreviewModalOpen(false);
+    }
+  };
   
-  // Launch campaign
   const handleLaunch = async () => {
     setLaunchError(null);
     
@@ -371,7 +362,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       return;
     }
     
-    // Optimistic debit
     onCreditsChange?.(Math.max(0, userCredits - requiredCredits));
     
     setIsLaunching(true);
@@ -386,7 +376,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
       const { createEmailCampaign, runEmailCampaign: runEmail } = await import('../lib/pipelineClient');
       
-      // Create campaign (pass parsed leads so they're stored in the DB)
       const campaign = await createEmailCampaign(
         ownerKey,
         {
@@ -401,10 +390,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         csvLeads,
       );
 
-      // The campaign row is now committed — swap the wizard UI to the
-      // celebration card IMMEDIATELY so the user never sees a raw
-      // "Launching..." button. The SSE stream keeps updating live counters
-      // through `setLaunchResults` / `setLaunchMessage`.
       setCelebratedCampaign({
         id: campaign.id,
         subject: emailSubject,
@@ -414,49 +399,40 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       setLaunchProgress(15);
       setLaunchMessage('Starting per-lead pipeline...');
       
-      // Reset live counters at the start of each run so re-launching
-      // doesn't accumulate stale numbers from the previous campaign.
       setLiveCounters({ sitesStaged: 0, emailsSent: 0, emailsFailed: 0, deploying: false });
       
-      // Capture every per-lead event so the result card shows exactly what
-      // happened (which account sent, which failed, which got queued, etc.)
       const perLead: any[] = [];
-      // Smooth progress bar: bump up on EVERY event using a stage weight
-      // so the bar climbs 0% → 100% across the whole run instead of
-      // stuttering at 80–98%. Never goes down.
       const humanStage = (type: string): string => {
         switch (type) {
-          case 'lead:start':          return 'starting lead';
-          case 'discovery:start':     return 'discovering email';
-          case 'discovery:found':     return 'email found';
+          case 'lead:start': return 'starting lead';
+          case 'discovery:start': return 'discovering email';
+          case 'discovery:found': return 'email found';
           case 'discovery:not_found': return 'no email found';
-          case 'site:compiling':      return 'building site';
-          case 'site:staged':         return 'site staged';
-          case 'site:failed':          return 'site failed';
-          case 'phase1:complete':      return 'all staged';
-          case 'deploy:start':         return 'pushing to Cloudflare';
-          case 'deploy:done':          return 'cloudflare live';
-          case 'email:sent':          return 'email sent';
-          case 'send:sent':           return 'email sent';
-          case 'send:queued':         return 'queued for later';
-          case 'send:failed':         return 'send failed';
-          case 'send:error':          return 'send error';
-          default:                    return type;
+          case 'site:compiling': return 'building site';
+          case 'site:staged': return 'site staged';
+          case 'site:failed': return 'site failed';
+          case 'phase1:complete': return 'all staged';
+          case 'deploy:start': return 'pushing to Cloudflare';
+          case 'deploy:done': return 'cloudflare live';
+          case 'email:sent': return 'email sent';
+          case 'send:sent': return 'email sent';
+          case 'send:queued': return 'queued for later';
+          case 'send:failed': return 'send failed';
+          case 'send:error': return 'send error';
+          default: return type;
         }
       };
       const smoothProgress = (type: string, index: number, total: number, current: number): number => {
         if (!total || total <= 0) return Math.min(100, current + 5);
-        const elapsed = (Math.max(1, index) - 1) / total; // 0..(N-1)/N
+        const elapsed = (Math.max(1, index) - 1) / total;
         let stage = 0.05;
-        if (type === 'site:compiling')    stage = 0.20;
-        else if (type === 'site:staged')  stage = 0.45;
+        if (type === 'site:compiling') stage = 0.20;
+        else if (type === 'site:staged') stage = 0.45;
         else if (type === 'deploy:start') stage = 0.50;
-        else if (type === 'deploy:done')  stage = 0.65;
-        else if (type === 'send:sent')    stage = 1.00;
-        else if (type === 'send:failed'
-              || type === 'send:error')   stage = 1.00;
-        else if (type === 'discovery:found'
-              || type === 'discovery:not_found') stage = 0.15;
+        else if (type === 'deploy:done') stage = 0.65;
+        else if (type === 'send:sent') stage = 1.00;
+        else if (type === 'send:failed' || type === 'send:error') stage = 1.00;
+        else if (type === 'discovery:found' || type === 'discovery:not_found') stage = 0.15;
         const next = Math.round((elapsed + stage / total) * 100);
         return Math.min(100, Math.max(current, next));
       };
@@ -464,10 +440,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         campaign.id,
         Array.from(selectedAccountIds),
         (e: EmailCampaignEvent) => {
-          // ---- Live counters: tick on every relevant event so the
-          // celebration card shows real-time progress ----
-          // NOTE: sites counter advances on `site:staged` (Phase 1 done),
-          // NOT `site:deployed` which no longer fires before emails.
           if (e.type === 'site:staged') {
             setLiveCounters(c => ({ ...c, sitesStaged: c.sitesStaged + 1 }));
           } else if (e.type === 'deploy:start') {
@@ -480,7 +452,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             setLiveCounters(c => ({ ...c, emailsFailed: c.emailsFailed + 1 }));
           }
 
-          // ---- Smooth progress bar ----
           if (typeof e.index === 'number' && typeof e.total === 'number') {
             setLaunchProgress(prev => smoothProgress(e.type, e.index!, e.total!, prev));
           } else if (e.type === 'deploy:start') {
@@ -489,7 +460,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             setLaunchProgress(prev => Math.min(100, prev + 5));
           }
 
-          // ---- Human-friendly launch message ----
           if (e.type === 'lead:start') {
             setLaunchMessage(`Lead ${e.index}/${e.total}: ${e.name} — ${humanStage(e.type)}…`);
           } else if (e.type === 'site:staged') {
@@ -510,7 +480,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             setLaunchMessage(`Queued ${e.index}/${e.total}: ${e.name}${e.reason ? ` — ${e.reason}` : ''}`);
           }
 
-          // ---- Per-lead accumulator for the final results card ----
           if (e.type === 'send:sent') {
             perLead.push({
               leadId: e.leadId,
@@ -537,9 +506,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               reason: e.reason,
             });
           } else if (e.type === 'site:staged') {
-            // Phase 1 may emit `site:staged` before Phase 3 creates the per-lead
-            // row via `send:sent`. Create a placeholder if missing so the
-            // `siteUrl` lands on the right row for the final results card.
             const found = perLead.find((p: any) => p.leadId === e.leadId);
             if (found) {
               found.siteUrl = e.siteUrl;
@@ -559,14 +525,11 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               perAccount: e.perAccount || [],
               perLead,
             });
-            // Snap progress to 100% on completion.
             setLaunchProgress(100);
           }
         }
       );
       
-      // If the SSE stream didn't emit `complete` (rare race), still record
-      // the final counts so the result card renders.
       if (!launchResults) {
         setLaunchResults({
           sent: result?.sent || 0,
@@ -594,13 +557,12 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     } catch (err: any) {
       playElegantError();
       setLaunchError(err.message || 'Campaign launch failed.');
-      onCreditsChange?.(userCredits); // Refund
+      onCreditsChange?.(userCredits);
     } finally {
       setIsLaunching(false);
     }
   };
   
-  // Reset wizard
   const handleReset = () => {
     setActiveStep(1);
     setLaunchComplete(false);
@@ -615,12 +577,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     setPlacesResults([]);
   };
   
-  // Template options for selected niche
-  const nicheTemplates = templates.filter(t => t.niche === selectedNiche);
-  const nicheCustom = customTemplates.filter(t => t.niche === selectedNiche);
-  const allTemplates = [...nicheTemplates, ...nicheCustom];
-  
-  // Check if account has capacity warning
   const getAccountCapacityWarning = (account: EmailAccount, leadsCount: number): string | null => {
     const assignedLeads = Math.ceil(leadsCount / selectedAccountIds.size);
     if (account.remainingToday < assignedLeads) {
@@ -628,27 +584,13 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     }
     return null;
   };
-  
-  // When the campaign is created, swap the entire wizard UI for the
-  // celebration card. We collapse the step content upward with
-  // `.animate-wizard-collapse-up` so the transition feels intentional
-  // rather than abrupt. Returns here so the wizard JSX never renders.
+
   if (celebratedCampaign) {
-    // Counter resolution order:
-    //   1. liveCounters (real-time SSE-driven, updates during the run)
-    //   2. launchResults (canonical totals from the `complete` event)
-    // This way the cards tick up the instant each lead finishes, AND
-    // they snap to the canonical final count once the campaign ends.
-    const sent      = isLaunching ? liveCounters.emailsSent   : (launchResults?.sent   ?? liveCounters.emailsSent   ?? 0);
-    const failed    = isLaunching ? liveCounters.emailsFailed : (launchResults?.failed ?? liveCounters.emailsFailed ?? 0);
-    // Sites count: derived from the per-lead siteUrl list captured during the
-    // SSE stream. While running, the live counter ticks on `site:staged`; once
-    // `complete` fires, the canonical count is the number of per-lead rows
-    // that have a siteUrl attached (i.e. successfully deployed + linked).
+    const sent = isLaunching ? liveCounters.emailsSent : (launchResults?.sent ?? liveCounters.emailsSent ?? 0);
+    const failed = isLaunching ? liveCounters.emailsFailed : (launchResults?.failed ?? liveCounters.emailsFailed ?? 0);
     const sitesLive = isLaunching
       ? liveCounters.sitesStaged
       : (launchResults?.perLead?.filter((p: any) => p.siteUrl).length ?? liveCounters.sitesStaged ?? 0);
-    // Defensive fallback for `perAccount` length so we never blank the tree.
     const perAcc = launchResults?.perAccount;
     const accountsUsed = Array.isArray(perAcc) && perAcc.length > 0
       ? perAcc.length
@@ -659,8 +601,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
 
     return (
       <div className="space-y-6">
-        {/* Header strip — mirrors the wizard step indicator's footprint
-            so the page rhythm stays consistent. */}
         <div className="relative px-6 py-5 bg-white border-b border-border-main flex items-center justify-between">
           <div>
             <p className="text-[11px] uppercase tracking-widest text-ink-secondary font-semibold">Email campaign</p>
@@ -672,13 +612,10 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
           </span>
         </div>
 
-        {/* Celebration card — lifted 1:1 from Campaigns.tsx so the two
-            wizards share the exact same visual language. */}
         <div className="px-6 pb-6 animate-fade-in">
           <div className="relative overflow-hidden rounded-2xl border border-success/25 bg-gradient-to-br from-success-soft via-white to-accent-soft/60 shadow-sm animate-celebration-bloom">
             <div className="absolute -top-12 -right-12 w-40 h-40 bg-success/10 rounded-full blur-3xl pointer-events-none" />
             <div className="relative p-5 sm:p-6 space-y-4">
-              {/* Heading row */}
               <div className="flex items-start gap-3">
                 <div className="relative shrink-0">
                   <div className="w-11 h-11 rounded-full bg-success text-white flex items-center justify-center shadow-sm">
@@ -719,36 +656,20 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 </div>
               </div>
 
-              {/* Live counters */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
                 <div className="bg-white/80 border border-border-light rounded-xl p-3 text-center">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Sites</p>
-                  <p
-                    key={`sites-${sitesLive}`}
-                    className="text-2xl font-bold text-accent font-mono mt-0.5 animate-counter-pop"
-                  >
-                    {sitesLive}
-                  </p>
+                  <p className="text-2xl font-bold text-accent font-mono mt-0.5 animate-counter-pop">{sitesLive}</p>
                   <p className="text-[9px] text-ink-tertiary mt-0.5">Sites staged</p>
                 </div>
                 <div className="bg-white/80 border border-border-light rounded-xl p-3 text-center">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Emails</p>
-                  <p
-                    key={`emails-${sent}`}
-                    className="text-2xl font-bold text-success font-mono mt-0.5 animate-counter-pop"
-                  >
-                    {sent}
-                  </p>
+                  <p className="text-2xl font-bold text-success font-mono mt-0.5 animate-counter-pop">{sent}</p>
                   <p className="text-[9px] text-ink-tertiary mt-0.5">Delivered</p>
                 </div>
                 <div className="bg-white/80 border border-border-light rounded-xl p-3 text-center">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Failed</p>
-                  <p
-                    key={`failed-${failed}`}
-                    className={`text-2xl font-bold font-mono mt-0.5 animate-counter-pop ${failed > 0 ? 'text-danger' : 'text-ink-tertiary'}`}
-                  >
-                    {failed}
-                  </p>
+                  <p className={`text-2xl font-bold font-mono mt-0.5 animate-counter-pop ${failed > 0 ? 'text-danger' : 'text-ink-tertiary'}`}>{failed}</p>
                   <p className="text-[9px] text-ink-tertiary mt-0.5">{failed > 0 ? 'See reasons below' : 'All clean'}</p>
                 </div>
                 <div className="bg-white/80 border border-border-light rounded-xl p-3 text-center">
@@ -758,8 +679,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 </div>
               </div>
 
-              {/* Cloudflare deploy banner — visible while Phase 2 is running.
-                  The deploy blocks all email sends so we surface it prominently. */}
               {isRunning && liveCounters.deploying && (
                 <div className="flex items-center gap-2 text-[11px] text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5">
                   <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -770,7 +689,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 </div>
               )}
 
-              {/* Live streaming progress chip */}
               {isRunning && (
                 <div className="flex items-center gap-2 text-[11px] text-ink-secondary bg-white/70 border border-border-light rounded-lg px-3 py-2">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-accent shrink-0" />
@@ -779,7 +697,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 </div>
               )}
 
-              {/* Latest failure reason chip */}
               {isDone && failed > 0 && launchResults?.perLead && (() => {
                 const failures = launchResults.perLead.filter((r: any) => r.status === 'failed' && r.reason);
                 if (failures.length === 0) return null;
@@ -805,15 +722,11 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 );
               })()}
 
-              {/* Footer actions — Edit outreach + View in Recent Campaigns + Launch another */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-3 border-t border-border-light/80">
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
                     type="button"
                     onClick={() => {
-                      // Re-open the wizard on the outreach step with this
-                      // campaign's subject/body pre-filled. The user can
-                      // iterate the message and launch again.
                       playGentleChime();
                       setCelebratedCampaign(null);
                       setLaunchComplete(false);
@@ -832,9 +745,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                     type="button"
                     onClick={() => {
                       playSoftTap();
-                      // Surface the campaign in the Recent Campaigns section.
-                      // App.tsx wires this through `onViewDetails` so the user
-                      // sees the same scroll-target-pulse animation.
                       onViewDetails?.(campaignId);
                     }}
                     className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-accent-soft text-accent border border-accent/20 text-[11px] font-semibold hover:bg-accent hover:text-white transition-all cursor-pointer"
@@ -846,7 +756,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                   type="button"
                   onClick={() => {
                     playSoftTap();
-                    // Launch another: reset everything, go back to step 1.
                     setCelebratedCampaign(null);
                     setLaunchComplete(false);
                     setLaunchResults(null);
@@ -868,7 +777,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Step Indicator — horizontally scrollable on small screens */}
+      {/* Step Indicator */}
       <div className="relative px-6 md:px-8 py-6 md:py-8 bg-white border-b border-border-main">
         <button
           type="button"
@@ -945,8 +854,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                     key={niche.id}
                     type="button"
                     onClick={() => {
-                      // Bubble pop on select is the most satisfying micro-sound
-                      // for "I just picked this one" — feels like a tactile click.
                       playSoftBubble();
                       setSelectedNiche(niche.id);
                       setCampaignName(`${niche.label} Email Campaign`);
@@ -957,12 +864,10 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                         : 'bg-white border-border-main hover:border-accent/30 hover:shadow-[0_14px_32px_rgba(26,25,22,0.10)] hover:-translate-y-1 hover:scale-[1.02]'
                     }`}
                   >
-                    {/* Decorative radial bloom on hover/selected */}
                     <div className={`pointer-events-none absolute -top-10 -right-10 w-28 h-28 rounded-full blur-2xl transition-opacity ${
                       isSelected ? 'bg-accent/20 opacity-100' : 'bg-accent/0 opacity-0 group-hover:bg-accent/10 group-hover:opacity-100'
                     }`} />
 
-                    {/* Niche emoji — much larger, like an icon hero */}
                     <div className={`relative mx-auto w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center text-3xl sm:text-4xl transition-all ${
                       isSelected
                         ? 'bg-accent text-white shadow-sm rotate-[-6deg]'
@@ -971,14 +876,12 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                       <span className="drop-shadow-sm">{niche.emoji}</span>
                     </div>
 
-                    {/* Label */}
                     <p className={`relative text-sm font-bold mt-3 leading-tight transition-colors ${
                       isSelected ? 'text-accent' : 'text-ink group-hover:text-accent'
                     }`}>
                       {niche.label}
                     </p>
 
-                    {/* Selected check + caption */}
                     <div className="relative mt-2 h-4">
                       {isSelected ? (
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-accent">
@@ -998,7 +901,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
           </div>
         )}
         
-        {/* Step 2: Choose Lead Source */}
+        {/* Step 2: Choose Lead Source - REDESIGNED */}
         {activeStep === 2 && (
           <div className="space-y-5 animate-fade-in">
             <div className="space-y-1">
@@ -1006,47 +909,68 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               <p className="text-sm text-ink-secondary">Upload a CSV or use Places API to find businesses.</p>
             </div>
             
-            {/* Lead Source Tabs */}
-            <div className="flex gap-2 p-1 bg-off-white rounded-xl w-fit">
+            {/* Lead Source Tabs - Brand New Design */}
+            <div className="flex gap-2 p-1.5 bg-gradient-to-r from-surface to-off-white rounded-2xl w-fit shadow-inner">
               <button
                 type="button"
                 onClick={() => { playSoftTap(); setLeadSource('csv'); }}
-                className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
                   leadSource === 'csv'
-                    ? 'bg-white text-accent shadow-sm border border-accent/20'
-                    : 'text-ink-secondary hover:text-ink'
+                    ? 'bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30'
+                    : 'text-ink-secondary hover:text-ink hover:bg-white/50'
                 }`}
               >
-                <Upload className="w-3.5 h-3.5 inline mr-1.5" />
+                <Upload className="w-5 h-5" />
                 Upload CSV
               </button>
               <button
                 type="button"
                 onClick={() => { playSoftTap(); setLeadSource('places_api'); }}
-                className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
                   leadSource === 'places_api'
-                    ? 'bg-white text-accent shadow-sm border border-accent/20'
-                    : 'text-ink-secondary hover:text-ink'
+                    ? 'bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30'
+                    : `text-ink-secondary hover:text-ink hover:bg-white/50 ${!isPro ? 'opacity-60' : ''}`
                 } ${!isPro ? 'opacity-60' : ''}`}
                 disabled={!isPro}
                 title={!isPro ? 'Places API is a Pro feature' : undefined}
               >
-                <Zap className="w-3.5 h-3.5 inline mr-1.5" />
+                <Zap className="w-5 h-5" />
                 Places API
-                {!isPro && <span className="ml-1 text-[9px] bg-amber-100 text-amber-700 px-1 rounded">Pro</span>}
+                {!isPro && <span className="ml-1 text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">Pro</span>}
               </button>
             </div>
             
-            {/* CSV Upload */}
+            {/* CSV Upload - BRAND NEW BEAUTIFUL DESIGN */}
             {leadSource === 'csv' && (
-              <div className="space-y-4">
+              <div className="space-y-5">
                 {!csvFileName ? (
-                  <label className="block cursor-pointer">
-                    <div className="border-2 border-dashed border-border-main rounded-xl p-8 text-center hover:border-accent/50 hover:bg-accent-soft/10 transition-all">
-                      <Upload className="w-8 h-8 mx-auto mb-3 text-ink-tertiary" />
-                      <p className="text-sm font-semibold text-ink">Drop your CSV file here</p>
-                      <p className="text-xs text-ink-secondary mt-1">or click to browse</p>
-                      <p className="text-[10px] text-ink-tertiary mt-3">Required columns: business_name, email, phone, city</p>
+                  /* Beautiful Drop Zone */
+                  <label className="block cursor-pointer group">
+                    <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-border-main hover:border-accent/50 bg-gradient-to-br from-surface via-white to-accent-soft/10 transition-all duration-300 group-hover:shadow-lg group-hover:shadow-accent/10">
+                      {/* Decorative elements */}
+                      <div className="absolute -top-20 -right-20 w-48 h-48 bg-accent/5 rounded-full blur-3xl" />
+                      <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-accent/5 rounded-full blur-3xl" />
+                      
+                      <div className="relative p-12 text-center">
+                        {/* Animated icon */}
+                        <div className="relative inline-block mb-6">
+                          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-accent to-accent-hover flex items-center justify-center shadow-xl shadow-accent/30 group-hover:scale-110 transition-transform duration-300">
+                            <FileSpreadsheet className="w-10 h-10 text-white" />
+                          </div>
+                          {/* Floating sparkle */}
+                          <div className="absolute -top-2 -right-2 w-6 h-6 bg-white rounded-full shadow-lg flex items-center justify-center animate-bounce-subtle">
+                            <Sparkles className="w-3 h-3 text-accent" />
+                          </div>
+                        </div>
+                        
+                        <p className="text-lg font-bold text-ink mb-2">Drop your CSV file here</p>
+                        <p className="text-sm text-ink-secondary mb-4">or click to browse from your computer</p>
+                        <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent text-white font-semibold rounded-xl shadow-lg shadow-accent/30 group-hover:bg-accent-hover transition-colors">
+                          <Upload className="w-4 h-4" />
+                          Choose File
+                        </div>
+                        <p className="text-xs text-ink-tertiary mt-6">Required columns: business_name, email, phone, city</p>
+                      </div>
                     </div>
                     <input
                       type="file"
@@ -1056,7 +980,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                     />
                   </label>
                 ) : (
-                  <div className="space-y-3">
+                  /* Beautiful CSV Preview using new component */
+                  <div className="space-y-4">
                     <CsvPreview
                       fileName={csvFileName}
                       leads={csvLeads}
@@ -1064,9 +989,9 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                       onClear={() => { playSoftTap(); setCsvFileName(null); setCsvLeads([]); setCsvValidation(null); setCsvParsedCount(0); }}
                       ClearIcon={X}
                     />
-                    <div className="flex items-center justify-between gap-3 px-1">
-                      <p className="text-[11px] text-ink-secondary">
-                        Looks good? Continue to <span className="font-semibold text-ink">pick a template</span>.
+                    <div className="flex items-center justify-between gap-4 px-1">
+                      <p className="text-sm text-ink-secondary">
+                        Ready? Continue to <span className="font-semibold text-ink">pick a template</span>.
                       </p>
                       <button
                         type="button"
@@ -1077,19 +1002,19 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                           setCsvValidation(null);
                           setCsvParsedCount(0);
                         }}
-                        className="text-[11px] font-semibold text-accent hover:text-accent-hover transition-colors inline-flex items-center gap-1"
+                        className="flex items-center gap-2 text-sm font-semibold text-accent hover:text-accent-hover transition-colors"
                       >
-                        <Upload className="w-3 h-3" />
-                        Upload another
+                        <Upload className="w-4 h-4" />
+                        Upload another CSV
                       </button>
                     </div>
                   </div>
                 )}
                 
                 {csvError && (
-                  <div className="bg-danger/5 border border-danger/20 rounded-xl p-4 flex items-start gap-3">
+                  <div className="bg-danger/5 border border-danger/20 rounded-xl p-4 flex items-start gap-3 animate-shake">
                     <AlertCircle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
-                    <p className="text-xs text-danger">{csvError}</p>
+                    <p className="text-sm text-danger">{csvError}</p>
                   </div>
                 )}
               </div>
@@ -1145,138 +1070,188 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
           </div>
         )}
         
-        {/* Step 3: Select Template */}
+        {/* Step 3: Select Template - COMPLETELY REDESIGNED */}
         {activeStep === 3 && (
           <div className="space-y-6 animate-fade-in">
-            {/* Brand-consistent header card */}
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-accent-soft/60 via-white to-accent-soft/20 border border-accent/15 p-5">
-              <div className="pointer-events-none absolute -top-12 -right-12 w-48 h-48 bg-accent/10 rounded-full blur-3xl" />
-              <div className="relative flex items-start gap-3.5">
-                <div className="w-11 h-11 rounded-xl bg-accent flex items-center justify-center shadow-sm shrink-0">
-                  <Globe className="w-5 h-5 text-white" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-serif text-xl text-ink leading-tight">Pick your template</h3>
-                  <p className="text-sm text-ink-secondary mt-1 leading-snug">
-                    Each site will be personalized with the lead's business info. Tap any card to select it.
-                  </p>
-                  {allTemplates.length > 0 && (
-                    <div className="flex items-center gap-3 mt-3">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-white border border-accent/25 text-accent shadow-xs">
-                        <Check className="w-3 h-3" /> 1 selected
-                      </span>
-                      <span className="text-[11px] text-ink-tertiary font-sans">
-                        {allTemplates.length} template{allTemplates.length === 1 ? '' : 's'} for {selectedNiche}
-                      </span>
+            {/* Brand New Header Card */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-accent/5 via-white to-accent/10 border border-accent/20 shadow-lg shadow-accent/10">
+              <div className="absolute -top-16 -right-16 w-56 h-56 bg-accent/10 rounded-full blur-3xl" />
+              <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-accent/8 rounded-full blur-3xl" />
+              
+              <div className="relative p-6 md:p-8">
+                <div className="flex items-start gap-4">
+                  <div className="relative">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-accent to-accent-hover flex items-center justify-center shadow-xl shadow-accent/30">
+                      <Globe className="w-7 h-7 text-white" />
                     </div>
-                  )}
+                    {/* Animated ring */}
+                    <div className="absolute inset-0 rounded-2xl border-2 border-accent/40 animate-ping" />
+                  </div>
+                  
+                  <div className="flex-1">
+                    <h3 className="font-serif text-2xl md:text-3xl text-ink leading-tight">Pick your template</h3>
+                    <p className="text-sm md:text-base text-ink-secondary mt-2 leading-relaxed">
+                      Each site will be personalized with the lead's business info. Click any card for a full preview.
+                    </p>
+                    {allTemplates.length > 0 && (
+                      <div className="flex items-center gap-4 mt-4 flex-wrap">
+                        <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl shadow-sm border border-border-light">
+                          <Check className="w-4 h-4 text-success" />
+                          <span className="text-sm font-semibold text-ink">{allTemplates.length}</span>
+                          <span className="text-xs text-ink-secondary">templates available</span>
+                        </div>
+                        <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl shadow-sm border border-border-light">
+                          <span className="text-sm font-semibold text-accent">{selectedNiche}</span>
+                          <span className="text-xs text-ink-secondary">niche selected</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
 
             {allTemplates.length === 0 ? (
               <div className="text-center py-16 px-6 bg-white rounded-2xl border border-dashed border-border-main">
-                <div className="w-14 h-14 rounded-2xl bg-accent-soft flex items-center justify-center mx-auto mb-4">
-                  <Globe className="w-7 h-7 text-accent" />
+                <div className="w-16 h-16 rounded-2xl bg-accent-soft flex items-center justify-center mx-auto mb-4">
+                  <Globe className="w-8 h-8 text-accent" />
                 </div>
-                <h3 className="text-base font-bold font-sans text-ink mb-1.5">No templates available for {selectedNiche}</h3>
-                <p className="text-sm text-ink-secondary font-sans max-w-sm mx-auto">
+                <h3 className="text-lg font-bold text-ink mb-2">No templates available</h3>
+                <p className="text-sm text-ink-secondary max-w-sm mx-auto">
                   Pick a different niche above to see pre-built templates.
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6">
-                {allTemplates.map((tpl) => {
+              /* COMPLETELY NEW TEMPLATE GRID - Much bigger, more beautiful */
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-8">
+                {allTemplates.map((tpl, index) => {
                   const isSelected = selectedTemplateId === tpl.id;
                   return (
-                  <button
-                    key={tpl.id}
-                    type="button"
-                    onClick={() => {
-                      // Crystalline bell tone signals "this template is now mine"
-                      // — distinct from the niche bubble to keep the two pickers
-                      // sonically identifiable.
-                      playElegantBell();
-                      setSelectedTemplateId(tpl.id);
-                      setSelectedTemplateForPreview(tpl as Template);
-                    }}
-                    className={`group relative bg-white rounded-2xl overflow-hidden border-2 transition-all duration-200 text-left cursor-pointer ${
-                      isSelected
-                        ? 'border-accent shadow-[0_18px_48px_rgba(99,102,241,0.22)] ring-4 ring-accent/20 scale-[1.015]'
-                        : 'border-border-main hover:border-accent/40 hover:shadow-[0_18px_48px_rgba(26,25,22,0.12)] hover:-translate-y-1 hover:scale-[1.01]'
-                    }`}
-                  >
-                    {/* Glow pulse on selection — replays every time the user
-                        picks this card so the "selected" feedback is fresh. */}
-                    {isSelected && (
-                      <span
-                        key={`glow-${tpl.id}-${selectedTemplateId}`}
-                        className="pointer-events-none absolute inset-0 rounded-2xl animate-template-glow-pulse"
-                      />
-                    )}
-
-                    {/* Bigger preview area — taller aspect ratio so the
-                        template visually pops in the grid. */}
-                    <div className="relative aspect-[4/3] sm:aspect-[16/11] bg-gradient-to-br from-accent/8 to-accent/3 overflow-hidden">
-                      <TemplateSimPreview
-                        id={tpl.id}
-                        name={tpl.name}
-                        niche={tpl.niche}
-                        badge={tpl.tag || ''}
-                        isMostUsed={tpl.isMostUsed}
-                      />
-                      {/* Selection badge top-right */}
-                      <div className={`absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center transition-all shadow-md ${
+                    <button
+                      key={tpl.id}
+                      type="button"
+                      onClick={() => {
+                        playElegantBell();
+                        setSelectedTemplateId(tpl.id);
+                        setSelectedTemplateForPreview(tpl as Template);
+                      }}
+                      onDoubleClick={() => openPreviewModal(tpl.id, index)}
+                      className={`group relative bg-white rounded-2xl overflow-hidden border-2 transition-all duration-300 text-left cursor-pointer ${
                         isSelected
-                          ? 'bg-accent text-white scale-100 ring-4 ring-white/60'
-                          : 'bg-white/90 backdrop-blur-sm border border-border-main text-transparent scale-90 group-hover:scale-100 group-hover:text-ink-secondary'
-                      }`}>
-                        <Check className="w-4 h-4" strokeWidth={3} />
-                      </div>
-                      {/* Niche ribbon top-left */}
-                      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white/95 backdrop-blur-sm text-ink shadow-sm border border-border-light">
-                        {tpl.niche}
-                      </div>
-                    </div>
-
-                    {/* Card body — bigger, more breathing room */}
-                    <div className="p-4 sm:p-5 space-y-2.5">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm sm:text-base font-bold font-sans text-ink leading-tight line-clamp-2 flex-1">
-                          {tpl.name}
-                        </p>
+                          ? 'border-accent shadow-2xl shadow-accent/20 ring-4 ring-accent/10 scale-[1.02]'
+                          : 'border-border-light hover:border-accent/40 hover:shadow-xl hover:shadow-accent/10 hover:-translate-y-2'
+                      }`}
+                    >
+                      {/* Animated glow on selected */}
+                      {isSelected && (
+                        <div className="absolute inset-0 bg-gradient-to-br from-accent/10 via-transparent to-accent/5 pointer-events-none animate-pulse" />
+                      )}
+                      
+                      {/* Preview Image Area - Much Bigger */}
+                      <div className="relative aspect-[16/11] bg-gradient-to-br from-surface via-off-white to-surface overflow-hidden">
+                        <TemplateSimPreview
+                          id={tpl.id}
+                          name={tpl.name}
+                          niche={tpl.niche}
+                          badge={tpl.tag || ''}
+                          isMostUsed={tpl.isMostUsed}
+                          selected={isSelected}
+                        />
+                        
+                        {/* Hover Overlay with Actions */}
+                        <div className="absolute inset-0 bg-ink/0 group-hover:bg-ink/40 transition-all duration-300 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); openPreviewModal(tpl.id, index); }}
+                            className="flex items-center gap-2 px-5 py-3 bg-white text-ink font-bold rounded-xl shadow-xl hover:bg-accent hover:text-white transition-all transform hover:scale-105"
+                          >
+                            <Eye className="w-5 h-5" />
+                            Preview
+                          </button>
+                        </div>
+                        
+                        {/* Selection Badge */}
+                        <div className={`absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${
+                          isSelected
+                            ? 'bg-accent text-white scale-100 ring-4 ring-white/60'
+                            : 'bg-white/90 backdrop-blur-sm text-transparent group-hover:text-ink-secondary scale-90 group-hover:scale-100'
+                        }`}>
+                          <Check className="w-5 h-5" strokeWidth={3} />
+                        </div>
+                        
+                        {/* Niche Badge */}
+                        <div className="absolute top-4 left-4 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-white/95 backdrop-blur-sm text-ink shadow-lg border border-border-light">
+                          {tpl.niche}
+                        </div>
+                        
+                        {/* Popular Badge */}
                         {tpl.isMostUsed && (
-                          <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
-                            ★ Popular
-                          </span>
+                          <div className="absolute bottom-4 left-4 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-400 text-white text-[10px] font-bold uppercase tracking-wider rounded-full shadow-lg flex items-center gap-1.5">
+                            <span className="text-sm">★</span>
+                            Most Popular
+                          </div>
                         )}
                       </div>
-                      {tpl.tag && (
-                        <p className="text-[11px] sm:text-xs text-ink-secondary font-sans line-clamp-2 leading-snug">
-                          {tpl.tag}
-                        </p>
-                      )}
-                      <div className="pt-2.5 mt-1 border-t border-border-light/80 flex items-center justify-between">
-                        <span className={`inline-flex items-center gap-1.5 text-[11px] sm:text-xs font-bold font-sans transition-colors ${
-                          isSelected ? 'text-accent' : 'text-ink-secondary group-hover:text-accent'
-                        }`}>
-                          {isSelected ? (
-                            <>
-                              <Check className="w-3.5 h-3.5" strokeWidth={3} />
-                              Selected
-                            </>
-                          ) : (
-                            <>Tap to select</>
+                      
+                      {/* Card Body - Larger, More Space */}
+                      <div className="p-5 md:p-6 space-y-4">
+                        <div>
+                          <h4 className="text-lg md:text-xl font-bold text-ink leading-tight">
+                            {tpl.name}
+                          </h4>
+                          {tpl.tag && (
+                            <p className="text-sm text-ink-secondary mt-1.5 leading-relaxed">
+                              {tpl.tag}
+                            </p>
                           )}
-                        </span>
-                        <Eye className="w-3.5 h-3.5 text-ink-tertiary group-hover:text-accent transition-colors" />
+                        </div>
+                        
+                        {/* Selection Status */}
+                        <div className={`flex items-center justify-between pt-3 border-t transition-all duration-300 ${
+                          isSelected ? 'border-accent/30' : 'border-border-light'
+                        }`}>
+                          <span className={`flex items-center gap-2 text-sm font-semibold transition-colors ${
+                            isSelected ? 'text-accent' : 'text-ink-secondary group-hover:text-accent'
+                          }`}>
+                            {isSelected ? (
+                              <>
+                                <Check className="w-5 h-5" strokeWidth={3} />
+                                Selected
+                              </>
+                            ) : (
+                              <>
+                                <Eye className="w-5 h-5" />
+                                Click to preview
+                              </>
+                            )}
+                          </span>
+                          
+                          {/* Animated indicator */}
+                          <div className={`flex items-center gap-1 transition-all duration-300 ${
+                            isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                          }`}>
+                            <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+                            <div className="w-2 h-2 rounded-full bg-accent/60 animate-pulse animation-delay-100" />
+                            <div className="w-2 h-2 rounded-full bg-accent/30 animate-pulse animation-delay-200" />
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </button>
+                    </button>
                   );
                 })}
               </div>
             )}
+            
+            {/* Preview Modal */}
+            <TemplatePreviewModal
+              template={selectedTemplateForPreview}
+              isOpen={previewModalOpen}
+              onClose={() => setPreviewModalOpen(false)}
+              onPrev={handlePrevTemplate}
+              onNext={handleNextTemplate}
+              hasPrev={previewTemplateIndex > 0}
+              hasNext={previewTemplateIndex < allTemplates.length - 1}
+            />
           </div>
         )}
         
@@ -1312,8 +1287,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               </div>
             ) : (
               <div className="space-y-3">
-                {/* Pre-flight probe banner — surfaces any dead refresh tokens
-                    before the user even tries to advance to Review. */}
                 <div className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg border text-xs ${
                   isProbingTokens
                     ? 'bg-blue-50 border-blue-200 text-blue-700'
@@ -1353,9 +1326,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                   const capacityWarning = csvLeads.length > 0 ? getAccountCapacityWarning(account, csvLeads.length) : null;
                   const probe = accountProbes[account.id];
                   const tokenDead = probe && !probe.ok;
-                  // Server-side status is also a strong signal, but we trust
-                  // the live probe more (it catches the case where the status
-                  // column hasn't been flipped yet).
                   const tokenFromStatus = account.status === 'needs_attention';
                   const showReconnect = !!tokenDead || tokenFromStatus;
 
@@ -1539,7 +1509,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               </div>
             </div>
             
-            {/* Send Schedule Estimate */}
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
               <Clock className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
               <div className="space-y-1">
@@ -1569,9 +1538,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         </button>
         
         {activeStep < 5 && (() => {
-          // On step 4 we MUST validate every selected account's refresh
-          // token before letting the user move on. If any selected account
-          // is dead, block the transition with a clear inline error.
           const selectedDead: EmailAccount[] = activeStep === 4
             ? connectedAccounts.filter(a =>
                 selectedAccountIds.has(a.id) && (
@@ -1626,7 +1592,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         )}
       </div>
       
-      {/* Inline error: blocks Next when on step 4 with dead tokens */}
       {activeStep === 4 && (() => {
         const selectedDead = connectedAccounts.filter(a =>
           selectedAccountIds.has(a.id) && (
@@ -1647,7 +1612,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         );
       })()}
 
-      {/* Launch Progress */}
       {(isLaunching || launchComplete) && (
         <div className="mx-6 mb-4 p-4 bg-off-white border border-border-main rounded-xl space-y-3">
           {isLaunching && (
@@ -1729,7 +1693,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         </div>
       )}
 
-      {/* Launch Error */}
       {launchError && (
         <div className="mx-6 mb-4 p-3 bg-danger/5 border border-danger/20 rounded-xl">
           <p className="text-xs text-danger font-semibold">{launchError}</p>
