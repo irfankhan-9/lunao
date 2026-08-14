@@ -403,28 +403,28 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       });
 
       setLaunchProgress(15);
-      setLaunchMessage('Starting the magic...');
+      setLaunchMessage('AI is editing templates...');
       
       setLiveCounters({ sitesStaged: 0, emailsSent: 0, emailsFailed: 0, deploying: false });
       
       const perLead: any[] = [];
       const humanStage = (type: string): string => {
         switch (type) {
-          case 'lead:start': return 'preparing personalization';
-          case 'discovery:start': return 'hunting for the right email';
+          case 'lead:start': return 'preparing magic';
+          case 'discovery:start': return 'finding the right inbox';
           case 'discovery:found': return 'found the perfect email';
-          case 'discovery:not_found': return 'could not find email';
-          case 'site:compiling': return 'AI is cooking your site';
-          case 'site:staged': return 'site is almost ready';
-          case 'site:failed': return 'site build failed';
-          case 'phase1:complete': return 'sites are prepped';
-          case 'deploy:start': return 'AI is deploying your website';
-          case 'deploy:done': return 'your website is live!';
+          case 'discovery:not_found': return 'no email found';
+          case 'site:compiling': return 'AI is editing your template';
+          case 'site:staged': return 'personalized site ready';
+          case 'site:failed': return 'something went wrong';
+          case 'phase1:complete': return 'all sites prepped';
+          case 'deploy:start': return 'deploying to the cloud';
+          case 'deploy:done': return 'website is live now!';
           case 'email:sent': return 'email delivered';
-          case 'send:sent': return 'personalized email sent';
-          case 'send:queued': return 'scheduled for delivery';
-          case 'send:failed': return 'email delivery failed';
-          case 'send:error': return 'email error occurred';
+          case 'send:sent': return 'email sent';
+          case 'send:queued': return 'scheduled for later';
+          case 'send:failed': return 'email failed';
+          case 'send:error': return 'delivery error';
           default: return type;
         }
       };
@@ -467,23 +467,23 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
           }
 
           if (e.type === 'lead:start') {
-            setLaunchMessage(`Lead ${e.index}/${e.total}: ${e.name} — ${humanStage(e.type)}…`);
+            setLaunchMessage(`personalizing website for ${e.name}...`);
           } else if (e.type === 'site:staged') {
-            setLaunchMessage(`Site staged for ${e.name} — waiting for Cloudflare deploy…`);
+            setLaunchMessage(`site ready for ${e.name}...`);
           } else if (e.type === 'phase1:complete') {
-            setLaunchMessage(`${e.ready} sites ready — pushing to Cloudflare…`);
+            setLaunchMessage(`${e.ready} sites personalized — deploying...`);
           } else if (e.type === 'deploy:start') {
-            setLaunchMessage(`Deploying ${e.count || ''} sites to Cloudflare Pages…`);
+            setLaunchMessage(`deploying ${e.count || ''} sites to cloud...`);
           } else if (e.type === 'deploy:failed') {
-            setLaunchMessage(`Cloudflare deploy failed — ${e.error}`);
+            setLaunchMessage(`deploy failed — ${e.error}`);
           } else if (e.type === 'deploy:done') {
-            setLaunchMessage(`All sites live on Cloudflare! — Sending emails…`);
+            setLaunchMessage(`all sites live! — sending emails...`);
           } else if (e.type === 'send:sent') {
-            setLaunchMessage(`Sent ${e.index}/${e.total}: ${e.name} via ${e.accountEmail}`);
+            setLaunchMessage(`sent ${e.index}/${e.total} emails`);
           } else if (e.type === 'send:failed' || e.type === 'send:error') {
-            setLaunchMessage(`Failed ${e.index}/${e.total}: ${e.name}${e.reason || e.error ? ` — ${e.reason || e.error}` : ''}`);
+            setLaunchMessage(`failed ${e.index}/${e.total} — retrying...`);
           } else if (e.type === 'send:queued') {
-            setLaunchMessage(`Queued ${e.index}/${e.total}: ${e.name}${e.reason ? ` — ${e.reason}` : ''}`);
+            setLaunchMessage(`queued ${e.index}/${e.total} emails...`);
           }
 
           if (e.type === 'send:sent') {
@@ -685,20 +685,11 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 </div>
               </div>
 
-              {isRunning && liveCounters.deploying && (
-                <div className="flex items-center gap-2 text-[11px] text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5">
-                  <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
-                  </svg>
-                  <span className="font-medium">AI is cooking your websites...</span>
-                  <span className="ml-auto text-blue-500 font-bold shrink-0">personalizing</span>
-                </div>
-              )}
-
+              {/* Single unified progress log */}
               {isRunning && (
-                <div className="flex items-center gap-2 text-[11px] text-ink-secondary bg-white/70 border border-border-light rounded-lg px-3 py-2">
+                <div className="flex items-center gap-2 text-[11px] text-ink-secondary bg-white/70 border border-border-light rounded-lg px-3 py-2.5">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-accent shrink-0" />
-                  <span className="font-mono truncate">{launchMessage || 'AI is working its magic...'}</span>
+                  <span className="font-medium truncate">{launchMessage || 'AI is working its magic...'}</span>
                   <span className="ml-auto text-[10px] text-ink-tertiary font-bold shrink-0">{launchProgress}%</span>
                 </div>
               )}
