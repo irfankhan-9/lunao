@@ -1,43 +1,42 @@
 /**
- * TemplatePreviewModal — Premium brand-consistent preview modal for Email Campaign Wizard
- * Uses exact brand colors, fonts, and styling from the Lunao design system
+ * TemplatePreviewModal — Shows real website preview with clean mobile toggle
  */
 
-import React, { useState, useEffect } from 'react';
-import { X, Smartphone, Monitor, ChevronLeft, ChevronRight, CheckCircle2, ExternalLink, Sparkles } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Smartphone, Monitor, CheckCircle2, ExternalLink, Loader2 } from 'lucide-react';
 import { Template } from '../types';
 
 interface TemplatePreviewModalProps {
   template: Template | null;
   isOpen: boolean;
   onClose: () => void;
-  onPrev?: () => void;
-  onNext?: () => void;
-  hasPrev?: boolean;
-  hasNext?: boolean;
 }
 
 export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
   template,
   isOpen,
   onClose,
-  onPrev,
-  onNext,
-  hasPrev = false,
-  hasNext = false,
 }) => {
   const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop');
+  const [isLoading, setIsLoading] = useState(true);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Reset to desktop when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setViewMode('desktop');
+      setIsLoading(true);
+    }
+  }, [isOpen]);
 
   // Handle escape key
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowLeft' && hasPrev && isOpen) onPrev?.();
-      if (e.key === 'ArrowRight' && hasNext && isOpen) onNext?.();
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [onClose, onPrev, onNext, hasPrev, hasNext, isOpen]);
+  }, [onClose]);
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -51,40 +50,24 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
 
   if (!isOpen || !template) return null;
 
-  // Get niche emoji
-  const getNicheEmoji = (niche: string) => {
-    switch (niche) {
-      case 'Barber': return '💈';
-      case 'Salon': return '💅';
-      case 'Dentist': return '🦷';
-      case 'HVAC': return '❄️';
-      case 'Gym': return '💪';
-      case 'Roofing': return '🏠';
-      case 'Real Estate': return '🏡';
-      default: return '✨';
-    }
+  // Get template type for display
+  const getTemplateLabel = (niche: string) => {
+    const labels: Record<string, string> = {
+      'Barber': 'Barbershop',
+      'Salon': 'Hair Salon',
+      'Dentist': 'Dental',
+      'HVAC': 'Climate Control',
+      'Gym': 'Fitness',
+      'Roofing': 'Roofing',
+      'Real Estate': 'Real Estate',
+    };
+    return labels[niche] || niche;
   };
 
-  // Sample preview data - brand consistent
-  const preview = {
-    name: 'Vintage Cuts',
-    city: 'Austin, TX',
-    phone: '(512) 555-0988',
-    tagline: 'Premium Haircuts & Grooming',
-    rating: 4.9,
-    reviews: 342,
-    address: '123 Main Street',
-    hours: 'Mon-Sat 9am-7pm',
-    services: [
-      { name: 'Classic Cut', price: '$35' },
-      { name: 'Skin Fade', price: '$45' },
-      { name: 'Beard Trim', price: '$25' },
-      { name: 'Hot Shave', price: '$30' },
-    ],
-  };
-
+  // Get REAL site URL for this template
   const getTemplateUrl = (id: string) => {
     const urls: Record<string, string> = {
+      t1: '/barber-template.html',
       t2: '/barber-template-02.html',
       t3: '/salon-template-01.html',
       t4: '/dentist-template-01.html',
@@ -96,43 +79,42 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
     return urls[id] || '/barber-template.html';
   };
 
+  const templateUrl = getTemplateUrl(template.id);
+
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 md:p-6">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-3 md:p-4">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-ink/85 backdrop-blur-sm"
+        className="absolute inset-0 bg-blue-950/60 backdrop-blur-sm"
         onClick={onClose}
       />
 
-      {/* Modal Container - Brand Consistent */}
-      <div className="relative w-full h-full max-w-5xl rounded-2xl overflow-hidden bg-white shadow-2xl flex flex-col animate-modal-slide-up"
-        style={{ maxHeight: 'calc(100vh - 32px)' }}>
+      {/* Modal Container */}
+      <div className="relative w-full h-full max-w-6xl rounded-2xl overflow-hidden bg-white shadow-2xl flex flex-col animate-modal-slide-up border border-blue-200"
+        style={{ maxHeight: 'calc(100vh - 16px)' }}>
         
-        {/* Header - Brand styled */}
-        <div className="flex-none bg-gradient-to-r from-ink to-ink/95 px-4 sm:px-6 py-4 sm:py-5 border-b border-white/10">
-          <div className="flex items-center justify-between gap-4">
+        {/* Header */}
+        <div className="flex-none bg-white px-4 sm:px-6 py-4 border-b border-blue-100">
+          <div className="flex items-center justify-between gap-3">
             {/* Left: Template info */}
             <div className="flex items-center gap-3 flex-1 min-w-0">
-              <span className="text-2xl sm:text-3xl flex-none">{getNicheEmoji(template.niche)}</span>
-              <div className="min-w-0 flex-1">
-                <h2 className="font-serif text-base sm:text-lg font-bold text-white truncate">{template.name}</h2>
-                <p className="text-[10px] sm:text-xs text-white/60 capitalize">{template.niche} Template</p>
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                <Monitor className="w-5 h-5 text-white" />
               </div>
-              {template.isMostUsed && (
-                <span className="hidden sm:inline-flex px-2.5 py-1 bg-amber-500/20 text-amber-400 text-[10px] font-bold uppercase tracking-wider rounded-full border border-amber-500/30 flex-none">
-                  ★ Popular
-                </span>
-              )}
+              <div className="min-w-0 flex-1">
+                <h2 className="font-serif text-base sm:text-lg font-bold text-blue-900 truncate">{template.name}</h2>
+                <p className="text-xs text-blue-600">{getTemplateLabel(template.niche)} Website</p>
+              </div>
             </div>
 
-            {/* Center: View toggle - Brand styled */}
-            <div className="flex items-center gap-1 p-1 bg-white/10 rounded-xl flex-none">
+            {/* Center: View toggle */}
+            <div className="flex items-center gap-1 p-1 bg-blue-50 rounded-xl flex-none">
               <button
                 onClick={() => setViewMode('desktop')}
-                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
                   viewMode === 'desktop'
-                    ? 'bg-white text-ink shadow-lg'
-                    : 'text-white/70 hover:text-white hover:bg-white/10'
+                    ? 'bg-white text-blue-700 shadow-sm border border-blue-200'
+                    : 'text-blue-600 hover:text-blue-800 hover:bg-white'
                 }`}
               >
                 <Monitor className="w-4 h-4" />
@@ -140,10 +122,10 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
               </button>
               <button
                 onClick={() => setViewMode('mobile')}
-                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
                   viewMode === 'mobile'
-                    ? 'bg-white text-ink shadow-lg'
-                    : 'text-white/70 hover:text-white hover:bg-white/10'
+                    ? 'bg-white text-blue-700 shadow-sm border border-blue-200'
+                    : 'text-blue-600 hover:text-blue-800 hover:bg-white'
                 }`}
               >
                 <Smartphone className="w-4 h-4" />
@@ -151,281 +133,129 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
               </button>
             </div>
 
-            {/* Right: Navigation + Close - Brand styled */}
-            <div className="flex items-center gap-2 flex-none">
-              <button
-                onClick={onPrev}
-                disabled={!hasPrev}
-                className={`p-2 rounded-lg transition-all ${
-                  hasPrev
-                    ? 'bg-white/10 text-white hover:bg-white/20'
-                    : 'bg-white/5 text-white/30 cursor-not-allowed'
-                }`}
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <button
-                onClick={onNext}
-                disabled={!hasNext}
-                className={`p-2 rounded-lg transition-all ${
-                  hasNext
-                    ? 'bg-white/10 text-white hover:bg-white/20'
-                    : 'bg-white/5 text-white/30 cursor-not-allowed'
-                }`}
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-              <button
-                onClick={onClose}
-                className="p-2 bg-danger/20 hover:bg-danger text-white rounded-lg transition-all ml-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+            {/* Right: Close button */}
+            <button
+              onClick={onClose}
+              className="p-2 bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-600 rounded-lg transition-all border border-red-200"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
         </div>
 
-        {/* Preview Content - Scrollable */}
-        <div className="flex-1 overflow-auto bg-gradient-to-br from-surface via-white to-off-white">
-          <div className="w-full h-full flex items-center justify-center p-4 sm:p-6 md:p-8">
+        {/* Preview Content */}
+        <div className="flex-1 overflow-hidden bg-gradient-to-br from-blue-50 via-white to-indigo-50 relative">
+          {isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
+              <div className="flex flex-col items-center gap-2">
+                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                <span className="text-sm text-blue-600">Loading preview...</span>
+              </div>
+            </div>
+          )}
+          
+          <div className="w-full h-full flex items-center justify-center p-3 sm:p-4 md:p-6">
             {viewMode === 'desktop' ? (
-              /* Desktop Preview - Brand Styled */
-              <div className="relative w-full max-w-4xl h-full">
-                <div className="absolute inset-0 flex flex-col bg-white rounded-xl shadow-2xl border border-border-main overflow-hidden h-full">
-                  {/* Browser header - Brand styled */}
-                  <div className="h-9 sm:h-10 bg-gradient-to-r from-surface via-off-white to-surface flex items-center px-3 sm:px-4 gap-2 sm:gap-3 border-b border-border-light shrink-0">
-                    <div className="flex gap-1.5 sm:gap-2">
-                      <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-danger/80" />
-                      <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-amber-400/80" />
-                      <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-success/80" />
-                    </div>
-                    <div className="flex-1 mx-2 sm:mx-4">
-                      <div className="max-w-xs sm:max-w-md mx-auto h-5 sm:h-6 bg-surface rounded flex items-center justify-center">
-                        <span className="text-[9px] sm:text-[10px] text-ink-tertiary font-mono">preview.lunao.dev</span>
-                      </div>
-                    </div>
+              /* Desktop Preview - REAL SITE */
+              <div className="relative w-full h-full flex flex-col max-w-5xl mx-auto">
+                {/* Browser Chrome */}
+                <div className="h-9 bg-gradient-to-r from-blue-100 via-blue-50 to-blue-100 flex items-center px-4 gap-3 border-b border-blue-200 rounded-t-xl shrink-0">
+                  <div className="flex gap-2">
+                    <div className="w-3 h-3 rounded-full bg-red-400" />
+                    <div className="w-3 h-3 rounded-full bg-yellow-400" />
+                    <div className="w-3 h-3 rounded-full bg-green-400" />
                   </div>
-
-                  {/* Website Content - Brand styled */}
-                  <div className="flex-1 overflow-auto bg-white">
-                    {/* Hero Section */}
-                    <div className="relative min-h-[200px] sm:min-h-[280px] bg-gradient-to-br from-ink via-ink to-ink/90 flex items-center">
-                      <div className="absolute inset-0 opacity-20">
-                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(99,102,241,0.3),transparent_50%)]" />
-                      </div>
-                      <div className="relative container mx-auto px-4 sm:px-8 py-8 sm:py-12">
-                        <div className="max-w-2xl">
-                          <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-                            <span className="text-3xl sm:text-4xl">{getNicheEmoji(template.niche)}</span>
-                            <div>
-                              <h1 className="text-2xl sm:text-4xl font-serif font-bold text-white tracking-tight">{preview.name}</h1>
-                              <p className="text-white/60 text-xs sm:text-sm mt-1">{preview.tagline} · {preview.city}</p>
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-4 sm:mt-6">
-                            <div className="flex items-center gap-1.5 sm:gap-2 bg-white/10 backdrop-blur-sm px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full">
-                              <span className="text-yellow-400 text-sm">★</span>
-                              <span className="text-white font-bold text-sm">{preview.rating}</span>
-                              <span className="text-white/60 text-xs">({preview.reviews})</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 sm:gap-2 bg-white/10 backdrop-blur-sm px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full text-white text-xs sm:text-sm">
-                              <span>📍</span>
-                              <span>{preview.address}</span>
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-4 sm:mt-8">
-                            <button className="px-4 sm:px-6 py-2 sm:py-3 bg-accent hover:bg-accent-hover text-white font-bold rounded-lg sm:rounded-xl transition-all shadow-lg shadow-accent/30 text-sm">
-                              Book Now
-                            </button>
-                            <button className="px-4 sm:px-6 py-2 sm:py-3 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-lg sm:rounded-xl backdrop-blur-sm transition-all text-sm">
-                              Call Us
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Services Section */}
-                    <div className="container mx-auto px-4 sm:px-8 py-6 sm:py-12">
-                      <h2 className="text-xl sm:text-2xl font-serif font-bold text-ink mb-4 sm:mb-8">Our Services</h2>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-                        {preview.services.map((svc, idx) => (
-                          <div
-                            key={idx}
-                            className="group p-3 sm:p-4 bg-surface hover:bg-accent-soft/30 rounded-xl border border-border-light hover:border-accent/30 transition-all cursor-pointer"
-                          >
-                            <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-                              <span className="font-semibold text-ink group-hover:text-accent transition-colors text-sm">{svc.name}</span>
-                            </div>
-                            <span className="text-xl sm:text-2xl font-bold text-accent">{svc.price}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* CTA Section */}
-                    <div className="container mx-auto px-4 sm:px-8 py-6 sm:py-12">
-                      <div className="bg-gradient-to-r from-accent via-accent-hover to-accent rounded-xl sm:rounded-2xl p-6 sm:p-8 text-center">
-                        <h3 className="text-xl sm:text-2xl font-serif font-bold text-white mb-1 sm:mb-2">Ready to Transform Your Look?</h3>
-                        <p className="text-white/80 mb-4 sm:mb-6 text-sm">Book your appointment today and experience the difference.</p>
-                        <button className="px-6 sm:px-8 py-2.5 sm:py-3 bg-white text-accent font-bold rounded-lg sm:rounded-xl hover:bg-white/90 transition-all shadow-lg text-sm">
-                          Book Appointment
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Footer */}
-                    <div className="bg-surface py-4 sm:py-6">
-                      <div className="container mx-auto px-4 sm:px-8 text-center text-ink-secondary text-xs sm:text-sm">
-                        <p>{preview.name} · {preview.address}, {preview.city}</p>
-                        <p className="mt-1">{preview.phone} · {preview.hours}</p>
-                      </div>
+                  <div className="flex-1">
+                    <div className="max-w-md mx-auto h-6 bg-white rounded-lg border border-blue-200 flex items-center justify-center">
+                      <span className="text-[10px] text-blue-500 font-mono truncate px-3">{templateUrl}</span>
                     </div>
                   </div>
                 </div>
-
-                {/* Floating badge */}
-                <div className="absolute -bottom-3 sm:-bottom-4 left-1/2 transform -translate-x-1/2 px-3 sm:px-4 py-1.5 sm:py-2 bg-accent text-white text-[10px] sm:text-xs font-bold rounded-full shadow-lg flex items-center gap-1.5 sm:gap-2">
-                  <Monitor className="w-3 h-3 sm:w-4 sm:h-4" />
-                  Desktop Preview
+                
+                {/* REAL Site iframe */}
+                <div className="flex-1 border-2 border-blue-200 border-t-0 rounded-b-xl overflow-hidden bg-white">
+                  <iframe
+                    ref={iframeRef}
+                    src={templateUrl}
+                    className="w-full h-full"
+                    onLoad={() => setIsLoading(false)}
+                    title="Template Preview"
+                    sandbox="allow-same-origin allow-scripts allow-forms"
+                  />
                 </div>
               </div>
             ) : (
-              /* Mobile Preview - Brand Styled */
+              /* Mobile Preview - Smaller, fits properly */
               <div className="relative">
-                <div className="relative w-[280px] sm:w-[320px] h-[560px] sm:h-[650px] bg-ink rounded-[2.5rem] sm:rounded-[3rem] p-2 sm:p-3 shadow-2xl border border-zinc-700">
-                  {/* Phone notch */}
-                  <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-28 sm:w-32 h-6 sm:h-7 bg-ink rounded-b-2xl z-20" />
-                  <div className="absolute top-1 sm:top-1.5 left-1/2 transform -translate-x-1/2 w-14 sm:w-16 h-1 bg-zinc-800 rounded-full z-20" />
+                {/* Phone Frame - Smaller */}
+                <div className="relative w-[260px] h-[520px] sm:w-[300px] sm:h-[600px] bg-gray-800 rounded-[2rem] sm:rounded-[2.5rem] p-1.5 shadow-2xl border border-gray-700">
+                  {/* Notch */}
+                  <div className="absolute top-0.5 left-1/2 transform -translate-x-1/2 w-20 h-4 sm:w-24 sm:h-5 bg-gray-800 rounded-b-lg z-20" />
+                  <div className="absolute top-1 left-1/2 transform -translate-x-1/2 w-16 h-2 sm:w-20 sm:h-2.5 bg-gray-900 rounded-b-lg z-20" />
 
                   {/* Screen */}
-                  <div className="relative w-full h-full bg-white rounded-[2rem] sm:rounded-[2.5rem] overflow-hidden">
+                  <div className="relative w-full h-full bg-white rounded-[1.75rem] sm:rounded-[2rem] overflow-hidden border-[2px] border-gray-900">
                     {/* Status Bar */}
-                    <div className="h-10 sm:h-11 bg-surface/80 backdrop-blur-sm flex items-center justify-between px-4 sm:px-6 text-[9px] sm:text-[10px] font-semibold text-ink">
+                    <div className="h-8 sm:h-9 bg-gray-100 flex items-center justify-between px-4 text-[9px] sm:text-[10px] font-medium text-gray-800">
                       <span>9:41</span>
-                      <div className="flex items-center gap-1">
-                        <span className="text-[7px] sm:text-[8px]">📶</span>
-                        <span className="text-[7px] sm:text-[8px]">🔋</span>
+                      <div className="flex items-center gap-0.5 text-[8px]">
+                        <span>.....</span>
+                        <span>📶</span>
+                        <span>🔋</span>
                       </div>
                     </div>
 
-                    {/* Mobile Content */}
-                    <div className="h-[calc(100%-40px)] sm:h-[calc(100%-44px)] overflow-y-auto">
-                      {/* Hero */}
-                      <div className="relative min-h-[180px] sm:min-h-[220px] bg-gradient-to-br from-ink to-ink/90 flex items-end">
-                        <div className="absolute inset-0 opacity-30">
-                          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(99,102,241,0.4),transparent_60%)]" />
-                        </div>
-                        <div className="relative p-4 sm:p-5 pb-4 sm:pb-6 w-full">
-                          <span className="text-2xl sm:text-3xl">{getNicheEmoji(template.niche)}</span>
-                          <h1 className="text-xl sm:text-2xl font-serif font-bold text-white mt-1.5 sm:mt-2 leading-tight">{preview.name}</h1>
-                          <p className="text-white/60 text-[10px] sm:text-xs mt-1">{preview.tagline}</p>
-                          <div className="flex items-center gap-1.5 sm:gap-2 mt-2 sm:mt-3">
-                            <span className="text-yellow-400 text-xs sm:text-sm">★</span>
-                            <span className="text-white font-bold text-xs sm:text-sm">{preview.rating}</span>
-                            <span className="text-white/60 text-[10px] sm:text-xs">({preview.reviews})</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Action Buttons */}
-                      <div className="px-3 sm:px-4 -mt-5 sm:-mt-6 relative z-10 flex gap-2 sm:gap-3">
-                        <button className="flex-1 py-2.5 sm:py-3 bg-accent text-white font-bold rounded-lg sm:rounded-xl shadow-lg text-xs sm:text-sm">
-                          Book Now
-                        </button>
-                        <button className="px-3 sm:px-4 py-2.5 sm:py-3 bg-white border border-border-main text-ink font-semibold rounded-lg sm:rounded-xl text-xs sm:text-sm">
-                          Call
-                        </button>
-                      </div>
-
-                      {/* Info */}
-                      <div className="px-3 sm:px-4 mt-3 sm:mt-4 space-y-2 sm:space-y-3">
-                        <div className="p-2.5 sm:p-3 bg-surface rounded-lg sm:rounded-xl">
-                          <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-ink-secondary">
-                            <span>📍</span>
-                            <span>{preview.address}, {preview.city}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-ink-secondary mt-1.5 sm:mt-2">
-                            <span>📞</span>
-                            <span>{preview.phone}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-ink-secondary mt-1.5 sm:mt-2">
-                            <span>🕐</span>
-                            <span>{preview.hours}</span>
-                          </div>
-                        </div>
-
-                        {/* Services */}
-                        <div className="p-3 sm:p-4 bg-surface rounded-lg sm:rounded-xl">
-                          <h3 className="text-xs sm:text-sm font-bold text-ink mb-2 sm:mb-3">Services</h3>
-                          <div className="space-y-1.5 sm:space-y-2">
-                            {preview.services.map((svc, idx) => (
-                              <div
-                                key={idx}
-                                className="flex items-center justify-between p-2 sm:p-3 bg-white rounded-lg border border-border-light"
-                              >
-                                <span className="font-medium text-ink text-[11px] sm:text-sm">{svc.name}</span>
-                                <span className="font-bold text-accent text-xs sm:text-sm">{svc.price}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* CTA */}
-                      <div className="p-3 sm:p-4 mt-3 sm:mt-4">
-                        <button className="w-full py-3 sm:py-4 bg-gradient-to-r from-accent to-accent-hover text-white font-bold rounded-xl shadow-lg text-xs sm:text-sm">
-                          Book Appointment Now
-                        </button>
-                      </div>
-
-                      <div className="h-6 sm:h-8" />
+                    {/* REAL Site iframe - PROPERLY SCALED */}
+                    <div className="h-[calc(100%-32px)] sm:h-[calc(100%-36px)] overflow-hidden bg-white">
+                      <iframe
+                        ref={iframeRef}
+                        src={templateUrl}
+                        className="w-full h-full"
+                        style={{ transform: 'scale(0.4)', transformOrigin: 'top left', width: '250%', height: '250%' }}
+                        onLoad={() => setIsLoading(false)}
+                        title="Template Preview Mobile"
+                        sandbox="allow-same-origin allow-scripts allow-forms"
+                      />
                     </div>
 
                     {/* Home indicator */}
-                    <div className="absolute bottom-0.5 sm:bottom-1 left-1/2 transform -translate-x-1/2 w-28 sm:w-32 h-0.5 sm:h-1 bg-ink/20 rounded-full" />
+                    <div className="absolute bottom-0.5 left-1/2 transform -translate-x-1/2 w-20 sm:w-24 h-0.5 bg-gray-400 rounded-full" />
                   </div>
-                </div>
-
-                {/* Floating badge */}
-                <div className="absolute -bottom-3 sm:-bottom-4 left-1/2 transform -translate-x-1/2 px-3 sm:px-4 py-1.5 sm:py-2 bg-accent text-white text-[10px] sm:text-xs font-bold rounded-full shadow-lg flex items-center gap-1.5 sm:gap-2">
-                  <Smartphone className="w-3 h-3 sm:w-4 sm:h-4" />
-                  Mobile Preview
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Footer - Brand styled */}
-        <div className="flex-none bg-gradient-to-r from-ink to-ink/95 px-4 sm:px-6 py-4 sm:py-5 border-t border-white/10">
-          <div className="flex items-center justify-between gap-4">
+        {/* Footer */}
+        <div className="flex-none bg-white px-4 sm:px-6 py-4 border-t border-blue-100">
+          <div className="flex items-center justify-between gap-3">
             {/* Left: Status + Full page link */}
             <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-success flex-none" />
-              <span className="text-xs font-semibold text-white/80 hidden sm:inline">
-                Template ready for campaign
+              <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                <CheckCircle2 className="w-4 h-4 text-green-600" />
+              </div>
+              <span className="text-xs font-semibold text-gray-700">
+                Live preview
               </span>
               <a
-                href={getTemplateUrl(template.id)}
+                href={templateUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 bg-white/10 hover:bg-white/20 text-white/80 hover:text-white text-[10px] sm:text-xs font-semibold rounded-lg transition-all border border-white/10 hover:border-white/20"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded-lg transition-all border border-blue-200"
               >
-                <ExternalLink className="w-3 h-3 sm:w-3.5 sm:h-3.5 flex-none" />
-                <span className="hidden sm:inline">Open Full Page</span>
-                <span className="sm:hidden">Full Page</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>View Full Site</span>
               </a>
             </div>
 
-            {/* Right: Select button - Brand styled */}
+            {/* Right: Select button */}
             <button
               onClick={onClose}
-              className="px-4 sm:px-6 py-2 sm:py-2.5 bg-accent hover:bg-accent-hover text-white font-bold rounded-xl transition-all shadow-lg shadow-accent/30 flex items-center gap-2 text-sm"
+              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-all shadow-lg shadow-indigo-500/30 flex items-center gap-2 text-sm"
             >
-              <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span className="hidden sm:inline">Select Template</span>
-              <span className="sm:hidden">Select</span>
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Use This Template</span>
             </button>
           </div>
         </div>
@@ -433,14 +263,8 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
 
       <style>{`
         @keyframes modal-slide-up {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(20px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
         }
         .animate-modal-slide-up {
           animation: modal-slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);

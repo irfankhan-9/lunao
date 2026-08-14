@@ -5,9 +5,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Mail, Send, Upload, Globe, Check, ChevronRight, ChevronLeft, AlertCircle,
-  CheckCircle, Loader2, X, ShieldAlert, Plus, Trash2, Eye, ExternalLink,
+  CheckCircle, CheckCircle2, Loader2, X, ShieldAlert, Plus, Trash2, Eye, ExternalLink,
   RefreshCw, Link2, AlertTriangle, Zap, Clock, Pencil, Sparkles, FileSpreadsheet,
-  Smartphone, Monitor, Maximize2
+  Smartphone, Monitor, Maximize2, Users
 } from 'lucide-react';
 import { playGentleChime, playLaunchSwell, playVictoryCelebration, playSoftTap, playElegantError, playSoftBubble, playElegantBell } from '../utils/audio';
 import { validateCsvFile, CsvValidation, PipelineLead, runEmailCampaign, probeAllEmailAccounts, initiateOAuthFlow, EmailAccountProbeResult, EmailCampaignEvent } from '../lib/pipelineClient';
@@ -341,6 +341,14 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   
   const handleLaunch = async () => {
     setLaunchError(null);
+    
+    // Auto-scroll to step indicator when launching
+    setTimeout(() => {
+      const stepTrack = document.getElementById('wizard-steps-horizontal-track');
+      if (stepTrack) {
+        stepTrack.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
     
     const totalLeads = csvLeads.length;
     if (totalLeads === 0) {
@@ -1190,10 +1198,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               template={selectedTemplateForPreview}
               isOpen={previewModalOpen}
               onClose={() => setPreviewModalOpen(false)}
-              onPrev={handlePrevTemplate}
-              onNext={handleNextTemplate}
-              hasPrev={previewTemplateIndex > 0}
-              hasNext={previewTemplateIndex < allTemplates.length - 1}
             />
           </div>
         )}
@@ -1420,48 +1424,106 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               <p className="text-sm text-ink-secondary">Confirm your campaign details before sending.</p>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-off-white border border-border-main rounded-xl p-4 space-y-1">
-                <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Niche</p>
-                <p className="text-sm font-semibold text-ink">{selectedNiche}</p>
+            {/* Selected Template Preview */}
+            <div className="bg-white rounded-xl border border-blue-200 overflow-hidden">
+              <div className="px-4 py-3 bg-blue-50 border-b border-blue-200">
+                <p className="text-[10px] uppercase tracking-widest text-blue-700 font-bold">Selected Template</p>
               </div>
-              <div className="bg-off-white border border-border-main rounded-xl p-4 space-y-1">
-                <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Leads</p>
-                <p className="text-sm font-semibold text-ink">{csvParsedCount}</p>
-              </div>
-              <div className="bg-off-white border border-border-main rounded-xl p-4 space-y-1">
-                <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Cost</p>
-                <p className="text-sm font-semibold text-accent">{csvParsedCount * COST_PER_EMAIL} credits</p>
+              <div className="p-4">
+                <div className="flex items-center gap-4">
+                  {/* Template preview thumbnail */}
+                  <div className="w-24 h-16 sm:w-32 sm:h-20 rounded-lg bg-gray-100 border border-gray-200 overflow-hidden shadow-inner shrink-0">
+                    <TemplateSimPreview
+                      id={selectedTemplateId}
+                      name={templates.find(t => t.id === selectedTemplateId)?.name || 'Template'}
+                      niche={selectedNiche}
+                      badge=""
+                      isMostUsed={false}
+                      selected={true}
+                    />
+                  </div>
+                  {/* Template info */}
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-serif text-lg font-bold text-gray-900">{templates.find(t => t.id === selectedTemplateId)?.name}</h4>
+                    <p className="text-sm text-gray-600 capitalize">{selectedNiche} Website Template</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                    <span className="text-sm font-semibold text-green-600">Ready</span>
+                  </div>
+                </div>
               </div>
             </div>
             
-            <div className="bg-off-white border border-border-main rounded-xl p-4">
-              <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold mb-2">Sending Accounts</p>
+            {/* Campaign Summary Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-white border border-blue-200 rounded-xl p-4 text-center">
+                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-2">
+                  <Globe className="w-5 h-5 text-blue-600" />
+                </div>
+                <p className="text-[10px] uppercase tracking-widest text-blue-600 font-semibold mb-1">Niche</p>
+                <p className="text-sm font-bold text-gray-900">{selectedNiche}</p>
+              </div>
+              <div className="bg-white border border-blue-200 rounded-xl p-4 text-center">
+                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-2">
+                  <Users className="w-5 h-5 text-blue-600" />
+                </div>
+                <p className="text-[10px] uppercase tracking-widest text-blue-600 font-semibold mb-1">Leads</p>
+                <p className="text-lg font-bold text-gray-900">{csvParsedCount}</p>
+              </div>
+              <div className="bg-white border border-blue-200 rounded-xl p-4 text-center">
+                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-2">
+                  <Mail className="w-5 h-5 text-blue-600" />
+                </div>
+                <p className="text-[10px] uppercase tracking-widest text-blue-600 font-semibold mb-1">Cost</p>
+                <p className="text-lg font-bold text-indigo-600">{csvParsedCount * COST_PER_EMAIL}</p>
+              </div>
+              <div className="bg-white border border-blue-200 rounded-xl p-4 text-center">
+                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-2">
+                  <Send className="w-5 h-5 text-blue-600" />
+                </div>
+                <p className="text-[10px] uppercase tracking-widest text-blue-600 font-semibold mb-1">Accounts</p>
+                <p className="text-lg font-bold text-gray-900">{selectedAccountIds.size}</p>
+              </div>
+            </div>
+            
+            {/* Connected Accounts */}
+            <div className="bg-white border border-blue-200 rounded-xl p-4">
+              <p className="text-[10px] uppercase tracking-widest text-blue-700 font-bold mb-3">Sending Accounts</p>
               <div className="flex flex-wrap gap-2">
                 {Array.from(selectedAccountIds).map(id => {
                   const acc = connectedAccounts.find(a => a.id === id);
                   return (
-                    <span key={id} className="text-xs bg-white px-2 py-1 rounded-lg border border-border-main">
-                      {acc?.email || id}
-                    </span>
+                    <div key={id} className="flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-lg border border-blue-200">
+                      <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                        <Mail className="w-3 h-3 text-blue-600" />
+                      </div>
+                      <span className="text-xs font-medium text-blue-900">{acc?.email || id}</span>
+                      <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    </div>
                   );
                 })}
                 {selectedAccountIds.size === 0 && (
-                  <span className="text-xs text-ink-tertiary">No accounts selected</span>
+                  <div className="w-full text-center py-4">
+                    <p className="text-sm text-blue-500">No accounts selected</p>
+                    <button 
+                      onClick={() => setActiveStep(4)}
+                      className="mt-2 text-xs text-indigo-600 hover:text-indigo-700 font-semibold underline"
+                    >
+                      Go back to connect accounts
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
             
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
-              <Clock className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <p className="text-xs font-semibold text-blue-800">Estimated Send Schedule</p>
-                <p className="text-xs text-blue-700">
-                  {csvLeads.length} leads across {selectedAccountIds.size} accounts with ~{Math.floor(120 / selectedAccountIds.size)} emails/account/day.
-                  Campaign will complete in approximately {Math.ceil(csvLeads.length / (selectedAccountIds.size * 30))} days.
-                </p>
+            {/* Launch CTA */}
+            {selectedAccountIds.size > 0 && (
+              <div className="bg-gradient-to-r from-indigo-600 to-blue-600 rounded-xl p-5 text-center">
+                <p className="text-white/90 text-sm mb-2">Ready to launch your email campaign?</p>
+                <p className="text-white/70 text-xs">You will send {csvParsedCount} personalized emails to your leads.</p>
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>
