@@ -728,36 +728,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 );
               })()}
 
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-3 border-t border-border-light/80">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playGentleChime();
-                      setCelebratedCampaign(null);
-                      setLaunchComplete(false);
-                      setLaunchResults(null);
-                      setLaunchProgress(0);
-                      setLaunchMessage('');
-                      setEmailSubject(celebratedCampaign.subject);
-                      setEmailBody(celebratedCampaign.body);
-                      setActiveStep(4);
-                    }}
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-border-main text-[11px] font-semibold text-ink hover:bg-off-white transition-all cursor-pointer"
-                  >
-                    <Pencil className="w-3 h-3" /> Edit outreach
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playSoftTap();
-                      onViewDetails?.(campaignId);
-                    }}
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-accent-soft text-accent border border-accent/20 text-[11px] font-semibold hover:bg-accent hover:text-white transition-all cursor-pointer"
-                  >
-                    <ChevronRight className="w-3 h-3" /> View in Recent Campaigns
-                  </button>
-                </div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-3 border-t border-border-light/80">
                 <button
                   type="button"
                   onClick={() => {

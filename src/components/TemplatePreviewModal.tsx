@@ -21,7 +21,6 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // Reset to desktop when modal opens
   useEffect(() => {
     if (isOpen) {
       setViewMode('desktop');
@@ -29,7 +28,6 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
     }
   }, [isOpen]);
 
-  // Handle escape key
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -38,7 +36,6 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
     return () => window.removeEventListener('keydown', handleEsc);
   }, [onClose]);
 
-  // Prevent body scroll when modal is open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -50,31 +47,19 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
 
   if (!isOpen || !template) return null;
 
-  // Get template type for display
   const getTemplateLabel = (niche: string) => {
     const labels: Record<string, string> = {
-      'Barber': 'Barbershop',
-      'Salon': 'Hair Salon',
-      'Dentist': 'Dental',
-      'HVAC': 'Climate Control',
-      'Gym': 'Fitness',
-      'Roofing': 'Roofing',
-      'Real Estate': 'Real Estate',
+      'Barber': 'Barbershop', 'Salon': 'Hair Salon', 'Dentist': 'Dental',
+      'HVAC': 'Climate Control', 'Gym': 'Fitness', 'Roofing': 'Roofing', 'Real Estate': 'Real Estate',
     };
     return labels[niche] || niche;
   };
 
-  // Get REAL site URL for this template
   const getTemplateUrl = (id: string) => {
     const urls: Record<string, string> = {
-      t1: '/barber-template.html',
-      t2: '/barber-template-02.html',
-      t3: '/salon-template-01.html',
-      t4: '/dentist-template-01.html',
-      t5: '/roofing-template-01.html',
-      t6: '/hvac-template-01.html',
-      t7: '/gym-template-01.html',
-      t8: '/realestate-template-01.html',
+      t1: '/barber-template.html', t2: '/barber-template-02.html', t3: '/salon-template-01.html',
+      t4: '/dentist-template-01.html', t5: '/roofing-template-01.html', t6: '/hvac-template-01.html',
+      t7: '/gym-template-01.html', t8: '/realestate-template-01.html',
     };
     return urls[id] || '/barber-template.html';
   };
@@ -82,144 +67,113 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
   const templateUrl = getTemplateUrl(template.id);
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-3 md:p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-blue-950/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Modal Container */}
-      <div className="relative w-full h-full max-w-6xl rounded-2xl overflow-hidden bg-white shadow-2xl flex flex-col animate-modal-slide-up border border-blue-200"
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-3">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      
+      <div className="relative w-full h-full max-w-5xl rounded-xl overflow-hidden bg-white shadow-2xl flex flex-col animate-modal-slide-up"
         style={{ maxHeight: 'calc(100vh - 16px)' }}>
         
         {/* Header */}
-        <div className="flex-none bg-white px-4 sm:px-6 py-4 border-b border-blue-100">
-          <div className="flex items-center justify-between gap-3">
-            {/* Left: Template info */}
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
-                <Monitor className="w-5 h-5 text-white" />
+        <div className="flex-none bg-white px-3 sm:px-4 py-3 border-b border-gray-200">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                <Monitor className="w-4 h-4 text-blue-600" />
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="font-serif text-base sm:text-lg font-bold text-blue-900 truncate">{template.name}</h2>
-                <p className="text-xs text-blue-600">{getTemplateLabel(template.niche)} Website</p>
+                <h2 className="text-sm sm:text-base font-semibold text-gray-900 truncate">{template.name}</h2>
+                <p className="text-[10px] sm:text-xs text-gray-500">{getTemplateLabel(template.niche)}</p>
               </div>
             </div>
 
-            {/* Center: View toggle */}
-            <div className="flex items-center gap-1 p-1 bg-blue-50 rounded-xl flex-none">
+            {/* View toggle */}
+            <div className="flex items-center gap-0.5 p-0.5 bg-gray-100 rounded-lg flex-none">
               <button
                 onClick={() => setViewMode('desktop')}
-                className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                  viewMode === 'desktop'
-                    ? 'bg-white text-blue-700 shadow-sm border border-blue-200'
-                    : 'text-blue-600 hover:text-blue-800 hover:bg-white'
+                className={`flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-md text-[10px] sm:text-xs font-medium transition-all ${
+                  viewMode === 'desktop' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                <Monitor className="w-4 h-4" />
+                <Monitor className="w-3 h-3" />
                 <span className="hidden sm:inline">Desktop</span>
               </button>
               <button
                 onClick={() => setViewMode('mobile')}
-                className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                  viewMode === 'mobile'
-                    ? 'bg-white text-blue-700 shadow-sm border border-blue-200'
-                    : 'text-blue-600 hover:text-blue-800 hover:bg-white'
+                className={`flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-md text-[10px] sm:text-xs font-medium transition-all ${
+                  viewMode === 'mobile' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                <Smartphone className="w-4 h-4" />
+                <Smartphone className="w-3 h-3" />
                 <span className="hidden sm:inline">Mobile</span>
               </button>
             </div>
 
-            {/* Right: Close button */}
-            <button
-              onClick={onClose}
-              className="p-2 bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-600 rounded-lg transition-all border border-red-200"
-            >
-              <X className="w-5 h-5" />
+            <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all">
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
         {/* Preview Content */}
-        <div className="flex-1 overflow-hidden bg-gradient-to-br from-blue-50 via-white to-indigo-50 relative">
+        <div className="flex-1 overflow-hidden bg-gray-50 relative">
           {isLoading && (
             <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
-              <div className="flex flex-col items-center gap-2">
-                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-                <span className="text-sm text-blue-600">Loading preview...</span>
-              </div>
+              <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
             </div>
           )}
           
-          <div className="w-full h-full flex items-center justify-center p-3 sm:p-4 md:p-6">
+          <div className="w-full h-full flex items-center justify-center p-2 sm:p-3">
             {viewMode === 'desktop' ? (
-              /* Desktop Preview - REAL SITE */
-              <div className="relative w-full h-full flex flex-col max-w-5xl mx-auto">
-                {/* Browser Chrome */}
-                <div className="h-9 bg-gradient-to-r from-blue-100 via-blue-50 to-blue-100 flex items-center px-4 gap-3 border-b border-blue-200 rounded-t-xl shrink-0">
-                  <div className="flex gap-2">
-                    <div className="w-3 h-3 rounded-full bg-red-400" />
-                    <div className="w-3 h-3 rounded-full bg-yellow-400" />
-                    <div className="w-3 h-3 rounded-full bg-green-400" />
+              <div className="relative w-full h-full flex flex-col max-w-4xl mx-auto">
+                <div className="h-8 bg-gray-100 flex items-center px-3 gap-2 border-b border-gray-200 rounded-t-lg shrink-0">
+                  <div className="flex gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
                   </div>
-                  <div className="flex-1">
-                    <div className="max-w-md mx-auto h-6 bg-white rounded-lg border border-blue-200 flex items-center justify-center">
-                      <span className="text-[10px] text-blue-500 font-mono truncate px-3">{templateUrl}</span>
+                  <div className="flex-1 mx-2">
+                    <div className="max-w-xs mx-auto h-5 bg-white rounded border border-gray-200 flex items-center justify-center">
+                      <span className="text-[8px] text-gray-400 font-mono truncate px-2">{templateUrl}</span>
                     </div>
                   </div>
                 </div>
-                
-                {/* REAL Site iframe */}
-                <div className="flex-1 border-2 border-blue-200 border-t-0 rounded-b-xl overflow-hidden bg-white">
-                  <iframe
-                    ref={iframeRef}
-                    src={templateUrl}
-                    className="w-full h-full"
-                    onLoad={() => setIsLoading(false)}
-                    title="Template Preview"
-                    sandbox="allow-same-origin allow-scripts allow-forms"
-                  />
+                <div className="flex-1 border-2 border-gray-200 border-t-0 rounded-b-lg overflow-hidden bg-white">
+                  <iframe ref={iframeRef} src={templateUrl} className="w-full h-full" onLoad={() => setIsLoading(false)} title="Preview" sandbox="allow-same-origin allow-scripts allow-forms" />
                 </div>
               </div>
             ) : (
-              /* Mobile Preview - Smaller, fits properly */
+              /* Mobile Preview - Compact phone */
               <div className="relative">
-                {/* Phone Frame - Smaller */}
-                <div className="relative w-[260px] h-[520px] sm:w-[300px] sm:h-[600px] bg-gray-800 rounded-[2rem] sm:rounded-[2.5rem] p-1.5 shadow-2xl border border-gray-700">
+                <div className="relative w-[180px] h-[360px] sm:w-[220px] sm:h-[440px] bg-gray-900 rounded-[1.5rem] sm:rounded-[2rem] p-1 shadow-xl border border-gray-800">
                   {/* Notch */}
-                  <div className="absolute top-0.5 left-1/2 transform -translate-x-1/2 w-20 h-4 sm:w-24 sm:h-5 bg-gray-800 rounded-b-lg z-20" />
-                  <div className="absolute top-1 left-1/2 transform -translate-x-1/2 w-16 h-2 sm:w-20 sm:h-2.5 bg-gray-900 rounded-b-lg z-20" />
+                  <div className="absolute top-0.5 left-1/2 transform -translate-x-1/2 w-14 h-3 sm:w-16 sm:h-4 bg-gray-900 rounded-b-lg z-20" />
 
                   {/* Screen */}
-                  <div className="relative w-full h-full bg-white rounded-[1.75rem] sm:rounded-[2rem] overflow-hidden border-[2px] border-gray-900">
+                  <div className="relative w-full h-full bg-white rounded-[1.25rem] sm:rounded-[1.5rem] overflow-hidden border-[2px] border-gray-900">
                     {/* Status Bar */}
-                    <div className="h-8 sm:h-9 bg-gray-100 flex items-center justify-between px-4 text-[9px] sm:text-[10px] font-medium text-gray-800">
-                      <span>9:41</span>
-                      <div className="flex items-center gap-0.5 text-[8px]">
-                        <span>.....</span>
-                        <span>📶</span>
-                        <span>🔋</span>
+                    <div className="h-6 sm:h-7 bg-black/5 flex items-center justify-between px-3 text-[8px] sm:text-[9px] font-medium text-gray-800">
+                      <span className="font-medium">9:41</span>
+                      <div className="flex items-center gap-1">
+                        <span className="font-medium">LTE</span>
+                        <span className="font-medium">100%</span>
                       </div>
                     </div>
 
-                    {/* REAL Site iframe - PROPERLY SCALED */}
-                    <div className="h-[calc(100%-32px)] sm:h-[calc(100%-36px)] overflow-hidden bg-white">
+                    {/* Site iframe - properly scaled */}
+                    <div className="h-[calc(100%-24px)] sm:h-[calc(100%-28px)] overflow-hidden bg-white">
                       <iframe
                         ref={iframeRef}
                         src={templateUrl}
                         className="w-full h-full"
-                        style={{ transform: 'scale(0.4)', transformOrigin: 'top left', width: '250%', height: '250%' }}
+                        style={{ transform: 'scale(0.35)', transformOrigin: 'top left', width: '286%', height: '286%' }}
                         onLoad={() => setIsLoading(false)}
-                        title="Template Preview Mobile"
+                        title="Preview Mobile"
                         sandbox="allow-same-origin allow-scripts allow-forms"
                       />
                     </div>
 
                     {/* Home indicator */}
-                    <div className="absolute bottom-0.5 left-1/2 transform -translate-x-1/2 w-20 sm:w-24 h-0.5 bg-gray-400 rounded-full" />
+                    <div className="absolute bottom-0.5 left-1/2 transform -translate-x-1/2 w-16 sm:w-20 h-0.5 bg-gray-400 rounded-full" />
                   </div>
                 </div>
               </div>
@@ -228,34 +182,20 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex-none bg-white px-4 sm:px-6 py-4 border-t border-blue-100">
-          <div className="flex items-center justify-between gap-3">
-            {/* Left: Status + Full page link */}
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                <CheckCircle2 className="w-4 h-4 text-green-600" />
-              </div>
-              <span className="text-xs font-semibold text-gray-700">
-                Live preview
-              </span>
-              <a
-                href={templateUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded-lg transition-all border border-blue-200"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>View Full Site</span>
+        <div className="flex-none bg-white px-3 sm:px-4 py-3 border-t border-gray-200">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-green-500" />
+              <span className="text-xs text-gray-600">Live preview</span>
+              <a href={templateUrl} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1 px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[10px] font-medium rounded-lg transition-all">
+                <ExternalLink className="w-3 h-3" />
+                <span>Full Site</span>
               </a>
             </div>
-
-            {/* Right: Select button */}
-            <button
-              onClick={onClose}
-              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-all shadow-lg shadow-indigo-500/30 flex items-center gap-2 text-sm"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Use This Template</span>
+            <button onClick={onClose}
+              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-all">
+              Use Template
             </button>
           </div>
         </div>
@@ -263,12 +203,10 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
 
       <style>{`
         @keyframes modal-slide-up {
-          from { opacity: 0; transform: translateY(20px) scale(0.98); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
         }
-        .animate-modal-slide-up {
-          animation: modal-slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        }
+        .animate-modal-slide-up { animation: modal-slide-up 0.2s ease-out; }
       `}</style>
     </div>
   );
