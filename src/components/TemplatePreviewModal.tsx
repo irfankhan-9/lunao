@@ -5,17 +5,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Smartphone, Monitor, CheckCircle2, ExternalLink, Loader2 } from 'lucide-react';
 import { Template } from '../types';
+import { playSoftTap, playElegantBell } from '../utils/audio';
 
 interface TemplatePreviewModalProps {
   template: Template | null;
   isOpen: boolean;
   onClose: () => void;
+  onSelect?: () => void;
 }
 
 export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
   template,
   isOpen,
   onClose,
+  onSelect,
 }) => {
   const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop');
   const [isLoading, setIsLoading] = useState(true);
@@ -44,6 +47,22 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
     }
     return () => { document.body.style.overflow = ''; };
   }, [isOpen]);
+
+  const handleDesktopClick = () => {
+    playSoftTap();
+    setViewMode('desktop');
+  };
+
+  const handleMobileClick = () => {
+    playSoftTap();
+    setViewMode('mobile');
+  };
+
+  const handleSelectTemplate = () => {
+    playElegantBell();
+    onSelect?.();
+    onClose();
+  };
 
   if (!isOpen || !template) return null;
 
@@ -89,7 +108,7 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
             {/* View toggle */}
             <div className="flex items-center gap-0.5 p-0.5 bg-gray-100 rounded-lg flex-none">
               <button
-                onClick={() => setViewMode('desktop')}
+                onClick={handleDesktopClick}
                 className={`flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-md text-[10px] sm:text-xs font-medium transition-all ${
                   viewMode === 'desktop' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
                 }`}
@@ -98,7 +117,7 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
                 <span className="hidden sm:inline">Desktop</span>
               </button>
               <button
-                onClick={() => setViewMode('mobile')}
+                onClick={handleMobileClick}
                 className={`flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-md text-[10px] sm:text-xs font-medium transition-all ${
                   viewMode === 'mobile' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
                 }`}
@@ -193,7 +212,7 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
                 <span>Full Site</span>
               </a>
             </div>
-            <button onClick={onClose}
+            <button onClick={handleSelectTemplate}
               className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-all">
               Use Template
             </button>

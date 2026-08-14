@@ -371,8 +371,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     onCreditsChange?.(Math.max(0, userCredits - requiredCredits));
     
     setIsLaunching(true);
-    setLaunchProgress(0);
-    setLaunchMessage('Preparing email campaign...');
+    setLaunchProgress(5);
+    setLaunchMessage('AI is warming up...');
     setLaunchResults(null);
     setLaunchError(null);
     setLaunchComplete(false);
@@ -403,28 +403,28 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       });
 
       setLaunchProgress(15);
-      setLaunchMessage('Starting per-lead pipeline...');
+      setLaunchMessage('Starting the magic...');
       
       setLiveCounters({ sitesStaged: 0, emailsSent: 0, emailsFailed: 0, deploying: false });
       
       const perLead: any[] = [];
       const humanStage = (type: string): string => {
         switch (type) {
-          case 'lead:start': return 'starting lead';
-          case 'discovery:start': return 'discovering email';
-          case 'discovery:found': return 'email found';
-          case 'discovery:not_found': return 'no email found';
-          case 'site:compiling': return 'building site';
-          case 'site:staged': return 'site staged';
-          case 'site:failed': return 'site failed';
-          case 'phase1:complete': return 'all staged';
-          case 'deploy:start': return 'pushing to Cloudflare';
-          case 'deploy:done': return 'cloudflare live';
-          case 'email:sent': return 'email sent';
-          case 'send:sent': return 'email sent';
-          case 'send:queued': return 'queued for later';
-          case 'send:failed': return 'send failed';
-          case 'send:error': return 'send error';
+          case 'lead:start': return 'preparing personalization';
+          case 'discovery:start': return 'hunting for the right email';
+          case 'discovery:found': return 'found the perfect email';
+          case 'discovery:not_found': return 'could not find email';
+          case 'site:compiling': return 'AI is cooking your site';
+          case 'site:staged': return 'site is almost ready';
+          case 'site:failed': return 'site build failed';
+          case 'phase1:complete': return 'sites are prepped';
+          case 'deploy:start': return 'AI is deploying your website';
+          case 'deploy:done': return 'your website is live!';
+          case 'email:sent': return 'email delivered';
+          case 'send:sent': return 'personalized email sent';
+          case 'send:queued': return 'scheduled for delivery';
+          case 'send:failed': return 'email delivery failed';
+          case 'send:error': return 'email error occurred';
           default: return type;
         }
       };
@@ -433,9 +433,9 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         const elapsed = (Math.max(1, index) - 1) / total;
         let stage = 0.05;
         if (type === 'site:compiling') stage = 0.20;
-        else if (type === 'site:staged') stage = 0.45;
-        else if (type === 'deploy:start') stage = 0.50;
-        else if (type === 'deploy:done') stage = 0.65;
+        else if (type === 'site:staged') stage = 0.40;
+        else if (type === 'deploy:start') stage = 0.55;
+        else if (type === 'deploy:done') stage = 0.75;
         else if (type === 'send:sent') stage = 1.00;
         else if (type === 'send:failed' || type === 'send:error') stage = 1.00;
         else if (type === 'discovery:found' || type === 'discovery:not_found') stage = 0.15;
@@ -690,15 +690,15 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                   <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
                   </svg>
-                  <span className="font-medium">Deploying sites to Cloudflare Pages…</span>
-                  <span className="ml-auto text-blue-500 font-bold shrink-0">No emails sent yet</span>
+                  <span className="font-medium">AI is cooking your websites...</span>
+                  <span className="ml-auto text-blue-500 font-bold shrink-0">personalizing</span>
                 </div>
               )}
 
               {isRunning && (
                 <div className="flex items-center gap-2 text-[11px] text-ink-secondary bg-white/70 border border-border-light rounded-lg px-3 py-2">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-accent shrink-0" />
-                  <span className="font-mono truncate">{launchMessage || 'Deploying sites and sending emails in parallel…'}</span>
+                  <span className="font-mono truncate">{launchMessage || 'AI is working its magic...'}</span>
                   <span className="ml-auto text-[10px] text-ink-tertiary font-bold shrink-0">{launchProgress}%</span>
                 </div>
               )}
@@ -1458,19 +1458,33 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               </div>
             </div>
             
-            {/* Connected Accounts */}
+            {/* Connected Accounts with Email Distribution */}
             <div className="bg-white border border-blue-200 rounded-xl p-4">
-              <p className="text-[10px] uppercase tracking-widest text-blue-700 font-bold mb-3">Sending Accounts</p>
-              <div className="flex flex-wrap gap-2">
-                {Array.from(selectedAccountIds).map(id => {
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[10px] uppercase tracking-widest text-blue-700 font-bold">Sending Accounts</p>
+                <p className="text-[10px] text-blue-600 font-medium">{csvParsedCount} emails total</p>
+              </div>
+              <div className="space-y-2">
+                {Array.from(selectedAccountIds).map((id, idx) => {
                   const acc = connectedAccounts.find(a => a.id === id);
+                  const accountCount = Math.ceil(csvParsedCount / selectedAccountIds.size);
+                  const isLast = idx === selectedAccountIds.size - 1;
+                  const adjustedCount = isLast ? csvParsedCount - (accountCount * idx) : accountCount;
                   return (
-                    <div key={id} className="flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-lg border border-blue-200">
-                      <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                        <Mail className="w-3 h-3 text-blue-600" />
+                    <div key={id} className="flex items-center justify-between bg-blue-50 px-3 py-2.5 rounded-lg border border-blue-200">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                          <Mail className="w-3 h-3 text-blue-600" />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-xs font-medium text-blue-900">{acc?.email || id}</span>
+                          <span className="text-[10px] text-blue-500">{acc?.provider === 'gmail' ? 'Gmail' : 'Outlook'}</span>
+                        </div>
                       </div>
-                      <span className="text-xs font-medium text-blue-900">{acc?.email || id}</span>
-                      <CheckCircle2 className="w-4 h-4 text-green-500" />
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-indigo-600">{adjustedCount}</span>
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                      </div>
                     </div>
                   );
                 })}
