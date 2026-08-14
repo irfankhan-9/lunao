@@ -62,14 +62,6 @@ It only takes a moment to review, and there's no commitment.
 Best regards,
 The Lunao Team`;
 
-const EMAIL_STEPS = [
-  { step: 1, name: 'Select Niche' },
-  { step: 2, name: 'Choose Lead Source' },
-  { step: 3, name: 'Select Template' },
-  { step: 4, name: 'Connect Accounts' },
-  { step: 5, name: 'Review & Launch' },
-];
-
 export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   templates,
   customTemplates = [],
@@ -84,7 +76,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   const isPro = userPlan === 'Pro Plan' || userPlan === 'Agency Plan';
   
   const [activeStep, setActiveStep] = useState<number>(1);
-  const stepRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
   
   // Niche selection
   const [selectedNiche, setSelectedNiche] = useState<string>('Barber');
@@ -117,8 +108,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   const [isLoadingAccounts, setIsLoadingAccounts] = useState<boolean>(false);
   const [isProbingTokens, setIsProbingTokens] = useState<boolean>(false);
   const [accountProbes, setAccountProbes] = useState<Record<string, EmailAccountProbeResult>>({});
-  const stepTrackRef = useRef<HTMLDivElement | null>(null);
-  
   // Email content
   const [emailSubject, setEmailSubject] = useState<string>(DEFAULT_EMAIL_SUBJECT);
   const [emailBody, setEmailBody] = useState<string>(DEFAULT_EMAIL_BODY);
@@ -160,8 +149,17 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   const allTemplates = [...nicheTemplates, ...nicheCustom];
   
   useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+    // Scroll to show step indicator (in Campaigns.tsx) after step change
+    const timer = setTimeout(() => {
+      const stepTrack = document.getElementById('wizard-steps-horizontal-track');
+      if (stepTrack) {
+        stepTrack.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        stepContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
     playGentleChime(activeStep);
+    return () => clearTimeout(timer);
   }, [activeStep]);
   
   useEffect(() => {
@@ -777,65 +775,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Step Indicator */}
-      <div className="relative px-6 md:px-8 py-6 md:py-8 bg-white border-b border-border-main">
-        <button
-          type="button"
-          onClick={() => stepTrackRef.current?.scrollBy({ left: -240, behavior: 'smooth' })}
-          className="hidden md:flex absolute left-2 top-1/2 -translate-y-1/2 z-10 w-7 h-7 items-center justify-center bg-white/90 border border-border-main rounded-full shadow-sm hover:bg-off-white"
-          aria-label="Scroll steps left"
-        >
-          <ChevronLeft className="w-4 h-4 text-ink" />
-        </button>
-        <button
-          type="button"
-          onClick={() => stepTrackRef.current?.scrollBy({ left: 240, behavior: 'smooth' })}
-          className="hidden md:flex absolute right-2 top-1/2 -translate-y-1/2 z-10 w-7 h-7 items-center justify-center bg-white/90 border border-border-main rounded-full shadow-sm hover:bg-off-white"
-          aria-label="Scroll steps right"
-        >
-          <ChevronRight className="w-4 h-4 text-ink" />
-        </button>
-        <div
-          id="email-wizard-steps-track"
-          ref={stepTrackRef}
-          className="scrollbar-thin flex flex-nowrap items-center overflow-x-auto gap-4 px-6 md:px-12 snap-x snap-mandatory"
-        >
-          {EMAIL_STEPS.map((item) => (
-            <React.Fragment key={item.step}>
-              <div
-                ref={el => { stepRefs.current[item.step] = el; }}
-                className="flex items-center gap-3 shrink-0 snap-center"
-              >
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm ${
-                  activeStep === item.step
-                    ? 'bg-accent text-white ring-4 ring-accent-soft'
-                    : activeStep > item.step
-                      ? 'bg-success text-white'
-                      : 'bg-surface text-ink-secondary border border-border-main'
-                }`}>
-                  {activeStep > item.step ? <Check className="w-4 h-4" /> : item.step}
-                </div>
-                <div className="flex flex-col whitespace-nowrap">
-                  <span className={`text-[11px] uppercase tracking-wider font-semibold ${
-                    activeStep === item.step ? 'text-accent' : 'text-ink-secondary'
-                  }`}>
-                    Step 0{item.step}
-                  </span>
-                  <span className={`text-xs font-medium leading-tight ${
-                    activeStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'
-                  }`}>
-                    {item.name}
-                  </span>
-                </div>
-              </div>
-              {item.step < 5 && (
-                <div className="hidden md:block h-[1px] bg-border-light flex-1 mx-4 min-w-[20px]" />
-              )}
-            </React.Fragment>
-          ))}
-        </div>
-      </div>
-      
       {/* Step Content */}
       <div ref={stepContentRef} id="email-wizard-content" className="p-6 md:p-8 min-h-[350px] scroll-mt-4">
         {/* Step 1: Select Niche */}
@@ -1131,11 +1070,15 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                       key={tpl.id}
                       type="button"
                       onClick={() => {
-                        playElegantBell();
-                        setSelectedTemplateId(tpl.id);
-                        setSelectedTemplateForPreview(tpl as Template);
+                        if (isSelected) {
+                          // Already selected - open preview modal
+                          openPreviewModal(tpl.id, index);
+                        } else {
+                          // Not selected - select it with beautiful sound
+                          playElegantBell();
+                          setSelectedTemplateId(tpl.id);
+                        }
                       }}
-                      onDoubleClick={() => openPreviewModal(tpl.id, index)}
                       className={`group relative bg-white rounded-2xl overflow-hidden border-2 transition-all duration-300 text-left cursor-pointer ${
                         isSelected
                           ? 'border-accent shadow-2xl shadow-accent/20 ring-4 ring-accent/10 scale-[1.02]'
