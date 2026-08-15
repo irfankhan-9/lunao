@@ -1181,7 +1181,10 @@ export async function listEmailCampaigns(ownerKey: string, limit = 50): Promise<
 
 // Get a single email campaign with its leads
 export async function getEmailCampaign(id: string): Promise<{ campaign: any; leads: any[] } | null> {
-  const res = await fetch(`${API_BASE}/api/email-campaigns/${encodeURIComponent(id)}`);
+  const res = await fetch(`${API_BASE}/api/email-campaigns/${encodeURIComponent(id)}`, {
+    credentials: 'include',
+    headers: { 'x-owner-key': (typeof localStorage !== 'undefined' && localStorage.getItem('lunao_owner_key')) || '' },
+  });
   if (res.status === 404) return null;
   if (!res.ok) {
     const d = await res.json().catch(() => ({}));

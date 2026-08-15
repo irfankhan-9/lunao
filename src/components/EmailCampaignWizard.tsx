@@ -42,6 +42,7 @@ interface EmailCampaignWizardProps {
   userCredits: number;
   onCreditsChange?: (credits: number) => void;
   onLaunch?: () => void;
+  onCampaignCreated?: (campaign: any) => void;
   onViewDetails?: (campaignId: string) => void;
   initialSubject?: string;
   initialBody?: string;
@@ -69,6 +70,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   userCredits,
   onCreditsChange,
   onLaunch,
+  onCampaignCreated,
   onViewDetails,
   initialSubject,
   initialBody,
@@ -402,6 +404,47 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         body: emailBody,
       });
 
+      // Notify parent to add campaign to list
+      onCampaignCreated?.({
+        id: campaign.id,
+        name: campaignName,
+        niche: selectedNiche,
+        templateId: selectedTemplateId,
+        type: 'email',
+        status: 'Active',
+        createdAt: new Date().toISOString(),
+        emailAccountsUsed: Array.from(selectedAccountIds).map(id => {
+          const acc = connectedAccounts.find(a => a.id === id);
+          return {
+            accountId: id,
+            accountEmail: acc?.email || id,
+            sent: 0,
+            failed: 0,
+          };
+        }),
+        leadsFound: csvLeads.length,
+        sitesGenerated: 0,
+        emailsSent: 0,
+        emailsFailed: 0,
+      });
+
+      // Initialize launchResults with per-account tracking
+      setLaunchResults({
+        sent: 0,
+        failed: 0,
+        status: 'running',
+        perAccount: Array.from(selectedAccountIds).map(id => {
+          const acc = connectedAccounts.find(a => a.id === id);
+          return {
+            accountId: id,
+            accountEmail: acc?.email || id,
+            sent: 0,
+            failed: 0,
+          };
+        }),
+        perLead: [],
+      });
+
       setLaunchProgress(15);
       setLaunchMessage('AI is editing templates...');
       
@@ -496,6 +539,42 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               siteUrl: e.siteUrl,
               status: 'sent',
             });
+            // Update live counters immediately
+            setLiveCounters(prev => ({ ...prev, emailsSent: prev.emailsSent + 1 }));
+            // Update launch results for real-time display using functional update
+            setLaunchResults(prev => {
+              const prevSent = prev?.sent || 0;
+              const prevPerLead = prev?.perLead || [];
+              const prevPerAccount = prev?.perAccount || [];
+              const newPerLead = [...prevPerLead, {
+                leadId: e.leadId,
+                name: e.name,
+                email: e.email,
+                accountEmail: e.accountEmail,
+                subject: e.subject,
+                siteUrl: e.siteUrl,
+                status: 'sent',
+              }];
+              // Update per-account stats
+              let newPerAccount = prevPerAccount;
+              const accIdx = newPerAccount.findIndex((a: any) => (a.accountEmail || a.email) === e.accountEmail);
+              if (accIdx >= 0) {
+                newPerAccount = newPerAccount.map((a: any, i: number) => 
+                  i === accIdx ? { ...a, sent: (a.sent || 0) + 1 } : a
+                );
+              } else {
+                // Add new account if not found
+                newPerAccount = [...newPerAccount, { accountEmail: e.accountEmail, sent: 1, failed: 0 }];
+              }
+              return { sent: prevSent + 1, failed: prev?.failed || 0, status: prev?.status || 'running', perLead: newPerLead, perAccount: newPerAccount };
+            });
+            // Update campaign in list in real-time
+            window.dispatchEvent(new CustomEvent('lunao:campaign-progress', { detail: {
+              id: celebratedCampaign.id,
+              emailsSent: 1,
+              emailsFailed: 0,
+              lead: { leadId: e.leadId, name: e.name, email: e.email, accountEmail: e.accountEmail, siteUrl: e.siteUrl, status: 'sent' }
+            }}));
           } else if (e.type === 'send:failed' || e.type === 'send:error') {
             perLead.push({
               leadId: e.leadId,
@@ -504,6 +583,28 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               status: 'failed',
               reason: e.reason || e.error,
             });
+            // Update live counters immediately
+            setLiveCounters(prev => ({ ...prev, emailsFailed: prev.emailsFailed + 1 }));
+            // Update launch results for real-time display using functional update
+            setLaunchResults(prev => {
+              const prevFailed = prev?.failed || 0;
+              const prevPerLead = prev?.perLead || [];
+              const newPerLead = [...prevPerLead, {
+                leadId: e.leadId,
+                name: e.name,
+                accountEmail: e.accountEmail,
+                status: 'failed',
+                reason: e.reason || e.error,
+              }];
+              return { sent: prev?.sent || 0, failed: prevFailed + 1, status: prev?.status || 'running', perLead: newPerLead, perAccount: prev?.perAccount || [] };
+            });
+            // Update campaign in list in real-time
+            window.dispatchEvent(new CustomEvent('lunao:campaign-progress', { detail: {
+              id: celebratedCampaign.id,
+              emailsSent: 0,
+              emailsFailed: 1,
+              lead: { leadId: e.leadId, name: e.name, accountEmail: e.accountEmail, status: 'failed', reason: e.reason || e.error }
+            }}));
           } else if (e.type === 'send:queued') {
             perLead.push({
               leadId: e.leadId,
@@ -517,34 +618,161 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               found.siteUrl = e.siteUrl;
             } else {
               perLead.push({
-                leadId: e.leadId,
+                leadId: e.leadId ?? e.index,
                 name: e.name,
                 siteUrl: e.siteUrl,
                 status: 'pending',
               });
             }
+            // Fire progress so the Recent Campaigns card populates deployedSites in real time
+            window.dispatchEvent(new CustomEvent('lunao:campaign-progress', { detail: {
+              id: celebratedCampaign.id,
+              emailsSent: 0,
+              emailsFailed: 0,
+              lead: { leadId: e.leadId ?? e.index, name: e.name, siteUrl: e.siteUrl, status: 'pending' }
+            }}));
           } else if (e.type === 'complete') {
-            setLaunchResults({
-              sent: e.sent || 0,
-              failed: e.failed || 0,
-              status: e.status || 'completed',
-              perAccount: e.perAccount || [],
-              perLead,
+            // Use functional setState to get latest values
+            setLaunchResults(prev => {
+              const currentSent = prev?.sent || 0;
+              const currentFailed = prev?.failed || 0;
+              const currentPerLead = prev?.perLead || [];
+              const currentPerAccount = prev?.perAccount || [];
+              return {
+                sent: e.sent !== undefined && e.sent !== null ? e.sent : currentSent,
+                failed: e.failed !== undefined && e.failed !== null ? e.failed : currentFailed,
+                status: e.status || 'completed',
+                perAccount: e.perAccount && e.perAccount.length > 0 ? e.perAccount : currentPerAccount,
+                perLead: currentPerLead.length > 0 ? currentPerLead : perLead,
+              };
             });
             setLaunchProgress(100);
+            
+            // Calculate final values using accumulated perLead array
+            const finalSent = e.sent !== undefined ? e.sent : perLead.filter(p => p.status === 'sent').length;
+            const finalFailed = e.failed !== undefined ? e.failed : perLead.filter(p => p.status === 'failed').length;
+            
+            // Calculate per-account stats from perLead if not provided by backend
+            const perAccountFromLeads: any[] = [];
+            const accountMap: Record<string, any> = {};
+            for (const lead of perLead) {
+              if (lead.accountEmail) {
+                if (!accountMap[lead.accountEmail]) {
+                  accountMap[lead.accountEmail] = { accountEmail: lead.accountEmail, sent: 0, failed: 0 };
+                }
+                if (lead.status === 'sent') accountMap[lead.accountEmail].sent++;
+                else if (lead.status === 'failed') accountMap[lead.accountEmail].failed++;
+              }
+            }
+            const finalPerAccount = e.perAccount && e.perAccount.length > 0 
+              ? e.perAccount 
+              : Object.values(accountMap);
+            
+            // Update campaign in list with final results - ONLY ONCE
+            const finalCampaign = {
+              id: celebratedCampaign.id,
+              name: campaignName,
+              niche: selectedNiche,
+              templateId: selectedTemplateId,
+              type: 'email',
+              status: 'Completed',
+              createdAt: new Date().toISOString(),
+              emailAccountsUsed: finalPerAccount.map((a: any) => ({
+                accountId: a.accountId || a.id || '',
+                accountEmail: a.accountEmail || a.email || '',
+                sent: a.sent || 0,
+                failed: a.failed || 0,
+              })),
+              emailsSent: finalSent,
+              emailsFailed: finalFailed,
+              sitesGenerated: perLead.filter((p: any) => p.siteUrl).length,
+              deployedSites: perLead.filter((p: any) => p.siteUrl).map((p: any, idx: number) => ({
+                slug: (p.email || p.name || `lead-${idx}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+                name: p.name || 'Lead',
+                city: undefined,
+                url: p.siteUrl,
+                status: 'live' as const,
+              })),
+              emailLeads: perLead.map((p: any) => ({
+                leadId: p.leadId,
+                name: p.name,
+                email: p.email,
+                siteUrl: p.siteUrl,
+                accountEmail: p.accountEmail,
+                status: p.status === 'failed' ? 'failed' : 'sent',
+                reason: p.reason,
+              })),
+            };
+            // Dispatch event for parent to update - ALWAYS FIRE THIS
+            window.dispatchEvent(new CustomEvent('lunao:campaign-complete', { detail: finalCampaign }));
+            console.log('[EmailCampaign] Campaign complete event dispatched:', finalCampaign.id, 'sent:', finalSent, 'failed:', finalFailed);
           }
         }
       );
       
-      if (!launchResults) {
-        setLaunchResults({
-          sent: result?.sent || 0,
-          failed: result?.failed || 0,
-          status: 'completed',
-          perAccount: [],
-          perLead,
-        });
-      }
+      // Capture campaign ID at launch time
+      const campaignIdForFallback = celebratedCampaign.id;
+      const campaignNameForFallback = campaignName;
+      const selectedNicheForFallback = selectedNiche;
+      const selectedTemplateIdForFallback = selectedTemplateId;
+      
+      // CRITICAL: Ensure campaign-complete event fires even if SSE doesn't send it
+      // This is a fallback that fires after SSE connection closes
+      setTimeout(() => {
+        // Only dispatch if we haven't already (check if launchComplete is set)
+        if (!launchComplete) {
+          const currentSent = launchResults?.sent || perLead.filter(p => p.status === 'sent').length;
+          const currentFailed = launchResults?.failed || perLead.filter(p => p.status === 'failed').length;
+          // Calculate per-account from leads
+          const accountMap: Record<string, any> = {};
+          for (const lead of perLead) {
+            if (lead.accountEmail) {
+              if (!accountMap[lead.accountEmail]) {
+                accountMap[lead.accountEmail] = { accountEmail: lead.accountEmail, sent: 0, failed: 0 };
+              }
+              if (lead.status === 'sent') accountMap[lead.accountEmail].sent++;
+              else if (lead.status === 'failed') accountMap[lead.accountEmail].failed++;
+            }
+          }
+          const fallbackPerAccount = Object.values(accountMap);
+          const finalCampaign = {
+            id: campaignIdForFallback,
+            name: campaignNameForFallback,
+            niche: selectedNicheForFallback,
+            templateId: selectedTemplateIdForFallback,
+            type: 'email',
+            status: 'Completed',
+            createdAt: new Date().toISOString(),
+            emailAccountsUsed: fallbackPerAccount.map((a: any) => ({
+              accountId: a.accountId || '',
+              accountEmail: a.accountEmail || '',
+              sent: a.sent || 0,
+              failed: a.failed || 0,
+            })),
+            emailsSent: currentSent,
+            emailsFailed: currentFailed,
+            sitesGenerated: perLead.filter((p: any) => p.siteUrl).length,
+            deployedSites: perLead.filter((p: any) => p.siteUrl).map((p: any, idx: number) => ({
+              slug: (p.email || p.name || `lead-${idx}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+              name: p.name || 'Lead',
+              city: undefined,
+              url: p.siteUrl,
+              status: 'live' as const,
+            })),
+            emailLeads: perLead.map((p: any) => ({
+              leadId: p.leadId,
+              name: p.name,
+              email: p.email,
+              siteUrl: p.siteUrl,
+              accountEmail: p.accountEmail,
+              status: p.status === 'failed' ? 'failed' : 'sent',
+              reason: p.reason,
+            })),
+          };
+          window.dispatchEvent(new CustomEvent('lunao:campaign-complete', { detail: finalCampaign }));
+          console.log('[EmailCampaign] FALLBACK: Campaign complete event dispatched after timeout');
+        }
+      }, 5000); // 5 second fallback
       
       setLaunchProgress(100);
       setLaunchMessage(
@@ -662,14 +890,15 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 </div>
               </div>
 
+              {/* Detailed Stats */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
                 <div className="bg-white/80 border border-border-light rounded-xl p-3 text-center">
-                  <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Sites</p>
+                  <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Sites Built</p>
                   <p className="text-2xl font-bold text-accent font-mono mt-0.5 animate-counter-pop">{sitesLive}</p>
-                  <p className="text-[9px] text-ink-tertiary mt-0.5">Sites staged</p>
+                  <p className="text-[9px] text-ink-tertiary mt-0.5">Deployed</p>
                 </div>
                 <div className="bg-white/80 border border-border-light rounded-xl p-3 text-center">
-                  <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Emails</p>
+                  <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Emails Sent</p>
                   <p className="text-2xl font-bold text-success font-mono mt-0.5 animate-counter-pop">{sent}</p>
                   <p className="text-[9px] text-ink-tertiary mt-0.5">Delivered</p>
                 </div>
@@ -684,6 +913,32 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                   <p className="text-[9px] text-ink-tertiary mt-0.5">Sending inboxes</p>
                 </div>
               </div>
+
+              {/* Per-account breakdown */}
+              {isDone && perAcc && perAcc.length > 0 && (
+                <div className="bg-white/60 border border-border-light rounded-xl p-4 space-y-3">
+                  <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">Emails by Account</p>
+                  <div className="space-y-2">
+                    {perAcc.map((acc: any, idx: number) => {
+                      const accTotal = (acc.sent || 0) + (acc.failed || 0);
+                      const pct = accTotal > 0 ? Math.round(((acc.sent || 0) / accTotal) * 100) : 0;
+                      return (
+                        <div key={idx} className="flex items-center gap-3 text-[11px]">
+                          <Mail className="w-3.5 h-3.5 text-accent shrink-0" />
+                          <span className="flex-1 min-w-0 font-mono text-ink truncate">{acc.accountEmail || acc.email || 'Account'}</span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-success font-bold">{acc.sent || 0}</span>
+                            {acc.failed > 0 && <span className="text-danger font-bold">/{acc.failed}</span>}
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                              <div className="h-full bg-success transition-all" style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Single unified progress log */}
               {isRunning && (

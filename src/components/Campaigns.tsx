@@ -11,7 +11,7 @@ import { CelebrationEffect } from './CelebrationEffect';
 import { TemplateSimPreview } from './TemplateSimPreview';
 import { UnifiedRecentCampaigns } from './UnifiedRecentCampaigns';
 import { EmailCampaignWizard } from './EmailCampaignWizard';
-import { validateCsvFile, runCampaign, runSiteDeployCampaign, PipelineLead, PipelineResultRow, CsvValidation, listCustomTemplates, CustomTemplate, listEmailAccounts, createEmailCampaign, probeAllEmailAccounts, runEmailCampaign, cancelCampaign, cancelEmailCampaign, EmailCampaignEvent } from '../lib/pipelineClient';
+import { validateCsvFile, runCampaign, runSiteDeployCampaign, PipelineLead, PipelineResultRow, CsvValidation, listCustomTemplates, CustomTemplate, listEmailAccounts, createEmailCampaign, probeAllEmailAccounts, runEmailCampaign, cancelCampaign, cancelEmailCampaign, EmailCampaignEvent, getEmailCampaign as fetchEmailCampaign } from '../lib/pipelineClient';
 import { ActiveCampaignRun } from '../App';
 
 interface CampaignsProps {
@@ -708,6 +708,177 @@ The Lunao Team`);
       setEmailActiveStep(4);
     }
   }, [initialEmailNonce, initialEmailSubject, initialEmailBody]);
+
+  // Listen for email campaign completion events from EmailCampaignWizard
+  useEffect(() => {
+    const handleCampaignComplete = (e: Event) => {
+      const campaign = (e as CustomEvent).detail;
+      console.log('[Campaigns] Received campaign-complete event:', campaign.id, 'status:', campaign.status, 'sent:', campaign.emailsSent);
+      setCampaigns(prev => {
+        // Update existing campaign or add new one
+        const exists = prev.find(c => c.id === campaign.id);
+        console.log('[Campaigns] Campaign exists:', !!exists, 'total campaigns:', prev.length);
+        let updated;
+        if (exists) {
+          updated = prev.map(c => c.id === campaign.id ? { ...c, ...campaign } : c);
+          console.log('[Campaigns] Updated campaigns, found:', updated.find(c => c.id === campaign.id)?.status);
+        } else {
+          console.log('[Campaigns] Adding new campaign to list');
+          updated = [campaign, ...prev];
+        }
+        // Save to localStorage immediately
+        try {
+          localStorage.setItem('lunao_campaigns', JSON.stringify(updated));
+          console.log('[Campaigns] Saved to localStorage');
+        } catch (err) {
+          console.error('[Campaigns] Failed to save to localStorage:', err);
+        }
+        return updated;
+      });
+    };
+    const handleCampaignProgress = (e: Event) => {
+      const { id, emailsSent, emailsFailed, lead } = (e as CustomEvent).detail;
+      setCampaigns(prev => prev.map(c => {
+        if (c.id !== id) return c;
+        // Update email counts
+        const newSent = (c.emailsSent || 0) + emailsSent;
+        const newFailed = (c.emailsFailed || 0) + emailsFailed;
+        // Update email accounts used
+        let newEmailAccounts = c.emailAccountsUsed || [];
+        if (lead?.accountEmail && emailsSent > 0) {
+          const accIdx = newEmailAccounts.findIndex((a: any) => a.accountEmail === lead.accountEmail);
+          if (accIdx >= 0) {
+            newEmailAccounts = newEmailAccounts.map((a: any, i: number) =>
+              i === accIdx ? { ...a, sent: (a.sent || 0) + emailsSent } : a
+            );
+          } else {
+            newEmailAccounts = [...newEmailAccounts, { accountEmail: lead.accountEmail, sent: emailsSent, failed: 0 }];
+          }
+        }
+        // Update email leads
+        const newLeads = lead ? [...(c.emailLeads || []), lead] : (c.emailLeads || []);
+        // Track deployed sites in real time so the Recent card populates as soon
+        // as sites come online (instead of waiting for the final completion event).
+        let newDeployedSites = c.deployedSites || [];
+        if (lead?.siteUrl) {
+          const slug = (lead.email || lead.name || `lead-${newDeployedSites.length}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          const exists = newDeployedSites.some((s: any) => s.url === lead.siteUrl);
+          if (!exists) {
+            newDeployedSites = [...newDeployedSites, { slug, name: lead.name || 'Lead', city: undefined, url: lead.siteUrl, status: 'live' }];
+          }
+        }
+        const sitesGenerated = newDeployedSites.length || c.sitesGenerated;
+        return { ...c, emailsSent: newSent, emailsFailed: newFailed, emailAccountsUsed: newEmailAccounts, emailLeads: newLeads, deployedSites: newDeployedSites, sitesGenerated };
+      }));
+    };
+    window.addEventListener('lunao:campaign-complete', handleCampaignComplete);
+    window.addEventListener('lunao:campaign-progress', handleCampaignProgress);
+    return () => {
+      window.removeEventListener('lunao:campaign-complete', handleCampaignComplete);
+      window.removeEventListener('lunao:campaign-progress', handleCampaignProgress);
+    };
+  }, []);
+
+  // Reconcile Active email campaigns against the server every 3 seconds.
+  // This is the safety net for the SSE event bus — even if the wizard's
+  // window-dispatched events never reach this listener (e.g. the SSE stream
+  // dropped, the page was reloaded mid-run, the wizard unmounted), we still
+  // surface the real backend state on the Recent Campaigns card. The poll
+  // stops as soon as no campaigns are Active anymore.
+  const campaignsRef = useRef<Campaign[]>(campaigns);
+  useEffect(() => { campaignsRef.current = campaigns; }, [campaigns]);
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      const activeEmailCampaigns = campaignsRef.current.filter(
+        (c) => c.type === 'email' && c.status === 'Active',
+      );
+      if (activeEmailCampaigns.length === 0) return;
+      // Fetch the user's email accounts once per tick so we can map
+      // assigned_account_id → email address for the per-account breakdown.
+      let accountsById: Record<string, string> = {};
+      try {
+        const ownerKey = (typeof localStorage !== 'undefined' && localStorage.getItem('lunao_owner_key')) || 'dash-Free-Plan';
+        const accs = await listEmailAccounts(ownerKey);
+        for (const a of accs || []) {
+          accountsById[a.id] = a.email;
+        }
+      } catch { /* ignore */ }
+      for (const camp of activeEmailCampaigns) {
+        try {
+          // camp.id IS the server's campaign id (the wizard passes the
+          // backend's id directly as the local id when adding the row).
+          const id = camp.id;
+          const result = await fetchEmailCampaign(id);
+          if (cancelled || !result) continue;
+          const { campaign: dbCamp, leads } = result;
+          // Map backend lead statuses → our Campaign shape
+          const sentCount = leads.filter((l: any) => l.send_status === 'sent').length;
+          const failedCount = leads.filter((l: any) => l.send_status === 'failed').length;
+          const sitesCount = leads.filter((l: any) => l.generated_site_url).length;
+          const deployedSites = leads
+            .filter((l: any) => l.generated_site_url)
+            .map((l: any) => ({
+              slug: l.slug || (l.email || l.business_name || `lead-${l.id}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+              name: l.business_name || 'Lead',
+              city: l.city,
+              url: l.generated_site_url,
+              status: 'live' as const,
+            }));
+          // Per-account breakdown: walk leads with assigned_account_id and
+          // tally sent/failed per account so the card shows "X emails from
+          // alice@gmail.com" accurately.
+          const perAccount: Record<string, { accountId: string; accountEmail: string; sent: number; failed: number }> = {};
+          for (const l of leads) {
+            const aid = l.assigned_account_id;
+            if (!aid) continue;
+            const accEmail = accountsById[aid] || aid;
+            if (!perAccount[aid]) perAccount[aid] = { accountId: aid, accountEmail: accEmail, sent: 0, failed: 0 };
+            if (l.send_status === 'sent') perAccount[aid].sent++;
+            else if (l.send_status === 'failed') perAccount[aid].failed++;
+          }
+          // Preserve any accounts that were already known but had no lead
+          // assignments yet (e.g. account selected but no send happened).
+          for (const existing of camp.emailAccountsUsed || []) {
+            if (!perAccount[existing.accountId]) {
+              perAccount[existing.accountId] = { ...existing, sent: existing.sent || 0, failed: existing.failed || 0 };
+            }
+          }
+          const emailAccountsUsed = Object.values(perAccount);
+          const newStatus =
+            dbCamp.status === 'completed' ? 'Completed'
+              : dbCamp.status === 'failed' ? 'Crashed'
+                : dbCamp.status === 'cancelled' ? 'Crashed'
+                  : 'Active';
+
+          setCampaigns((prev) =>
+            prev.map((c) =>
+              c.id === camp.id || c.serverCampaignId === id
+                ? {
+                    ...c,
+                    status: newStatus,
+                    emailsSent: sentCount || c.emailsSent,
+                    emailsFailed: failedCount || c.emailsFailed,
+                    sitesGenerated: sitesCount || c.sitesGenerated,
+                    deployedSites: deployedSites.length ? deployedSites : c.deployedSites,
+                    emailAccountsUsed,
+                  }
+                : c,
+            ),
+          );
+        } catch {
+          /* swallow — next tick will retry */
+        }
+      }
+    };
+
+    poll();
+    const handle = setInterval(poll, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(handle);
+    };
+  }, [setCampaigns]);
 
   // Email account / token management
   const [emailAccounts, setEmailAccounts] = useState<any[]>([]);
@@ -1947,6 +2118,9 @@ The Lunao Team`);
               userCredits={userCredits}
               onCreditsChange={(credits) => setUserCredits(credits)}
               onLaunch={() => {}}
+              onCampaignCreated={(newCampaign) => {
+                setCampaigns(prev => [newCampaign, ...prev]);
+              }}
               onViewDetails={(campaignId) => {
                 setScrollTarget?.(campaignId);
               }}

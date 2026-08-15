@@ -250,7 +250,7 @@ export const UnifiedRecentCampaigns: React.FC<UnifiedRecentCampaignsProps> = ({
   };
 
   const handleCardOpen = (camp: Campaign) => {
-    if (camp.status === 'Active') return; // can't open mid-flight
+    // Always allow opening the card to view details, even mid-flight
     playSoftTap();
     setOpenCampaign(camp);
   };
@@ -680,6 +680,12 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
                   <StatPill label="Failed" value={failed} color="text-danger" />
                 </>
               )}
+              {camp.emailAccountsUsed && camp.emailAccountsUsed.length > 0 && (
+                <>
+                  <div className="w-px bg-border-light" />
+                  <StatPill label="Accts" value={camp.emailAccountsUsed.length} color="text-ink" />
+                </>
+              )}
             </>
           ) : (
             <>
@@ -689,6 +695,33 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
             </>
           )}
         </div>
+
+        {/* ── Per-account email breakdown for email campaigns ── */}
+        {isEmail && camp.emailAccountsUsed && camp.emailAccountsUsed.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-[9px] text-ink-tertiary font-bold uppercase tracking-widest">Sent by account</p>
+            <div className="space-y-1">
+              {camp.emailAccountsUsed.slice(0, 3).map((acc, i) => {
+                const total = (acc.sent || 0) + (acc.failed || 0);
+                const pct = total > 0 ? Math.round(((acc.sent || 0) / total) * 100) : 0;
+                return (
+                  <div key={i} className="flex items-center gap-2 text-[10px]">
+                    <Mail className="w-3 h-3 text-accent shrink-0" />
+                    <span className="flex-1 min-w-0 font-mono text-ink-secondary truncate">{acc.accountEmail}</span>
+                    <span className="text-success font-bold shrink-0">{acc.sent || 0}</span>
+                    {acc.failed > 0 && <span className="text-danger font-bold shrink-0">/{acc.failed}</span>}
+                    <div className="w-12 h-1 bg-gray-200 rounded-full overflow-hidden shrink-0">
+                      <div className="h-full bg-success" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+              {camp.emailAccountsUsed.length > 3 && (
+                <p className="text-[9px] text-accent font-semibold">+{camp.emailAccountsUsed.length - 3} more accounts</p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ── Date stamp ── */}
         <div className="flex items-center justify-between">
