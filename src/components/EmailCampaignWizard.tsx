@@ -2,7 +2,7 @@
 // Replaces the SMS campaign type with a full email campaign flow
 // Matches existing campaign wizard patterns 100%
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Mail, Send, Upload, Globe, Check, ChevronRight, ChevronLeft, AlertCircle,
   CheckCircle, CheckCircle2, Loader2, X, ShieldAlert, Plus, Trash2, Eye, ExternalLink,
@@ -16,6 +16,7 @@ import { nicheList } from '../data';
 import { TemplateSimPreview } from './TemplateSimPreview';
 import { CsvPreview } from './CsvPreview';
 import { TemplatePreviewModal } from './TemplatePreviewModal';
+import { CampaignProgressToggle, CampaignProgressData } from './CampaignProgressToggle';
 
 // Types
 interface EmailAccount {
@@ -46,6 +47,26 @@ interface EmailCampaignWizardProps {
   onViewDetails?: (campaignId: string) => void;
   initialSubject?: string;
   initialBody?: string;
+  // Active campaign registry
+  activeCampaignRuns?: Array<{
+    id: string;
+    kind: 'site-deploy' | 'email';
+    name: string;
+    niche: string;
+    total: number;
+    done: number;
+    status: 'starting' | 'running' | 'cancelling' | 'cancelled' | 'completed';
+    startedAt: number;
+    errorMessage?: string;
+    sitesGenerated?: number;
+    emailsSent?: number;
+    emailsFailed?: number;
+    accountsUsed?: number;
+    deployedSites?: string[];
+  }>;
+  upsertActiveRun?: (run: any) => void;
+  updateActiveRun?: (id: string, patch: any) => void;
+  removeActiveRun?: (id: string) => void;
 }
 
 const COST_PER_EMAIL = 2;
@@ -74,8 +95,18 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   onViewDetails,
   initialSubject,
   initialBody,
+  activeCampaignRuns = [],
+  upsertActiveRun,
+  updateActiveRun,
+  removeActiveRun,
 }) => {
   const isPro = userPlan === 'Pro Plan' || userPlan === 'Agency Plan';
+
+  // State for the progress toggle
+  const [activeProgressToggle, setActiveProgressToggle] = useState<CampaignProgressData | null>(null);
+  
+  // Track if we're showing the completion screen (vs wizard mode)
+  const [isShowingCompletion, setIsShowingCompletion] = useState(false);
   
   const [activeStep, setActiveStep] = useState<number>(1);
   
@@ -173,6 +204,59 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     if (typeof initialBody === 'string') setEmailBody(initialBody);
     if (initialSubject || initialBody) setActiveStep(4);
   }, [initialSubject, initialBody]);
+
+  // Sync progress toggle with active email campaigns
+  useEffect(() => {
+    // Find any running email campaigns in the active runs registry
+    const runningEmailCampaign = activeCampaignRuns.find(
+      (run) => run.kind === 'email' && (run.status === 'running' || run.status === 'starting')
+    );
+
+    if (runningEmailCampaign) {
+      // Show the progress toggle
+      setActiveProgressToggle({
+        id: runningEmailCampaign.id,
+        kind: 'email',
+        name: runningEmailCampaign.name,
+        status: runningEmailCampaign.status,
+        total: runningEmailCampaign.total,
+        done: runningEmailCampaign.done,
+        sitesGenerated: runningEmailCampaign.sitesGenerated,
+        emailsSent: runningEmailCampaign.emailsSent,
+        emailsFailed: runningEmailCampaign.emailsFailed,
+        accountsUsed: runningEmailCampaign.accountsUsed,
+        deployedSites: runningEmailCampaign.deployedSites,
+      });
+    } else if (celebratedCampaign && launchComplete && !isLaunching && isShowingCompletion) {
+      // Campaign just finished - show completion in toggle (only when showing completion screen)
+      const totalSent = launchResults?.sent ?? 0;
+      const totalFailed = launchResults?.failed ?? 0;
+      const sitesCount = launchResults?.perLead?.filter((p: any) => p.siteUrl).length ?? 0;
+      const accountsUsed = launchResults?.perAccount?.length ?? selectedAccountIds.size;
+
+      setActiveProgressToggle({
+        id: celebratedCampaign.id,
+        kind: 'email',
+        name: celebratedCampaign.name,
+        status: 'completed',
+        total: csvParsedCount || totalSent + totalFailed,
+        done: totalSent + totalFailed,
+        sitesGenerated: sitesCount,
+        emailsSent: totalSent,
+        emailsFailed: totalFailed,
+        accountsUsed,
+        deployedSites: launchResults?.perLead?.filter((p: any) => p.siteUrl).map((p: any) => p.siteUrl) ?? [],
+      });
+    } else {
+      // No active campaigns - clear toggle
+      setActiveProgressToggle(null);
+    }
+  }, [activeCampaignRuns, celebratedCampaign, launchComplete, isLaunching, launchResults, csvParsedCount, selectedAccountIds.size, isShowingCompletion]);
+
+  // Handle progress toggle dismissal
+  const handleProgressToggleDismiss = useCallback((id: string) => {
+    setActiveProgressToggle(null);
+  }, []);
   
   const dedupeAccounts = (rows: any[]): any[] => {
     const seen = new Map<string, any>();
@@ -404,6 +488,22 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         body: emailBody,
       });
 
+      // Register this campaign as an active run for the progress toggle
+      upsertActiveRun?.({
+        id: campaign.id,
+        kind: 'email',
+        name: campaignName,
+        niche: selectedNiche,
+        total: csvLeads.length,
+        done: 0,
+        status: 'starting',
+        startedAt: Date.now(),
+        sitesGenerated: 0,
+        emailsSent: 0,
+        emailsFailed: 0,
+        accountsUsed: selectedAccountIds.size,
+      });
+
       // Notify parent to add campaign to list
       onCampaignCreated?.({
         id: campaign.id,
@@ -575,6 +675,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               emailsFailed: 0,
               lead: { leadId: e.leadId, name: e.name, email: e.email, accountEmail: e.accountEmail, siteUrl: e.siteUrl, status: 'sent' }
             }}));
+            // Update active run progress for toggle
+            updateActiveRun?.(celebratedCampaign.id, { status: 'running' });
           } else if (e.type === 'send:failed' || e.type === 'send:error') {
             perLead.push({
               leadId: e.leadId,
@@ -631,6 +733,9 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               emailsFailed: 0,
               lead: { leadId: e.leadId ?? e.index, name: e.name, siteUrl: e.siteUrl, status: 'pending' }
             }}));
+            // Update active run with sitesGenerated for the toggle
+            const sitesSoFar = perLead.filter((p: any) => p.siteUrl).length + 1;
+            updateActiveRun?.(celebratedCampaign.id, { sitesGenerated: sitesSoFar });
           } else if (e.type === 'complete') {
             // Use functional setState to get latest values
             setLaunchResults(prev => {
@@ -781,6 +886,21 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
           : `Campaign finished — ${result?.sent || 0} sent, ${result?.failed || 0} failed.`,
       );
       setLaunchComplete(true);
+      setIsShowingCompletion(true);
+
+      // Auto-dismiss after 3 seconds with animation
+      setTimeout(() => {
+        const container = document.getElementById('campaign-progress-container');
+        if (container) {
+          container.classList.add('animate-slide-down-fade');
+        }
+        setTimeout(() => {
+          handleReset();
+        }, 400);
+      }, 3000);
+
+      // Mark the active run as completed for the progress toggle
+      updateActiveRun?.(celebratedCampaign.id, { status: 'completed' });
       if ((result?.sent || 0) > 0) {
         playVictoryCelebration();
       } else {
@@ -985,6 +1105,9 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                     setLaunchProgress(0);
                     setLaunchMessage('');
                     setActiveStep(1);
+                    setIsShowingCompletion(false);
+                    // Clear progress toggle when starting a new campaign
+                    setActiveProgressToggle(null);
                   }}
                   className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-border-main text-[11px] font-semibold text-ink hover:bg-off-white transition-all cursor-pointer"
                 >
@@ -1316,7 +1439,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                       )}
                       
                       {/* Preview Image Area - Much Bigger */}
-                      <div className="relative aspect-[16/11] bg-gradient-to-br from-surface via-off-white to-surface overflow-hidden">
+                      <div className="relative aspect-[16/11] bg-gradient-to-br from-surface via-off-white to-surface overflow-hidden cursor-pointer" onClick={() => openPreviewModal(tpl.id, index)}>
                         <TemplateSimPreview
                           id={tpl.id}
                           name={tpl.name}
@@ -1328,14 +1451,16 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                         
                         {/* Hover Overlay with Actions */}
                         <div className="absolute inset-0 bg-ink/0 group-hover:bg-ink/40 transition-all duration-300 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100">
-                          <button
-                            type="button"
+                          <div
+                            role="button"
+                            tabIndex={0}
                             onClick={(e) => { e.stopPropagation(); openPreviewModal(tpl.id, index); }}
-                            className="flex items-center gap-2 px-5 py-3 bg-white text-ink font-bold rounded-xl shadow-xl hover:bg-accent hover:text-white transition-all transform hover:scale-105"
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); openPreviewModal(tpl.id, index); } }}
+                            className="flex items-center gap-2 px-5 py-3 bg-white text-ink font-bold rounded-xl shadow-xl hover:bg-accent hover:text-white transition-all transform hover:scale-105 cursor-pointer"
                           >
                             <Eye className="w-5 h-5" />
                             Preview
-                          </button>
+                          </div>
                         </div>
                         
                         {/* Selection Badge */}
@@ -1849,83 +1974,131 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       })()}
 
       {(isLaunching || launchComplete) && (
-        <div className="mx-6 mb-4 p-4 bg-off-white border border-border-main rounded-xl space-y-3">
-          {isLaunching && (
-            <>
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 text-accent animate-spin" />
-                <p className="text-sm font-semibold text-ink">Campaign running...</p>
-              </div>
-              <div className="w-full bg-border-main/30 rounded-full h-2 overflow-hidden">
-                <div
-                  className="bg-accent h-full transition-all duration-300"
-                  style={{ width: `${launchProgress}%` }}
-                />
-              </div>
-              <p className="text-xs text-ink-secondary">{launchMessage}</p>
-            </>
-          )}
-          {launchComplete && launchResults && (
-            <div className="space-y-3">
-              <div className={`p-4 rounded-xl border ${launchResults.sent > 0 && launchResults.failed === 0 ? 'bg-success-soft border-success/20' : launchResults.sent === 0 ? 'bg-danger/5 border-danger/20' : 'bg-amber-50 border-amber-200'}`}>
-                <div className="flex items-start gap-3">
-                  {launchResults.sent > 0 && launchResults.failed === 0
-                    ? <CheckCircle className="w-6 h-6 text-success shrink-0" />
-                    : launchResults.sent === 0
-                      ? <X className="w-6 h-6 text-danger shrink-0" />
-                      : <AlertCircle className="w-6 h-6 text-amber-600 shrink-0" />}
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <p className={`text-base font-bold ${launchResults.sent > 0 && launchResults.failed === 0 ? 'text-success' : launchResults.sent === 0 ? 'text-danger' : 'text-amber-700'}`}>
-                      {launchResults.sent > 0 && launchResults.failed === 0
-                        ? `Campaign complete! ${launchResults.sent} sent.`
-                        : launchResults.sent === 0
-                          ? `Campaign finished — 0 emails sent, ${launchResults.failed} failed.`
-                          : `Campaign finished — ${launchResults.sent} sent, ${launchResults.failed} failed.`}
-                    </p>
-                    <p className="text-xs text-ink-secondary">{launchMessage}</p>
+        <div id="campaign-progress-container" className={`mx-6 mb-4 overflow-hidden transition-all duration-500 ${launchComplete ? 'animate-slide-up-fade' : ''}`}>
+          <div className="bg-white border-2 border-blue-200 rounded-2xl shadow-lg shadow-blue-100/50 overflow-hidden">
+            {/* Header */}
+            <div className="px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {launchComplete ? (
+                  <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-lg">
+                    <CheckCircle className="w-5 h-5 text-blue-600" />
                   </div>
+                ) : (
+                  <div className="relative">
+                    <Loader2 className="w-7 h-7 text-white animate-spin" />
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm font-bold text-white">
+                    {launchComplete ? 'Campaign Complete!' : 'Launching Campaign...'}
+                  </p>
+                  <p className="text-[11px] text-blue-100">{launchMessage}</p>
                 </div>
               </div>
-
-              {launchResults.perLead.length > 0 && (
-                <div className="bg-white border border-border-main rounded-xl overflow-hidden">
-                  <div className="px-4 py-2 bg-off-white border-b border-border-main">
-                    <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Per-lead results</p>
-                  </div>
-                  <ul className="divide-y divide-border-main/50">
-                    {launchResults.perLead.map((lead, i) => (
-                      <li key={i} className="px-4 py-2.5 flex items-center justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-ink truncate">{lead.name}</p>
-                          <p className="text-[11px] text-ink-secondary truncate">
-                            {lead.email || lead.accountEmail || '—'}
-                            {lead.accountEmail ? ` · via ${lead.accountEmail}` : ''}
-                          </p>
-                        </div>
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                          lead.status === 'sent'
-                            ? 'bg-success/10 text-success'
-                            : lead.status === 'queued'
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-danger/10 text-danger'
-                        }`}>
-                          {lead.status}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+              {/* Live percentage */}
+              {isLaunching && (
+                <div className="text-white font-black text-lg">{launchProgress}%</div>
               )}
+            </div>
 
+            {/* Stats Row - Compact */}
+            <div className="px-4 py-3 flex items-center gap-3">
+              {/* Sites */}
+              <div className="flex-1 bg-blue-50 rounded-xl p-2.5 text-center border border-blue-100">
+                <div className="text-lg mb-0.5">🏗️</div>
+                <div className="text-xl font-black text-blue-700">{liveCounters.sitesStaged}</div>
+                <div className="text-[10px] text-blue-500 font-semibold uppercase">Sites</div>
+              </div>
+
+              {/* Sent */}
+              <div className="flex-1 bg-blue-50 rounded-xl p-2.5 text-center border border-blue-100">
+                <div className="text-lg mb-0.5">✉️</div>
+                <div className="text-xl font-black text-blue-700">{liveCounters.emailsSent}</div>
+                <div className="text-[10px] text-blue-500 font-semibold uppercase">Sent</div>
+              </div>
+
+              {/* Failed */}
+              <div className="flex-1 bg-red-50 rounded-xl p-2.5 text-center border border-red-100">
+                <div className="text-lg mb-0.5">❌</div>
+                <div className="text-xl font-black text-red-600">{liveCounters.emailsFailed}</div>
+                <div className="text-[10px] text-red-500 font-semibold uppercase">Failed</div>
+              </div>
+
+              {/* Accounts */}
+              <div className="flex-1 bg-blue-50 rounded-xl p-2.5 text-center border border-blue-100">
+                <div className="text-lg mb-0.5">👤</div>
+                <div className="text-xl font-black text-blue-700">{selectedAccountIds.size}</div>
+                <div className="text-[10px] text-blue-500 font-semibold uppercase">Accounts</div>
+              </div>
+            </div>
+
+            {/* Progress Bar (while launching) */}
+            {isLaunching && (
+              <div className="px-4 pb-3">
+                <div className="h-2.5 bg-blue-100 rounded-full overflow-hidden border border-blue-200">
+                  <div
+                    className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300 rounded-full relative overflow-hidden"
+                    style={{ width: `${launchProgress}%` }}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Victory Celebration (3 seconds then auto-dismiss) */}
+            {launchComplete && (
+              <div className="relative overflow-hidden">
+                {/* Confetti */}
+                {Array.from({ length: 30 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="absolute w-1.5 h-1.5 rounded-full animate-confetti-fall"
+                    style={{
+                      left: `${Math.random() * 100}%`,
+                      top: '-8px',
+                      backgroundColor: ['#3B82F6', '#60A5FA', '#93C5FD', '#FFD700', '#BFDBFE'][Math.floor(Math.random() * 5)],
+                      animationDelay: `${Math.random() * 1000}ms`,
+                      animationDuration: `${1500 + Math.random() * 1000}ms`,
+                    }}
+                  />
+                ))}
+                
+                {/* Victory Banner */}
+                <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-blue-100 border-t border-blue-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">🎉</span>
+                    <p className="text-sm font-bold text-blue-800">
+                      {launchResults?.sent && launchResults.sent > 0 
+                        ? `${launchResults.sent} emails sent successfully!` 
+                        : 'Campaign finished!'}
+                    </p>
+                  </div>
+                  <div className="flex gap-1">
+                    {['🌟', '💪', '🏆', '🚀'].map((emoji, i) => (
+                      <span key={i} className="text-xl animate-bounce" style={{ animationDelay: `${i * 0.1}s` }}>{emoji}</span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Auto-dismiss countdown */}
+                <div className="h-1 bg-blue-200">
+                  <div className="h-full bg-blue-500 animate-shrink-width" />
+                </div>
+              </div>
+            )}
+
+            {/* Launch Another Button */}
+            <div className="px-4 py-3 bg-blue-50 border-t border-blue-200">
               <button
                 type="button"
                 onClick={handleReset}
-                className="w-full px-4 py-2 bg-accent hover:bg-accent-hover text-white text-xs font-bold uppercase tracking-wider rounded-lg transition-all"
+                className="w-full px-4 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-sm font-bold rounded-xl transition-all shadow-md hover:shadow-lg"
               >
-                Launch another campaign
+                🚀 Launch Another Campaign
               </button>
             </div>
-          )}
+          </div>
         </div>
       )}
 
@@ -1933,6 +2106,14 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         <div className="mx-6 mb-4 p-3 bg-danger/5 border border-danger/20 rounded-xl">
           <p className="text-xs text-danger font-semibold">{launchError}</p>
         </div>
+      )}
+
+      {/* Campaign Progress Toggle - Beautiful floating progress indicator */}
+      {activeProgressToggle && (
+        <CampaignProgressToggle
+          campaign={activeProgressToggle}
+          onDismiss={handleProgressToggleDismiss}
+        />
       )}
     </div>
   );
