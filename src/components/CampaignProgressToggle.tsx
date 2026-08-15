@@ -40,24 +40,27 @@ function useCampaignPolling(campaignId: string, enabled: boolean, campaignStatus
   const [data, setData] = useState<CampaignProgressData | null>(null);
 
   useEffect(() => {
-    if (!enabled || campaignStatus !== 'running') return;
+    if (!enabled || campaignStatus !== 'running' || !campaignId) return;
 
+    let cancelled = false;
     const poll = async () => {
       try {
         const result = await getEmailCampaign(campaignId);
-        if (result) {
+        if (cancelled) return;
+        if (result && result.campaign) {
+          const c = result.campaign;
           setData({
-            id: result.id,
+            id: c.id || campaignId,
             kind: 'email',
-            name: result.name,
-            status: result.status === 'completed' ? 'completed' : 'running',
-            total: result.totalLeads || campaignTotal,
-            done: result.sent || 0,
-            sitesGenerated: result.sitesGenerated || 0,
-            emailsSent: result.sent || 0,
-            emailsFailed: result.failed || 0,
-            accountsUsed: result.accountsUsed || 0,
-            deployedSites: result.deployedSites || [],
+            name: c.name || 'Campaign',
+            status: c.status === 'completed' ? 'completed' : 'running',
+            total: c.totalLeads || campaignTotal,
+            done: c.sent || 0,
+            sitesGenerated: c.sitesGenerated || 0,
+            emailsSent: c.sent || 0,
+            emailsFailed: c.failed || 0,
+            accountsUsed: c.accountsUsed || 0,
+            deployedSites: c.deployedSites || [],
           });
         }
       } catch (e) {
@@ -67,7 +70,10 @@ function useCampaignPolling(campaignId: string, enabled: boolean, campaignStatus
 
     // Poll every 2 seconds
     const interval = setInterval(poll, 2000);
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [campaignId, enabled, campaignStatus, campaignTotal]);
 
   return data;

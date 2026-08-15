@@ -895,12 +895,25 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
           container.classList.add('animate-slide-down-fade');
         }
         setTimeout(() => {
-          handleReset();
+          setActiveStep(1);
+          setLaunchComplete(false);
+          setIsShowingCompletion(false);
+          setCsvFileName(null);
+          setCsvLeads([]);
+          setCsvValidation(null);
+          setLaunchProgress(0);
+          setLaunchMessage('');
+          setLaunchResults(null);
+          setActiveProgressToggle(null);
+          setCelebratedCampaign(null);
+          setLiveCounters({ sitesStaged: 0, emailsSent: 0, emailsFailed: 0, deploying: false });
         }, 400);
       }, 3000);
 
       // Mark the active run as completed for the progress toggle
-      updateActiveRun?.(celebratedCampaign.id, { status: 'completed' });
+      if (celebratedCampaign?.id) {
+        updateActiveRun?.(celebratedCampaign.id, { status: 'completed' });
+      }
       if ((result?.sent || 0) > 0) {
         playVictoryCelebration();
       } else {
@@ -929,6 +942,10 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     setEmailSubject(DEFAULT_EMAIL_SUBJECT);
     setEmailBody(DEFAULT_EMAIL_BODY);
     setPlacesResults([]);
+    // Clear progress toggle and celebration state to prevent stale data
+    setActiveProgressToggle(null);
+    setCelebratedCampaign(null);
+    setIsShowingCompletion(false);
   };
   
   const getAccountCapacityWarning = (account: EmailAccount, leadsCount: number): string | null => {
@@ -951,7 +968,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       : selectedAccountIds.size;
     const isRunning = isLaunching && !launchComplete;
     const isDone = !!launchComplete && !!launchResults;
-    const campaignId = celebratedCampaign.id;
+    const campaignId = celebratedCampaign?.id || '';
 
     return (
       <div className="space-y-6">
@@ -1990,7 +2007,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 )}
                 <div>
                   <p className="text-sm font-bold text-white">
-                    {launchComplete ? 'Campaign Complete!' : 'Launching Campaign...'}
+                    {launchComplete ? 'Campaign Complete!' : 'Running Campaign...'}
                   </p>
                   <p className="text-[11px] text-blue-100">{launchMessage}</p>
                 </div>
