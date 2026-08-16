@@ -551,6 +551,26 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       setLiveCounters({ sitesStaged: 0, emailsSent: 0, emailsFailed: 0, deploying: false });
       
       const perLead: any[] = [];
+      // Single source of truth — every event that updates a lead's record goes
+      // through upsertPerLead() which dedupes by (leadId || email || slug ||
+      // index). This prevents the same lead from being counted twice when
+      // site:staged and send:sent both push entries with different identifiers.
+      const upsertPerLead = (entry: any) => {
+        const key = entry.leadId ?? entry.email ?? entry.slug ?? entry.index;
+        if (key === undefined || key === null) {
+          perLead.push(entry);
+          return;
+        }
+        const existingIdx = perLead.findIndex((p) => {
+          const pKey = p.leadId ?? p.email ?? p.slug ?? p.index;
+          return pKey !== undefined && pKey !== null && pKey === key;
+        });
+        if (existingIdx >= 0) {
+          perLead[existingIdx] = { ...perLead[existingIdx], ...entry };
+        } else {
+          perLead.push(entry);
+        }
+      };
       const humanStage = (type: string): string => {
         switch (type) {
           case 'lead:start': return 'preparing magic';
@@ -641,7 +661,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
           }
 
           if (e.type === 'send:sent') {
-            perLead.push({
+            upsertPerLead({
               leadId: e.leadId,
               name: e.name,
               email: e.email,
@@ -685,12 +705,12 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               id: campaignId,
               emailsSent: 1,
               emailsFailed: 0,
-              lead: { leadId: e.leadId, name: e.name, email: e.email, accountEmail: e.accountEmail, siteUrl: e.siteUrl, status: 'sent' }
+              lead: { leadId: e.leadId, name: e.name, email: e.email, slug: e.slug, accountEmail: e.accountEmail, siteUrl: e.siteUrl, status: 'sent' }
             }}));
             // Update active run progress for toggle
             updateActiveRun?.(campaignId, { status: 'running' });
           } else if (e.type === 'send:failed' || e.type === 'send:error') {
-            perLead.push({
+            upsertPerLead({
               leadId: e.leadId,
               name: e.name,
               accountEmail: e.accountEmail,
@@ -720,36 +740,32 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               lead: { leadId: e.leadId, name: e.name, accountEmail: e.accountEmail, status: 'failed', reason: e.reason || e.error }
             }}));
           } else if (e.type === 'send:queued') {
-            perLead.push({
+            upsertPerLead({
               leadId: e.leadId,
               name: e.name,
               status: 'queued',
               reason: e.reason,
             });
           } else if (e.type === 'site:staged') {
-            // Use index as the primary key — server pipeline events don't
-            // include leadId, so dedup by index to avoid double-counting when
-            // Phase 2 swaps localhost → Cloudflare URLs (same lead, new URL).
-            const leadKey = e.leadId ?? e.index;
-            const found = perLead.find((p: any) => (p.leadId ?? p.index) === leadKey);
-            if (found) {
-              found.siteUrl = e.siteUrl;
-              found.leadId = found.leadId ?? leadKey;
-            } else {
-              perLead.push({
-                leadId: leadKey,
-                index: e.index,
-                name: e.name,
-                siteUrl: e.siteUrl,
-                status: 'pending',
-              });
-            }
+            // Use slug as the primary key — server pipeline emits the
+            // business slug with every site:staged event, which is stable
+            // across Phase 1 staging and Phase 2 URL-swap (only the URL
+            // changes; the slug stays). Fall back to index for safety.
+            const leadKey = e.slug ?? e.leadId ?? e.index;
+            upsertPerLead({
+              leadId: leadKey,
+              index: e.index,
+              name: e.name,
+              slug: e.slug,
+              siteUrl: e.siteUrl,
+              status: 'pending',
+            });
             // Fire progress so the Recent Campaigns card populates deployedSites in real time
             window.dispatchEvent(new CustomEvent('lunao:campaign-progress', { detail: {
               id: campaignId,
               emailsSent: 0,
               emailsFailed: 0,
-              lead: { leadId: leadKey, name: e.name, siteUrl: e.siteUrl, status: 'pending' }
+              lead: { leadId: leadKey, name: e.name, slug: e.slug, siteUrl: e.siteUrl, status: 'pending' }
             }}));
             // Update active run with sitesGenerated for the toggle (use unique-leads count)
             const uniqueSites = new Set(perLead.filter((p: any) => p.siteUrl).map((p: any) => p.leadId ?? p.index)).size;
@@ -808,12 +824,15 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               })),
               emailsSent: finalSent,
               emailsFailed: finalFailed,
+              // sitesGenerated = unique leads that have a siteUrl (deduped by leadId /
+              // email / slug / index — see upsertPerLead).
               sitesGenerated: perLead.filter((p: any) => p.siteUrl).length,
               deployedSites: perLead.filter((p: any) => p.siteUrl).map((p: any, idx: number) => ({
-                slug: (p.email || p.name || `lead-${idx}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+                slug: p.slug || (p.email || p.name || `lead-${idx}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
                 name: p.name || 'Lead',
                 city: undefined,
                 url: p.siteUrl,
+                leadId: p.leadId,
                 status: 'live' as const,
               })),
               emailLeads: perLead.map((p: any) => ({
@@ -973,9 +992,13 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   };
   
   const getAccountCapacityWarning = (account: EmailAccount, leadsCount: number): string | null => {
-    const assignedLeads = Math.ceil(leadsCount / selectedAccountIds.size);
+    const assignedLeads = Math.ceil(leadsCount / Math.max(1, selectedAccountIds.size));
+    // Over the cap (or exactly at cap): explicit reminder — sends still go through.
+    if (account.remainingToday <= 0) {
+      return `Past today's suggested cap (${account.sendsToday}/${account.dailyCap}) — sends will continue anyway. Watch bounce rate.`;
+    }
     if (account.remainingToday < assignedLeads) {
-      return `This may exceed today's safe limit (${assignedLeads} assigned, ${account.remainingToday} remaining)`;
+      return `This may exceed today's safe limit (${assignedLeads} assigned, ${account.remainingToday} remaining). Sends will continue.`;
     }
     return null;
   };
@@ -1651,6 +1674,28 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                   </button>
                 </div>
 
+                {/* Top-level reminder banner when ANY connected account is at
+                    or past today's suggested cap. By design, sends still go
+                    through — this is just a heads-up so the user knows
+                    they're pushing past the recommended rate. */}
+                {(() => {
+                  const overCap = connectedAccounts.filter(a => a.remainingToday <= 0);
+                  if (overCap.length === 0) return null;
+                  return (
+                    <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700">
+                      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                      <div className="text-xs leading-relaxed">
+                        <p className="font-semibold">
+                          {overCap.length} account{overCap.length === 1 ? '' : 's'} past today's suggested cap
+                        </p>
+                        <p className="mt-0.5 text-amber-700/80">
+                          {overCap.map(a => a.email).join(', ')} — sends will still go through, but watch bounce rate and consider rotating in a fresh account.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {connectedAccounts.map((account) => {
                   const isSelected = selectedAccountIds.has(account.id);
                   const capacityWarning = csvLeads.length > 0 ? getAccountCapacityWarning(account, csvLeads.length) : null;
@@ -1703,8 +1748,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                           <div className="flex items-center gap-4 mt-2 text-xs text-ink-secondary">
                             <span>{account.sendsToday} sent today</span>
                             <span>·</span>
-                            <span className={account.remainingToday < 5 ? 'text-amber-600' : ''}>
-                              {account.remainingToday} remaining
+                            <span className={account.remainingToday <= 0 ? 'text-amber-700 font-semibold' : account.remainingToday < 5 ? 'text-amber-600' : ''}>
+                              {account.remainingToday <= 0 ? `Past cap (${account.sendsToday}/${account.dailyCap})` : `${account.remainingToday} remaining`}
                             </span>
                             <span>·</span>
                             <span>Cap: {account.dailyCap}/day</span>

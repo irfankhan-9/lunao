@@ -711,70 +711,139 @@ The Lunao Team`);
 
   // Listen for email campaign completion events from EmailCampaignWizard
   useEffect(() => {
+    // Authoritative post-complete fetch. After the wizard dispatches its
+    // best-effort payload, we ask the API for the canonical campaign+leads
+    // record and use THAT to set deployedSites / sitesGenerated / emailsSent
+    // / emailsFailed / emailLeads. The API is the only source of truth for
+    // "how many sites actually exist", and we want the Recent Campaigns card
+    // to match the dashboard's count exactly. This also defends against:
+    //   - duplicate events from the wizard
+    //   - stale localStorage rows from a previous run
+    //   - Phase 2 URL-swap race conditions
+    //   - partial SSE event delivery
     const handleCampaignComplete = (e: Event) => {
       const campaign = (e as CustomEvent).detail;
       console.log('[Campaigns] Received campaign-complete event:', campaign.id, 'status:', campaign.status, 'sent:', campaign.emailsSent);
       setCampaigns(prev => {
-        // Update existing campaign or add new one
+        // Update existing campaign or add new one. We adopt the wizard's
+        // metadata (name, niche, templateId, etc.) immediately so the row
+        // appears in the UI without waiting for the API fetch.
         const exists = prev.find(c => c.id === campaign.id);
-        console.log('[Campaigns] Campaign exists:', !!exists, 'total campaigns:', prev.length);
-        let updated;
-        if (exists) {
-          updated = prev.map(c => c.id === campaign.id ? { ...c, ...campaign } : c);
-          console.log('[Campaigns] Updated campaigns, found:', updated.find(c => c.id === campaign.id)?.status);
-        } else {
-          console.log('[Campaigns] Adding new campaign to list');
-          updated = [campaign, ...prev];
-        }
-        // Save to localStorage immediately
+        const adopted: any = exists
+          ? { ...exists, ...campaign, deployedSites: exists.deployedSites, sitesGenerated: exists.sitesGenerated, emailsSent: exists.emailsSent, emailsFailed: exists.emailsFailed, emailAccountsUsed: campaign.emailAccountsUsed || exists.emailAccountsUsed, emailLeads: exists.emailLeads }
+          : { ...campaign, deployedSites: [], sitesGenerated: 0, emailLeads: [] };
+        const updated = exists
+          ? prev.map(c => c.id === campaign.id ? adopted : c)
+          : [adopted, ...prev];
         try {
           localStorage.setItem('lunao_campaigns', JSON.stringify(updated));
-          console.log('[Campaigns] Saved to localStorage');
         } catch (err) {
           console.error('[Campaigns] Failed to save to localStorage:', err);
         }
         return updated;
       });
+      // Now fetch the authoritative state from the API. This overwrites
+      // adopted placeholders with exact DB values. We do this in a separate
+      // effect to keep the optimistic UI update snappy.
+      const campaignId = campaign.id;
+      (async () => {
+        try {
+          const result = await fetchEmailCampaign(campaignId);
+          if (!result) return;
+          const { campaign: dbCamp, leads } = result;
+          const sentCount = leads.filter((l: any) => l.send_status === 'sent').length;
+          const failedCount = leads.filter((l: any) => l.send_status === 'failed').length;
+          const sitesCount = leads.filter((l: any) => l.generated_site_url).length;
+          // Defensive dedupe by slug — should be one row per lead, but a
+          // stale DB row could theoretically duplicate.
+          const rawSites = leads
+            .filter((l: any) => l.generated_site_url)
+            .map((l: any) => ({
+              slug: l.slug || (l.email || l.business_name || `lead-${l.id}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+              name: l.business_name || 'Lead',
+              email: l.email,
+              city: l.city,
+              url: l.generated_site_url,
+              leadId: l.id,
+              status: 'live' as const,
+            }));
+          const bySlug = new Map<string, any>();
+          for (const s of rawSites) {
+            const k = s.slug ?? s.email ?? s.leadId ?? s.url;
+            if (k) bySlug.set(k, s);
+          }
+          const deployedSites = Array.from(bySlug.values());
+          // Build per-account breakdown from server-side data.
+          let accountsById: Record<string, string> = {};
+          try {
+            const ownerKey = (typeof localStorage !== 'undefined' && localStorage.getItem('lunao_owner_key')) || 'dash-Free-Plan';
+            const accs = await listEmailAccounts(ownerKey);
+            for (const a of accs || []) accountsById[a.id] = a.email;
+          } catch { /* ignore */ }
+          const perAccount: Record<string, any> = {};
+          for (const l of leads) {
+            const aid = l.assigned_account_id;
+            if (!aid) continue;
+            const accEmail = accountsById[aid] || aid;
+            if (!perAccount[aid]) perAccount[aid] = { accountId: aid, accountEmail: accEmail, sent: 0, failed: 0 };
+            if (l.send_status === 'sent') perAccount[aid].sent++;
+            else if (l.send_status === 'failed') perAccount[aid].failed++;
+          }
+          setCampaigns(prev2 => {
+            const next = prev2.map(c => c.id === campaignId ? {
+              ...c,
+              deployedSites,
+              sitesGenerated: sitesCount,
+              emailsSent: sentCount,
+              emailsFailed: failedCount,
+              emailAccountsUsed: Object.values(perAccount),
+              status: dbCamp.status === 'completed' ? 'Completed' : dbCamp.status === 'failed' ? 'Crashed' : dbCamp.status === 'cancelled' ? 'Crashed' : c.status,
+            } : c);
+            try { localStorage.setItem('lunao_campaigns', JSON.stringify(next)); } catch { /* ignore */ }
+            return next;
+          });
+        } catch (err) {
+          console.warn('[Campaigns] Post-complete authoritative fetch failed, falling back to wizard payload:', err);
+          // Fallback: if the API fetch fails, deduplicate the wizard payload
+          // by slug so we never display the raw polluted list.
+          setCampaigns(prev2 => {
+            const next = prev2.map(c => {
+              if (c.id !== campaignId) return c;
+              const bySlug = new Map<string, any>();
+              for (const s of c.deployedSites || []) {
+                const k = s.slug ?? s.email ?? s.leadId ?? s.url;
+                if (k) bySlug.set(k, s);
+              }
+              const deployedSites = Array.from(bySlug.values());
+              return { ...c, deployedSites, sitesGenerated: deployedSites.length };
+            });
+            try { localStorage.setItem('lunao_campaigns', JSON.stringify(next)); } catch { /* ignore */ }
+            return next;
+          });
+        }
+      })();
     };
+    // Real-time progress updates from the wizard — we ONLY use these for
+    // deployedSites so the user sees sites appear live in the Recent card.
+    // emailsSent/emailsFailed/emailLeads come from the polling/API since
+    // those are the authoritative counts (the wizard can over-count with
+    // retries, events that fire twice, etc.). Email leads' per-prospect
+    // log is also derived from the API.
     const handleCampaignProgress = (e: Event) => {
-      const { id, emailsSent, emailsFailed, lead } = (e as CustomEvent).detail;
+      const { id, lead } = (e as CustomEvent).detail;
+      if (!lead?.siteUrl) return; // nothing to do — count comes from polling
       setCampaigns(prev => prev.map(c => {
         if (c.id !== id) return c;
-        // Update email counts
-        const newSent = (c.emailsSent || 0) + emailsSent;
-        const newFailed = (c.emailsFailed || 0) + emailsFailed;
-        // Update email accounts used
-        let newEmailAccounts = c.emailAccountsUsed || [];
-        if (lead?.accountEmail && emailsSent > 0) {
-          const accIdx = newEmailAccounts.findIndex((a: any) => a.accountEmail === lead.accountEmail);
-          if (accIdx >= 0) {
-            newEmailAccounts = newEmailAccounts.map((a: any, i: number) =>
-              i === accIdx ? { ...a, sent: (a.sent || 0) + emailsSent } : a
-            );
-          } else {
-            newEmailAccounts = [...newEmailAccounts, { accountEmail: lead.accountEmail, sent: emailsSent, failed: 0 }];
-          }
-        }
-        // Update email leads
-        const newLeads = lead ? [...(c.emailLeads || []), lead] : (c.emailLeads || []);
-        // Track deployed sites in real time so the Recent card populates as soon
-        // as sites come online. Key by lead email (stable across all events
-        // for the same lead) so that Phase 2's URL-swap (localhost →
-        // Cloudflare) re-fires site:staged with a new URL for the same lead
-        // without double-counting. sitesGenerated is always the unique-leads count.
         const deployedByLead = new Map<string, any>();
         for (const s of c.deployedSites || []) {
-          const k = s.email ?? s.leadId ?? s.url;
+          const k = s.slug ?? s.email ?? s.leadId ?? s.url;
           if (k) deployedByLead.set(k, s);
         }
-        if (lead?.siteUrl) {
-          const leadKey = lead.email ?? lead.leadId ?? lead.siteUrl;
-          const slug = (lead.email || lead.name || `lead-${deployedByLead.size}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-          deployedByLead.set(leadKey, { slug, name: lead.name || 'Lead', email: lead.email, city: undefined, url: lead.siteUrl, leadId: lead.leadId, status: 'live' });
-        }
+        const leadKey = lead.slug ?? lead.email ?? lead.leadId ?? lead.siteUrl;
+        const slug = lead.slug || (lead.email || lead.name || `lead-${deployedByLead.size}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        deployedByLead.set(leadKey, { slug, name: lead.name || 'Lead', email: lead.email, city: undefined, url: lead.siteUrl, leadId: lead.leadId, status: 'live' });
         const newDeployedSites = Array.from(deployedByLead.values());
-        const sitesGenerated = newDeployedSites.length;
-        return { ...c, emailsSent: newSent, emailsFailed: newFailed, emailAccountsUsed: newEmailAccounts, emailLeads: newLeads, deployedSites: newDeployedSites, sitesGenerated };
+        return { ...c, deployedSites: newDeployedSites, sitesGenerated: newDeployedSites.length };
       }));
     };
     window.addEventListener('lunao:campaign-complete', handleCampaignComplete);
@@ -796,10 +865,16 @@ The Lunao Team`);
   useEffect(() => {
     let cancelled = false;
     const poll = async () => {
-      const activeEmailCampaigns = campaignsRef.current.filter(
-        (c) => c.type === 'email' && c.status === 'Active',
+      // Poll email campaigns that are still in motion. We poll Active AND recently
+      // completed campaigns so the Recent card can settle on the authoritative
+      // final values (deployedSites, emailsSent, etc.) without bouncing off
+      // stale wizard-payload state. A campaign is left in this set until at
+      // least one successful poll AFTER the API says it's Completed, then the
+      // campaign is no longer of interest and we let it drop out.
+      const polledCampaigns = campaignsRef.current.filter(
+        (c) => c.type === 'email' && (c.status === 'Active' || c.status === 'Completed'),
       );
-      if (activeEmailCampaigns.length === 0) return;
+      if (polledCampaigns.length === 0) return;
       // Fetch the user's email accounts once per tick so we can map
       // assigned_account_id → email address for the per-account breakdown.
       let accountsById: Record<string, string> = {};
@@ -810,7 +885,7 @@ The Lunao Team`);
           accountsById[a.id] = a.email;
         }
       } catch { /* ignore */ }
-      for (const camp of activeEmailCampaigns) {
+      for (const camp of polledCampaigns) {
         try {
           // camp.id IS the server's campaign id (the wizard passes the
           // backend's id directly as the local id when adding the row).
@@ -822,7 +897,10 @@ The Lunao Team`);
           const sentCount = leads.filter((l: any) => l.send_status === 'sent').length;
           const failedCount = leads.filter((l: any) => l.send_status === 'failed').length;
           const sitesCount = leads.filter((l: any) => l.generated_site_url).length;
-          const deployedSites = leads
+          // Defensive dedupe of polling output — even though the API should return
+          // one row per lead, we collapse by slug so a stale DB row can never
+          // inflate the count on the Recent card.
+          const rawDeployedSites = leads
             .filter((l: any) => l.generated_site_url)
             .map((l: any) => ({
               slug: l.slug || (l.email || l.business_name || `lead-${l.id}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
@@ -831,6 +909,12 @@ The Lunao Team`);
               url: l.generated_site_url,
               status: 'live' as const,
             }));
+          const deployedBySlug = new Map<string, any>();
+          for (const s of rawDeployedSites) {
+            const k = s.slug ?? s.email ?? s.leadId ?? s.url;
+            if (k) deployedBySlug.set(k, s);
+          }
+          const cleanDeployedSites = Array.from(deployedBySlug.values());
           // Per-account breakdown: walk leads with assigned_account_id and
           // tally sent/failed per account so the card shows "X emails from
           // alice@gmail.com" accurately.
@@ -863,10 +947,13 @@ The Lunao Team`);
                 ? {
                     ...c,
                     status: newStatus,
-                    emailsSent: sentCount || c.emailsSent,
-                    emailsFailed: failedCount || c.emailsFailed,
-                    sitesGenerated: sitesCount || c.sitesGenerated,
-                    deployedSites: deployedSites.length ? deployedSites : c.deployedSites,
+                    // Use API authoritative counts so the card always matches
+                    // the dashboard. Fall back to existing only when the API
+                    // returns an empty set (campaign not yet created).
+                    emailsSent: sentCount,
+                    emailsFailed: failedCount,
+                    sitesGenerated: sitesCount,
+                    deployedSites: cleanDeployedSites,
                     emailAccountsUsed,
                   }
                 : c,

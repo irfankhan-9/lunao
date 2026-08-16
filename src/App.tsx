@@ -245,6 +245,22 @@ function DashboardApp() {
           return { ...c, status: 'Crashed' as const, errorReason: 'Deploy interrupted (browser closed)' };
         }
       }
+      if (c.type === 'email' && Array.isArray((c as any).deployedSites)) {
+        // Migration: dedupe stale deployedSites persisted from before the
+        // slug-based dedupe fix landed. Same lead appearing twice (once from
+        // site:staged, once from send:sent, with different derived slugs)
+        // would inflate the displayed "12 sites" count. Collapsing by slug
+        // restores correctness for runs from older sessions.
+        const bySlug = new Map<string, any>();
+        for (const s of (c as any).deployedSites) {
+          const k = s.slug ?? s.email ?? s.leadId ?? s.url;
+          if (k) bySlug.set(k, s);
+        }
+        const deployedSites = Array.from(bySlug.values());
+        if (deployedSites.length !== (c as any).deployedSites.length) {
+          return { ...c, deployedSites, sitesGenerated: deployedSites.length } as any;
+        }
+      }
       return c;
     });
   });

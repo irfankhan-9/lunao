@@ -285,7 +285,7 @@ const phase1Workers = Array.from(
       if (!refreshedLead.generated_site_url) {
         const slug = slugify(refreshedLead.business_name, refreshedLead.city);
         console.log(`[email-pipeline] Lead ${leadIndex}: Generating site with slug=${slug}, template=${campaign.template_key || campaign.niche}`);
-        emit('site:compiling', { index: leadIndex, name: refreshedLead.business_name, slug });
+        emit('site:compiling', { index: leadIndex, leadId: refreshedLead.id, name: refreshedLead.business_name, slug });
         try {
           const business = {
             name: refreshedLead.business_name,
@@ -297,15 +297,16 @@ const phase1Workers = Array.from(
           const siteUrl = await stageSite(slug, html);
           updateLeadSiteUrl(refreshedLead.id, siteUrl, slug);
           console.log(`[email-pipeline] Lead ${leadIndex}: Site staged at ${siteUrl}`);
-          emit('site:staged', { index: leadIndex, name: refreshedLead.business_name, slug, siteUrl });
+          emit('site:staged', { index: leadIndex, leadId: refreshedLead.id, name: refreshedLead.business_name, slug, siteUrl });
         } catch (err) {
           console.error(`[email-pipeline] Lead ${leadIndex}: Site generation failed: ${err.message}`);
-          emit('site:failed', { index: leadIndex, name: refreshedLead.business_name, error: err.message });
+          emit('site:failed', { index: leadIndex, leadId: refreshedLead.id, name: refreshedLead.business_name, error: err.message });
         }
       } else {
         console.log(`[email-pipeline] Lead ${leadIndex}: Site already staged at ${refreshedLead.generated_site_url}`);
         emit('site:staged', {
           index: leadIndex,
+          leadId: refreshedLead.id,
           name: refreshedLead.business_name,
           slug: refreshedLead.slug,
           siteUrl: refreshedLead.generated_site_url,
@@ -401,10 +402,13 @@ const phase3Workers = Array.from(
         continue;
       }
 
-      const { canSend, reason } = canAccountSend(accountId);
-      if (!canSend) {
-        updateLeadSendStatus(lead.id, 'queued', reason);
-        emit('send:queued', { index: leadIndex, name: lead.business_name, accountId, reason });
+      // Account-can-send check is now ADVISORY only — the user can always
+      // send past the cap. We still gate on real failures (disconnected,
+      // needs_attention) which canAccountSend returns as canSend: false.
+      const canSendCheck = canAccountSend(accountId);
+      if (!canSendCheck.canSend) {
+        updateLeadSendStatus(lead.id, 'queued', canSendCheck.reason);
+        emit('send:queued', { index: leadIndex, name: lead.business_name, accountId, reason: canSendCheck.reason });
         continue;
       }
 
@@ -459,6 +463,7 @@ const phase3Workers = Array.from(
               leadId: lead.id,
               name: lead.business_name,
               email: lead.email,
+              slug: lead.slug,
               accountId,
               accountEmail: account.email,
               accountName: account.display_name,

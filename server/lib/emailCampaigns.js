@@ -457,29 +457,45 @@ export function resetDailySendsIfNeeded(accountId) {
 }
 
 // Check if account can send. Uses the rolling 24h window and the new formula.
+//
+// IMPORTANT: by product spec, the user can ALWAYS send emails — even past
+// the daily cap and even at 0% battery. We only block on real failures
+// (account disconnected, needs attention, no refresh token). The cap is an
+// ADVISORY signal that the picker UI surfaces as a warning so the user
+// knows they're pushing past the recommended rate, but we never
+// gate canSend on it. We return `overCap` + `remaining` so the UI can
+// highlight the over-cap state.
 export function canAccountSend(accountId) {
   const account = getEmailAccount(accountId);
   if (!account) return { canSend: false, reason: 'Account not found' };
-  
+
   if (account.status === 'disconnected') {
     return { canSend: false, reason: 'Account disconnected' };
   }
-  
+
   if (account.status === 'needs_attention') {
     return { canSend: false, reason: 'Account needs attention' };
   }
-  
+
   resetDailySendsIfNeeded(accountId);
-  
+
   const currentAccount = getEmailAccount(accountId);
   const dailyCap = currentAccount.daily_cap || DAILY_CAP;
   const sentInWindow = currentAccount.sends_today || 0;
-  
-  if (sentInWindow >= dailyCap) {
-    return { canSend: false, reason: `Daily limit reached (${sentInWindow}/${dailyCap})` };
-  }
-  
-  return { canSend: true, remaining: dailyCap - sentInWindow, dailyCap };
+  const remaining = Math.max(0, dailyCap - sentInWindow);
+  const overCap = sentInWindow > dailyCap;
+
+  // Always allow — surface advisory fields for the UI.
+  return {
+    canSend: true,
+    remaining,
+    dailyCap,
+    sent: sentInWindow,
+    overCap,
+    reason: overCap
+      ? `Past suggested daily cap (${sentInWindow}/${dailyCap}) — sending anyway`
+      : null,
+  };
 }
 
 // ---- Connected Email Accounts ----
@@ -711,21 +727,25 @@ export function getAccountHealth(accountId) {
   };
 }
 
-// Load balancing: distribute leads across accounts based on remaining capacity
+// Load balancing: distribute leads across accounts based on remaining capacity.
+// By product spec, the user can ALWAYS send even past the cap — so we prefer
+// an account with positive remaining, but if every account is at/over cap
+// we fall back to the first account (still sends OK) instead of returning
+// null and stalling the pipeline.
 export function getNextAvailableAccount(accountIds) {
   const accounts = accountIds.map(id => {
     const acc = getEmailAccount(id);
     if (!acc) return null;
     const { canSend, remaining } = canAccountSend(id);
-    return { id, remaining, account: acc };
+    return { id, remaining, canSend, account: acc };
   }).filter(Boolean);
-  
+
   if (accounts.length === 0) return null;
-  
-  // Sort by remaining capacity (most remaining first)
+
   accounts.sort((a, b) => b.remaining - a.remaining);
-  
-  // Return account with most remaining capacity
+
   const best = accounts.find(a => a.remaining > 0);
-  return best ? best.id : null;
+  if (best) return best.id;
+  // Everyone is over cap — still usable. Pick the LEAST over.
+  return accounts[0].id;
 }
