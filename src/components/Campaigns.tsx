@@ -1796,45 +1796,111 @@ The Lunao Team`);
               [ { step: 1, name: 'Select Niche' }, { step: 2, name: 'Input Businesses' }, { step: 3, name: 'Choose Template' }, { step: 4, name: 'Deploy Preview' } ].map((item) => (
                 <React.Fragment key={item.step}>
                   <div ref={el => { sdStepRefs.current[item.step] = el; }} className="flex items-center gap-3 shrink-0 snap-start min-w-[140px]">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm ${sdActiveStep === item.step ? 'bg-accent text-white ring-4 ring-accent-soft' : sdActiveStep > item.step ? 'bg-success text-white' : 'bg-surface text-ink-secondary border border-border-main'}`}>
-                      {sdActiveStep > item.step ? <Check className="w-4 h-4" /> : item.step}
+                    <div className="relative">
+                      {sdActiveStep === item.step && (
+                        <span className="absolute inset-0 rounded-full border-2 border-accent/40 animate-[step-ring_2s_ease-in-out_infinite]" />
+                      )}
+                      <div className={`
+                        relative w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm
+                        transition-all duration-300 ease-out
+                        ${sdActiveStep === item.step
+                          ? 'bg-accent text-white shadow-[0_0_0_3px_rgba(99,102,241,0.15)] scale-105'
+                          : sdActiveStep > item.step
+                            ? 'bg-success text-white animate-[step-pop_0.4s_ease-out_forwards]'
+                            : 'bg-surface text-ink-secondary border border-border-main'
+                        }
+                      `}>
+                        {sdActiveStep > item.step ? <Check className="w-4 h-4" /> : item.step}
+                      </div>
                     </div>
                     <div className="flex flex-col">
-                      <span className={`text-[11px] uppercase tracking-wider font-semibold ${sdActiveStep === item.step ? 'text-accent' : 'text-ink-secondary'}`}>Step 0{item.step}</span>
-                      <span className={`text-xs font-medium leading-tight whitespace-nowrap ${sdActiveStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
+                      <span className={`text-[11px] uppercase tracking-wider font-semibold transition-colors duration-300 ${sdActiveStep === item.step ? 'text-accent' : 'text-ink-secondary'}`}>Step 0{item.step}</span>
+                      <span className={`text-xs font-medium leading-tight whitespace-nowrap transition-colors duration-300 ${sdActiveStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
                     </div>
                   </div>
-                  {item.step < 4 && <div className="hidden md:block h-[1px] bg-border-light flex-1 min-w-[20px] mx-2 self-center"></div>}
+                  {item.step < 4 && (
+                    <div className={`
+                      hidden md:block h-[1px] flex-1 min-w-[20px] mx-2 self-center
+                      transition-all duration-500 ease-out origin-left
+                      ${sdActiveStep > item.step ? 'bg-success scale-x-100' : 'bg-border-light'}
+                    `} />
+                  )}
                 </React.Fragment>
               ))
             ) : activeCampaignType === 'email' ? (
               [ { step: 1, name: 'Select Niche' }, { step: 2, name: 'Upload Leads' }, { step: 3, name: 'Choose Template' }, { step: 4, name: 'Email Content' }, { step: 5, name: 'Review & Launch' } ].map((item) => (
                 <React.Fragment key={item.step}>
                   <div ref={el => { emailStepRefs.current[item.step] = el; }} className="flex items-center gap-3 shrink-0 snap-start min-w-[140px]">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm ${emailActiveStep === item.step ? 'bg-accent text-white ring-4 ring-accent-soft' : emailActiveStep > item.step ? 'bg-success text-white' : 'bg-surface text-ink-secondary border border-border-main'}`}>
-                      {emailActiveStep > item.step ? <Check className="w-4 h-4" /> : item.step}
+                    {/* Circle wrapper for breathing ring + transition */}
+                    <div className="relative">
+                      {emailActiveStep === item.step && (
+                        <span className="absolute inset-0 rounded-full border-2 border-accent/40 animate-[step-ring_2s_ease-in-out_infinite]" />
+                      )}
+                      <div className={`
+                        relative w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm
+                        transition-all duration-300 ease-out
+                        ${emailActiveStep === item.step
+                          ? 'bg-accent text-white shadow-[0_0_0_3px_rgba(99,102,241,0.15)] scale-105'
+                          : emailActiveStep > item.step
+                            ? 'bg-success text-white animate-[step-pop_0.4s_ease-out_forwards]'
+                            : 'bg-surface text-ink-secondary border border-border-main'
+                        }
+                      `}>
+                        {emailActiveStep > item.step ? <Check className="w-4 h-4" /> : item.step}
+                      </div>
                     </div>
                     <div className="flex flex-col">
-                      <span className={`text-[11px] uppercase tracking-wider font-semibold ${emailActiveStep === item.step ? 'text-accent' : 'text-ink-secondary'}`}>Step 0{item.step}</span>
-                      <span className={`text-xs font-medium leading-tight whitespace-nowrap ${emailActiveStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
+                      <span className={`text-[11px] uppercase tracking-wider font-semibold transition-colors duration-300 ${emailActiveStep === item.step ? 'text-accent' : 'text-ink-secondary'}`}>Step 0{item.step}</span>
+                      <span className={`text-xs font-medium leading-tight whitespace-nowrap transition-colors duration-300 ${emailActiveStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
                     </div>
                   </div>
-                  {item.step < 5 && <div className="hidden md:block h-[1px] bg-border-light flex-1 min-w-[16px] mx-2 self-center"></div>}
+                  {item.step < 5 && (
+                    <div className={`
+                      hidden md:block h-[1px] flex-1 min-w-[16px] mx-2 self-center
+                      transition-all duration-500 ease-out origin-left
+                      ${emailActiveStep > item.step
+                        ? 'bg-success scale-x-100'
+                        : emailActiveStep === item.step && item.step === 1
+                          ? 'bg-border-light scale-x-100'
+                          : 'bg-border-light'
+                      }
+                    `} />
+                  )}
                 </React.Fragment>
               ))
             ) : (
               [ { step: 1, name: 'Select Niche' }, { step: 2, name: 'Input Businesses' }, { step: 3, name: 'Choose Template' }, { step: 4, name: 'SMS Messaging' }, { step: 5, name: 'Launch Outreach' } ].map((item) => (
                 <React.Fragment key={item.step}>
                   <div className="flex items-center gap-3 shrink-0 snap-start min-w-[140px]">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm ${activeStep === item.step ? 'bg-accent text-white ring-4 ring-accent-soft' : activeStep > item.step ? 'bg-success text-white' : 'bg-surface text-ink-secondary border border-border-main'}`}>
-                      {activeStep > item.step ? <Check className="w-4 h-4" /> : item.step}
+                    <div className="relative">
+                      {activeStep === item.step && (
+                        <span className="absolute inset-0 rounded-full border-2 border-accent/40 animate-[step-ring_2s_ease-in-out_infinite]" />
+                      )}
+                      <div className={`
+                        relative w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm
+                        transition-all duration-300 ease-out
+                        ${activeStep === item.step
+                          ? 'bg-accent text-white shadow-[0_0_0_3px_rgba(99,102,241,0.15)] scale-105'
+                          : activeStep > item.step
+                            ? 'bg-success text-white animate-[step-pop_0.4s_ease-out_forwards]'
+                            : 'bg-surface text-ink-secondary border border-border-main'
+                        }
+                      `}>
+                        {activeStep > item.step ? <Check className="w-4 h-4" /> : item.step}
+                      </div>
                     </div>
                     <div className="flex flex-col">
-                      <span className={`text-[11px] uppercase tracking-wider font-semibold ${activeStep === item.step ? 'text-accent' : 'text-ink-secondary'}`}>Step 0{item.step}</span>
-                      <span className={`text-xs font-medium leading-tight whitespace-nowrap ${activeStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
+                      <span className={`text-[11px] uppercase tracking-wider font-semibold transition-colors duration-300 ${activeStep === item.step ? 'text-accent' : 'text-ink-secondary'}`}>Step 0{item.step}</span>
+                      <span className={`text-xs font-medium leading-tight whitespace-nowrap transition-colors duration-300 ${activeStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
                     </div>
                   </div>
-                  {item.step < 5 && <div className="hidden md:block h-[1px] bg-border-light flex-1 min-w-[20px] mx-2 self-center"></div>}
+                  {item.step < 5 && (
+                    <div className={`
+                      hidden md:block h-[1px] flex-1 min-w-[20px] mx-2 self-center
+                      transition-all duration-500 ease-out origin-left
+                      ${activeStep > item.step ? 'bg-success scale-x-100' : 'bg-border-light'}
+                    `} />
+                  )}
                 </React.Fragment>
               ))
             )}
@@ -2217,6 +2283,7 @@ The Lunao Team`);
               onViewDetails={(campaignId) => {
                 setScrollTarget?.(campaignId);
               }}
+              onStepChange={(step) => setEmailActiveStep(step)}
               initialSubject={initialEmailSubject}
               initialBody={initialEmailBody}
             />

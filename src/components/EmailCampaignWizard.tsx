@@ -7,7 +7,7 @@ import {
   Mail, Send, Upload, Globe, Check, ChevronRight, ChevronLeft, AlertCircle,
   CheckCircle, CheckCircle2, Loader2, X, ShieldAlert, Plus, Trash2, Eye, ExternalLink,
   RefreshCw, Link2, AlertTriangle, Zap, Clock, Pencil, Sparkles, FileSpreadsheet,
-  Smartphone, Monitor, Maximize2, Users
+  Smartphone, Monitor, Maximize2, Users, Layout, Type
 } from 'lucide-react';
 import { playGentleChime, playLaunchSwell, playVictoryCelebration, playSoftTap, playElegantError, playSoftBubble, playElegantBell } from '../utils/audio';
 import { validateCsvFile, CsvValidation, PipelineLead, runEmailCampaign, probeAllEmailAccounts, initiateOAuthFlow, EmailAccountProbeResult, EmailCampaignEvent } from '../lib/pipelineClient';
@@ -45,6 +45,7 @@ interface EmailCampaignWizardProps {
   onLaunch?: () => void;
   onCampaignCreated?: (campaign: any) => void;
   onViewDetails?: (campaignId: string) => void;
+  onStepChange?: (step: number) => void;
   initialSubject?: string;
   initialBody?: string;
   // Active campaign registry
@@ -93,6 +94,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   onLaunch,
   onCampaignCreated,
   onViewDetails,
+  onStepChange,
   initialSubject,
   initialBody,
   activeCampaignRuns = [],
@@ -192,6 +194,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       }
     }, 100);
     playGentleChime(activeStep);
+    onStepChange?.(activeStep);
     return () => clearTimeout(timer);
   }, [activeStep]);
   
@@ -1846,124 +1849,172 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         
         {/* Step 5: Review & Launch */}
         {activeStep === 5 && (
-          <div className="space-y-5 animate-fade-in">
-            <div className="space-y-1">
-              <h3 className="font-serif text-2xl text-ink">Review & launch</h3>
-              <p className="text-sm text-ink-secondary">Confirm your campaign details before sending.</p>
+          <div className="space-y-6 animate-fade-in">
+            {/* Section header */}
+            <div className="space-y-0.5">
+              <h3 className="font-serif text-2xl text-ink">Ready to launch</h3>
+              <p className="text-sm text-ink-secondary">Everything looks great — review below and hit launch when ready.</p>
             </div>
-            
-            {/* Selected Template Preview */}
-            <div className="bg-white rounded-xl border border-blue-200 overflow-hidden">
-              <div className="px-4 py-3 bg-blue-50 border-b border-blue-200">
-                <p className="text-[10px] uppercase tracking-widest text-blue-700 font-bold">Selected Template</p>
-              </div>
-              <div className="p-4">
-                <div className="flex items-center gap-4">
-                  {/* Template preview thumbnail */}
-                  <div className="w-24 h-16 sm:w-32 sm:h-20 rounded-lg bg-gray-100 border border-gray-200 overflow-hidden shadow-inner shrink-0">
-                    <TemplateSimPreview
-                      id={selectedTemplateId}
-                      name={templates.find(t => t.id === selectedTemplateId)?.name || 'Template'}
-                      niche={selectedNiche}
-                      badge=""
-                      isMostUsed={false}
-                      selected={true}
-                    />
-                  </div>
-                  {/* Template info */}
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-serif text-lg font-bold text-gray-900">{templates.find(t => t.id === selectedTemplateId)?.name}</h4>
-                    <p className="text-sm text-gray-600 capitalize">{selectedNiche} Website Template</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-green-500" />
-                    <span className="text-sm font-semibold text-green-600">Ready</span>
-                  </div>
+
+            {/* Primary summary row */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-white rounded-2xl border border-border-light p-4 text-center shadow-sm">
+                <div className="w-10 h-10 bg-accent-soft rounded-xl flex items-center justify-center mx-auto mb-2">
+                  <Users className="w-5 h-5 text-accent" />
                 </div>
+                <p className="text-2xl font-bold text-accent font-mono">{csvParsedCount}</p>
+                <p className="text-[10px] uppercase tracking-widest text-ink-tertiary font-semibold mt-0.5">Leads</p>
               </div>
-            </div>
-            
-            {/* Campaign Summary Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="bg-white border border-blue-200 rounded-xl p-4 text-center">
-                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-2">
-                  <Globe className="w-5 h-5 text-blue-600" />
+              <div className="bg-white rounded-2xl border border-border-light p-4 text-center shadow-sm">
+                <div className="w-10 h-10 bg-success-soft rounded-xl flex items-center justify-center mx-auto mb-2">
+                  <Globe className="w-5 h-5 text-success" />
                 </div>
-                <p className="text-[10px] uppercase tracking-widest text-blue-600 font-semibold mb-1">Niche</p>
-                <p className="text-sm font-bold text-gray-900">{selectedNiche}</p>
+                <p className="text-2xl font-bold text-success font-mono">{selectedNiche}</p>
+                <p className="text-[10px] uppercase tracking-widest text-ink-tertiary font-semibold mt-0.5">Niche</p>
               </div>
-              <div className="bg-white border border-blue-200 rounded-xl p-4 text-center">
-                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-2">
-                  <Users className="w-5 h-5 text-blue-600" />
-                </div>
-                <p className="text-[10px] uppercase tracking-widest text-blue-600 font-semibold mb-1">Leads</p>
-                <p className="text-lg font-bold text-gray-900">{csvParsedCount}</p>
-              </div>
-              <div className="bg-white border border-blue-200 rounded-xl p-4 text-center">
-                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-2">
-                  <Mail className="w-5 h-5 text-blue-600" />
-                </div>
-                <p className="text-[10px] uppercase tracking-widest text-blue-600 font-semibold mb-1">Cost</p>
-                <p className="text-lg font-bold text-indigo-600">{csvParsedCount * COST_PER_EMAIL}</p>
-              </div>
-              <div className="bg-white border border-blue-200 rounded-xl p-4 text-center">
-                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-2">
+              <div className="bg-white rounded-2xl border border-border-light p-4 text-center shadow-sm">
+                <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center mx-auto mb-2">
                   <Send className="w-5 h-5 text-blue-600" />
                 </div>
-                <p className="text-[10px] uppercase tracking-widest text-blue-600 font-semibold mb-1">Accounts</p>
-                <p className="text-lg font-bold text-gray-900">{selectedAccountIds.size}</p>
+                <p className="text-2xl font-bold text-blue-600 font-mono">{selectedAccountIds.size}</p>
+                <p className="text-[10px] uppercase tracking-widest text-ink-tertiary font-semibold mt-0.5">Accounts</p>
               </div>
             </div>
-            
-            {/* Connected Accounts with Email Distribution */}
-            <div className="bg-white border border-blue-200 rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-[10px] uppercase tracking-widest text-blue-700 font-bold">Sending Accounts</p>
-                <p className="text-[10px] text-blue-600 font-medium">{csvParsedCount} emails total</p>
+
+            {/* Template row */}
+            <div className="bg-white rounded-2xl border border-border-light overflow-hidden shadow-sm">
+              <div className="px-4 py-3 border-b border-border-light/80 flex items-center gap-2">
+                <div className="w-5 h-5 bg-accent-soft rounded-md flex items-center justify-center">
+                  <Layout className="w-3 h-3 text-accent" />
+                </div>
+                <p className="text-[11px] uppercase tracking-widest text-ink-secondary font-bold">Website Template</p>
               </div>
-              <div className="space-y-2">
-                {Array.from(selectedAccountIds).map((id, idx) => {
-                  const acc = connectedAccounts.find(a => a.id === id);
-                  const accountCount = Math.ceil(csvParsedCount / selectedAccountIds.size);
-                  const isLast = idx === selectedAccountIds.size - 1;
-                  const adjustedCount = isLast ? csvParsedCount - (accountCount * idx) : accountCount;
-                  return (
-                    <div key={id} className="flex items-center justify-between bg-blue-50 px-3 py-2.5 rounded-lg border border-blue-200">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                          <Mail className="w-3 h-3 text-blue-600" />
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-xs font-medium text-blue-900">{acc?.email || id}</span>
-                          <span className="text-[10px] text-blue-500">{acc?.provider === 'gmail' ? 'Gmail' : 'Outlook'}</span>
-                        </div>
+              <div className="p-4 flex items-center gap-4">
+                <div className="w-28 h-20 rounded-xl bg-surface overflow-hidden shadow-inner shrink-0">
+                  <TemplateSimPreview
+                    id={selectedTemplateId}
+                    name={templates.find(t => t.id === selectedTemplateId)?.name || 'Template'}
+                    niche={selectedNiche}
+                    badge=""
+                    isMostUsed={false}
+                    selected={true}
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-serif text-base font-bold text-ink">{templates.find(t => t.id === selectedTemplateId)?.name}</p>
+                  <p className="text-xs text-ink-secondary capitalize mt-0.5">{selectedNiche} · AI personalized per lead</p>
+                </div>
+                <CheckCircle2 className="w-5 h-5 text-success shrink-0" />
+              </div>
+            </div>
+
+            {/* Sending accounts */}
+            <div className="bg-white rounded-2xl border border-border-light overflow-hidden shadow-sm">
+              <div className="px-4 py-3 border-b border-border-light/80 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 bg-blue-50 rounded-md flex items-center justify-center">
+                    <Mail className="w-3 h-3 text-blue-600" />
+                  </div>
+                  <p className="text-[11px] uppercase tracking-widest text-ink-secondary font-bold">Sending Accounts</p>
+                </div>
+                <p className="text-[11px] font-bold text-blue-600">{csvParsedCount} emails total</p>
+              </div>
+              <div className="divide-y divide-border-light/60">
+                {selectedAccountIds.size === 0 ? (
+                  <div className="flex items-center justify-between px-4 py-5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 bg-danger/10 rounded-full flex items-center justify-center">
+                        <AlertTriangle className="w-3 h-3 text-danger" />
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-indigo-600">{adjustedCount}</span>
-                        <CheckCircle2 className="w-4 h-4 text-green-500" />
-                      </div>
+                      <span className="text-xs font-medium text-danger">No accounts selected</span>
                     </div>
-                  );
-                })}
-                {selectedAccountIds.size === 0 && (
-                  <div className="w-full text-center py-4">
-                    <p className="text-sm text-blue-500">No accounts selected</p>
-                    <button 
-                      onClick={() => setActiveStep(4)}
-                      className="mt-2 text-xs text-indigo-600 hover:text-indigo-700 font-semibold underline"
+                    <button
+                      type="button"
+                      onClick={() => { playGentleChime(); setActiveStep(4); }}
+                      className="text-[11px] font-semibold text-accent hover:underline"
                     >
-                      Go back to connect accounts
+                      Add accounts →
                     </button>
                   </div>
+                ) : (
+                  Array.from(selectedAccountIds).map((id, idx) => {
+                    const acc = connectedAccounts.find(a => a.id === id);
+                    const accountCount = Math.ceil(csvParsedCount / selectedAccountIds.size);
+                    const isLast = idx === selectedAccountIds.size - 1;
+                    const adjustedCount = isLast ? csvParsedCount - (accountCount * idx) : accountCount;
+                    return (
+                      <div key={id} className="flex items-center justify-between px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                            acc?.provider === 'gmail'
+                              ? 'bg-[#EA4335]/10 text-[#EA4335]'
+                              : 'bg-[#0078D4]/10 text-[#0078D4]'
+                          }`}>
+                            {acc?.email?.[0]?.toUpperCase() || id[0].toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-ink">{acc?.email || id}</p>
+                            <p className="text-[10px] text-ink-tertiary capitalize">{acc?.provider === 'gmail' ? 'Google Gmail' : 'Microsoft Outlook'}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <p className="text-sm font-bold text-ink font-mono">{adjustedCount}</p>
+                            <p className="text-[9px] text-ink-tertiary">emails</p>
+                          </div>
+                          <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>
-            
-            {/* Launch CTA */}
-            {selectedAccountIds.size > 0 && (
-              <div className="bg-gradient-to-r from-indigo-600 to-blue-600 rounded-xl p-5 text-center">
-                <p className="text-white/90 text-sm mb-2">Ready to launch your email campaign?</p>
-                <p className="text-white/70 text-xs">You will send {csvParsedCount} personalized emails to your leads.</p>
+
+            {/* Email subject line preview */}
+            <div className="bg-white rounded-2xl border border-border-light overflow-hidden shadow-sm">
+              <div className="px-4 py-3 border-b border-border-light/80 flex items-center gap-2">
+                <div className="w-5 h-5 bg-accent-soft rounded-md flex items-center justify-center">
+                  <Type className="w-3 h-3 text-accent" />
+                </div>
+                <p className="text-[11px] uppercase tracking-widest text-ink-secondary font-bold">Email Subject</p>
+              </div>
+              <div className="px-4 py-3.5">
+                <p className="text-sm text-ink font-medium">
+                  {emailSubject
+                    ? emailSubject
+                    : `Personalized {FIRST_NAME} — {CITY} Business Inquiry`}
+                </p>
+              </div>
+            </div>
+
+            {/* Launch CTA banner */}
+            {selectedAccountIds.size > 0 ? (
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-accent via-indigo-600 to-blue-600 p-5 text-center shadow-lg">
+                {/* Decorative orbs */}
+                <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
+                <div className="absolute -bottom-8 -left-8 w-24 h-24 bg-white/10 rounded-full blur-2xl" />
+                <div className="relative">
+                  <p className="text-white/90 font-serif text-lg font-bold mb-1">Launch Campaign</p>
+                  <p className="text-white/60 text-xs">
+                    {csvParsedCount} personalized emails · {selectedAccountIds.size} sending account{selectedAccountIds.size > 1 ? 's' : ''} · AI-built sites included
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="relative overflow-hidden rounded-2xl bg-surface border border-border-light p-5 text-center">
+                <div className="w-10 h-10 bg-danger/10 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <AlertTriangle className="w-5 h-5 text-danger" />
+                </div>
+                <p className="text-sm font-semibold text-danger mb-1">No sending accounts selected</p>
+                <p className="text-xs text-ink-secondary">Go back to step 4 and connect at least one email account to launch.</p>
+                <button
+                  type="button"
+                  onClick={() => { playGentleChime(); setActiveStep(4); }}
+                  className="mt-3 text-xs font-bold text-accent hover:underline"
+                >
+                  ← Back to Accounts
+                </button>
               </div>
             )}
           </div>

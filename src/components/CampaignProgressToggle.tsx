@@ -6,7 +6,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Globe, Mail, CheckCircle2, XCircle, Users,
   ChevronDown, ChevronUp, Loader2, Sparkles,
-  Trophy, Star, PartyPopper, X
+  Trophy, Star, PartyPopper, X, ExternalLink
 } from 'lucide-react';
 import { playVictoryCelebration } from '../utils/audio';
 import { getEmailCampaign } from '../lib/pipelineClient';
@@ -25,7 +25,13 @@ export interface CampaignProgressData {
   emailsSent?: number;
   emailsFailed?: number;
   accountsUsed?: number;
-  deployedSites?: string[];
+  deployedSites?: Array<{
+    slug: string;
+    name: string;
+    city?: string;
+    url: string;
+    status: string;
+  }>;
 }
 
 interface CampaignProgressToggleProps {
@@ -416,6 +422,38 @@ export const CampaignProgressToggle: React.FC<CampaignProgressToggleProps> = ({
                 <p className="text-[10px] text-amber-500 font-medium">sending</p>
               </div>
             </div>
+
+            {/* Live Deployed Sites — only show when there are deployed sites */}
+            {displayData.deployedSites && displayData.deployedSites.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-violet-600 uppercase tracking-widest">
+                    🔗 Live Deployed Sites ({displayData.deployedSites.length})
+                  </span>
+                  <div className="flex-1 h-px bg-violet-200" />
+                </div>
+                <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto pr-1">
+                  {displayData.deployedSites.slice(0, 8).map((site, idx) => (
+                    <a
+                      key={site.slug || idx}
+                      href={site.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group flex items-center gap-1.5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg px-2.5 py-1.5 text-[11px] text-blue-700 hover:from-blue-100 hover:to-indigo-100 hover:border-blue-300 hover:text-blue-800 transition-all shadow-sm hover:shadow-md max-w-[200px]"
+                    >
+                      <Globe className="w-3 h-3 shrink-0 text-blue-400 group-hover:text-blue-600 transition-colors" />
+                      <span className="truncate font-semibold">{site.name}</span>
+                      <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-50 group-hover:opacity-100 transition-opacity" />
+                    </a>
+                  ))}
+                  {displayData.deployedSites.length > 8 && (
+                    <div className="flex items-center px-2 py-1.5 bg-violet-50 border border-violet-200 rounded-lg text-[10px] text-violet-600 font-semibold">
+                      +{displayData.deployedSites.length - 8} more
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Live status indicator */}
             <div className="flex items-center justify-between pt-2 border-t border-violet-100">
