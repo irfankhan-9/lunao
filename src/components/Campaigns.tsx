@@ -758,16 +758,22 @@ The Lunao Team`);
         // Update email leads
         const newLeads = lead ? [...(c.emailLeads || []), lead] : (c.emailLeads || []);
         // Track deployed sites in real time so the Recent card populates as soon
-        // as sites come online (instead of waiting for the final completion event).
-        let newDeployedSites = c.deployedSites || [];
-        if (lead?.siteUrl) {
-          const slug = (lead.email || lead.name || `lead-${newDeployedSites.length}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-          const exists = newDeployedSites.some((s: any) => s.url === lead.siteUrl);
-          if (!exists) {
-            newDeployedSites = [...newDeployedSites, { slug, name: lead.name || 'Lead', city: undefined, url: lead.siteUrl, status: 'live' }];
-          }
+        // as sites come online. Key by lead email (stable across all events
+        // for the same lead) so that Phase 2's URL-swap (localhost →
+        // Cloudflare) re-fires site:staged with a new URL for the same lead
+        // without double-counting. sitesGenerated is always the unique-leads count.
+        const deployedByLead = new Map<string, any>();
+        for (const s of c.deployedSites || []) {
+          const k = s.email ?? s.leadId ?? s.url;
+          if (k) deployedByLead.set(k, s);
         }
-        const sitesGenerated = newDeployedSites.length || c.sitesGenerated;
+        if (lead?.siteUrl) {
+          const leadKey = lead.email ?? lead.leadId ?? lead.siteUrl;
+          const slug = (lead.email || lead.name || `lead-${deployedByLead.size}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          deployedByLead.set(leadKey, { slug, name: lead.name || 'Lead', email: lead.email, city: undefined, url: lead.siteUrl, leadId: lead.leadId, status: 'live' });
+        }
+        const newDeployedSites = Array.from(deployedByLead.values());
+        const sitesGenerated = newDeployedSites.length;
         return { ...c, emailsSent: newSent, emailsFailed: newFailed, emailAccountsUsed: newEmailAccounts, emailLeads: newLeads, deployedSites: newDeployedSites, sitesGenerated };
       }));
     };

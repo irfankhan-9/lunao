@@ -605,6 +605,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
           } else if (e.type === 'deploy:done' || e.type === 'deploy:failed') {
             setLiveCounters(c => ({ ...c, deploying: false }));
           } else if (e.type === 'send:sent') {
+            // Increment once here (single source of truth). Don't double-count
+            // in the perLead/dispatch branch below.
             setLiveCounters(c => ({ ...c, emailsSent: c.emailsSent + 1 }));
           } else if (e.type === 'send:failed' || e.type === 'send:error') {
             setLiveCounters(c => ({ ...c, emailsFailed: c.emailsFailed + 1 }));
@@ -648,22 +650,24 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               siteUrl: e.siteUrl,
               status: 'sent',
             });
-            // Update live counters immediately
-            setLiveCounters(prev => ({ ...prev, emailsSent: prev.emailsSent + 1 }));
-            // Update launch results for real-time display using functional update
+            // Update launch results for real-time display using functional update.
+            // NOTE: do NOT increment emailsSent here — it's already handled in
+            // the liveCounters branch above (and would otherwise double-count).
             setLaunchResults(prev => {
               const prevSent = prev?.sent || 0;
               const prevPerLead = prev?.perLead || [];
               const prevPerAccount = prev?.perAccount || [];
-              const newPerLead = [...prevPerLead, {
-                leadId: e.leadId,
-                name: e.name,
-                email: e.email,
-                accountEmail: e.accountEmail,
-                subject: e.subject,
-                siteUrl: e.siteUrl,
-                status: 'sent',
-              }];
+              const newPerLead = prevPerLead.some((p: any) => p.leadId === e.leadId && p.status === 'sent')
+                ? prevPerLead
+                : [...prevPerLead, {
+                    leadId: e.leadId,
+                    name: e.name,
+                    email: e.email,
+                    accountEmail: e.accountEmail,
+                    subject: e.subject,
+                    siteUrl: e.siteUrl,
+                    status: 'sent',
+                  }];
               // Update per-account stats
               let newPerAccount = prevPerAccount;
               const accIdx = newPerAccount.findIndex((a: any) => (a.accountEmail || a.email) === e.accountEmail);
@@ -672,7 +676,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                   i === accIdx ? { ...a, sent: (a.sent || 0) + 1 } : a
                 );
               } else {
-                // Add new account if not found
                 newPerAccount = [...newPerAccount, { accountEmail: e.accountEmail, sent: 1, failed: 0 }];
               }
               return { sent: prevSent + 1, failed: prev?.failed || 0, status: prev?.status || 'running', perLead: newPerLead, perAccount: newPerAccount };
@@ -694,8 +697,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               status: 'failed',
               reason: e.reason || e.error,
             });
-            // Update live counters immediately
-            setLiveCounters(prev => ({ ...prev, emailsFailed: prev.emailsFailed + 1 }));
+            // NOTE: emailsFailed is already incremented in the liveCounters
+            // branch above (line ~610) — do NOT double-count here.
             // Update launch results for real-time display using functional update
             setLaunchResults(prev => {
               const prevFailed = prev?.failed || 0;
@@ -724,12 +727,18 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               reason: e.reason,
             });
           } else if (e.type === 'site:staged') {
-            const found = perLead.find((p: any) => p.leadId === e.leadId);
+            // Use index as the primary key — server pipeline events don't
+            // include leadId, so dedup by index to avoid double-counting when
+            // Phase 2 swaps localhost → Cloudflare URLs (same lead, new URL).
+            const leadKey = e.leadId ?? e.index;
+            const found = perLead.find((p: any) => (p.leadId ?? p.index) === leadKey);
             if (found) {
               found.siteUrl = e.siteUrl;
+              found.leadId = found.leadId ?? leadKey;
             } else {
               perLead.push({
-                leadId: e.leadId ?? e.index,
+                leadId: leadKey,
+                index: e.index,
                 name: e.name,
                 siteUrl: e.siteUrl,
                 status: 'pending',
@@ -740,11 +749,11 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               id: campaignId,
               emailsSent: 0,
               emailsFailed: 0,
-              lead: { leadId: e.leadId ?? e.index, name: e.name, siteUrl: e.siteUrl, status: 'pending' }
+              lead: { leadId: leadKey, name: e.name, siteUrl: e.siteUrl, status: 'pending' }
             }}));
-            // Update active run with sitesGenerated for the toggle
-            const sitesSoFar = perLead.filter((p: any) => p.siteUrl).length + 1;
-            updateActiveRun?.(campaignId, { sitesGenerated: sitesSoFar });
+            // Update active run with sitesGenerated for the toggle (use unique-leads count)
+            const uniqueSites = new Set(perLead.filter((p: any) => p.siteUrl).map((p: any) => p.leadId ?? p.index)).size;
+            updateActiveRun?.(campaignId, { sitesGenerated: uniqueSites });
           } else if (e.type === 'complete') {
             // Use functional setState to get latest values
             setLaunchResults(prev => {

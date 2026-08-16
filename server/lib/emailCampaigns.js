@@ -159,7 +159,16 @@ export function createEmailCampaign({
 
 // Get email campaign by ID
 export function getEmailCampaign(id) {
-  return db.prepare('SELECT * FROM email_campaigns WHERE id = ?').get(id);
+  const campaign = db.prepare('SELECT * FROM email_campaigns WHERE id = ?').get(id);
+  if (!campaign) return null;
+  // Attach live counts so callers (especially the 2-second polling hook) always
+  // get an accurate sites_generated / sent / failed picture without needing a
+  // separate round-trip.
+  const counts = getEmailCampaignCounts(id);
+  campaign.sites_generated = counts.sites_generated;
+  campaign.sent = counts.emails_sent;
+  campaign.failed = counts.emails_failed;
+  return campaign;
 }
 
 // Mark an email campaign as cancelled by the user. Soft cancel — the

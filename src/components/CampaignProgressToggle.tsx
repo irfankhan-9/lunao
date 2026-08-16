@@ -40,6 +40,7 @@ function useCampaignPolling(campaignId: string, enabled: boolean, campaignStatus
   const [data, setData] = useState<CampaignProgressData | null>(null);
 
   useEffect(() => {
+    // Don't start polling if campaign is already complete
     if (!enabled || campaignStatus !== 'running' || !campaignId) return;
 
     let cancelled = false;
@@ -49,14 +50,23 @@ function useCampaignPolling(campaignId: string, enabled: boolean, campaignStatus
         if (cancelled) return;
         if (result && result.campaign) {
           const c = result.campaign;
+          // Stop polling if campaign is no longer running (completed/cancelled).
+          // This prevents stale server data from overwriting accurate completion values.
+          if (c.status && c.status !== 'running' && c.status !== 'starting') {
+            cancelled = true;
+            clearInterval(pollInterval);
+            return;
+          }
           setData({
             id: c.id || campaignId,
             kind: 'email',
             name: c.name || 'Campaign',
             status: c.status === 'completed' ? 'completed' : 'running',
-            total: c.totalLeads || campaignTotal,
+            total: c.totalLeads || c.leads_found || campaignTotal,
             done: c.sent || 0,
-            sitesGenerated: c.sitesGenerated || 0,
+            // Use the live count we now attach in getEmailCampaign — it's the
+            // authoritative unique-site count, not c.sent (which can include retries).
+            sitesGenerated: c.sites_generated || 0,
             emailsSent: c.sent || 0,
             emailsFailed: c.failed || 0,
             accountsUsed: c.accountsUsed || 0,
@@ -69,10 +79,10 @@ function useCampaignPolling(campaignId: string, enabled: boolean, campaignStatus
     };
 
     // Poll every 2 seconds
-    const interval = setInterval(poll, 2000);
+    const pollInterval = setInterval(poll, 2000);
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      clearInterval(pollInterval);
     };
   }, [campaignId, enabled, campaignStatus, campaignTotal]);
 
@@ -221,8 +231,10 @@ export const CampaignProgressToggle: React.FC<CampaignProgressToggleProps> = ({
   // Poll for live updates while running
   const liveData = useCampaignPolling(campaign.id, campaign.status === 'running', campaign.status, campaign.total);
 
-  // Merge live data with local data
-  const displayData = liveData || campaign;
+  // Use the prop as the source of truth when the campaign is finished — the
+  // polling hook only fires while running, so its final value can lag behind
+  // the authoritative wizard-completion payload.
+  const displayData = campaign.status === 'running' ? (liveData || campaign) : campaign;
 
   // Auto-expand when campaign is running
   useEffect(() => {
@@ -359,7 +371,7 @@ export const CampaignProgressToggle: React.FC<CampaignProgressToggleProps> = ({
               {/* Sites generated */}
               <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 rounded-xl p-3 border border-blue-200 shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xl">🏗️</span>
+                  <span className="text-xl">🌐</span>
                   <span className="text-xs font-bold text-blue-700 uppercase tracking-wide">Sites</span>
                 </div>
                 <p className="text-2xl font-black text-blue-800">
