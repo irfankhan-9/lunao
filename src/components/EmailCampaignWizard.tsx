@@ -585,10 +585,19 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         const next = Math.round((elapsed + stage / total) * 100);
         return Math.min(100, Math.max(current, next));
       };
+// Capture stable refs at launch time so late SSE events arriving
+      // AFTER handleReset / "Launch Another Campaign" cleared
+      // celebratedCampaign don't crash with "Cannot read properties of null".
+      // We use the freshly-created campaign object (not the React state
+      // celebratedCampaign, whose closure value is stale at this point).
+      const campaignId = campaign.id;
+      const launchCampaignName = campaignName;
+
       const result = await runEmail(
         campaign.id,
         Array.from(selectedAccountIds),
         (e: EmailCampaignEvent) => {
+          try {
           if (e.type === 'site:staged') {
             setLiveCounters(c => ({ ...c, sitesStaged: c.sitesStaged + 1 }));
           } else if (e.type === 'deploy:start') {
@@ -659,7 +668,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               let newPerAccount = prevPerAccount;
               const accIdx = newPerAccount.findIndex((a: any) => (a.accountEmail || a.email) === e.accountEmail);
               if (accIdx >= 0) {
-                newPerAccount = newPerAccount.map((a: any, i: number) => 
+                newPerAccount = newPerAccount.map((a: any, i: number) =>
                   i === accIdx ? { ...a, sent: (a.sent || 0) + 1 } : a
                 );
               } else {
@@ -670,13 +679,13 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             });
             // Update campaign in list in real-time
             window.dispatchEvent(new CustomEvent('lunao:campaign-progress', { detail: {
-              id: celebratedCampaign.id,
+              id: campaignId,
               emailsSent: 1,
               emailsFailed: 0,
               lead: { leadId: e.leadId, name: e.name, email: e.email, accountEmail: e.accountEmail, siteUrl: e.siteUrl, status: 'sent' }
             }}));
             // Update active run progress for toggle
-            updateActiveRun?.(celebratedCampaign.id, { status: 'running' });
+            updateActiveRun?.(campaignId, { status: 'running' });
           } else if (e.type === 'send:failed' || e.type === 'send:error') {
             perLead.push({
               leadId: e.leadId,
@@ -702,7 +711,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             });
             // Update campaign in list in real-time
             window.dispatchEvent(new CustomEvent('lunao:campaign-progress', { detail: {
-              id: celebratedCampaign.id,
+              id: campaignId,
               emailsSent: 0,
               emailsFailed: 1,
               lead: { leadId: e.leadId, name: e.name, accountEmail: e.accountEmail, status: 'failed', reason: e.reason || e.error }
@@ -728,14 +737,14 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             }
             // Fire progress so the Recent Campaigns card populates deployedSites in real time
             window.dispatchEvent(new CustomEvent('lunao:campaign-progress', { detail: {
-              id: celebratedCampaign.id,
+              id: campaignId,
               emailsSent: 0,
               emailsFailed: 0,
               lead: { leadId: e.leadId ?? e.index, name: e.name, siteUrl: e.siteUrl, status: 'pending' }
             }}));
             // Update active run with sitesGenerated for the toggle
             const sitesSoFar = perLead.filter((p: any) => p.siteUrl).length + 1;
-            updateActiveRun?.(celebratedCampaign.id, { sitesGenerated: sitesSoFar });
+            updateActiveRun?.(campaignId, { sitesGenerated: sitesSoFar });
           } else if (e.type === 'complete') {
             // Use functional setState to get latest values
             setLaunchResults(prev => {
@@ -752,11 +761,11 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               };
             });
             setLaunchProgress(100);
-            
+
             // Calculate final values using accumulated perLead array
             const finalSent = e.sent !== undefined ? e.sent : perLead.filter(p => p.status === 'sent').length;
             const finalFailed = e.failed !== undefined ? e.failed : perLead.filter(p => p.status === 'failed').length;
-            
+
             // Calculate per-account stats from perLead if not provided by backend
             const perAccountFromLeads: any[] = [];
             const accountMap: Record<string, any> = {};
@@ -769,14 +778,14 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 else if (lead.status === 'failed') accountMap[lead.accountEmail].failed++;
               }
             }
-            const finalPerAccount = e.perAccount && e.perAccount.length > 0 
-              ? e.perAccount 
+            const finalPerAccount = e.perAccount && e.perAccount.length > 0
+              ? e.perAccount
               : Object.values(accountMap);
-            
+
             // Update campaign in list with final results - ONLY ONCE
             const finalCampaign = {
-              id: celebratedCampaign.id,
-              name: campaignName,
+              id: campaignId,
+              name: launchCampaignName,
               niche: selectedNiche,
               templateId: selectedTemplateId,
               type: 'email',
@@ -812,12 +821,18 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             window.dispatchEvent(new CustomEvent('lunao:campaign-complete', { detail: finalCampaign }));
             console.log('[EmailCampaign] Campaign complete event dispatched:', finalCampaign.id, 'sent:', finalSent, 'failed:', finalFailed);
           }
+          } catch (err) {
+            // Safety net: never let an SSE callback throw and crash the React
+            // tree. Log and keep the stream alive.
+            console.warn('[EmailCampaign] SSE handler swallowed error:', err);
+          }
         }
       );
-      
-      // Capture campaign ID at launch time
-      const campaignIdForFallback = celebratedCampaign.id;
-      const campaignNameForFallback = campaignName;
+
+      // Capture campaign ID at launch time (for the 5s fallback below).
+      // Note: campaignId / launchCampaignName above are already stable captures.
+      const campaignIdForFallback = campaignId;
+      const campaignNameForFallback = launchCampaignName;
       const selectedNicheForFallback = selectedNiche;
       const selectedTemplateIdForFallback = selectedTemplateId;
       

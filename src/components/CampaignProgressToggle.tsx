@@ -316,7 +316,7 @@ export const CampaignProgressToggle: React.FC<CampaignProgressToggleProps> = ({
               <div className="hidden sm:flex items-center gap-1.5 text-xs">
                 {(displayData.sitesGenerated !== undefined && displayData.sitesGenerated > 0) && (
                   <span className="bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full flex items-center gap-1 font-semibold">
-                    🏗️ {displayData.sitesGenerated}
+                    🌐 {displayData.sitesGenerated}
                   </span>
                 )}
                 {(displayData.emailsSent !== undefined && displayData.emailsSent > 0) && (
