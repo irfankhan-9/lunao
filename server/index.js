@@ -103,6 +103,7 @@ import {
   setEmailAccountPaused,
   probeEmailAccountToken,
   probeAllEmailAccountTokens,
+  listEmailLeadsWithAccounts,
 } from './lib/emailCampaigns.js';
 import {
   buildGmailAuthUrl,
@@ -1354,8 +1355,20 @@ app.get('/api/email-campaigns/:id', authenticate, (req, res) => {
   try {
     const campaign = getEmailCampaign(req.params.id);
     if (!campaign) return res.status(404).json({ ok: false, error: 'Campaign not found' });
-    const leads = listEmailLeads(campaign.id);
+    const leads = listEmailLeadsWithAccounts(campaign.id);
     res.json({ ok: true, campaign, leads });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Get leads for an email campaign with account email info
+app.get('/api/email-campaigns/:id/leads', authenticate, (req, res) => {
+  try {
+    const campaign = getEmailCampaign(req.params.id);
+    if (!campaign) return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    const leads = listEmailLeadsWithAccounts(campaign.id);
+    res.json({ ok: true, leads });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

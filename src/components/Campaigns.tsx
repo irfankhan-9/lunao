@@ -897,6 +897,7 @@ The Lunao Team`);
           const sentCount = leads.filter((l: any) => l.send_status === 'sent').length;
           const failedCount = leads.filter((l: any) => l.send_status === 'failed').length;
           const sitesCount = leads.filter((l: any) => l.generated_site_url).length;
+          const totalLeads = leads.length;
           // Defensive dedupe of polling output — even though the API should return
           // one row per lead, we collapse by slug so a stale DB row can never
           // inflate the count on the Recent card.
@@ -969,6 +970,7 @@ The Lunao Team`);
                     emailsSent: sentCount,
                     emailsFailed: failedCount,
                     sitesGenerated: sitesCount,
+                    leadsFound: totalLeads,
                     deployedSites: cleanDeployedSites,
                     emailAccountsUsed,
                   }

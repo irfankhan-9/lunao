@@ -162,9 +162,10 @@ export function getEmailCampaign(id) {
   const campaign = db.prepare('SELECT * FROM email_campaigns WHERE id = ?').get(id);
   if (!campaign) return null;
   // Attach live counts so callers (especially the 2-second polling hook) always
-  // get an accurate sites_generated / sent / failed picture without needing a
+  // get an accurate leads / sites_generated / sent / failed picture without needing a
   // separate round-trip.
   const counts = getEmailCampaignCounts(id);
+  campaign.leads_found = counts.leads_found;
   campaign.sites_generated = counts.sites_generated;
   campaign.sent = counts.emails_sent;
   campaign.failed = counts.emails_failed;
@@ -183,9 +184,20 @@ export function markEmailCampaignCancelled(id) {
 
 // List email campaigns for a user
 export function listEmailCampaigns(userId, limit = 50) {
-  return db.prepare(
+  const campaigns = db.prepare(
     'SELECT * FROM email_campaigns WHERE user_id = ? ORDER BY created_at DESC LIMIT ?'
   ).all(userId, limit);
+  // Attach live counts to each campaign
+  return campaigns.map(c => {
+    const counts = getEmailCampaignCounts(c.id);
+    return {
+      ...c,
+      leads_found: counts.leads_found,
+      sites_generated: counts.sites_generated,
+      sent: counts.emails_sent,
+      failed: counts.emails_failed,
+    };
+  });
 }
 
 // Update email campaign status
@@ -286,11 +298,25 @@ export function addEmailLead({
   };
 }
 
-// Get leads for an email campaign
+// Get leads for an email campaign (with account email info)
 export function listEmailLeads(campaignId) {
   return db.prepare(
     'SELECT * FROM email_leads WHERE campaign_id = ? ORDER BY index_in_campaign'
   ).all(campaignId);
+}
+
+// Get leads for an email campaign with account email info for display
+export function listEmailLeadsWithAccounts(campaignId) {
+  return db.prepare(`
+    SELECT 
+      el.*,
+      ea.email as account_email,
+      ea.provider as account_provider
+    FROM email_leads el
+    LEFT JOIN email_accounts ea ON el.assigned_account_id = ea.id
+    WHERE el.campaign_id = ?
+    ORDER BY el.index_in_campaign
+  `).all(campaignId);
 }
 
 // Get leads pending email discovery

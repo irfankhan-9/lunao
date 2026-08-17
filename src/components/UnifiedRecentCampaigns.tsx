@@ -812,19 +812,34 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
   const isSiteDeploy = camp.type === 'site-deploy';
   const [emailLeads, setEmailLeads] = useState<CampaignEmailLead[]>(camp.emailLeads || []);
   const [loadingLeads, setLoadingLeads] = useState<boolean>(false);
+  const [accountsUsed, setAccountsUsed] = useState<{ accountId: string; accountEmail: string; sent: number; failed: number }[]>(camp.emailAccountsUsed || []);
 
-  // Fetch leads from API when modal opens on a completed campaign that has no local data.
-  // This ensures the detail modal always shows the full prospect list.
+  // Fetch leads from API when modal opens for email campaigns.
+  // This ensures the detail modal always shows the full prospect list with real data.
   React.useEffect(() => {
-    if (!isEmail || emailLeads.length > 0) return;
-    if (camp.status !== 'Completed' && camp.status !== 'Crashed') return;
+    if (!isEmail) return;
     const cid = camp.serverCampaignId || camp.id;
     if (!cid) return;
     setLoadingLeads(true);
-    fetch(`${import.meta.env.VITE_API_BASE || ''}/api/email-campaigns/${encodeURIComponent(cid)}/leads`)
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then((data: any[]) => {
-        const mapped: CampaignEmailLead[] = (data || []).map((l: any) => ({
+    const ownerKey = (typeof localStorage !== 'undefined' && localStorage.getItem('lunao_owner_key')) || 'dash-Free-Plan';
+    fetch(`${import.meta.env.VITE_API_BASE || ''}/api/email-campaigns/${encodeURIComponent(cid)}/leads`, {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        'x-owner-key': ownerKey,
+        'Content-Type': 'application/json',
+      },
+    })
+      .then(r => {
+        if (!r.ok) {
+          console.error('[CampaignDetailModal] leads fetch failed', r.status, r.statusText);
+          return Promise.reject(new Error(`HTTP ${r.status}`));
+        }
+        return r.json();
+      })
+      .then((data: any) => {
+        const leads = data?.leads || [];
+        const mapped: CampaignEmailLead[] = (leads || []).map((l: any) => ({
           id: l.id,
           email: l.email || l.business_email || '',
           businessName: l.business_name || l.name || '',
@@ -834,12 +849,29 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
           leadId: l.id,
           city: l.city || '',
           phone: l.phone || l.phone_raw || '',
+          reason: l.send_error || l.error || '',
         }));
-        setEmailLeads(mapped.length > 0 ? mapped : []);
+        setEmailLeads(mapped);
+        // Build per-account stats from leads if not already populated
+        if (mapped.length > 0) {
+          const byAcc: Record<string, { accountId: string; accountEmail: string; sent: number; failed: number }> = {};
+          for (const l of mapped) {
+            const key = l.accountEmail || 'unknown';
+            if (!byAcc[key]) byAcc[key] = { accountId: key, accountEmail: key, sent: 0, failed: 0 };
+            if (l.status === 'sent') byAcc[key].sent += 1;
+            else if (l.status === 'failed') byAcc[key].failed += 1;
+          }
+          const newAccounts = Object.values(byAcc);
+          if (newAccounts.length > 0) {
+            setAccountsUsed(prev => prev.length > 0 ? prev : newAccounts);
+          }
+        }
       })
-      .catch(() => { /* leave empty */ })
+      .catch((err) => {
+        console.error('[CampaignDetailModal] leads fetch error:', err);
+      })
       .finally(() => setLoadingLeads(false));
-  }, [isEmail, emailLeads.length, camp.status, camp.serverCampaignId, camp.id]);
+  }, [isEmail, camp.serverCampaignId, camp.id]);
 
   const deployedSites: CampaignDeployedSite[] = camp.deployedSites || [];
 
@@ -853,11 +885,11 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
     playDialogPop();
   }, []);
 
-  // Per-account stats — prefer the persisted breakdown, fall back to
+  // Per-account stats — prefer the API-fetched accountsUsed, fall back to
   // counting distinct from-emails on the per-lead log.
   const accountStats: { accountEmail: string; sent: number; failed: number }[] = useMemo(() => {
-    if (camp.emailAccountsUsed && camp.emailAccountsUsed.length > 0) {
-      return camp.emailAccountsUsed.map((a) => ({ accountEmail: a.accountEmail, sent: a.sent, failed: a.failed }));
+    if (accountsUsed && accountsUsed.length > 0) {
+      return accountsUsed.map((a) => ({ accountEmail: a.accountEmail, sent: a.sent, failed: a.failed }));
     }
     const byAcc: Record<string, { sent: number; failed: number }> = {};
     for (const l of emailLeads) {
@@ -867,7 +899,7 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
       else if (l.status === 'failed') byAcc[key].failed += 1;
     }
     return Object.entries(byAcc).map(([accountEmail, v]) => ({ accountEmail, ...v }));
-  }, [camp.emailAccountsUsed, emailLeads]);
+  }, [accountsUsed, emailLeads]);
 
   const liveSites = deployedSites.filter((s) => s.status === 'live' && s.url);
   const sent = camp.emailsSent ?? 0;
@@ -961,10 +993,10 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
         <div className={`grid ${isEmail ? 'grid-cols-5' : 'grid-cols-3'} divide-x divide-border-light border-b border-border-light`}>
           {isEmail ? (
             <>
-              <StatBlock label="Leads" value={emailLeads.length} icon={<Users className="w-4 h-4" />} color="text-blue-600" />
-              <StatBlock label="Sites Live" value={sites} icon={<Globe className="w-4 h-4" />} color="text-accent" />
-              <StatBlock label="Emails Sent" value={sent} icon={<Mail className="w-4 h-4" />} color="text-success" />
-              <StatBlock label="Failed" value={failed} icon={<X className="w-4 h-4" />} color={failed > 0 ? 'text-danger' : 'text-ink-tertiary'} />
+              <StatBlock label="Leads" value={loadingLeads ? (camp.leadsFound || 0) : (emailLeads.length || camp.leadsFound || 0)} icon={<Users className="w-4 h-4" />} color="text-blue-600" />
+              <StatBlock label="Sites Live" value={loadingLeads ? (camp.sitesGenerated || 0) : sites} icon={<Globe className="w-4 h-4" />} color="text-accent" />
+              <StatBlock label="Emails Sent" value={loadingLeads ? (camp.emailsSent || 0) : sent} icon={<Mail className="w-4 h-4" />} color="text-success" />
+              <StatBlock label="Failed" value={loadingLeads ? (camp.emailsFailed || 0) : failed} icon={<X className="w-4 h-4" />} color={failed > 0 ? 'text-danger' : 'text-ink-tertiary'} />
               <StatBlock label="Accounts" value={accountStats.length} icon={<Activity className="w-4 h-4" />} color="text-ink" />
             </>
           ) : (
@@ -981,7 +1013,7 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
           {isSiteDeploy ? (
             <SiteDeployBody liveSites={liveSites} onCopyUrl={onCopyUrl} copiedUrl={copiedUrl} />
           ) : (
-            <EmailBody leads={emailLeads} accountStats={accountStats} copiedUrl={copiedUrl} onCopyUrl={onCopyUrl} />
+            <EmailBody leads={emailLeads} accountStats={accountStats} copiedUrl={copiedUrl} onCopyUrl={onCopyUrl} loading={loadingLeads} />
           )}
         </div>
 
@@ -1100,7 +1132,8 @@ const EmailBody: React.FC<{
   accountStats: { accountEmail: string; sent: number; failed: number }[];
   copiedUrl: boolean;
   onCopyUrl: () => void;
-}> = ({ leads, accountStats }) => {
+  loading?: boolean;
+}> = ({ leads, accountStats, loading }) => {
   const [copied, setCopied] = useState<{ row: number; which: 'url' | 'email' } | null>(null);
   const handleCopy = async (text: string, row: number, which: 'url' | 'email') => {
     if (!text) return;
@@ -1109,6 +1142,16 @@ const EmailBody: React.FC<{
     window.setTimeout(() => setCopied((c) => (c?.row === row && c.which === which ? null : c)), 1400);
     playConfirmSuccess();
   };
+
+  if (loading) {
+    return (
+      <div className="px-6 py-8 text-center text-ink-secondary">
+        <Loader2 className="w-10 h-10 mx-auto mb-2 animate-spin text-accent" />
+        <p className="text-sm">Loading campaign details...</p>
+        <p className="text-[11px] text-ink-tertiary mt-1">Fetching leads from the server.</p>
+      </div>
+    );
+  }
 
   if (leads.length === 0) {
     return (
