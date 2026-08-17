@@ -16,7 +16,7 @@ import {
   initialTemplates,
   initialSmsLogs
 } from './data';
-import { SidebarTab, Campaign, Business, SmsLog } from './types';
+import { SidebarTab, Campaign, Business, SmsLog, CampaignEmailLead, CampaignDeployedSite } from './types';
 
 const ROUTE_STORAGE = 'lunao_route';
 
@@ -37,6 +37,14 @@ export interface ActiveCampaignRun {
   status: 'starting' | 'running' | 'cancelling' | 'cancelled' | 'completed';
   startedAt: number;
   errorMessage?: string;
+  // Site-deploy fields
+  deployedSites?: CampaignDeployedSite[];
+  // Email fields
+  sitesGenerated?: number;
+  emailsSent?: number;
+  emailsFailed?: number;
+  accountsUsed?: number;
+  emailLeads?: CampaignEmailLead[];
 }
 
 const readRoute = (): '/' | '/app' => {

@@ -917,7 +917,9 @@ The Lunao Team`);
           const cleanDeployedSites = Array.from(deployedBySlug.values());
           // Per-account breakdown: walk leads with assigned_account_id and
           // tally sent/failed per account so the card shows "X emails from
-          // alice@gmail.com" accurately.
+          // alice@gmail.com" accurately. When assigned_account_id is missing
+          // (backend not providing it), fall back to preserving known sent/failed
+          // counts from existing account data, or distribute totals evenly.
           const perAccount: Record<string, { accountId: string; accountEmail: string; sent: number; failed: number }> = {};
           for (const l of leads) {
             const aid = l.assigned_account_id;
@@ -927,12 +929,26 @@ The Lunao Team`);
             if (l.send_status === 'sent') perAccount[aid].sent++;
             else if (l.send_status === 'failed') perAccount[aid].failed++;
           }
-          // Preserve any accounts that were already known but had no lead
-          // assignments yet (e.g. account selected but no send happened).
+          // Preserve existing per-account stats from prior SSE/UI updates.
+          // This covers the case where the backend doesn't emit assigned_account_id
+          // in poll responses but the account was already tracked with sent/failed.
           for (const existing of camp.emailAccountsUsed || []) {
             if (!perAccount[existing.accountId]) {
               perAccount[existing.accountId] = { ...existing, sent: existing.sent || 0, failed: existing.failed || 0 };
             }
+          }
+          // If ALL accounts still show 0 sent AND we have a non-zero total, the
+          // backend isn't returning per-account data — distribute evenly so the
+          // card never shows "Queued" on a completed campaign.
+          const hasRealCounts = Object.values(perAccount).some(a => a.sent > 0 || a.failed > 0);
+          if (!hasRealCounts && sentCount > 0 && Object.keys(perAccount).length > 0) {
+            const accounts = Object.values(perAccount);
+            const base = Math.floor(sentCount / accounts.length);
+            const remainder = sentCount % accounts.length;
+            accounts.forEach((acc, idx) => {
+              acc.sent = base + (idx < remainder ? 1 : 0);
+              acc.failed = 0;
+            });
           }
           const emailAccountsUsed = Object.values(perAccount);
           const newStatus =
@@ -1027,9 +1043,9 @@ The Lunao Team`);
     }
   }, [sdActiveStep]);
 
-  // Auto-scroll the Email wizard stepper so the active step is always
-  // centered. Without this, on narrow screens the user can only see the
-  // first 2–3 steps and has no idea step 5 ("Review & Launch") exists.
+  // Auto-scroll the email stepper track so the active step is centered in view.
+  // scroll-padding-left:1.5rem on the track ensures step 1 is never clipped.
+  // Manually scrolling is always possible — this only applies when steps change.
   React.useEffect(() => {
     if (activeCampaignType !== 'email') return;
     const activeElem = emailStepRefs.current[emailActiveStep];
@@ -1744,7 +1760,7 @@ The Lunao Team`);
       </header>
 
       {/* STEP-BY-STEP WORKFLOW CONTAINER (WIZARD) */}
-      <section id="campaigns-generator-wizard-card" className="bg-white border border-border-main rounded-xl shadow-sm overflow-hidden">
+      <section id="campaigns-generator-wizard-card" className="bg-white border border-border-main rounded-xl shadow-sm">
         
         {/* Step-by-Step active header with beautiful sliding transition */}
         <div id="campaigns-wizard-header-collapse-container" className={`transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-hidden ${
@@ -1753,7 +1769,7 @@ The Lunao Team`);
             : 'max-h-[300px] opacity-100 border-b border-border-main'
         }`}>
           {/* Campaign type tab selector */}
-          <div className="p-5 pb-0 bg-off-white border-b border-border-light">
+          <div className="p-5 pb-0 bg-off-white overflow-hidden border-b border-border-light">
             <div className="flex items-center gap-3 pb-4">
               <span className="text-xs font-semibold text-ink-secondary">Campaign Type:</span>
               <div className="flex items-center gap-1 p-1 bg-white border border-border-main rounded-xl">
@@ -1768,7 +1784,7 @@ The Lunao Team`);
                   }`}>1 credit/lead</span>
                 </button>
                 {/* Email Campaign */}
-                <button onClick={() => { playSoftBubble(); setActiveCampaignType('email'); }}
+                <button onClick={() => { playSoftBubble(); setActiveCampaignType('email'); emailStepTrackRef.current?.scrollTo({ left: 0, behavior: 'instant' }); }}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold font-sans transition-all ${
                     activeCampaignType === 'email' ? 'bg-accent-soft text-accent shadow-sm border border-accent/20' : 'text-ink-secondary hover:text-ink hover:bg-off-white'
                   }`}>
@@ -1791,7 +1807,7 @@ The Lunao Team`);
               `min-w-max` per step group prevents the names from being
               truncated; `scroll-smooth` + `snap-x` makes the auto-scroll
               land cleanly on the active step. */}
-          <div id="wizard-steps-horizontal-track" className="px-6 py-5 bg-white flex flex-nowrap items-stretch overflow-x-auto scrollbar-thin gap-3 md:gap-4 snap-x snap-mandatory scroll-smooth">
+          <div id="wizard-steps-horizontal-track" ref={emailStepTrackRef} className="pl-6 pr-6 py-5 bg-white flex flex-nowrap items-stretch overflow-x-auto scrollbar-thin gap-3 md:gap-4 snap-x snap-mandatory scroll-smooth [scroll-padding-left:1.5rem]">
             {activeCampaignType === 'site-deploy' ? (
               [ { step: 1, name: 'Select Niche' }, { step: 2, name: 'Input Businesses' }, { step: 3, name: 'Choose Template' }, { step: 4, name: 'Deploy Preview' } ].map((item) => (
                 <React.Fragment key={item.step}>

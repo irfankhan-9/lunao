@@ -505,6 +505,13 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         emailsSent: 0,
         emailsFailed: 0,
         accountsUsed: selectedAccountIds.size,
+        emailLeads: csvLeads.map((l: any, i: number) => ({
+          leadId: l.id ?? l.leadId ?? i,
+          name: l.business_name || l.name || 'Lead',
+          email: l.email || '',
+          siteUrl: '',
+          status: 'queued' as const,
+        })),
       });
 
       // Notify parent to add campaign to list
@@ -516,6 +523,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         type: 'email',
         status: 'Active',
         createdAt: new Date().toISOString(),
+        emailSubject,
+        emailBody,
         emailAccountsUsed: Array.from(selectedAccountIds).map(id => {
           const acc = connectedAccounts.find(a => a.id === id);
           return {
@@ -819,6 +828,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               type: 'email',
               status: 'Completed',
               createdAt: new Date().toISOString(),
+              emailSubject,
+              emailBody,
               emailAccountsUsed: finalPerAccount.map((a: any) => ({
                 accountId: a.accountId || a.id || '',
                 accountEmail: a.accountEmail || a.email || '',
@@ -894,6 +905,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             type: 'email',
             status: 'Completed',
             createdAt: new Date().toISOString(),
+            emailSubject,
+            emailBody,
             emailAccountsUsed: fallbackPerAccount.map((a: any) => ({
               accountId: a.accountId || '',
               accountEmail: a.accountEmail || '',

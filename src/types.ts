@@ -42,6 +42,9 @@ export interface Campaign {
   // "X emails from alice@gmail.com" stat strip on the recent card.
   emailAccountsUsed?: { accountId: string; accountEmail: string; sent: number; failed: number }[];
   sitesGenerated?: number;
+  // Email campaign subject and body — shown in recent campaign card details
+  emailSubject?: string;
+  emailBody?: string;
 }
 
 export interface CampaignEmailLead {

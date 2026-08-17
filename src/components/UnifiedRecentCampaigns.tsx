@@ -35,15 +35,22 @@ import {
   AlertTriangle,
   Filter,
   Layers,
+  Users,
+  Palette,
+  FileText,
+  Send,
+  Loader2,
+  Eye,
 } from 'lucide-react';
 import { Campaign, CampaignDeployedSite, CampaignEmailLead } from '../types';
-import { RunningBadge, SiteUrlRow, DeployedUrlChips, CampaignDetailButton, EditOutreachButton } from './RecentCampaignsBits';
+import { RunningBadge, SiteUrlRow, DeployedUrlChips } from './RecentCampaignsBits';
 import { TemplateSimPreview } from './TemplateSimPreview';
 import { ConfirmDialog } from './ConfirmDialog';
 import {
   playCancelTone,
   playConfirmSuccess,
   playSoftTap,
+  playDialogPop,
 } from '../utils/audio';
 import { Template } from '../types';
 
@@ -536,6 +543,7 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
   onEditOutreach,
 }) => {
   const isRunning = camp.status === 'Active';
+  const isFrozen = camp.status === 'Completed' || camp.status === 'Crashed';
   const isSiteDeploy = camp.type === 'site-deploy';
   const isEmail = camp.type === 'email';
 
@@ -575,13 +583,15 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
   return (
     <div
       id={`rcard-${camp.id}`}
-      className={`relative bg-white border rounded-2xl overflow-hidden transition-all group ${
+      className={`relative bg-white border rounded-2xl overflow-hidden transition-all group min-h-[320px] flex flex-col ${
         isLeaving ? 'animate-campaign-row-collapse' : ''
       } ${
         isSelected
           ? 'border-accent ring-2 ring-accent/20 shadow-md'
-          : 'border-border-light hover:border-accent/30 hover:shadow-lg hover:-translate-y-1'
-      } ${isRunning ? 'cursor-default' : 'cursor-pointer'}`}
+          : isFrozen
+            ? 'border-border-light opacity-90'
+            : 'border-border-light hover:border-accent/30 hover:shadow-lg hover:-translate-y-1'
+      } ${isRunning ? 'cursor-default' : isFrozen ? 'cursor-default' : 'cursor-pointer'}`}
       onClick={(e) => {
         const target = e.target as HTMLElement;
         if (target.closest('[data-card-control="true"]')) return;
@@ -667,10 +677,12 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
           </div>
         </div>
 
-        {/* ── Stats row — large numbers, brand tokens ── */}
-        <div className="flex items-stretch gap-0 rounded-xl overflow-hidden border border-border-light bg-off-white">
+        {/* ── Stats row — compact, brand tokens, no subject clutter ── */}
+        <div className="flex items-stretch rounded-xl overflow-hidden border border-border-light bg-off-white">
           {isEmail ? (
             <>
+              <StatPill label="Leads" value={leads} color="text-blue-600" />
+              <div className="w-px bg-border-light" />
               <StatPill label="Sites" value={sites} color="text-accent" />
               <div className="w-px bg-border-light" />
               <StatPill label="Sent" value={sent} color="text-success" />
@@ -696,29 +708,44 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
           )}
         </div>
 
-        {/* ── Per-account email breakdown for email campaigns ── */}
+        {/* ── Gmail accounts used — beautiful integrated row (no subject on card) ── */}
         {isEmail && camp.emailAccountsUsed && camp.emailAccountsUsed.length > 0 && (
           <div className="space-y-1.5">
-            <p className="text-[9px] text-ink-tertiary font-bold uppercase tracking-widest">Sent by account</p>
-            <div className="space-y-1">
-              {camp.emailAccountsUsed.slice(0, 3).map((acc, i) => {
-                const total = (acc.sent || 0) + (acc.failed || 0);
-                const pct = total > 0 ? Math.round(((acc.sent || 0) / total) * 100) : 0;
-                return (
-                  <div key={i} className="flex items-center gap-2 text-[10px]">
-                    <Mail className="w-3 h-3 text-accent shrink-0" />
-                    <span className="flex-1 min-w-0 font-mono text-ink-secondary truncate">{acc.accountEmail}</span>
-                    <span className="text-success font-bold shrink-0">{acc.sent || 0}</span>
-                    {acc.failed > 0 && <span className="text-danger font-bold shrink-0">/{acc.failed}</span>}
-                    <div className="w-12 h-1 bg-gray-200 rounded-full overflow-hidden shrink-0">
-                      <div className="h-full bg-success" style={{ width: `${pct}%` }} />
-                    </div>
+            <div className="flex items-center gap-1.5">
+              <Users className="w-3 h-3 text-ink-tertiary" />
+              <p className="text-[9px] text-ink-tertiary font-bold uppercase tracking-widest">
+                {camp.emailAccountsUsed.length} Gmail Account{ camp.emailAccountsUsed.length !== 1 ? 's' : '' } Used
+              </p>
+            </div>
+            <div className="flex flex-col gap-1">
+              {camp.emailAccountsUsed.map((acc, i) => (
+                <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-off-white border border-border-light">
+                  <div className="w-5 h-5 rounded-full bg-accent-soft text-accent flex items-center justify-center shrink-0">
+                    <Mail className="w-2.5 h-2.5" />
                   </div>
-                );
-              })}
-              {camp.emailAccountsUsed.length > 3 && (
-                <p className="text-[9px] text-accent font-semibold">+{camp.emailAccountsUsed.length - 3} more accounts</p>
-              )}
+                  <span className="flex-1 min-w-0 text-[10px] font-mono text-ink truncate">{acc.accountEmail}</span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {acc.sent > 0 && (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-success-soft text-success border border-success/25 text-[9px] font-bold">
+                        <CheckCircle className="w-2.5 h-2.5" />
+                        {acc.sent}
+                      </span>
+                    )}
+                    {acc.failed > 0 && (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-danger/10 text-danger border border-danger/25 text-[9px] font-bold">
+                        <X className="w-2.5 h-2.5" />
+                        {acc.failed}
+                      </span>
+                    )}
+                    {acc.sent === 0 && acc.failed === 0 && (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-accent-soft text-accent border border-accent/25 text-[9px] font-bold">
+                        <Loader2 className="w-2.5 h-2.5 animate-campaign-spin" />
+                        {isRunning ? 'Running' : 'Queued'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -741,59 +768,20 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
           </span>
         </div>
 
-        {/* ── Deployed site URLs — inline, scrollable on mobile ── */}
-        {isEmail && liveSites.length > 0 && (
-          <div className="space-y-1 pt-2 border-t border-border-light">
-            <p className="text-[9px] text-ink-tertiary font-bold uppercase tracking-widest">
-              Deployed Sites
-            </p>
-            <div className="flex flex-col gap-1 max-h-24 overflow-y-auto pr-1">
-              {liveSites.slice(0, 4).map((site: CampaignDeployedSite, idx: number) => (
-                <div key={`${site.slug}-${idx}`} className="flex items-center gap-1.5 min-w-0">
-                  <Link2 className="w-3 h-3 text-accent shrink-0" />
-                  <a
-                    href={site.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={site.url}
-                    className="flex-1 min-w-0 text-[10px] text-ink-secondary hover:text-accent font-mono truncate transition-colors"
-                  >
-                    {site.url.replace(/^https?:\/\//, '')}
-                  </a>
-                  <a
-                    href={site.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Open site"
-                    className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-md text-ink-tertiary hover:text-accent hover:bg-accent-soft transition-colors"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-              ))}
-              {liveSites.length > 4 && (
-                <p className="text-[9px] text-accent font-semibold">+{liveSites.length - 4} more sites</p>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* ── Footer actions ── */}
-        <div className="flex items-center justify-between pt-2 border-t border-border-light gap-2">
-          <span className="text-[10px] text-ink-secondary truncate flex items-center gap-1">
-            <ChevronRight className="w-3 h-3 text-ink-tertiary group-hover:text-accent group-hover:translate-x-0.5 transition-all shrink-0" />
-            <span className="group-hover:text-accent transition-colors">
-              {isRunning ? 'Live — wait to finish' : 'Click for full details'}
-            </span>
-          </span>
-          <div className="flex items-center gap-1.5 shrink-0">
-            {!isRunning && onEditOutreach && isEmail && (
-              <EditOutreachButton onClick={onEditOutreach} />
-            )}
-            {!isRunning && onViewDetails && (
-              <CampaignDetailButton onClick={onViewDetails} />
-            )}
-          </div>
+        <div className="flex items-center justify-center pt-2 border-t border-border-light mt-auto">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              playSoftTap();
+              onOpen();
+            }}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-lg bg-accent-soft text-accent hover:bg-accent hover:text-white text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer"
+          >
+            <Eye className="w-3 h-3" />
+            View Details
+          </button>
         </div>
       </div>
     </div>
@@ -822,26 +810,48 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
 }) => {
   const isEmail = camp.type === 'email';
   const isSiteDeploy = camp.type === 'site-deploy';
+  const [emailLeads, setEmailLeads] = useState<CampaignEmailLead[]>(camp.emailLeads || []);
+  const [loadingLeads, setLoadingLeads] = useState<boolean>(false);
+
+  // Fetch leads from API when modal opens on a completed campaign that has no local data.
+  // This ensures the detail modal always shows the full prospect list.
+  React.useEffect(() => {
+    if (!isEmail || emailLeads.length > 0) return;
+    if (camp.status !== 'Completed' && camp.status !== 'Crashed') return;
+    const cid = camp.serverCampaignId || camp.id;
+    if (!cid) return;
+    setLoadingLeads(true);
+    fetch(`${import.meta.env.VITE_API_BASE || ''}/api/email-campaigns/${encodeURIComponent(cid)}/leads`)
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then((data: any[]) => {
+        const mapped: CampaignEmailLead[] = (data || []).map((l: any) => ({
+          id: l.id,
+          email: l.email || l.business_email || '',
+          businessName: l.business_name || l.name || '',
+          siteUrl: l.generated_site_url || l.site_url || '',
+          status: l.send_status === 'sent' ? 'sent' : l.send_status === 'failed' ? 'failed' : 'queued',
+          accountEmail: l.account_email || l.from_email || '',
+          leadId: l.id,
+          city: l.city || '',
+          phone: l.phone || l.phone_raw || '',
+        }));
+        setEmailLeads(mapped.length > 0 ? mapped : []);
+      })
+      .catch(() => { /* leave empty */ })
+      .finally(() => setLoadingLeads(false));
+  }, [isEmail, emailLeads.length, camp.status, camp.serverCampaignId, camp.id]);
+
+  const deployedSites: CampaignDeployedSite[] = camp.deployedSites || [];
+
   const tpl = useMemo(
     () => [...templates, ...customTemplates.map((t) => ({ ...t, preview: '' }))].find((t) => t.id === camp.templateId),
     [templates, customTemplates, camp.templateId],
   );
 
-  const deployedSites: CampaignDeployedSite[] = camp.deployedSites || [];
-  const emailLeads: CampaignEmailLead[] = camp.emailLeads || [];
-
-  const liveSites = deployedSites.filter((s) => s.status === 'live' && s.url);
-  const sent = camp.emailsSent ?? 0;
-  const failed = camp.emailsFailed ?? 0;
-  const sites = camp.sitesGenerated ?? camp.sites ?? 0;
-
-  const statusMeta: Record<string, { bg: string; text: string; border: string; dot: string }> = {
-    Completed: { bg: 'bg-success-soft', text: 'text-success', border: 'border-success/20', dot: 'bg-success' },
-    Active: { bg: 'bg-accent-soft', text: 'text-accent', border: 'border-accent/20', dot: 'bg-accent' },
-    Crashed: { bg: 'bg-danger-soft', text: 'text-danger', border: 'border-danger/20', dot: 'bg-danger' },
-    Queued: { bg: 'bg-warning-soft', text: 'text-warning', border: 'border-warning/20', dot: 'bg-warning' },
-  };
-  const meta = statusMeta[camp.status] ?? { bg: 'bg-surface', text: 'text-ink', border: 'border-border-main', dot: 'bg-ink-tertiary' };
+  // Play a satisfying "pop" sound when the modal opens
+  React.useEffect(() => {
+    playDialogPop();
+  }, []);
 
   // Per-account stats — prefer the persisted breakdown, fall back to
   // counting distinct from-emails on the per-lead log.
@@ -858,6 +868,19 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
     }
     return Object.entries(byAcc).map(([accountEmail, v]) => ({ accountEmail, ...v }));
   }, [camp.emailAccountsUsed, emailLeads]);
+
+  const liveSites = deployedSites.filter((s) => s.status === 'live' && s.url);
+  const sent = camp.emailsSent ?? 0;
+  const failed = camp.emailsFailed ?? 0;
+  const sites = camp.sitesGenerated ?? camp.sites ?? 0;
+
+  const statusMeta: Record<string, { bg: string; text: string; border: string; dot: string }> = {
+    Completed: { bg: 'bg-success-soft', text: 'text-success', border: 'border-success/20', dot: 'bg-success' },
+    Active: { bg: 'bg-accent-soft', text: 'text-accent', border: 'border-accent/20', dot: 'bg-accent' },
+    Crashed: { bg: 'bg-danger-soft', text: 'text-danger', border: 'border-danger/20', dot: 'bg-danger' },
+    Queued: { bg: 'bg-warning-soft', text: 'text-warning', border: 'border-warning/20', dot: 'bg-warning' },
+  };
+  const meta = statusMeta[camp.status] ?? { bg: 'bg-surface', text: 'text-ink', border: 'border-border-main', dot: 'bg-ink-tertiary' };
 
   return (
     <div
@@ -907,14 +930,38 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
                 ) : null}
               </div>
               <p className="text-xs text-ink-secondary">{camp.niche} · {camp.createdAt}</p>
+              {/* Email subject + body preview — only for email campaigns */}
+              {isEmail && (camp.emailSubject || camp.emailBody) && (
+                <div className="mt-2.5 flex flex-col gap-1.5">
+                  {camp.emailSubject && (
+                    <div className="flex items-start gap-2 p-2.5 rounded-lg border border-accent/20 bg-accent-soft/40">
+                      <Mail className="w-3.5 h-3.5 text-accent shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="text-[9px] text-accent font-bold uppercase tracking-widest mb-0.5">Subject Line</p>
+                        <p className="text-xs text-ink font-medium leading-snug">{camp.emailSubject}</p>
+                      </div>
+                    </div>
+                  )}
+                  {camp.emailBody && (
+                    <div className="flex items-start gap-2 p-2.5 rounded-lg border border-border-light bg-off-white/70">
+                      <FileText className="w-3.5 h-3.5 text-ink-tertiary shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="text-[9px] text-ink-tertiary font-bold uppercase tracking-widest mb-0.5">Email Body Preview</p>
+                        <p className="text-[11px] text-ink-secondary leading-relaxed line-clamp-3">{camp.emailBody.replace(/\{\{[^}]+\}\}/g, (m) => m)}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {/* Stats strip */}
-        <div className={`grid ${isEmail ? 'grid-cols-4' : 'grid-cols-3'} divide-x divide-border-light border-b border-border-light`}>
+        <div className={`grid ${isEmail ? 'grid-cols-5' : 'grid-cols-3'} divide-x divide-border-light border-b border-border-light`}>
           {isEmail ? (
             <>
+              <StatBlock label="Leads" value={emailLeads.length} icon={<Users className="w-4 h-4" />} color="text-blue-600" />
               <StatBlock label="Sites Live" value={sites} icon={<Globe className="w-4 h-4" />} color="text-accent" />
               <StatBlock label="Emails Sent" value={sent} icon={<Mail className="w-4 h-4" />} color="text-success" />
               <StatBlock label="Failed" value={failed} icon={<X className="w-4 h-4" />} color={failed > 0 ? 'text-danger' : 'text-ink-tertiary'} />
@@ -1073,26 +1120,89 @@ const EmailBody: React.FC<{
     );
   }
 
+  const totalSent = leads.filter(l => l.status === 'sent').length;
+  const totalFailed = leads.filter(l => l.status === 'failed').length;
+  const totalQueued = leads.filter(l => l.status === 'queued').length;
+  const leadsWithSite = leads.filter(l => l.siteUrl).length;
+
   return (
-    <div className="px-6 py-4 space-y-3">
-      {/* Per-account breakdown */}
+    <div className="px-6 py-5 space-y-5">
+
+      {/* ── Summary strip ── */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-success-soft text-success border border-success/25 text-[10px] font-bold">
+          <CheckCircle className="w-3 h-3" />
+          {totalSent} Sent
+        </span>
+        {totalFailed > 0 && (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-danger/10 text-danger border border-danger/25 text-[10px] font-bold">
+            <X className="w-3 h-3" />
+            {totalFailed} Failed
+          </span>
+        )}
+        {totalQueued > 0 && (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold">
+            <Activity className="w-3 h-3" />
+            {totalQueued} Queued
+          </span>
+        )}
+        {leadsWithSite > 0 && (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent-soft text-accent border border-accent/25 text-[10px] font-bold">
+            <Globe className="w-3 h-3" />
+            {leadsWithSite} Site{leadsWithSite !== 1 ? 's' : ''} Deployed
+          </span>
+        )}
+        <span className="ml-auto text-[10px] text-ink-tertiary font-medium">{leads.length} total lead{leads.length !== 1 ? 's' : ''}</span>
+      </div>
+
+      {/* ── Per-account breakdown ── */}
       {accountStats.length > 0 && (
-        <div className="space-y-1.5">
-          <p className="text-[10px] text-ink-tertiary uppercase tracking-widest font-semibold">Sent by account</p>
-          <div className="space-y-1.5">
+        <div className="rounded-xl border border-border-light overflow-hidden">
+          <div className="px-4 py-2.5 bg-off-white border-b border-border-light flex items-center gap-2">
+            <Users className="w-3.5 h-3.5 text-accent" />
+            <p className="text-[10px] text-ink font-bold uppercase tracking-widest">Email Accounts Used</p>
+            <span className="ml-auto text-[10px] text-ink-secondary font-medium">{accountStats.length} account{accountStats.length !== 1 ? 's' : ''}</span>
+          </div>
+          <div className="divide-y divide-border-light">
             {accountStats.map((acc, i) => {
               const total = acc.sent + acc.failed;
               const pct = total > 0 ? Math.round((acc.sent / total) * 100) : 0;
               return (
-                <div key={acc.accountEmail + i} className="space-y-1">
-                  <div className="flex items-center gap-2 text-[11px]">
-                    <Mail className="w-3 h-3 text-accent shrink-0" />
-                    <span className="font-mono text-ink truncate flex-1 min-w-0">{acc.accountEmail}</span>
-                    <span className="text-success font-bold tabular-nums">{acc.sent}</span>
-                    {acc.failed > 0 && <span className="text-danger font-bold tabular-nums">/{acc.failed}</span>}
+                <div key={acc.accountEmail + i} className="px-4 py-3 flex items-center gap-4 hover:bg-off-white/40 transition-colors">
+                  <div className="w-8 h-8 rounded-lg bg-accent-soft text-accent flex items-center justify-center shrink-0">
+                    <Mail className="w-4 h-4" />
                   </div>
-                  <div className="h-1 bg-off-white rounded-full overflow-hidden">
-                    <div className="h-full bg-success transition-all" style={{ width: `${pct}%` }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-ink truncate" title={acc.accountEmail}>{acc.accountEmail}</p>
+                    {/* Progress bar */}
+                    <div className="mt-1.5 h-1.5 bg-surface rounded-full overflow-hidden flex">
+                      {acc.sent > 0 && (
+                        <div className="h-full bg-success transition-all" style={{ width: `${pct}%` }} />
+                      )}
+                      {acc.failed > 0 && (
+                        <div className="h-full bg-danger transition-all" style={{ width: `${total - pct > 0 ? Math.round((acc.failed / total) * 100) : 0}%` }} />
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {acc.sent > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-success-soft text-success border border-success/25 text-[10px] font-bold">
+                        <CheckCircle className="w-2.5 h-2.5" />
+                        {acc.sent} sent
+                      </span>
+                    )}
+                    {acc.failed > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-danger/10 text-danger border border-danger/25 text-[10px] font-bold">
+                        <X className="w-2.5 h-2.5" />
+                        {acc.failed} failed
+                      </span>
+                    )}
+                    {acc.sent === 0 && acc.failed === 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface text-ink-tertiary border border-border-light text-[10px] font-bold">
+                        <Activity className="w-2.5 h-2.5" />
+                        Queued
+                      </span>
+                    )}
                   </div>
                 </div>
               );
@@ -1101,99 +1211,127 @@ const EmailBody: React.FC<{
         </div>
       )}
 
-      {/* Per-prospect log */}
-      <div className="space-y-1.5">
-        <p className="text-[10px] text-ink-tertiary uppercase tracking-widest font-semibold">Per-prospect log ({leads.length})</p>
-        <div className="max-h-72 overflow-y-auto divide-y divide-border-light border border-border-light rounded-lg">
-          {leads.map((row, i) => {
-            const isSent = row.status === 'sent';
-            const isQueued = row.status === 'queued';
-            const pill = isSent
-              ? 'bg-success-soft text-success border-success/25'
-              : isQueued
-                ? 'bg-amber-50 text-amber-700 border-amber-200'
-                : 'bg-danger/10 text-danger border-danger/25';
-            const pillLabel = isSent ? 'Sent' : isQueued ? 'Queued' : 'Failed';
-            return (
-              <div key={`${row.leadId ?? row.email ?? row.name}-${i}`} className="px-3 py-2.5 space-y-1">
-                <div className="flex items-start gap-2 min-w-0">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
-                    isSent ? 'bg-success-soft text-success' : isQueued ? 'bg-amber-50 text-amber-600' : 'bg-danger/10 text-danger'
-                  }`}>
-                    {isSent ? <CheckCircle className="w-3.5 h-3.5" /> : isQueued ? <Activity className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-ink leading-tight truncate" title={row.name}>{row.name || 'Prospect'}</p>
+      {/* ── Per-prospect log ── */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 px-1">
+          <Users className="w-3.5 h-3.5 text-ink-tertiary" />
+          <p className="text-[10px] text-ink font-bold uppercase tracking-widest">Prospect Details</p>
+          <span className="ml-auto text-[10px] text-ink-tertiary">{leads.length} lead{leads.length !== 1 ? 's' : ''}</span>
+        </div>
+        <div className="rounded-xl border border-border-light overflow-hidden">
+          <div className="divide-y divide-border-light">
+            {leads.map((row, i) => {
+              const isSent = row.status === 'sent';
+              const isQueued = row.status === 'queued';
+              const pill = isSent
+                ? 'bg-success-soft text-success border-success/25'
+                : isQueued
+                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                  : 'bg-danger/10 text-danger border-danger/25';
+              const pillLabel = isSent ? 'Sent' : isQueued ? 'Queued' : 'Failed';
+              const iconBg = isSent ? 'bg-success-soft text-success' : isQueued ? 'bg-amber-50 text-amber-600' : 'bg-danger/10 text-danger';
+              const Icon = isSent ? CheckCircle : isQueued ? Activity : X;
 
-                    {/* Deployed site URL — the primary copy target, shown FIRST
-                        (most actionable — user wants to share the live page). */}
-                    {row.siteUrl && (
-                      <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
-                        <Link2 className="w-3 h-3 text-accent shrink-0" />
-                        <a
-                          href={row.siteUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 min-w-0 text-[10px] text-ink hover:text-accent font-mono truncate transition-colors"
-                          title={row.siteUrl}
-                        >
-                          {row.siteUrl.replace(/^https?:\/\//, '')}
-                        </a>
-                        <button
-                          type="button"
-                          onClick={() => handleCopy(row.siteUrl!, i, 'url')}
-                          aria-label="Copy site URL"
-                          className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-tertiary hover:text-accent hover:bg-accent-soft transition-colors"
-                        >
-                          {copied?.row === i && copied.which === 'url' ? (
-                            <Check className="w-3 h-3 text-success" />
-                          ) : (
-                            <Copy className="w-3 h-3" />
-                          )}
-                        </button>
-                        <a
-                          href={row.siteUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label="Open site"
-                          className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-tertiary hover:text-accent hover:bg-accent-soft transition-colors"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
+              return (
+                <div key={`${row.leadId ?? row.email ?? row.name}-${i}`} className="px-4 py-3 hover:bg-off-white/30 transition-colors">
+                  <div className="flex items-start gap-3">
+                    {/* Status icon */}
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${iconBg}`}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+
+                    {/* Main content */}
+                    <div className="flex-1 min-w-0 space-y-1.5">
+                      {/* Name + status pill */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-xs font-bold text-ink leading-tight truncate" title={row.name}>{row.name || 'Prospect'}</p>
+                        <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${pill}`}>
+                          <span className="w-1 h-1 rounded-full bg-current opacity-70" />
+                          {pillLabel}
+                        </span>
                       </div>
-                    )}
 
-                    {/* Business email address — secondary info, shown BELOW the
-                        deployed site URL. Slightly smaller and muted. */}
-                    <div className="flex items-center gap-1 mt-0.5 min-w-0">
-                      <Mail className="w-2.5 h-2.5 text-ink-tertiary shrink-0" />
-                      <span className="text-[10px] text-ink-tertiary font-mono truncate flex-1 min-w-0" title={row.email}>{row.email || '—'}</span>
-                      {row.email && (
-                        <button
-                          type="button"
-                          onClick={() => handleCopy(row.email!, i, 'email')}
-                          aria-label="Copy prospect email"
-                          className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-ink-tertiary hover:text-accent hover:bg-accent-soft transition-colors"
-                        >
-                          {copied?.row === i && copied.which === 'email' ? (
-                            <Check className="w-3 h-3 text-success" />
-                          ) : (
-                            <Copy className="w-3 h-3" />
-                          )}
-                        </button>
+                      {/* Two-column info grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                        {/* Deployed site */}
+                        {row.siteUrl && (
+                          <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-accent-soft/40 border border-accent/15 min-w-0">
+                            <Globe className="w-3 h-3 text-accent shrink-0" />
+                            <a
+                              href={row.siteUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 min-w-0 text-[10px] text-accent hover:text-accent-hover font-medium truncate transition-colors"
+                              title={row.siteUrl}
+                            >
+                              {row.siteUrl.replace(/^https?:\/\//, '')}
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(row.siteUrl!, i, 'url')}
+                              aria-label="Copy site URL"
+                              className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-accent hover:bg-accent/10 transition-colors"
+                            >
+                              {copied?.row === i && copied.which === 'url' ? (
+                                <Check className="w-3 h-3 text-success" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                            <a
+                              href={row.siteUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label="Open site"
+                              className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-accent hover:bg-accent/10 transition-colors"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </div>
+                        )}
+
+                        {/* Business email */}
+                        {row.email && (
+                          <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-surface border border-border-light min-w-0">
+                            <Mail className="w-3 h-3 text-ink-tertiary shrink-0" />
+                            <span className="flex-1 min-w-0 text-[10px] text-ink-secondary font-mono truncate" title={row.email}>{row.email}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(row.email!, i, 'email')}
+                              aria-label="Copy email"
+                              className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-ink-tertiary hover:text-accent hover:bg-accent/10 transition-colors"
+                            >
+                              {copied?.row === i && copied.which === 'email' ? (
+                                <Check className="w-3 h-3 text-success" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Sent from account */}
+                      {row.accountEmail && (
+                        <div className="flex items-center gap-1.5">
+                          <Send className="w-3 h-3 text-ink-tertiary shrink-0" />
+                          <span className="text-[10px] text-ink-tertiary font-mono truncate">{row.accountEmail}</span>
+                        </div>
+                      )}
+
+                      {/* Failure reason */}
+                      {row.reason && (
+                        <p className="flex items-center gap-1.5 text-[10px] text-danger font-medium">
+                          <AlertTriangle className="w-3 h-3 shrink-0" />
+                          {row.reason}
+                        </p>
                       )}
                     </div>
                   </div>
-                  <span className={`shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${pill}`}>
-                    {pillLabel}
-                  </span>
                 </div>
-                {row.reason && (
-                  <p className="pl-8 text-[10px] text-danger leading-snug">{row.reason}</p>
-                )}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
