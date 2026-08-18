@@ -7,10 +7,10 @@ import {
   Mail, Send, Upload, Globe, Check, ChevronRight, ChevronLeft, AlertCircle,
   CheckCircle, CheckCircle2, Loader2, X, ShieldAlert, Plus, Trash2, Eye, ExternalLink,
   RefreshCw, Link2, AlertTriangle, Zap, Clock, Pencil, Sparkles, FileSpreadsheet,
-  Smartphone, Monitor, Maximize2, Users, Layout, Type
+  Smartphone, Monitor, Maximize2, Users, Layout, Type, Search, MapPin
 } from 'lucide-react';
 import { playGentleChime, playLaunchSwell, playVictoryCelebration, playSoftTap, playElegantError, playSoftBubble, playElegantBell } from '../utils/audio';
-import { validateCsvFile, CsvValidation, PipelineLead, runEmailCampaign, probeAllEmailAccounts, initiateOAuthFlow, EmailAccountProbeResult, EmailCampaignEvent } from '../lib/pipelineClient';
+import { validateCsvFile, CsvValidation, PipelineLead, runEmailCampaign, probeAllEmailAccounts, initiateOAuthFlow, EmailAccountProbeResult, EmailCampaignEvent, lookupCity, runDorkEmailCampaign, CityLookupResponse, CitySuggestion, getDorkStatus } from '../lib/pipelineClient';
 import { Template } from '../types';
 import { nicheList } from '../data';
 import { TemplateSimPreview } from './TemplateSimPreview';
@@ -116,8 +116,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   const [selectedNiche, setSelectedNiche] = useState<string>('Barber');
   
   // Lead source
-  const [leadSource, setLeadSource] = useState<'csv' | 'places_api'>('csv');
-  
+  const [leadSource, setLeadSource] = useState<'csv' | 'places_api' | 'dork'>('csv');
+
   // CSV state
   const [csvFileName, setCsvFileName] = useState<string | null>(null);
   const [isCsvParsing, setIsCsvParsing] = useState<boolean>(false);
@@ -125,11 +125,30 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   const [csvLeads, setCsvLeads] = useState<PipelineLead[]>([]);
   const [csvValidation, setCsvValidation] = useState<CsvValidation | null>(null);
   const [csvError, setCsvError] = useState<string | null>(null);
-  
+
   // Places API state
   const [placesCity, setPlacesCity] = useState<string>('');
   const [placesLoading, setPlacesLoading] = useState<boolean>(false);
   const [placesResults, setPlacesResults] = useState<any[]>([]);
+
+  // Auto Email Sender (dork) state
+  const [dorkCity, setDorkCity] = useState<string>('');
+  const [dorkTargetVolume, setDorkTargetVolume] = useState<number>(50);
+  const [dorkCityLookup, setDorkCityLookup] = useState<CityLookupResponse | null>(null);
+  const [dorkCitySuggestions, setDorkCitySuggestions] = useState<CitySuggestion[]>([]);
+  const [dorkCityConfirmed, setDorkCityConfirmed] = useState<string | null>(null);
+  const [dorkConfirmModalOpen, setDorkConfirmModalOpen] = useState<boolean>(false);
+  const [dorkLookupPending, setDorkLookupPending] = useState<boolean>(false);
+  // Shown when the user clicks Next with no/garbage city name OR when the
+  // quick-query returns zero suggestions. Cleared as soon as they type a
+  // better name.
+  const [dorkCityInlineError, setDorkCityInlineError] = useState<string | null>(null);
+  // True while the Next-click quick lookup is running; gives the "scanning"
+  // loader between the click and the result.
+  const [dorkQuickQueryPending, setDorkQuickQueryPending] = useState<boolean>(false);
+  // Live status of the dork backend — populated once on mount. Lets the UI
+  // render a clear "Live Google" vs "DRY-RUN mock" badge above the panel.
+  const [dorkStatus, setDorkStatus] = useState<{ provider: 'serpapi' | 'google_cse' | 'mock'; serpApiLive: boolean; googleCseLive: boolean } | null>(null);
   
   // Template selection
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('barber-dark-luxury');
@@ -169,6 +188,28 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     deploying: boolean;
   }>({ sitesStaged: 0, emailsSent: 0, emailsFailed: 0, deploying: false });
 
+  // Auto Email Sender (dork) pipeline progress. Only the dork launch path
+  // populates this — the CSV path leaves it at 'idle' so the existing
+  // progress card renders identically to before.
+  type DorkStage = 'discovering' | 'building' | 'sending' | 'idle';
+  const [dorkProgress, setDorkProgress] = useState<{
+    stage: DorkStage;
+    leadsFound: number;
+    targetVolume: number;
+    currentCity: string | null;
+    currentPage: number | null;
+    citiesScanned: string[];
+    queriesUsed: number;
+  }>({
+    stage: 'idle',
+    leadsFound: 0,
+    targetVolume: 0,
+    currentCity: null,
+    currentPage: null,
+    citiesScanned: [],
+    queriesUsed: 0,
+  });
+
   const [celebratedCampaign, setCelebratedCampaign] = useState<{
     id: string;
     subject: string;
@@ -202,11 +243,57 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     loadConnectedAccounts();
   }, []);
 
+  // One-shot fetch of the dork provider status so the UI can render a
+  // "Live Google" / "DRY-RUN" badge above the Auto Email Sender panel.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const status = await getDorkStatus();
+      if (!cancelled && status) setDorkStatus(status);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     if (typeof initialSubject === 'string') setEmailSubject(initialSubject);
     if (typeof initialBody === 'string') setEmailBody(initialBody);
     if (initialSubject || initialBody) setActiveStep(4);
   }, [initialSubject, initialBody]);
+
+  // Debounced city lookup for the Auto Email Sender panel. Fires 350ms after
+  // the user stops typing, then either auto-confirms an exact match or stages
+  // suggestions for the modal.
+  useEffect(() => {
+    if (leadSource !== 'dork') return;
+    const trimmed = dorkCity.trim();
+    if (trimmed.length < 2) {
+      setDorkCityLookup(null);
+      setDorkCitySuggestions([]);
+      setDorkCityConfirmed(null);
+      return;
+    }
+    // Typing again clears the previous Next-click error/nudge.
+    setDorkCityInlineError(null);
+    let cancelled = false;
+    setDorkLookupPending(true);
+    const handle = setTimeout(async () => {
+      const result = await lookupCity(trimmed);
+      if (cancelled) return;
+      setDorkCityLookup(result);
+      setDorkLookupPending(false);
+      if (result?.exact && result.match) {
+        setDorkCityConfirmed(result.match.name);
+        setDorkCitySuggestions([]);
+      } else {
+        setDorkCityConfirmed(null);
+        setDorkCitySuggestions((result?.suggestions || []).slice(0, 5));
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [dorkCity, leadSource]);
 
   // Sync progress toggle with active email campaigns
   useEffect(() => {
@@ -430,7 +517,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   
   const handleLaunch = async () => {
     setLaunchError(null);
-    
+
     // Auto-scroll to step indicator when launching
     setTimeout(() => {
       const stepTrack = document.getElementById('wizard-steps-horizontal-track');
@@ -438,25 +525,56 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         stepTrack.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     }, 100);
-    
+
+    const isDork = leadSource === 'dork';
+
+    // ---- Dork-specific preflight ----
+    if (isDork) {
+      if (!dorkCity.trim()) {
+        setLaunchError('Enter a city to find leads with the auto email sender.');
+        return;
+      }
+      if (!dorkCityConfirmed) {
+        // Either the lookup hasn't finished yet, or the city wasn't
+        // recognized. Surface the suggestions modal so the user can pick a
+        // close match.
+        setDorkConfirmModalOpen(true);
+        return;
+      }
+      if (selectedAccountIds.size === 0) {
+        setLaunchError('Select at least one email account to send from.');
+        return;
+      }
+      const requiredCredits = dorkTargetVolume * COST_PER_EMAIL;
+      if (userCredits < requiredCredits) {
+        playElegantError();
+        setLaunchError(`Insufficient credits: this campaign needs ${requiredCredits} credits (${dorkTargetVolume} leads × ${COST_PER_EMAIL}). You have ${userCredits}.`);
+        return;
+      }
+      onCreditsChange?.(Math.max(0, userCredits - requiredCredits));
+      await runDorkLaunch();
+      return;
+    }
+
+    // ---- CSV / places_api preflight ----
     const totalLeads = csvLeads.length;
     if (totalLeads === 0) {
       setLaunchError('Upload a CSV with business data before launching.');
       return;
     }
-    
+
     if (selectedAccountIds.size === 0) {
       setLaunchError('Select at least one email account to send from.');
       return;
     }
-    
+
     const requiredCredits = totalLeads * COST_PER_EMAIL;
     if (userCredits < requiredCredits) {
       playElegantError();
       setLaunchError(`Insufficient credits: this campaign needs ${requiredCredits} credits (${totalLeads} leads × ${COST_PER_EMAIL}). You have ${userCredits}.`);
       return;
     }
-    
+
     onCreditsChange?.(Math.max(0, userCredits - requiredCredits));
     
     setIsLaunching(true);
@@ -979,7 +1097,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         playElegantError();
       }
       onLaunch?.();
-      
+
     } catch (err: any) {
       playElegantError();
       setLaunchError(err.message || 'Campaign launch failed.');
@@ -988,7 +1106,545 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       setIsLaunching(false);
     }
   };
-  
+
+  // ---- Dork (Auto Email Sender) launch path ----
+  // Reuses the same SSE event stream and per-lead/sent/failed accounting as
+  // the CSV path. The backend's /api/email-campaigns/dork/run endpoint does
+  // discovered-leads + sites + emails in one stream, emitting the same event
+  // names the existing handler already listens to.
+  const runDorkLaunch = async () => {
+    setIsLaunching(true);
+    setLaunchProgress(5);
+    setLaunchMessage('Starting the auto email sender...');
+    setLaunchResults(null);
+    setLaunchError(null);
+    setLaunchComplete(false);
+    setDorkProgress({
+      stage: 'discovering',
+      leadsFound: 0,
+      targetVolume: dorkTargetVolume,
+      currentCity: null,
+      currentPage: null,
+      citiesScanned: [],
+      queriesUsed: 0,
+    });
+    playLaunchSwell();
+
+    // Auto-scroll to step indicator when launching
+    setTimeout(() => {
+      const stepTrack = document.getElementById('wizard-steps-horizontal-track');
+      if (stepTrack) {
+        stepTrack.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+
+    const perLead: any[] = [];
+    const upsertPerLead = (entry: any) => {
+      const key = entry.leadId ?? entry.email ?? entry.slug ?? entry.index;
+      if (key === undefined || key === null) {
+        perLead.push(entry);
+        return;
+      }
+      const existingIdx = perLead.findIndex((p) => {
+        const pKey = p.leadId ?? p.email ?? p.slug ?? p.index;
+        return pKey !== undefined && pKey !== null && pKey === key;
+      });
+      if (existingIdx >= 0) {
+        perLead[existingIdx] = { ...perLead[existingIdx], ...entry };
+      } else {
+        perLead.push(entry);
+      }
+    };
+
+    // Pre-populate the per-account stats so the completion screen always has
+    // a stable place to record sends even before the first send:sent event.
+    setLaunchResults({
+      sent: 0,
+      failed: 0,
+      status: 'running',
+      perAccount: Array.from(selectedAccountIds).map(id => {
+        const acc = connectedAccounts.find(a => a.id === id);
+        return {
+          accountId: id,
+          accountEmail: acc?.email || id,
+          sent: 0,
+          failed: 0,
+        };
+      }),
+      perLead: [],
+    });
+
+    setLiveCounters({ sitesStaged: 0, emailsSent: 0, emailsFailed: 0, deploying: false });
+
+    const tempCampaignId = 'emc_run_' + Date.now();
+    // Mutable id used by the SSE callback so patches target the renamed run
+    // once the server returns the real campaignId (see the `campaign` event branch).
+    let currentRunId = tempCampaignId;
+
+    setCelebratedCampaign({
+      id: tempCampaignId,
+      subject: emailSubject,
+      body: emailBody,
+    });
+
+    upsertActiveRun?.({
+      id: tempCampaignId,
+      kind: 'email',
+      name: campaignName,
+      niche: selectedNiche,
+      total: dorkTargetVolume,
+      done: 0,
+      status: 'starting',
+      startedAt: Date.now(),
+      sitesGenerated: 0,
+      emailsSent: 0,
+      emailsFailed: 0,
+      accountsUsed: selectedAccountIds.size,
+      // Dork-only counters that feed the floating CampaignProgressToggle's
+      // "Leads" tile alongside the existing Sites / Sent / Failed / Accounts tiles.
+      leadsFound: 0,
+      leadsTarget: dorkTargetVolume,
+      emailLeads: [],
+    });
+
+    onCampaignCreated?.({
+      id: tempCampaignId,
+      name: campaignName,
+      niche: selectedNiche,
+      templateId: selectedTemplateId,
+      type: 'email',
+      leadSource: 'dork',
+      status: 'Active',
+      createdAt: new Date().toISOString(),
+      emailSubject,
+      emailBody,
+      emailAccountsUsed: Array.from(selectedAccountIds).map(id => {
+        const acc = connectedAccounts.find(a => a.id === id);
+        return {
+          accountId: id,
+          accountEmail: acc?.email || id,
+          sent: 0,
+          failed: 0,
+        };
+      }),
+      leadsFound: 0,
+      sitesGenerated: 0,
+      emailsSent: 0,
+      emailsFailed: 0,
+    });
+
+    try {
+      const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
+      const result = await runDorkEmailCampaign(
+        ownerKey,
+        {
+          niche: selectedNiche,
+          city: dorkCityConfirmed || dorkCity.trim(),
+          targetVolume: dorkTargetVolume,
+          templateKey: selectedTemplateId,
+          accountIds: Array.from(selectedAccountIds),
+          emailSubject,
+          emailBody,
+          confirmCity: dorkCityConfirmed || undefined,
+        },
+        (e: EmailCampaignEvent) => {
+          try {
+            // Real campaign id comes back with the first `campaign` event —
+            // patch the active run + celebration card so the UI is consistent.
+            if (e.type === 'campaign' && e.campaignId && e.campaignId !== tempCampaignId) {
+              setCelebratedCampaign((prev) => prev ? { ...prev, id: e.campaignId! } : prev);
+              updateActiveRun?.(tempCampaignId, { id: e.campaignId });
+              currentRunId = e.campaignId!;
+              return;
+            }
+
+            // The dork pipeline emits lead:start (with index/total) for every
+            // discovered lead so we can show a smooth progress bar across the
+            // discovery phase.
+            if (e.type === 'lead:start' && typeof e.index === 'number' && typeof e.total === 'number') {
+              const pct = 5 + Math.round((e.index / Math.max(1, e.total)) * 70);
+              setLaunchProgress(prev => Math.max(prev, pct));
+              setLaunchMessage(`discovering ${e.name || 'lead'} (${e.index}/${e.total})...`);
+              return;
+            }
+
+            if (e.type === 'dork:searching') {
+              setLaunchMessage(`scanning ${e.city} (page ${e.page})...`);
+              setDorkProgress(prev => ({
+                ...prev,
+                stage: 'discovering',
+                currentCity: e.city,
+                currentPage: e.page,
+              }));
+              return;
+            }
+
+            if (e.type === 'dork:found') {
+              setLaunchMessage(`found ${e.totalSoFar} leads so far...`);
+              setDorkProgress(prev => {
+                const cities = prev.citiesScanned.includes(e.city)
+                  ? prev.citiesScanned
+                  : [...prev.citiesScanned, e.city];
+                return {
+                  ...prev,
+                  leadsFound: e.totalSoFar,
+                  citiesScanned: cities,
+                  queriesUsed: prev.queriesUsed + 1,
+                };
+              });
+              // Keep the floating CampaignProgressToggle's "Leads" tile in sync.
+              updateActiveRun?.(currentRunId, { leadsFound: e.totalSoFar });
+              return;
+            }
+
+            if (e.type === 'dork:expand') {
+              setDorkProgress(prev => ({
+                ...prev,
+                queriesUsed: prev.queriesUsed + 1,
+              }));
+              return;
+            }
+
+            if (e.type === 'dork:discovery-complete') {
+              setLaunchMessage(`discovered ${e.discovered} leads — building sites...`);
+              setLaunchProgress(75);
+              setDorkProgress(prev => ({
+                ...prev,
+                stage: 'building',
+                leadsFound: e.discovered,
+                currentCity: null,
+                currentPage: null,
+              }));
+              // Final leads count lands on the floating toggle's tile.
+              updateActiveRun?.(currentRunId, { leadsFound: e.discovered });
+              return;
+            }
+
+            if (e.type === 'site:staged') {
+              setLiveCounters(c => ({ ...c, sitesStaged: c.sitesStaged + 1 }));
+              setDorkProgress(prev => ({ ...prev, stage: 'building' }));
+              const leadKey = e.slug ?? e.leadId ?? e.index;
+              upsertPerLead({
+                leadId: leadKey,
+                index: e.index,
+                name: e.name,
+                slug: e.slug,
+                siteUrl: e.siteUrl,
+                status: 'pending',
+              });
+              window.dispatchEvent(new CustomEvent('lunao:campaign-progress', { detail: {
+                id: tempCampaignId,
+                emailsSent: 0,
+                emailsFailed: 0,
+                lead: { leadId: leadKey, name: e.name, slug: e.slug, siteUrl: e.siteUrl, status: 'pending' },
+              }}));
+              const uniqueSites = new Set(perLead.filter((p: any) => p.siteUrl).map((p: any) => p.leadId ?? p.index)).size;
+              updateActiveRun?.(tempCampaignId, { sitesGenerated: uniqueSites });
+              return;
+            }
+
+            if (e.type === 'deploy:start') {
+              setLiveCounters(c => ({ ...c, deploying: true }));
+              setLaunchMessage(`deploying ${e.count || ''} sites to cloud...`);
+              return;
+            }
+
+            if (e.type === 'deploy:done') {
+              setLiveCounters(c => ({ ...c, deploying: false }));
+              setLaunchMessage('all sites live — sending emails...');
+              setLaunchProgress(85);
+              setDorkProgress(prev => ({ ...prev, stage: 'sending' }));
+              return;
+            }
+
+            if (e.type === 'deploy:failed') {
+              setLiveCounters(c => ({ ...c, deploying: false }));
+              setLaunchMessage(`deploy failed — ${e.error}`);
+              return;
+            }
+
+            if (e.type === 'send:sent') {
+              setLiveCounters(c => ({ ...c, emailsSent: c.emailsSent + 1 }));
+              upsertPerLead({
+                leadId: e.leadId,
+                name: e.name,
+                email: e.email,
+                accountEmail: e.accountEmail,
+                subject: e.subject,
+                siteUrl: e.siteUrl,
+                status: 'sent',
+              });
+              setLaunchResults(prev => {
+                const prevSent = prev?.sent || 0;
+                const prevPerLead = prev?.perLead || [];
+                const prevPerAccount = prev?.perAccount || [];
+                const newPerLead = prevPerLead.some((p: any) => p.leadId === e.leadId && p.status === 'sent')
+                  ? prevPerLead
+                  : [...prevPerLead, {
+                      leadId: e.leadId,
+                      name: e.name,
+                      email: e.email,
+                      accountEmail: e.accountEmail,
+                      subject: e.subject,
+                      siteUrl: e.siteUrl,
+                      status: 'sent',
+                    }];
+                let newPerAccount = prevPerAccount;
+                const accIdx = newPerAccount.findIndex((a: any) => (a.accountEmail || a.email) === e.accountEmail);
+                if (accIdx >= 0) {
+                  newPerAccount = newPerAccount.map((a: any, i: number) =>
+                    i === accIdx ? { ...a, sent: (a.sent || 0) + 1 } : a,
+                  );
+                } else if (e.accountEmail) {
+                  newPerAccount = [...newPerAccount, { accountEmail: e.accountEmail, sent: 1, failed: 0 }];
+                }
+                return {
+                  sent: prevSent + 1,
+                  failed: prev?.failed || 0,
+                  status: prev?.status || 'running',
+                  perLead: newPerLead,
+                  perAccount: newPerAccount,
+                };
+              });
+              window.dispatchEvent(new CustomEvent('lunao:campaign-progress', { detail: {
+                id: tempCampaignId,
+                emailsSent: 1,
+                emailsFailed: 0,
+                lead: { leadId: e.leadId, name: e.name, email: e.email, slug: e.slug, accountEmail: e.accountEmail, siteUrl: e.siteUrl, status: 'sent' },
+              }}));
+              updateActiveRun?.(tempCampaignId, { status: 'running' });
+              return;
+            }
+
+            if (e.type === 'send:failed' || e.type === 'send:error') {
+              setLiveCounters(c => ({ ...c, emailsFailed: c.emailsFailed + 1 }));
+              upsertPerLead({
+                leadId: e.leadId,
+                name: e.name,
+                accountEmail: e.accountEmail,
+                status: 'failed',
+                reason: e.reason || e.error,
+              });
+              setLaunchResults(prev => ({
+                sent: prev?.sent || 0,
+                failed: (prev?.failed || 0) + 1,
+                status: prev?.status || 'running',
+                perLead: [...(prev?.perLead || []), {
+                  leadId: e.leadId,
+                  name: e.name,
+                  accountEmail: e.accountEmail,
+                  status: 'failed',
+                  reason: e.reason || e.error,
+                }],
+                perAccount: prev?.perAccount || [],
+              }));
+              window.dispatchEvent(new CustomEvent('lunao:campaign-progress', { detail: {
+                id: tempCampaignId,
+                emailsSent: 0,
+                emailsFailed: 1,
+                lead: { leadId: e.leadId, name: e.name, accountEmail: e.accountEmail, status: 'failed', reason: e.reason || e.error },
+              }}));
+              return;
+            }
+
+            if (e.type === 'complete') {
+              const finalSent = e.sent !== undefined ? e.sent : perLead.filter(p => p.status === 'sent').length;
+              const finalFailed = e.failed !== undefined ? e.failed : perLead.filter(p => p.status === 'failed').length;
+              setLaunchProgress(100);
+              setLaunchResults({
+                sent: finalSent,
+                failed: finalFailed,
+                status: e.status || 'completed',
+                perAccount: e.perAccount && e.perAccount.length > 0 ? e.perAccount : (launchResults?.perAccount || []),
+                perLead: perLead.length > 0 ? perLead : (launchResults?.perLead || []),
+              });
+              setLaunchComplete(true);
+              setIsShowingCompletion(true);
+
+              const finalCampaign = {
+                id: tempCampaignId,
+                name: campaignName,
+                niche: selectedNiche,
+                leadSource: 'dork',
+                templateId: selectedTemplateId,
+                type: 'email',
+                status: 'Completed',
+                createdAt: new Date().toISOString(),
+                emailSubject,
+                emailBody,
+                emailAccountsUsed: (e.perAccount || []).map((a: any) => ({
+                  accountId: a.accountId || a.id || '',
+                  accountEmail: a.accountEmail || a.email || '',
+                  sent: a.sent || 0,
+                  failed: a.failed || 0,
+                })),
+                emailsSent: finalSent,
+                emailsFailed: finalFailed,
+                sitesGenerated: perLead.filter((p: any) => p.siteUrl).length,
+                deployedSites: perLead.filter((p: any) => p.siteUrl).map((p: any, idx: number) => ({
+                  slug: p.slug || (p.email || p.name || `lead-${idx}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+                  name: p.name || 'Lead',
+                  city: undefined,
+                  url: p.siteUrl,
+                  leadId: p.leadId,
+                  status: 'live' as const,
+                })),
+                emailLeads: perLead.map((p: any) => ({
+                  leadId: p.leadId,
+                  name: p.name,
+                  email: p.email,
+                  siteUrl: p.siteUrl,
+                  accountEmail: p.accountEmail,
+                  status: p.status === 'failed' ? 'failed' : 'sent',
+                  reason: p.reason,
+                  discoverySource: 'dork_google',
+                })),
+              };
+              window.dispatchEvent(new CustomEvent('lunao:campaign-complete', { detail: finalCampaign }));
+            }
+          } catch (err) {
+            console.warn('[EmailCampaign/Dork] SSE handler swallowed error:', err);
+          }
+        },
+      );
+
+      setLaunchProgress(100);
+      setLaunchMessage(
+        result?.sent > 0
+          ? `Sent ${result.sent} email${result.sent === 1 ? '' : 's'}!`
+          : `Campaign finished — ${result?.sent || 0} sent, ${result?.failed || 0} failed.`,
+      );
+      setLaunchComplete(true);
+      setIsShowingCompletion(true);
+
+      // Auto-dismiss after 3 seconds with animation
+      setTimeout(() => {
+        const container = document.getElementById('campaign-progress-container');
+        if (container) container.classList.add('animate-slide-down-fade');
+        setTimeout(() => {
+          setActiveStep(1);
+          setLaunchComplete(false);
+          setIsShowingCompletion(false);
+          setCsvFileName(null);
+          setCsvLeads([]);
+          setCsvValidation(null);
+          setLaunchProgress(0);
+          setLaunchMessage('');
+          setLaunchResults(null);
+          setActiveProgressToggle(null);
+          setCelebratedCampaign(null);
+          setLiveCounters({ sitesStaged: 0, emailsSent: 0, emailsFailed: 0, deploying: false });
+          setDorkCity('');
+          setDorkCityConfirmed(null);
+          setDorkCitySuggestions([]);
+        }, 400);
+      }, 3000);
+
+      if (finalSentCached(result?.sent)) {
+        playVictoryCelebration();
+      } else {
+        if ((result?.sent || 0) > 0) playVictoryCelebration();
+        else playElegantError();
+      }
+      onLaunch?.();
+    } catch (err: any) {
+      playElegantError();
+      setLaunchError(err.message || 'Dork campaign launch failed.');
+      onCreditsChange?.(userCredits);
+    } finally {
+      setIsLaunching(false);
+    }
+  };
+
+  // Helper used by the dork launch path to keep the victory-chime logic
+  // equivalent to the CSV path's (we read the result synchronously).
+  const finalSentCached = (n?: number) => (n || 0) > 0;
+
+  // ---- Step 2 → Step 3 gate: validates the dork city input ----
+  //
+  // Three exit conditions:
+  //   (a) Empty / too short                → inline error, stay on step 2.
+  //   (b) Already confirmed (exact match)  → advance.
+  //   (c) Misspelling with suggestions     → run a quick debounced query,
+  //                                          open the "Did you mean?" modal,
+  //                                          never advance until they pick.
+  //
+  // If the lookup returns zero suggestions, treat it like (a): we just
+  // don't recognize the city and we want the user to fix it.
+  const validateDorkCityForNext = async (): Promise<boolean> => {
+    const trimmed = dorkCity.trim();
+    if (trimmed.length < 2) {
+      setDorkCityInlineError('Please enter a valid city name (at least 2 letters).');
+      playElegantError();
+      return false;
+    }
+    setDorkCityInlineError(null);
+
+    // Already confirmed earlier — fast path.
+    if (dorkCityConfirmed) return true;
+
+    // Run a quick lookup right now so a stale debounce doesn't block them.
+    setDorkQuickQueryPending(true);
+    try {
+      const result = await lookupCity(trimmed);
+      setDorkQuickQueryPending(false);
+
+      if (!result) {
+        setDorkCityInlineError('Could not reach the city lookup service. Try again.');
+        playElegantError();
+        return false;
+      }
+
+      // Update the in-place suggestion text so the modal shows the latest
+      // suggestions even if the debounce hasn't fired yet.
+      setDorkCityLookup(result);
+      setDorkCitySuggestions((result.suggestions || []).slice(0, 5));
+
+      if (result.exact && result.match) {
+        setDorkCityConfirmed(result.match.name);
+        // Also reflect the canonical name in the input for visual consistency.
+        if (result.match.name.toLowerCase() !== trimmed.toLowerCase()) {
+          setDorkCity(result.match.name);
+        }
+        return true;
+      }
+
+      // Misspelling → open the modal so they can pick.
+      const suggestions = (result.suggestions || []).slice(0, 5);
+      if (suggestions.length === 0) {
+        setDorkCityInlineError(
+          `We don't recognize "${trimmed}". Try a major nearby city (e.g., London, Liverpool, Manchester).`,
+        );
+        playElegantError();
+        return false;
+      }
+      setDorkConfirmModalOpen(true);
+      playElegantError();
+      return false;
+    } catch {
+      setDorkQuickQueryPending(false);
+      setDorkCityInlineError('City lookup failed. Check your connection and try again.');
+      playElegantError();
+      return false;
+    }
+  };
+
+  // Wrap the global "Next Step" button so step 2 can do its own gate.
+  const handleNextStep = useCallback(async () => {
+    playGentleChime();
+    if (activeStep === 2 && leadSource === 'dork') {
+      const ok = await validateDorkCityForNext();
+      if (!ok) return;
+    }
+    if (activeStep === 2 && leadSource === 'csv' && csvLeads.length === 0) {
+      setLaunchError?.(null);
+      // No CSV uploaded — fall through and let the user see the CSV drop zone.
+      // We don't block, but we'd give the same nudge at launch time.
+    }
+    setActiveStep((prev) => prev + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStep, leadSource, dorkCity, dorkCityConfirmed, csvLeads.length]);
+
   const handleReset = () => {
     setActiveStep(1);
     setLaunchComplete(false);
@@ -1005,6 +1661,15 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     setActiveProgressToggle(null);
     setCelebratedCampaign(null);
     setIsShowingCompletion(false);
+    setDorkProgress({
+      stage: 'idle',
+      leadsFound: 0,
+      targetVolume: 0,
+      currentCity: null,
+      currentPage: null,
+      citiesScanned: [],
+      queriesUsed: 0,
+    });
   };
   
   const getAccountCapacityWarning = (account: EmailAccount, leadsCount: number): string | null => {
@@ -1018,6 +1683,10 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     }
     return null;
   };
+
+  // True lead count for the active campaign on the Review step.
+  // Auto Email Sender uses the user-chosen dork target; CSV uses parsed row count.
+  const reviewLeadCount = leadSource === 'dork' ? (dorkTargetVolume || 0) : csvParsedCount;
 
   if (celebratedCampaign) {
     const sent = isLaunching ? liveCounters.emailsSent : (launchResults?.sent ?? liveCounters.emailsSent ?? 0);
@@ -1305,6 +1974,18 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 Places API
                 {!isPro && <span className="ml-1 text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">Pro</span>}
               </button>
+              <button
+                type="button"
+                onClick={() => { playSoftTap(); setLeadSource('dork'); }}
+                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
+                  leadSource === 'dork'
+                    ? 'bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30'
+                    : 'text-ink-secondary hover:text-ink hover:bg-white/50'
+                }`}
+              >
+                <Globe className="w-5 h-5" />
+                Auto Email Sender
+              </button>
             </div>
             
             {/* CSV Upload - BRAND NEW BEAUTIFUL DESIGN */}
@@ -1432,6 +2113,205 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                     <p className="text-sm font-semibold text-success">{placesResults.length} businesses found</p>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Auto Email Sender (Google Dork) */}
+            {leadSource === 'dork' && (
+              <div className="space-y-5">
+                {/* Descriptive card above the city input */}
+                <div className="relative overflow-hidden rounded-2xl border border-accent/20 bg-gradient-to-br from-accent-soft/40 via-white to-accent-soft/20 shadow-sm">
+                  <div className="absolute -top-10 -right-10 w-32 h-32 bg-accent/10 rounded-full blur-3xl pointer-events-none" />
+                  <div className="relative flex items-start gap-3 p-4">
+                    <div className="shrink-0 w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
+                      <Globe className="w-5 h-5 text-accent" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <p className="text-sm font-serif font-semibold text-ink">Auto Email Sender</p>
+                        {dorkStatus && (
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                              dorkStatus.provider === 'mock'
+                                ? 'bg-warning/10 text-warning border border-warning/30'
+                                : 'bg-success/10 text-success border border-success/30'
+                            }`}
+                            title={
+                              dorkStatus.provider === 'serpapi'
+                                ? 'Live Google search via SerpAPI'
+                                : dorkStatus.provider === 'google_cse'
+                                ? 'Live Google search via Custom Search JSON API'
+                                : 'No Google API key configured — results will be simulated'
+                            }
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                dorkStatus.provider === 'mock' ? 'bg-warning' : 'bg-success animate-pulse'
+                              }`}
+                            />
+                            {dorkStatus.provider === 'mock' ? 'DRY-RUN' : `Live · ${dorkStatus.provider === 'serpapi' ? 'SerpAPI' : 'Google CSE'}`}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[12px] text-ink-secondary leading-relaxed">
+                        Type a city and we&apos;ll Google-dork it for local businesses in your niche,
+                        pull out valid Gmail addresses, build each one a personalized site, and
+                        send them a friendly introduction — all in one click. If the first city
+                        doesn&apos;t have enough leads, we&apos;ll silently expand to nearby cities.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-border-light bg-white p-5 shadow-sm space-y-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-xs font-semibold text-ink-secondary mb-1.5">
+                        Only input city name here
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={dorkCity}
+                          onChange={(e) => {
+                            setDorkCity(e.target.value);
+                            setDorkCityConfirmed(null);
+                          }}
+                          placeholder="e.g., Liverpool"
+                          aria-invalid={!!dorkCityInlineError}
+                          className={`w-full px-3.5 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 transition-all ${
+                            dorkCityInlineError
+                              ? 'border-danger/60 focus:ring-danger/20 bg-danger/5'
+                              : 'border-border-main focus:ring-accent/30 focus:border-accent/50'
+                          }`}
+                        />
+                        {dorkLookupPending && (
+                          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-tertiary animate-spin" />
+                        )}
+                        {!dorkLookupPending && dorkCity.trim().length >= 2 && dorkCityConfirmed && !dorkCityInlineError && (
+                          <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-success" />
+                        )}
+                      </div>
+                      {dorkCityInlineError ? (
+                        <p className="text-[11px] text-danger mt-1.5 flex items-start gap-1.5 animate-fade-in">
+                          <AlertCircle className="w-3.5 h-3.5 mt-px shrink-0" />
+                          <span>{dorkCityInlineError}</span>
+                        </p>
+                      ) : dorkCityConfirmed && dorkCityConfirmed.toLowerCase() !== dorkCity.trim().toLowerCase() ? (
+                        <p className="text-[11px] text-success mt-1.5 flex items-center gap-1">
+                          <Check className="w-3 h-3" />
+                          Matched city: <strong>{dorkCityConfirmed}</strong>
+                        </p>
+                      ) : !dorkCityLookup?.exact && dorkCitySuggestions.length > 0 ? (
+                        <div className="mt-1.5 text-[11px] text-ink-secondary flex items-center gap-1 flex-wrap">
+                          <Sparkles className="w-3 h-3 text-accent" />
+                          Did you mean{' '}
+                          <button
+                            type="button"
+                            onClick={() => setDorkConfirmModalOpen(true)}
+                            className="text-accent hover:underline font-semibold"
+                          >
+                            {dorkCitySuggestions[0]?.name}, {dorkCitySuggestions[0]?.country}
+                          </button>
+                          ?
+                        </div>
+                      ) : null}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-ink-secondary mb-1.5">
+                        Number of leads
+                      </label>
+                      <div className="flex items-center gap-3 px-3.5 py-2.5 border border-border-main rounded-xl bg-white">
+                        <input
+                          type="range"
+                          min={1}
+                          max={100}
+                          step={1}
+                          value={dorkTargetVolume}
+                          onChange={(e) => setDorkTargetVolume(parseInt(e.target.value, 10) || 1)}
+                          className="flex-1 accent-accent"
+                        />
+                        <span className="font-mono text-sm font-semibold text-ink w-12 text-right tabular-nums">
+                          {dorkTargetVolume}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-ink-tertiary mt-1.5 leading-relaxed">
+                        We&apos;ll discover up to <strong>{dorkTargetVolume}</strong>{' '}
+                        business{Number(dorkTargetVolume) === 1 ? '' : 'es'} with valid Gmail
+                        addresses — expanding to nearby cities only if needed.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* City confirmation modal */}
+            {dorkConfirmModalOpen && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-sm p-4 animate-fade-in"
+                onClick={() => setDorkConfirmModalOpen(false)}
+              >
+                <div
+                  className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-border-light"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="p-5 border-b border-border-light flex items-start gap-3">
+                    <div className="shrink-0 w-9 h-9 rounded-xl bg-accent-soft/60 flex items-center justify-center">
+                      <Sparkles className="w-5 h-5 text-accent" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-base font-serif font-semibold text-ink leading-tight">
+                        Did you mean one of these?
+                      </p>
+                      <p className="text-xs text-ink-secondary mt-1 leading-relaxed">
+                        We couldn&apos;t find an exact match for{' '}
+                        <strong className="text-ink">{dorkCity.trim() || 'your input'}</strong>.
+                        Pick the closest city and we&apos;ll use it for the campaign.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto divide-y divide-border-light">
+                    {dorkCitySuggestions.length === 0 ? (
+                      <div className="p-6 text-center text-xs text-ink-tertiary">
+                        <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2" />
+                        Looking for close cities…
+                      </div>
+                    ) : (
+                      dorkCitySuggestions.map((s) => (
+                        <button
+                          key={`${s.name}-${s.country}`}
+                          type="button"
+                          onClick={() => {
+                            setDorkCityConfirmed(s.name);
+                            setDorkCity(s.name);
+                            setDorkCityInlineError(null);
+                            setDorkConfirmModalOpen(false);
+                          }}
+                          className="w-full text-left px-5 py-3 hover:bg-accent-soft/40 transition-colors flex items-center justify-between gap-3 group"
+                        >
+                          <span className="flex-1 flex items-center gap-2 min-w-0">
+                            <Check className="w-4 h-4 text-ink-tertiary group-hover:text-accent transition-colors shrink-0" />
+                            <span className="font-semibold text-ink">{s.name}</span>
+                            <span className="text-xs text-ink-tertiary">{s.country}</span>
+                          </span>
+                          <span className="text-[10px] uppercase tracking-wider text-ink-tertiary font-bold tabular-nums">
+                            pop {s.population.toLocaleString()}
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                  <div className="p-4 bg-surface border-t border-border-light flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDorkConfirmModalOpen(false)}
+                      className="px-4 py-2 rounded-lg text-xs font-semibold text-ink-secondary hover:bg-white"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -1870,12 +2750,12 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             </div>
 
             {/* Primary summary row */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className={`grid gap-3 ${leadSource === 'dork' ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-3'}`}>
               <div className="bg-white rounded-2xl border border-border-light p-4 text-center shadow-sm">
                 <div className="w-10 h-10 bg-accent-soft rounded-xl flex items-center justify-center mx-auto mb-2">
                   <Users className="w-5 h-5 text-accent" />
                 </div>
-                <p className="text-2xl font-bold text-accent font-mono">{csvParsedCount}</p>
+                <p className="text-2xl font-bold text-accent font-mono">{reviewLeadCount}</p>
                 <p className="text-[10px] uppercase tracking-widest text-ink-tertiary font-semibold mt-0.5">Leads</p>
               </div>
               <div className="bg-white rounded-2xl border border-border-light p-4 text-center shadow-sm">
@@ -1885,6 +2765,17 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 <p className="text-2xl font-bold text-success font-mono">{selectedNiche}</p>
                 <p className="text-[10px] uppercase tracking-widest text-ink-tertiary font-semibold mt-0.5">Niche</p>
               </div>
+              {leadSource === 'dork' && (
+                <div className="bg-white rounded-2xl border border-border-light p-4 text-center shadow-sm">
+                  <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center mx-auto mb-2">
+                    <MapPin className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <p className="text-2xl font-bold text-amber-600 font-mono truncate">
+                    {dorkCityConfirmed || (dorkCity ? dorkCity : '—')}
+                  </p>
+                  <p className="text-[10px] uppercase tracking-widest text-ink-tertiary font-semibold mt-0.5">Target City</p>
+                </div>
+              )}
               <div className="bg-white rounded-2xl border border-border-light p-4 text-center shadow-sm">
                 <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center mx-auto mb-2">
                   <Send className="w-5 h-5 text-blue-600" />
@@ -1930,7 +2821,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                   </div>
                   <p className="text-[11px] uppercase tracking-widest text-ink-secondary font-bold">Sending Accounts</p>
                 </div>
-                <p className="text-[11px] font-bold text-blue-600">{csvParsedCount} emails total</p>
+                <p className="text-[11px] font-bold text-blue-600">{reviewLeadCount} emails total</p>
               </div>
               <div className="divide-y divide-border-light/60">
                 {selectedAccountIds.size === 0 ? (
@@ -1952,9 +2843,9 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 ) : (
                   Array.from(selectedAccountIds).map((id, idx) => {
                     const acc = connectedAccounts.find(a => a.id === id);
-                    const accountCount = Math.ceil(csvParsedCount / selectedAccountIds.size);
+                    const accountCount = Math.ceil(reviewLeadCount / Math.max(1, selectedAccountIds.size));
                     const isLast = idx === selectedAccountIds.size - 1;
-                    const adjustedCount = isLast ? csvParsedCount - (accountCount * idx) : accountCount;
+                    const adjustedCount = isLast ? reviewLeadCount - (accountCount * idx) : accountCount;
                     return (
                       <div key={id} className="flex items-center justify-between px-4 py-3">
                         <div className="flex items-center gap-3">
@@ -2010,7 +2901,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 <div className="relative">
                   <p className="text-white/90 font-serif text-lg font-bold mb-1">Launch Campaign</p>
                   <p className="text-white/60 text-xs">
-                    {csvParsedCount} personalized emails · {selectedAccountIds.size} sending account{selectedAccountIds.size > 1 ? 's' : ''} · AI-built sites included
+                    {reviewLeadCount} personalized emails · {selectedAccountIds.size} sending account{selectedAccountIds.size > 1 ? 's' : ''} · AI-built sites included
                   </p>
                 </div>
               </div>
@@ -2064,15 +2955,24 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             <button
               type="button"
               disabled={disabled}
-              onClick={() => { playGentleChime(); setActiveStep(prev => prev + 1); }}
+              onClick={handleNextStep}
               className={`text-xs font-semibold px-5 py-2.5 rounded-lg flex items-center gap-1.5 transition-all ${
                 disabled
                   ? 'bg-surface text-ink-tertiary cursor-not-allowed'
                   : 'bg-accent hover:bg-accent-hover text-white shadow-sm'
               }`}
             >
-              <span>Next Step</span>
-              <ChevronRight className="w-4 h-4" />
+              {dorkQuickQueryPending ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Scanning…</span>
+                </>
+              ) : (
+                <>
+                  <span>Next Step</span>
+                  <ChevronRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           );
         })()}
@@ -2150,6 +3050,54 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 <div className="text-white font-black text-lg">{launchProgress}%</div>
               )}
             </div>
+
+            {/* Two-phase stage indicator (Auto Email Sender only) */}
+            {dorkProgress.stage !== 'idle' && (
+              <div className="px-4 pb-3">
+                <div className="flex items-center gap-1.5 mb-2">
+                  {(['discovering', 'building', 'sending'] as const).map((s, i) => {
+                    const labels: Record<typeof s, string> = {
+                      discovering: '1. Discovering leads',
+                      building: '2. Building sites',
+                      sending: '3. Sending emails',
+                      idle: '',
+                    };
+                    const order = ['discovering', 'building', 'sending'];
+                    const activeIdx = order.indexOf(dorkProgress.stage);
+                    const isActive = i === activeIdx;
+                    const isDone = i < activeIdx;
+                    return (
+                      <div key={s} className={`flex-1 text-center text-[10px] font-bold uppercase tracking-wide py-1.5 rounded-lg border ${
+                        isActive
+                          ? 'bg-blue-600 text-white border-blue-700'
+                          : isDone
+                          ? 'bg-blue-100 text-blue-700 border-blue-200'
+                          : 'bg-slate-50 text-slate-400 border-slate-200'
+                      }`}>
+                        {labels[s]}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Discovery counter — only during the discovery phase */}
+                {dorkProgress.stage === 'discovering' && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Search className="w-3.5 h-3.5 text-blue-600" />
+                      <span className="text-xs font-bold text-blue-700">
+                        {dorkProgress.leadsFound} / {dorkProgress.targetVolume} leads found
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-blue-500 font-semibold">
+                      {dorkProgress.currentCity
+                        ? `scanning ${dorkProgress.currentCity}${dorkProgress.currentPage ? ` (p.${dorkProgress.currentPage})` : ''}`
+                        : 'preparing search…'}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Stats Row - Compact */}
             <div className="px-4 py-3 flex items-center gap-3">

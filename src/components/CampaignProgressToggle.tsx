@@ -25,6 +25,12 @@ export interface CampaignProgressData {
   emailsSent?: number;
   emailsFailed?: number;
   accountsUsed?: number;
+  // Dork-only fields — when set, the toggle renders an extra "Leads" tile
+  // showing leadsFound / leadsTarget side-by-side, and hides the generic
+  // "📊 {done} / {total} leads" subline (which isn't meaningful during
+  // the discovery phase).
+  leadsFound?: number;
+  leadsTarget?: number;
   deployedSites?: Array<{
     slug: string;
     name: string;
@@ -42,7 +48,14 @@ interface CampaignProgressToggleProps {
 // ---------------------------------------------------------------------------
 // Polling hook for live updates
 // ---------------------------------------------------------------------------
-function useCampaignPolling(campaignId: string, enabled: boolean, campaignStatus: string, campaignTotal: number) {
+function useCampaignPolling(
+  campaignId: string,
+  enabled: boolean,
+  campaignStatus: string,
+  campaignTotal: number,
+  campaignLeadsFound?: number,
+  campaignLeadsTarget?: number,
+) {
   const [data, setData] = useState<CampaignProgressData | null>(null);
 
   useEffect(() => {
@@ -63,19 +76,30 @@ function useCampaignPolling(campaignId: string, enabled: boolean, campaignStatus
             clearInterval(pollInterval);
             return;
           }
+          // For dork runs the progress bar should reflect leads discovered so far
+          // (not emails sent, which stays at 0 during discovery). For CSV runs
+          // we keep the existing done=sent semantics.
+          const isDork = campaignLeadsTarget !== undefined;
+          const doneForBar = isDork
+            ? (typeof campaignLeadsFound === 'number' ? campaignLeadsFound : (c.sent || 0))
+            : (c.sent || 0);
+          const totalForBar = isDork ? (campaignLeadsTarget ?? c.totalLeads ?? campaignTotal) : (c.totalLeads ?? campaignTotal);
           setData({
             id: c.id || campaignId,
             kind: 'email',
             name: c.name || 'Campaign',
             status: c.status === 'completed' ? 'completed' : 'running',
-            total: c.totalLeads || c.leads_found || campaignTotal,
-            done: c.sent || 0,
+            total: totalForBar,
+            done: doneForBar,
             // Use the live count we now attach in getEmailCampaign — it's the
             // authoritative unique-site count, not c.sent (which can include retries).
             sitesGenerated: c.sites_generated || 0,
             emailsSent: c.sent || 0,
             emailsFailed: c.failed || 0,
             accountsUsed: c.accountsUsed || 0,
+            // Carry through the dork-only fields so re-renders don't drop them.
+            leadsFound: campaignLeadsFound,
+            leadsTarget: campaignLeadsTarget,
             deployedSites: c.deployedSites || [],
           });
         }
@@ -90,7 +114,7 @@ function useCampaignPolling(campaignId: string, enabled: boolean, campaignStatus
       cancelled = true;
       clearInterval(pollInterval);
     };
-  }, [campaignId, enabled, campaignStatus, campaignTotal]);
+  }, [campaignId, enabled, campaignStatus, campaignTotal, campaignLeadsFound, campaignLeadsTarget]);
 
   return data;
 }
@@ -235,7 +259,7 @@ export const CampaignProgressToggle: React.FC<CampaignProgressToggleProps> = ({
   const hasAutoExpanded = useRef(false);
 
   // Poll for live updates while running
-  const liveData = useCampaignPolling(campaign.id, campaign.status === 'running', campaign.status, campaign.total);
+  const liveData = useCampaignPolling(campaign.id, campaign.status === 'running', campaign.status, campaign.total, campaign.leadsFound, campaign.leadsTarget);
 
   // Use the prop as the source of truth when the campaign is finished — the
   // polling hook only fires while running, so its final value can lag behind
@@ -367,12 +391,39 @@ export const CampaignProgressToggle: React.FC<CampaignProgressToggleProps> = ({
                 </div>
               </div>
               <div className="flex justify-between text-xs">
-                <span className="font-semibold text-violet-700">📊 {displayData.done} / {displayData.total} leads</span>
+                {campaign.leadsFound === undefined && (
+                  <span className="font-semibold text-violet-700">📊 {displayData.done} / {displayData.total} leads</span>
+                )}
+                {campaign.leadsFound !== undefined && (
+                  <span className="font-semibold text-blue-700">👤 {displayData.leadsFound ?? 0} / {displayData.leadsTarget ?? '—'} leads</span>
+                )}
                 <span className="font-bold text-violet-600">{pct}%</span>
               </div>
             </div>
 
             {/* Beautiful Stats Grid with Emojis */}
+            {/*
+              Dork runs surface an additional full-width "Leads" tile
+              (leadsFound / leadsTarget) above the standard 2x2 grid.
+              CSV runs never set leadsFound, so this tile is hidden.
+            */}
+            {displayData.leadsFound !== undefined && (
+              <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 rounded-xl p-3 border border-blue-200 shadow-sm">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">👤</span>
+                    <span className="text-xs font-bold text-blue-700 uppercase tracking-wide">Leads</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-blue-600/70 uppercase tracking-widest">discovered</span>
+                </div>
+                <p className="text-2xl font-black text-blue-800">
+                  <span className="tabular-nums">{displayData.leadsFound ?? 0}</span>
+                  <span className="text-base text-blue-500 font-bold mx-1">/</span>
+                  <span className="text-base text-blue-500 font-bold tabular-nums">{displayData.leadsTarget ?? '—'}</span>
+                </p>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               {/* Sites generated */}
               <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 rounded-xl p-3 border border-blue-200 shadow-sm hover:shadow-md transition-shadow">
