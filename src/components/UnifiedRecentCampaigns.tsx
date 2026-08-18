@@ -840,7 +840,12 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
       .then((data: any) => {
         const leads = data?.leads || [];
         const mapped: CampaignEmailLead[] = (leads || []).map((l: any) => ({
+          // The `CampaignEmailLead` shape uses `name` (per src/types.ts) so the
+          // per-prospect row in EmailBody can read `row.name` directly. Mapping
+          // to `businessName` here left `row.name` undefined and made every
+          // prospect look empty in the recent-campaign modal.
           id: l.id,
+          name: l.business_name || l.name || '',
           email: l.email || l.business_email || '',
           businessName: l.business_name || l.name || '',
           siteUrl: l.generated_site_url || l.site_url || '',

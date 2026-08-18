@@ -729,9 +729,26 @@ The Lunao Team`);
         // metadata (name, niche, templateId, etc.) immediately so the row
         // appears in the UI without waiting for the API fetch.
         const exists = prev.find(c => c.id === campaign.id);
+        // Adopt wizard payload fields, but KEEP authoritative counts that may
+        // have been backfilled from a polling cycle (sitesGenerated,
+        // emailsSent, emailsFailed, deployedSites, emailAccountsUsed). For
+        // emailLeads we trust the wizard payload — its `perLead` was built
+        // from per-site:staged / send:* SSE events, so it has richer data
+        // (sending account, slug, deployed URL) than the API fetch snapshot.
+        // The post-complete API fetch below will overwrite emailLeads with
+        // authoritative DB values, so any stale [] in the wizard payload is
+        // self-healing within seconds.
         const adopted: any = exists
-          ? { ...exists, ...campaign, deployedSites: exists.deployedSites, sitesGenerated: exists.sitesGenerated, emailsSent: exists.emailsSent, emailsFailed: exists.emailsFailed, emailAccountsUsed: campaign.emailAccountsUsed || exists.emailAccountsUsed, emailLeads: exists.emailLeads }
-          : { ...campaign, deployedSites: [], sitesGenerated: 0, emailLeads: [] };
+          ? {
+              ...exists,
+              ...campaign,
+              deployedSites: exists.deployedSites,
+              sitesGenerated: exists.sitesGenerated,
+              emailsSent: exists.emailsSent,
+              emailsFailed: exists.emailsFailed,
+              emailAccountsUsed: campaign.emailAccountsUsed || exists.emailAccountsUsed,
+            }
+          : { ...campaign, deployedSites: [], sitesGenerated: 0, emailLeads: campaign.emailLeads || [] };
         const updated = exists
           ? prev.map(c => c.id === campaign.id ? adopted : c)
           : [adopted, ...prev];
@@ -789,6 +806,25 @@ The Lunao Team`);
             if (l.send_status === 'sent') perAccount[aid].sent++;
             else if (l.send_status === 'failed') perAccount[aid].failed++;
           }
+          // Build per-prospect list from the same authoritative fetch. This
+          // is what feeds the rich detail modal — prospect business_name,
+          // business email, deployed site URL, sending account, status +
+          // failure reason. Without this the modal would have to re-fetch
+          // on every open AND would previously render with empty rows
+          // because the wizard payload's `emailLeads: []` would win the
+          // optimistic merge.
+          const emailLeads: any[] = leads.map((l: any) => ({
+            leadId: l.id,
+            name: l.business_name || l.name || '',
+            email: l.email || l.business_email || '',
+            businessName: l.business_name || l.name || '',
+            siteUrl: l.generated_site_url || l.site_url || '',
+            accountEmail: l.account_email || l.from_email || '',
+            status: l.send_status === 'sent' ? 'sent' : l.send_status === 'failed' ? 'failed' : 'queued',
+            reason: l.send_error || l.error || '',
+            city: l.city || '',
+            discoverySource: l.discovery_source || undefined,
+          }));
           setCampaigns(prev2 => {
             const next = prev2.map(c => c.id === campaignId ? {
               ...c,
@@ -797,6 +833,7 @@ The Lunao Team`);
               emailsSent: sentCount,
               emailsFailed: failedCount,
               emailAccountsUsed: Object.values(perAccount),
+              emailLeads,
               status: dbCamp.status === 'completed' ? 'Completed' : dbCamp.status === 'failed' ? 'Crashed' : dbCamp.status === 'cancelled' ? 'Crashed' : c.status,
             } : c);
             try { localStorage.setItem('lunao_campaigns', JSON.stringify(next)); } catch { /* ignore */ }

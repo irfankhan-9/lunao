@@ -186,7 +186,9 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     emailsSent: number;
     emailsFailed: number;
     deploying: boolean;
-  }>({ sitesStaged: 0, emailsSent: 0, emailsFailed: 0, deploying: false });
+    // Dork-only — leads discovered so far during the discovery phase.
+    leadsFound: number;
+  }>({ sitesStaged: 0, emailsSent: 0, emailsFailed: 0, deploying: false, leadsFound: 0 });
 
   // Auto Email Sender (dork) pipeline progress. Only the dork launch path
   // populates this — the CSV path leaves it at 'idle' so the existing
@@ -690,7 +692,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       setLaunchProgress(15);
       setLaunchMessage('AI is editing templates...');
       
-      setLiveCounters({ sitesStaged: 0, emailsSent: 0, emailsFailed: 0, deploying: false });
+      setLiveCounters({ sitesStaged: 0, emailsSent: 0, emailsFailed: 0, deploying: false, leadsFound: 0 });
       
       const perLead: any[] = [];
       // Single source of truth — every event that updates a lead's record goes
@@ -1095,7 +1097,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
           setLaunchResults(null);
           setActiveProgressToggle(null);
           setCelebratedCampaign(null);
-          setLiveCounters({ sitesStaged: 0, emailsSent: 0, emailsFailed: 0, deploying: false });
+          setLiveCounters({ sitesStaged: 0, emailsSent: 0, emailsFailed: 0, deploying: false, leadsFound: 0 });
         }, 400);
       }, 3000);
 
@@ -1186,7 +1188,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       perLead: [],
     });
 
-    setLiveCounters({ sitesStaged: 0, emailsSent: 0, emailsFailed: 0, deploying: false });
+    setLiveCounters({ sitesStaged: 0, emailsSent: 0, emailsFailed: 0, deploying: false, leadsFound: 0 });
 
     const tempCampaignId = 'emc_run_' + Date.now();
     // Mutable id used by the SSE callback so patches target the renamed run
@@ -1293,6 +1295,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
 
             if (e.type === 'dork:found') {
               setLaunchMessage(`found ${e.totalSoFar} leads so far...`);
+              setLiveCounters(c => ({ ...c, leadsFound: e.totalSoFar }));
               setDorkProgress(prev => {
                 const cities = prev.citiesScanned.includes(e.city)
                   ? prev.citiesScanned
@@ -1320,6 +1323,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             if (e.type === 'dork:discovery-complete') {
               setLaunchMessage(`discovered ${e.discovered} leads — building sites...`);
               setLaunchProgress(75);
+              setLiveCounters(c => ({ ...c, leadsFound: e.discovered }));
               setDorkProgress(prev => ({
                 ...prev,
                 stage: 'building',
@@ -1545,7 +1549,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
           setLaunchResults(null);
           setActiveProgressToggle(null);
           setCelebratedCampaign(null);
-          setLiveCounters({ sitesStaged: 0, emailsSent: 0, emailsFailed: 0, deploying: false });
+          setLiveCounters({ sitesStaged: 0, emailsSent: 0, emailsFailed: 0, deploying: false, leadsFound: 0 });
           setDorkCity('');
           setDorkCityConfirmed(null);
           setDorkCitySuggestions([]);
@@ -3112,30 +3116,43 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             )}
 
             {/* Stats Row - Compact */}
-            <div className="px-4 py-3 flex items-center gap-3">
+            <div className={`px-4 py-3 grid ${leadSource === 'dork' ? 'grid-cols-5' : 'grid-cols-4'} gap-2`}>
+              {/* Leads (dork-only) — leads discovered so far out of the user-chosen target */}
+              {leadSource === 'dork' && (
+                <div className="bg-blue-50 rounded-xl p-2.5 text-center border border-blue-100">
+                  <div className="text-lg mb-0.5">👤</div>
+                  <div className="text-xl font-black text-blue-700 font-mono tabular-nums">
+                    {liveCounters.leadsFound}
+                    <span className="text-[10px] text-blue-400 font-bold mx-0.5">/</span>
+                    <span className="text-sm text-blue-500 font-bold tabular-nums">{dorkProgress.targetVolume || dorkTargetVolume}</span>
+                  </div>
+                  <div className="text-[10px] text-blue-500 font-semibold uppercase">Leads</div>
+                </div>
+              )}
+
               {/* Sites */}
-              <div className="flex-1 bg-blue-50 rounded-xl p-2.5 text-center border border-blue-100">
+              <div className="bg-blue-50 rounded-xl p-2.5 text-center border border-blue-100">
                 <div className="text-lg mb-0.5">🏗️</div>
                 <div className="text-xl font-black text-blue-700">{liveCounters.sitesStaged}</div>
                 <div className="text-[10px] text-blue-500 font-semibold uppercase">Sites</div>
               </div>
 
               {/* Sent */}
-              <div className="flex-1 bg-blue-50 rounded-xl p-2.5 text-center border border-blue-100">
+              <div className="bg-blue-50 rounded-xl p-2.5 text-center border border-blue-100">
                 <div className="text-lg mb-0.5">✉️</div>
                 <div className="text-xl font-black text-blue-700">{liveCounters.emailsSent}</div>
                 <div className="text-[10px] text-blue-500 font-semibold uppercase">Sent</div>
               </div>
 
               {/* Failed */}
-              <div className="flex-1 bg-red-50 rounded-xl p-2.5 text-center border border-red-100">
+              <div className="bg-red-50 rounded-xl p-2.5 text-center border border-red-100">
                 <div className="text-lg mb-0.5">❌</div>
                 <div className="text-xl font-black text-red-600">{liveCounters.emailsFailed}</div>
                 <div className="text-[10px] text-red-500 font-semibold uppercase">Failed</div>
               </div>
 
               {/* Accounts */}
-              <div className="flex-1 bg-blue-50 rounded-xl p-2.5 text-center border border-blue-100">
+              <div className="bg-blue-50 rounded-xl p-2.5 text-center border border-blue-100">
                 <div className="text-lg mb-0.5">👤</div>
                 <div className="text-xl font-black text-blue-700">{selectedAccountIds.size}</div>
                 <div className="text-[10px] text-blue-500 font-semibold uppercase">Accounts</div>
