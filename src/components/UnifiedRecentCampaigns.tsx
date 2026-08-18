@@ -552,7 +552,18 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
   const sent = camp.emailsSent ?? 0;
   const failed = camp.emailsFailed ?? 0;
   const sites = camp.sitesGenerated ?? camp.sites ?? 0;
-  const leads = camp.leadsFound ?? ((sent + failed) || liveCount || 0);
+  // Lead count fallback chain. The wizard's finalCampaign payload doesn't
+  // include top-level `leadsFound` (it carries `emailLeads` instead), and the
+  // dork pipeline's `perLead` only gets populated when sends actually fire
+  // (`send:sent` events fill `email`). For queued dork runs with 0 sends
+  // (typical when the user hasn't attached real Gmail OAuth accounts), the
+  // previous chain `sent + failed || liveCount` evaluates to 0 even though
+  // 8+ sites were staged. Now we also fall back to `emailLeads.length`
+  // (populated by the post-complete API fetch in Campaigns.tsx) and finally
+  // to `deployedSites.length` so the card row reflects real discovery volume.
+  const leadsCount = camp.leadsFound
+    ?? camp.emailLeads?.length
+    ?? ((sent + failed) || liveCount || (camp.deployedSites || []).length || 0);
   const tpl = useMemo(
     () => [...templates, ...customTemplates.map((t) => ({ ...t, preview: '' }))].find((t) => t.id === camp.templateId),
     [templates, customTemplates, camp.templateId],
@@ -681,7 +692,7 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
         <div className="flex items-stretch rounded-xl overflow-hidden border border-border-light bg-off-white">
           {isEmail ? (
             <>
-              <StatPill label="Leads" value={leads} color="text-blue-600" />
+              <StatPill label="Leads" value={leadsCount} color="text-blue-600" />
               <div className="w-px bg-border-light" />
               <StatPill label="Sites" value={sites} color="text-accent" />
               <div className="w-px bg-border-light" />
@@ -703,7 +714,7 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
             <>
               <StatPill label="Sites" value={liveCount || camp.sites || 0} color="text-accent" />
               <div className="w-px bg-border-light" />
-              <StatPill label="Leads" value={leads} color="text-ink" />
+              <StatPill label="Leads" value={leadsCount} color="text-ink" />
             </>
           )}
         </div>
@@ -811,7 +822,11 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
   const isEmail = camp.type === 'email';
   const isSiteDeploy = camp.type === 'site-deploy';
   const [emailLeads, setEmailLeads] = useState<CampaignEmailLead[]>(camp.emailLeads || []);
-  const [loadingLeads, setLoadingLeads] = useState<boolean>(false);
+  // Start in loading state so the spinner covers the brief 0-lead window
+  // between modal mount and the first fetch response. Without this, the
+  // user sees a misleading "No per-prospect data yet" placeholder for a
+  // frame or two while the leads request is in flight.
+  const [loadingLeads, setLoadingLeads] = useState<boolean>(isEmail && (camp.emailLeads?.length ?? 0) === 0);
   const [accountsUsed, setAccountsUsed] = useState<{ accountId: string; accountEmail: string; sent: number; failed: number }[]>(camp.emailAccountsUsed || []);
 
   // Fetch leads from API when modal opens for email campaigns.

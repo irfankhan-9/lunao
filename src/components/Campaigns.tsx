@@ -995,6 +995,24 @@ The Lunao Team`);
                 : dbCamp.status === 'cancelled' ? 'Crashed'
                   : 'Active';
 
+          // Build the per-prospect list from the same poll. This is the authoritative
+          // source — it gets persisted to localStorage so the card row's Leads
+          // count and the detail modal's per-prospect rows both reflect real
+          // data, including for rows created before the emailLeads backfill
+          // existed.
+          const emailLeadsForRow: any[] = leads.map((l: any) => ({
+            leadId: l.id,
+            name: l.business_name || l.name || '',
+            email: l.email || l.business_email || '',
+            businessName: l.business_name || l.name || '',
+            siteUrl: l.generated_site_url || l.site_url || '',
+            accountEmail: l.account_email || l.from_email || '',
+            status: l.send_status === 'sent' ? 'sent' : l.send_status === 'failed' ? 'failed' : 'queued',
+            reason: l.send_error || l.error || '',
+            city: l.city || '',
+            discoverySource: l.discovery_source || undefined,
+          }));
+
           setCampaigns((prev) =>
             prev.map((c) =>
               c.id === camp.id || c.serverCampaignId === id
@@ -1010,6 +1028,7 @@ The Lunao Team`);
                     leadsFound: totalLeads,
                     deployedSites: cleanDeployedSites,
                     emailAccountsUsed,
+                    emailLeads: emailLeadsForRow,
                   }
                 : c,
             ),
