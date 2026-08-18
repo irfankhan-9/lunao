@@ -129,13 +129,13 @@ export function createEmailCampaign({
     emailSubject || '', emailBody || '', csvSnapshot || null, now
   );
   
-  // Bulk-insert all leads from the CSV in a single transaction.
+  // Bulk-insert all leads in a single transaction.
   if (leads.length > 0) {
     const insert = db.prepare(`
       INSERT INTO email_leads (
         campaign_id, business_name, phone, city, website, email,
-        email_source, verification_status, slug, send_status, index_in_campaign, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, 'csv', 'pending', '', 'pending', ?, ?)
+        email_source, verification_status, slug, send_status, index_in_campaign, created_at, discovery_source
+      ) VALUES (?, ?, ?, ?, ?, ?, 'csv', 'pending', '', 'pending', ?, ?, COALESCE(?, 'csv'))
     `);
     const insertAll = db.transaction((rows) => {
       rows.forEach((lead, i) => {
@@ -146,14 +146,15 @@ export function createEmailCampaign({
           (lead.city || '').trim(),
           (lead.website || lead.url || '').trim(),
           (lead.email || '').trim(),
-          i,
-          now
+          i + 1,
+          now,
+          (lead.discovery_source || null),
         );
       });
     });
     insertAll(leads);
   }
-  
+
   return getEmailCampaign(id);
 }
 

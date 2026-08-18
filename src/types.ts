@@ -3,7 +3,8 @@ export type CampaignType = 'sms' | 'site-deploy' | 'email';
 export type EmailCampaignType = 'email';
 
 // Email Campaign related types
-export type LeadSource = 'csv' | 'places_api';
+export type LeadSource = 'csv' | 'places_api' | 'dork';
+export type DiscoverySource = 'csv' | 'dork_google' | 'dork_google_nearby';
 export type EmailSource = 'csv' | 'crawler' | 'hunter';
 export type VerificationStatus = 'pending' | 'verified' | 'failed' | 'bounced';
 export type SendStatus = 'pending' | 'queued' | 'sent' | 'delivered' | 'failed' | 'bounced' | 'skipped';
@@ -55,6 +56,11 @@ export interface CampaignEmailLead {
   siteUrl?: string;
   status: 'sent' | 'failed' | 'queued';
   reason?: string;
+  // How the lead was originally discovered. Drives the
+  // "Google Dork / Places API / CSV" badge in the campaign detail modal.
+  discoverySource?: DiscoverySource;
+  // Where the lead was found (e.g. "Liverpool" vs "Birkenhead" for dork).
+  city?: string;
 }
 
 export interface CampaignDeployedSite {

@@ -15,8 +15,10 @@ import { db } from './db.js';
 export function buildPlaceholders(biz) {
   const name = biz.name || biz.business_name || 'Local Business';
   const city = biz.city || '';
-  const phoneDisplay = biz.phone || biz.phone_display || '';
-  const phoneRaw = biz.phone_raw || digitsOnly(phoneDisplay);
+  // Mask dork leads (`phone === '*'`) so PHONE_DISPLAY and PHONE_RAW both
+  // render '*****' instead of digitsOnly('*') collapsing to an empty string.
+  const phoneDisplay = biz.phone === '*' ? '*' : (biz.phone || biz.phone_display || '');
+  const phoneRaw = biz.phone === '*' ? '*' : (biz.phone_raw || digitsOnly(phoneDisplay));
   const firstWordOf = (str) => String(str || '').trim().split(/\s+/)[0] || '';
   const igHandle =
     biz.instagram_handle ||

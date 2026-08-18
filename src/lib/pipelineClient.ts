@@ -1131,13 +1131,145 @@ export interface EmailCampaignPayload {
   niche: string;
   templateId?: string;
   templateKey?: string;
-  leadSource: 'csv' | 'places_api';
+  leadSource: 'csv' | 'places_api' | 'dork';
   targetVolume: number;
   city: string;
   category?: string;
   emailSubject?: string;
   emailBody?: string;
   csvSnapshot?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Auto Email Sender (Google Dork) — city lookup + SSE pipeline runner
+// ---------------------------------------------------------------------------
+
+export interface CitySuggestion {
+  name: string;
+  country: string;
+  population: number;
+  lat: number;
+  lon: number;
+  distance: number;
+}
+
+export interface CityLookupResult {
+  exact: boolean;
+  match?: { name: string; country: string; population: number; lat: number; lon: number };
+  suggestions?: CitySuggestion[];
+}
+
+export interface CityLookupResponse {
+  exact: boolean;
+  match?: { name: string; country: string; population: number; lat: number; lon: number };
+  suggestions: CitySuggestion[];
+}
+
+// Debounce-friendly city lookup. Returns the raw response from the server
+// (or null on network failure) so the wizard can decide whether to render
+// the suggestion modal.
+export async function lookupCity(name: string): Promise<CityLookupResponse | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/cities/lookup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as CityLookupResponse;
+  } catch {
+    return null;
+  }
+}
+
+// Lightweight status of the dork pipeline's live provider. Used by the
+// wizard to render a "live"/"dry-run" badge above the Auto Email Sender
+// panel so users know if real Google searches will be made.
+export interface DorkStatus {
+  provider: 'serpapi' | 'google_cse' | 'mock';
+  serpApiLive: boolean;
+  googleCseLive: boolean;
+}
+
+export async function getDorkStatus(): Promise<DorkStatus | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/dork/status`);
+    if (!res.ok) return null;
+    return (await res.json()) as DorkStatus;
+  } catch {
+    return null;
+  }
+}
+
+// Run the auto-sender pipeline (Google Dork + nearest-city expansion + email
+// send). Streams Server-Sent Events on the same wire format the existing CSV
+// / places_api wizard already understands. Resolves with the final campaign
+// stats when the `complete` event arrives.
+export interface RunDorkEmailCampaignPayload {
+  niche: string;
+  city: string;
+  targetVolume: number;
+  templateKey?: string;
+  templateId?: string;
+  accountIds: string[];
+  emailSubject?: string;
+  emailBody?: string;
+  // When the city was misspelled, the wizard resolves it via the
+  // confirmation modal and posts the chosen canonical name back here.
+  confirmCity?: string;
+}
+
+export async function runDorkEmailCampaign(
+  ownerKey: string,
+  payload: RunDorkEmailCampaignPayload,
+  onEvent: (e: EmailCampaignEvent) => void,
+): Promise<{ campaignId: string; sent: number; failed: number }> {
+  const res = await fetch(`${API_BASE}/api/email-campaigns/dork/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ownerKey, ...payload }),
+  });
+
+  if (!res.ok || !res.body) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Dork campaign failed (${res.status})`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result = { campaignId: '', sent: 0, failed: 0 };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const chunks = buffer.split('\n\n');
+    buffer = chunks.pop() || '';
+
+    for (const chunk of chunks) {
+      const line = chunk.trim();
+      if (!line.startsWith('data:')) continue;
+      const json = line.slice(5).trim();
+      if (!json) continue;
+      try {
+        const event: EmailCampaignEvent = JSON.parse(json);
+        onEvent(event);
+        if (event.type === 'campaign') {
+          result.campaignId = event.campaignId || '';
+        }
+        if (event.type === 'complete') {
+          result.sent = event.sent || 0;
+          result.failed = event.failed || 0;
+        }
+      } catch {
+        /* ignore malformed chunk */
+      }
+    }
+  }
+
+  return result;
 }
 
 export interface EmailAccountPayload {

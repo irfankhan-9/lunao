@@ -105,6 +105,8 @@ import {
   probeAllEmailAccountTokens,
   listEmailLeadsWithAccounts,
 } from './lib/emailCampaigns.js';
+import { lookupCity } from './lib/cities.js';
+import { runDorkPipeline } from './lib/dorkPipeline.js';
 import {
   buildGmailAuthUrl,
   exchangeGmailCode,
@@ -1821,6 +1823,109 @@ app.get('/api/email-campaigns/:id/pending-discovery', authenticate, (req, res) =
   }
 });
 
+// ---- Dork Auto-Sender (must be registered BEFORE /:id/run so the literal
+//   path `/dork/run` doesn't get matched as `:id=dork`) -------------------
+//
+// POST /api/email-campaigns/dork/run — runs the auto-sender pipeline
+// (Google CSE dork + nearest-city expansion). Streams Server-Sent Events
+// on the same wire format the existing CSV / places_api wizard already
+// understands (campaign / discovery / site / send / complete events).
+//
+// Body: { niche, city, targetVolume, templateKey, templateId?, accountIds,
+//         emailSubject?, emailBody?, ownerKey?, confirmCity? }
+//
+// The CSV path is untouched — this route is additive.
+app.post('/api/email-campaigns/dork/run', async (req, res) => {
+  const {
+    niche,
+    city,
+    targetVolume,
+    templateKey,
+    templateId,
+    accountIds,
+    emailSubject,
+    emailBody,
+    confirmCity,
+  } = req.body || {};
+
+  const ownerKey = req.userId
+    ? `user_${req.userId}`
+    : String(req.body?.ownerKey || '').trim();
+  if (!ownerKey) {
+    return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+  }
+  if (!niche || !city) {
+    return res.status(400).json({ ok: false, error: 'niche and city are required' });
+  }
+  if (!targetVolume || targetVolume <= 0) {
+    return res.status(400).json({ ok: false, error: 'targetVolume must be > 0' });
+  }
+  if (!Array.isArray(accountIds) || accountIds.length === 0) {
+    return res.status(400).json({ ok: false, error: 'At least one Gmail account is required' });
+  }
+
+  // Validate the city now so we fail fast with a clear error before opening
+  // the SSE stream. The wizard already debounce-validates per-keystroke, but
+  // a malicious or stale client could POST anything here.
+  const lookup = lookupCity(city);
+  if (!lookup.exact && (!lookup.suggestions || lookup.suggestions.length === 0)) {
+    return res.status(400).json({ ok: false, error: `City not recognized: ${city}` });
+  }
+  const resolvedCity = confirmCity || (lookup.exact ? lookup.match.name : lookup.suggestions[0].name);
+  const autoCityConfirmed = !confirmCity && !lookup.exact;
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders?.();
+
+  const send = (event) => {
+    try {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    } catch (err) {
+      console.warn(`[dork-run] SSE write failed: ${err.message}`);
+    }
+  };
+
+  const heartbeat = setInterval(() => {
+    try { res.write(`: heartbeat ${Date.now()}\n\n`); } catch {}
+  }, 15000);
+
+  req.on('close', () => clearInterval(heartbeat));
+
+  // First event tells the UI which live provider is configured so the user
+  // can see when they go from "DRY-RUN" to a real network call.
+  const { isSerpApiLive } = await import('./lib/serpApi.js');
+  const { isDorkLive } = await import('./lib/googleDork.js');
+  const liveProvider = isSerpApiLive() ? 'serpapi' : (isDorkLive() ? 'google_cse' : 'mock');
+  send({ type: 'dork:provider', provider: liveProvider });
+
+  try {
+    await runDorkPipeline({
+      ownerKey,
+      // userId is required by createEmailCampaign's NOT NULL constraint. When
+      // the request is unauthenticated we fall back to the ownerKey (which is
+      // already validated non-empty above) so the pipeline can complete.
+      userId: req.userId || ownerKey,
+      niche,
+      targetCity: resolvedCity,
+      targetVolume,
+      templateKey: templateKey || templateId || '',
+      accountIds,
+      emailSubject,
+      emailBody,
+      onEvent: send,
+    });
+  } catch (err) {
+    console.error(`[dork-run] failed: ${err.message}`);
+    send({ type: 'error', error: err.message });
+  } finally {
+    clearInterval(heartbeat);
+    try { res.end(); } catch {}
+  }
+});
+
 // ---- Email Campaign Run (SSE) ----
 
 // Run email campaign pipeline
@@ -1887,6 +1992,42 @@ app.post('/api/email-campaigns/:id/run', async (req, res) => {
     try { res.end(); } catch {}
   }
 });
+
+// ---- Cities + Dork Auto-Sender ---------------------------------------------
+
+// POST /api/cities/lookup — accept a free-form city name and return
+// { exact, match?, suggestions[] }. Used by the wizard's debounced input.
+app.post('/api/cities/lookup', async (req, res) => {
+  try {
+    const name = (req.body?.name || '').toString();
+    if (!name.trim()) {
+      return res.json({ exact: false, suggestions: [] });
+    }
+    const result = lookupCity(name);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// GET /api/dork/status — quick non-mutating check the wizard uses to render
+// the right hint ("live" vs "DRY-RUN") above the Auto Email Sender panel.
+app.get('/api/dork/status', async (req, res) => {
+  const { isSerpApiLive } = await import('./lib/serpApi.js');
+  const { isDorkLive } = await import('./lib/googleDork.js');
+  let provider = 'mock';
+  if (isSerpApiLive()) provider = 'serpapi';
+  else if (isDorkLive()) provider = 'google_cse';
+  res.json({
+    provider,
+    serpApiLive: isSerpApiLive(),
+    googleCseLive: isDorkLive(),
+  });
+});
+
+// (The /api/email-campaigns/dork/run route was moved earlier in this file
+//  — before /api/email-campaigns/:id/run — so the literal "dork" path
+//  doesn't get matched as `:id=dork`. See comment above the new location.)
 
 // ---- Test SMS (Settings "Send test message" button) ----------------------
 

@@ -334,7 +334,8 @@ const SCHEMA_SQL = `
     send_error          TEXT,
     sent_at             INTEGER,
     index_in_campaign   INTEGER NOT NULL DEFAULT 0,
-    created_at          INTEGER NOT NULL
+    created_at          INTEGER NOT NULL,
+    discovery_source    TEXT    NOT NULL DEFAULT 'csv'
   );
   CREATE INDEX IF NOT EXISTS idx_email_leads_campaign ON email_leads(campaign_id, index_in_campaign);
   CREATE INDEX IF NOT EXISTS idx_email_leads_email ON email_leads(email);
@@ -468,6 +469,10 @@ function migrateSqlite() {
     // Existing rows pick up the defaults (unpaused, battery = 300).
     { table: 'email_accounts', col: 'paused',           ddl: `ALTER TABLE email_accounts ADD COLUMN paused INTEGER NOT NULL DEFAULT 0` },
     { table: 'email_accounts', col: 'battery_capacity', ddl: `ALTER TABLE email_accounts ADD COLUMN battery_capacity INTEGER NOT NULL DEFAULT 300` },
+    // v4: Dork pipeline — track which discovery method produced each lead
+    // so the campaign detail modal can group by source. Existing rows
+    // default to 'csv' (the only pre-dork source).
+    { table: 'email_leads',   col: 'discovery_source', ddl: `ALTER TABLE email_leads ADD COLUMN discovery_source TEXT NOT NULL DEFAULT 'csv'` },
   ];
   for (const m of migrations) {
     if (!columnExists(m.table, m.col)) {

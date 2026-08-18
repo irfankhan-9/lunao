@@ -25,6 +25,7 @@ import {
   updateLeadSiteUrl,
   updateAllLeadSiteUrls,
   updateLeadSendStatus,
+  assignLeadToAccount,
   logEmailSend,
   recordSend,
   canAccountSend,
@@ -96,11 +97,16 @@ export async function runEmailPipeline({
   campaignId,
   accountIds,
   onEvent = () => {},
+  // Optional override for the per-account inter-send gap. Defaults to
+  // MIN_INTER_SEND_MS below. Set to 1000 (1s) for dork campaigns where
+  // the leads are pre-validated by Google and we want the send loop to
+  // finish faster.
+  minInterSendMs = null,
 }) {
   const emit = (type, payload = {}) => onEvent({ type, ts: Date.now(), ...payload });
-  
-  console.log(`[email-pipeline] START campaignId=${campaignId} accountIds=${accountIds.join(',')}`);
-  
+
+  console.log(`[email-pipeline] START campaignId=${campaignId} accountIds=${accountIds.join(',')} minInterSendMs=${minInterSendMs ?? 'default'}`);
+
   const campaign = getEmailCampaign(campaignId);
   if (!campaign) {
     console.error(`[email-pipeline] Campaign not found: ${campaignId}`);
@@ -164,7 +170,7 @@ export async function runEmailPipeline({
   // or third send silently stalls for minutes before returning. A small
   // 2.5s gap is polite enough to keep Gmail happy but still finishes a
   // 4-lead campaign in ~10s instead of the old 4-minute serial run.
-  const MIN_INTER_SEND_MS = 2500;
+  const MIN_INTER_SEND_MS = typeof minInterSendMs === 'number' && minInterSendMs > 0 ? minInterSendMs : 2500;
   const enqueueOnAccount = (accountId, task) => new Promise((resolve, reject) => {
     const slot = accountQueues.get(accountId);
     if (!slot) {
@@ -401,6 +407,10 @@ const phase3Workers = Array.from(
         emit('send:failed', { index: leadIndex, name: lead.business_name, reason: 'No available accounts' });
         continue;
       }
+
+      // Assign the lead to this account so per-account stats can be retrieved
+      // even after the campaign completes (modal "View Details" relies on this).
+      assignLeadToAccount(lead.id, accountId);
 
       // Account-can-send check is now ADVISORY only — the user can always
       // send past the cap. We still gate on real failures (disconnected,
