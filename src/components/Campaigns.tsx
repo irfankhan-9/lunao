@@ -812,19 +812,27 @@ The Lunao Team`);
           // failure reason. Without this the modal would have to re-fetch
           // on every open AND would previously render with empty rows
           // because the wizard payload's `emailLeads: []` would win the
-          // optimistic merge.
-          const emailLeads: any[] = leads.map((l: any) => ({
-            leadId: l.id,
-            name: l.business_name || l.name || '',
-            email: l.email || l.business_email || '',
-            businessName: l.business_name || l.name || '',
-            siteUrl: l.generated_site_url || l.site_url || '',
-            accountEmail: l.account_email || l.from_email || '',
-            status: l.send_status === 'sent' ? 'sent' : l.send_status === 'failed' ? 'failed' : 'queued',
-            reason: l.send_error || l.error || '',
-            city: l.city || '',
-            discoverySource: l.discovery_source || undefined,
-          }));
+          // Optimistic merge. Deduplicate by slug so wizard payload entries
+          // (string leadId) never stack on top of API entries (numeric id).
+          const emailLeads: any[] = [];
+          const seenSlug = new Set<string>();
+          for (const l of leads) {
+            const slug = l.slug || (l.email || l.business_name || `lead-${l.id}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            if (seenSlug.has(slug)) continue;
+            seenSlug.add(slug);
+            emailLeads.push({
+              leadId: l.id,
+              name: l.business_name || l.name || '',
+              email: l.email || l.business_email || '',
+              businessName: l.business_name || l.name || '',
+              siteUrl: l.generated_site_url || l.site_url || '',
+              accountEmail: l.account_email || l.from_email || '',
+              status: l.send_status === 'sent' ? 'sent' : l.send_status === 'failed' ? 'failed' : 'queued',
+              reason: l.send_error || l.error || '',
+              city: l.city || '',
+              discoverySource: l.discovery_source || undefined,
+            });
+          }
           setCampaigns(prev2 => {
             const next = prev2.map(c => c.id === campaignId ? {
               ...c,
@@ -999,19 +1007,29 @@ The Lunao Team`);
           // source — it gets persisted to localStorage so the card row's Leads
           // count and the detail modal's per-prospect rows both reflect real
           // data, including for rows created before the emailLeads backfill
-          // existed.
-          const emailLeadsForRow: any[] = leads.map((l: any) => ({
-            leadId: l.id,
-            name: l.business_name || l.name || '',
-            email: l.email || l.business_email || '',
-            businessName: l.business_name || l.name || '',
-            siteUrl: l.generated_site_url || l.site_url || '',
-            accountEmail: l.account_email || l.from_email || '',
-            status: l.send_status === 'sent' ? 'sent' : l.send_status === 'failed' ? 'failed' : 'queued',
-            reason: l.send_error || l.error || '',
-            city: l.city || '',
-            discoverySource: l.discovery_source || undefined,
-          }));
+          // existed. Deduplicate by slug so that entries from the wizard payload
+          // (string leadId, added by the 1.5s fallback) never stack on top of
+          // API entries (numeric id, set by the post-complete authoritative fetch).
+          // Keying by slug is safe because slugs are stable across staging → live.
+          const emailLeadsForRow: any[] = [];
+          const seenSlug = new Set<string>();
+          for (const l of leads) {
+            const slug = l.slug || (l.email || l.business_name || `lead-${l.id}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            if (seenSlug.has(slug)) continue;
+            seenSlug.add(slug);
+            emailLeadsForRow.push({
+              leadId: l.id,
+              name: l.business_name || l.name || '',
+              email: l.email || l.business_email || '',
+              businessName: l.business_name || l.name || '',
+              siteUrl: l.generated_site_url || l.site_url || '',
+              accountEmail: l.account_email || l.from_email || '',
+              status: l.send_status === 'sent' ? 'sent' : l.send_status === 'failed' ? 'failed' : 'queued',
+              reason: l.send_error || l.error || '',
+              city: l.city || '',
+              discoverySource: l.discovery_source || undefined,
+            });
+          }
 
           setCampaigns((prev) =>
             prev.map((c) =>

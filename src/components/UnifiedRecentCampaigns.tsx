@@ -895,6 +895,14 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
 
   const deployedSites: CampaignDeployedSite[] = camp.deployedSites || [];
 
+  // Compute authoritative counts from the leads array so the stat blocks reflect
+  // real data immediately after the leads fetch resolves — even when the
+  // campaign row's emailsSent / sitesGenerated fields are stale (e.g. the
+  // polling backfill hasn't fired yet after the user opens the modal).
+  const modalSent = emailLeads.filter(l => l.status === 'sent').length;
+  const modalFailed = emailLeads.filter(l => l.status === 'failed').length;
+  const modalSites = emailLeads.filter(l => l.siteUrl).length;
+
   const tpl = useMemo(
     () => [...templates, ...customTemplates.map((t) => ({ ...t, preview: '' }))].find((t) => t.id === camp.templateId),
     [templates, customTemplates, camp.templateId],
@@ -1014,9 +1022,9 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
           {isEmail ? (
             <>
               <StatBlock label="Leads" value={loadingLeads ? (camp.leadsFound || 0) : (emailLeads.length || camp.leadsFound || 0)} icon={<Users className="w-4 h-4" />} color="text-blue-600" />
-              <StatBlock label="Sites Live" value={loadingLeads ? (camp.sitesGenerated || 0) : sites} icon={<Globe className="w-4 h-4" />} color="text-accent" />
-              <StatBlock label="Emails Sent" value={loadingLeads ? (camp.emailsSent || 0) : sent} icon={<Mail className="w-4 h-4" />} color="text-success" />
-              <StatBlock label="Failed" value={loadingLeads ? (camp.emailsFailed || 0) : failed} icon={<X className="w-4 h-4" />} color={failed > 0 ? 'text-danger' : 'text-ink-tertiary'} />
+              <StatBlock label="Sites Live" value={loadingLeads ? (camp.sitesGenerated || 0) : modalSites} icon={<Globe className="w-4 h-4" />} color="text-accent" />
+              <StatBlock label="Emails Sent" value={loadingLeads ? (camp.emailsSent || 0) : modalSent} icon={<Mail className="w-4 h-4" />} color="text-success" />
+              <StatBlock label="Failed" value={loadingLeads ? (camp.emailsFailed || 0) : modalFailed} icon={<X className="w-4 h-4" />} color={modalFailed > 0 ? 'text-danger' : 'text-ink-tertiary'} />
               <StatBlock label="Accounts" value={accountStats.length} icon={<Activity className="w-4 h-4" />} color="text-ink" />
             </>
           ) : (

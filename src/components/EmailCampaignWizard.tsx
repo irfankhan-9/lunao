@@ -962,6 +962,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               createdAt: new Date().toISOString(),
               emailSubject,
               emailBody,
+              leadsFound: perLead.length,
               emailAccountsUsed: finalPerAccount.map((a: any) => ({
                 accountId: a.accountId || a.id || '',
                 accountEmail: a.accountEmail || a.email || '',
@@ -1039,6 +1040,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             createdAt: new Date().toISOString(),
             emailSubject,
             emailBody,
+            leadsFound: perLead.length,
             emailAccountsUsed: fallbackPerAccount.map((a: any) => ({
               accountId: a.accountId || '',
               accountEmail: a.accountEmail || '',
@@ -1488,6 +1490,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 createdAt: new Date().toISOString(),
                 emailSubject,
                 emailBody,
+                leadsFound: perLead.length,
                 emailAccountsUsed: (e.perAccount || []).map((a: any) => ({
                   accountId: a.accountId || a.id || '',
                   accountEmail: a.accountEmail || a.email || '',

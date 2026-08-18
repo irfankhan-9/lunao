@@ -98,8 +98,10 @@ function useCampaignPolling(
             emailsFailed: c.failed || 0,
             accountsUsed: c.accountsUsed || 0,
             // Carry through the dork-only fields so re-renders don't drop them.
-            leadsFound: campaignLeadsFound,
-            leadsTarget: campaignLeadsTarget,
+            // Prefer the wizard-seeded values (campaignLeadsFound/Target) when
+            // available, but fall back to API fields for stale campaigns.
+            leadsFound: campaignLeadsFound ?? c.leads_found ?? c.leadsFound ?? 0,
+            leadsTarget: campaignLeadsTarget ?? c.target_volume ?? c.leadsTarget ?? 0,
             deployedSites: c.deployedSites || [],
           });
         }
@@ -261,10 +263,13 @@ export const CampaignProgressToggle: React.FC<CampaignProgressToggleProps> = ({
   // Poll for live updates while running
   const liveData = useCampaignPolling(campaign.id, campaign.status === 'running', campaign.status, campaign.total, campaign.leadsFound, campaign.leadsTarget);
 
-  // Use the prop as the source of truth when the campaign is finished — the
-  // polling hook only fires while running, so its final value can lag behind
-  // the authoritative wizard-completion payload.
-  const displayData = campaign.status === 'running' ? (liveData || campaign) : campaign;
+  // Use the live data if available, otherwise fall back to the campaign prop.
+  // Spreading campaign first and liveData second means live values always win,
+  // while any fields the API doesn't return (e.g. leadsTarget in older campaigns)
+  // gracefully revert to the wizard-provided values.
+  const displayData = liveData
+    ? { ...campaign, ...liveData }
+    : campaign;
 
   // Auto-expand when campaign is running
   useEffect(() => {
