@@ -315,6 +315,10 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         emailsSent: runningEmailCampaign.emailsSent,
         emailsFailed: runningEmailCampaign.emailsFailed,
         accountsUsed: runningEmailCampaign.accountsUsed,
+        // Dork-only — copy through so the floating toggle renders the
+        // "Leads" tile and the blue `leadsFound / leadsTarget` subline.
+        leadsFound: runningEmailCampaign.leadsFound,
+        leadsTarget: runningEmailCampaign.leadsTarget,
         deployedSites: runningEmailCampaign.deployedSites,
       });
     } else if (celebratedCampaign && launchComplete && !isLaunching && isShowingCompletion) {
@@ -323,18 +327,26 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       const totalFailed = launchResults?.failed ?? 0;
       const sitesCount = launchResults?.perLead?.filter((p: any) => p.siteUrl).length ?? 0;
       const accountsUsed = launchResults?.perAccount?.length ?? selectedAccountIds.size;
+      // Dork campaigns store their target volume separately; CSV uses parsed row count.
+      const completionTotal = leadSource === 'dork'
+        ? (dorkTargetVolume || totalSent + totalFailed)
+        : (csvParsedCount || totalSent + totalFailed);
 
       setActiveProgressToggle({
         id: celebratedCampaign.id,
         kind: 'email',
         name: celebratedCampaign.name,
         status: 'completed',
-        total: csvParsedCount || totalSent + totalFailed,
+        total: completionTotal,
         done: totalSent + totalFailed,
         sitesGenerated: sitesCount,
         emailsSent: totalSent,
         emailsFailed: totalFailed,
         accountsUsed,
+        // Dork-only — freeze final values so the toggle's Leads tile and
+        // subline stay populated on the completion screen too.
+        leadsFound: leadSource === 'dork' ? (dorkProgress.leadsFound || totalSent + totalFailed) : undefined,
+        leadsTarget: leadSource === 'dork' ? dorkTargetVolume : undefined,
         deployedSites: launchResults?.perLead?.filter((p: any) => p.siteUrl).map((p: any) => p.siteUrl) ?? [],
       });
     } else {
