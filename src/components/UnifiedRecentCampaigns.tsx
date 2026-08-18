@@ -552,18 +552,21 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
   const sent = camp.emailsSent ?? 0;
   const failed = camp.emailsFailed ?? 0;
   const sites = camp.sitesGenerated ?? camp.sites ?? 0;
-  // Lead count fallback chain. The wizard's finalCampaign payload doesn't
-  // include top-level `leadsFound` (it carries `emailLeads` instead), and the
-  // dork pipeline's `perLead` only gets populated when sends actually fire
-  // (`send:sent` events fill `email`). For queued dork runs with 0 sends
-  // (typical when the user hasn't attached real Gmail OAuth accounts), the
-  // previous chain `sent + failed || liveCount` evaluates to 0 even though
-  // 8+ sites were staged. Now we also fall back to `emailLeads.length`
-  // (populated by the post-complete API fetch in Campaigns.tsx) and finally
-  // to `deployedSites.length` so the card row reflects real discovery volume.
-  const leadsCount = camp.leadsFound
-    ?? camp.emailLeads?.length
-    ?? ((sent + failed) || liveCount || (camp.deployedSites || []).length || 0);
+  // Lead count for the card row. The wizard's `finalCampaign` payload sets both
+  // `leadsFound` AND `emailLeads`, and the post-complete API backfill in
+  // Campaigns.tsx sets them again from DB counts. They MUST agree — but to be
+  // safe we always pick the smaller of the two, because the API can return a
+  // transient inflated count (e.g. retry rows from a previously-re-run campaign)
+  // while `emailLeads` is always slug-deduped. Falling back to `liveCount` or
+  // `deployedSites.length` is forbidden here — those can be inflated by retries
+  // and would cause the "Leads" tile to show e.g. 8 when the user picked 3.
+  const computedLeads = (() => {
+    const a = camp.leadsFound;
+    const b = camp.emailLeads?.length ?? 0;
+    if (typeof a === 'number' && a > 0 && b > 0) return Math.min(a, b);
+    return a ?? (b || 0);
+  })();
+  const leadsCount = computedLeads || 0;
   const tpl = useMemo(
     () => [...templates, ...customTemplates.map((t) => ({ ...t, preview: '' }))].find((t) => t.id === camp.templateId),
     [templates, customTemplates, camp.templateId],

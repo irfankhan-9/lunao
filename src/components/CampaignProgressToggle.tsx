@@ -263,13 +263,21 @@ export const CampaignProgressToggle: React.FC<CampaignProgressToggleProps> = ({
   // Poll for live updates while running
   const liveData = useCampaignPolling(campaign.id, campaign.status === 'running', campaign.status, campaign.total, campaign.leadsFound, campaign.leadsTarget);
 
-  // Use the live data if available, otherwise fall back to the campaign prop.
-  // Spreading campaign first and liveData second means live values always win,
-  // while any fields the API doesn't return (e.g. leadsTarget in older campaigns)
-  // gracefully revert to the wizard-provided values.
-  const displayData = liveData
-    ? { ...campaign, ...liveData }
-    : campaign;
+// Use the live data if available, otherwise fall back to the campaign prop.
+// Spreading campaign first and liveData second means live values always win,
+// while any fields the API doesn't return (e.g. leadsTarget in older campaigns)
+// gracefully revert to the wizard-provided values.
+const displayData: CampaignProgressData = liveData
+  ? { ...campaign, ...liveData }
+  : campaign;
+
+// Dork runs always render the Leads tile. We detect them via either
+// `campaign.leadsTarget` being set (the wizard seeds this for dork runs) or
+// `leadSource === 'dork'` on the campaign row. Falling back to "any
+// leadsFound value" handles the post-completion state where the wizard
+// dispatched a finalCampaign with leadsFound = perLead.length.
+const isDorkRun = (campaign.leadsTarget !== undefined && campaign.leadsTarget !== null)
+  || (campaign as any).leadSource === 'dork';
 
   // Auto-expand when campaign is running
   useEffect(() => {
@@ -396,11 +404,10 @@ export const CampaignProgressToggle: React.FC<CampaignProgressToggleProps> = ({
                 </div>
               </div>
               <div className="flex justify-between text-xs">
-                {campaign.leadsFound === undefined && (
-                  <span className="font-semibold text-violet-700">📊 {displayData.done} / {displayData.total} leads</span>
-                )}
-                {campaign.leadsFound !== undefined && (
+                {isDorkRun ? (
                   <span className="font-semibold text-blue-700">👤 {displayData.leadsFound ?? 0} / {displayData.leadsTarget ?? '—'} leads</span>
+                ) : (
+                  <span className="font-semibold text-violet-700">📊 {displayData.done} / {displayData.total} leads</span>
                 )}
                 <span className="font-bold text-violet-600">{pct}%</span>
               </div>
@@ -411,8 +418,12 @@ export const CampaignProgressToggle: React.FC<CampaignProgressToggleProps> = ({
               Dork runs surface an additional full-width "Leads" tile
               (leadsFound / leadsTarget) above the standard 2x2 grid.
               CSV runs never set leadsFound, so this tile is hidden.
+              Gated on isDorkRun (derived from leadsTarget or leadSource),
+              NOT on leadsFound !== undefined — otherwise the tile flashes
+              away for a frame after the campaign completes and before the
+              polling hook picks up the final API value.
             */}
-            {displayData.leadsFound !== undefined && (
+            {isDorkRun && (
               <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 rounded-xl p-3 border border-blue-200 shadow-sm">
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
