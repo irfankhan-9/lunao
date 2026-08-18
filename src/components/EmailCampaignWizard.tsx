@@ -1221,6 +1221,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       leadsFound: 0,
       leadsTarget: dorkTargetVolume,
       emailLeads: [],
+      // Explicitly tag so the floating toggle's isDorkRun detection fires reliably.
+      leadSource: 'dork' as const,
     });
 
     onCampaignCreated?.({
@@ -1720,6 +1722,14 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     const isRunning = isLaunching && !launchComplete;
     const isDone = !!launchComplete && !!launchResults;
     const campaignId = celebratedCampaign?.id || '';
+    // Dork runs always show a Leads tile: found (from launchResults or live counters)
+    // vs target (the user-chosen dork target volume). For CSV runs this is hidden.
+    const isDork = leadSource === 'dork';
+    const leadsFound = isLaunching
+      ? liveCounters.leadsFound
+      : (launchResults?.perLead?.length ?? liveCounters.leadsFound ?? 0);
+    const leadsTarget = isDork ? dorkTargetVolume : 0;
+    const isDorkWithTarget = isDork && leadsTarget > 0;
 
     return (
       <div className="space-y-6">
@@ -1778,8 +1788,23 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 </div>
               </div>
 
-              {/* Detailed Stats */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+              {/* Detailed Stats — dork runs get a 5-tile grid (Leads + Sites + Sent + Failed + Accounts), CSV runs get 4 */}
+              <div className={`grid gap-2 sm:gap-3 ${isDorkWithTarget ? 'grid-cols-2 sm:grid-cols-5' : 'grid-cols-2 sm:grid-cols-4'}`}>
+                {/* Leads (dork-only) */}
+                {isDorkWithTarget && (
+                  <div className="bg-white/80 border border-blue-200 rounded-xl p-3 text-center">
+                    <p className="text-[10px] uppercase tracking-widest text-blue-600 font-semibold">Leads</p>
+                    <p className="text-2xl font-bold text-blue-700 font-mono mt-0.5 tabular-nums">
+                      {leadsFound}
+                      <span className="text-base text-blue-400 font-bold mx-0.5">/</span>
+                      <span className="text-base text-blue-500 font-bold tabular-nums">{leadsTarget}</span>
+                    </p>
+                    <p className="text-[9px] text-blue-400 mt-0.5">
+                      {isRunning ? 'acquired' : 'acquired'}
+                    </p>
+                  </div>
+                )}
+
                 <div className="bg-white/80 border border-border-light rounded-xl p-3 text-center">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Sites Built</p>
                   <p className="text-2xl font-bold text-accent font-mono mt-0.5 animate-counter-pop">{sitesLive}</p>

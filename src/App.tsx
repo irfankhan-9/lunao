@@ -45,6 +45,11 @@ export interface ActiveCampaignRun {
   emailsFailed?: number;
   accountsUsed?: number;
   emailLeads?: CampaignEmailLead[];
+  // Dork (Auto Email Sender) fields — drives the Leads tile in the
+  // floating progress toggle and the post-launch success card.
+  leadSource?: 'csv' | 'dork';
+  leadsFound?: number;
+  leadsTarget?: number;
 }
 
 const readRoute = (): '/' | '/app' => {
