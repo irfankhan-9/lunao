@@ -10,6 +10,7 @@ import {
   Smartphone, Monitor, Maximize2, Users, Layout, Type, Search, MapPin
 } from 'lucide-react';
 import { playGentleChime, playLaunchSwell, playVictoryCelebration, playSoftTap, playElegantError, playSoftBubble, playElegantBell } from '../utils/audio';
+import { dedupeLeads } from '../utils/leads';
 import { validateCsvFile, CsvValidation, PipelineLead, runEmailCampaign, probeAllEmailAccounts, initiateOAuthFlow, EmailAccountProbeResult, EmailCampaignEvent, lookupCity, runDorkEmailCampaign, CityLookupResponse, CitySuggestion, getDorkStatus } from '../lib/pipelineClient';
 import { Template } from '../types';
 import { nicheList } from '../data';
@@ -116,7 +117,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   const [selectedNiche, setSelectedNiche] = useState<string>('Barber');
   
   // Lead source
-  const [leadSource, setLeadSource] = useState<'csv' | 'places_api' | 'dork'>('csv');
+  const [leadSource, setLeadSource] = useState<'csv' | 'leads'>('leads');
 
   // CSV state
   const [csvFileName, setCsvFileName] = useState<string | null>(null);
@@ -126,12 +127,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   const [csvValidation, setCsvValidation] = useState<CsvValidation | null>(null);
   const [csvError, setCsvError] = useState<string | null>(null);
 
-  // Places API state
-  const [placesCity, setPlacesCity] = useState<string>('');
-  const [placesLoading, setPlacesLoading] = useState<boolean>(false);
-  const [placesResults, setPlacesResults] = useState<any[]>([]);
-
-  // Auto Email Sender (dork) state
+  // Auto Email Sender state
   const [dorkCity, setDorkCity] = useState<string>('');
   const [dorkTargetVolume, setDorkTargetVolume] = useState<number>(50);
   const [dorkCityLookup, setDorkCityLookup] = useState<CityLookupResponse | null>(null);
@@ -266,7 +262,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   // the user stops typing, then either auto-confirms an exact match or stages
   // suggestions for the modal.
   useEffect(() => {
-    if (leadSource !== 'dork') return;
+    if (leadSource !== 'leads') return;
     const trimmed = dorkCity.trim();
     if (trimmed.length < 2) {
       setDorkCityLookup(null);
@@ -330,7 +326,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       const sitesCount = launchResults?.perLead?.filter((p: any) => p.siteUrl).length ?? 0;
       const accountsUsed = launchResults?.perAccount?.length ?? selectedAccountIds.size;
       // Dork campaigns store their target volume separately; CSV uses parsed row count.
-      const completionTotal = leadSource === 'dork'
+      const completionTotal = leadSource === 'leads'
         ? (dorkTargetVolume || totalSent + totalFailed)
         : (csvParsedCount || totalSent + totalFailed);
 
@@ -347,8 +343,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         accountsUsed,
         // Dork-only — freeze final values so the toggle's Leads tile and
         // subline stay populated on the completion screen too.
-        leadsFound: leadSource === 'dork' ? (dorkProgress.leadsFound || totalSent + totalFailed) : undefined,
-        leadsTarget: leadSource === 'dork' ? dorkTargetVolume : undefined,
+        leadsFound: leadSource === 'leads' ? (dorkProgress.leadsFound || totalSent + totalFailed) : undefined,
+        leadsTarget: leadSource === 'leads' ? dorkTargetVolume : undefined,
         deployedSites: launchResults?.perLead?.filter((p: any) => p.siteUrl).map((p: any) => p.siteUrl) ?? [],
       });
     } else {
@@ -540,7 +536,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       }
     }, 100);
 
-    const isDork = leadSource === 'dork';
+    const isDork = leadSource === 'leads';
 
     // ---- Dork-specific preflight ----
     if (isDork) {
@@ -570,27 +566,26 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       return;
     }
 
-    // ---- CSV / places_api preflight ----
-    const totalLeads = csvLeads.length;
-    if (totalLeads === 0) {
-      setLaunchError('Upload a CSV with business data before launching.');
-      return;
+    // ---- CSV preflight (only applies when using CSV) ----
+    if (leadSource === 'csv') {
+      const totalLeads = csvLeads.length;
+      if (totalLeads === 0) {
+        setLaunchError('Upload a CSV with business data before launching.');
+        return;
+      }
+      if (selectedAccountIds.size === 0) {
+        setLaunchError('Select at least one email account to send from.');
+        return;
+      }
+      const requiredCredits = totalLeads * COST_PER_EMAIL;
+      if (userCredits < requiredCredits) {
+        playElegantError();
+        setLaunchError(`Insufficient credits: this campaign needs ${requiredCredits} credits (${totalLeads} leads × ${COST_PER_EMAIL}). You have ${userCredits}.`);
+        return;
+      }
+      onCreditsChange?.(Math.max(0, userCredits - requiredCredits));
     }
 
-    if (selectedAccountIds.size === 0) {
-      setLaunchError('Select at least one email account to send from.');
-      return;
-    }
-
-    const requiredCredits = totalLeads * COST_PER_EMAIL;
-    if (userCredits < requiredCredits) {
-      playElegantError();
-      setLaunchError(`Insufficient credits: this campaign needs ${requiredCredits} credits (${totalLeads} leads × ${COST_PER_EMAIL}). You have ${userCredits}.`);
-      return;
-    }
-
-    onCreditsChange?.(Math.max(0, userCredits - requiredCredits));
-    
     setIsLaunching(true);
     setLaunchProgress(5);
     setLaunchMessage('AI is warming up...');
@@ -608,9 +603,9 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         {
           niche: selectedNiche,
           templateKey: selectedTemplateId,
-          leadSource: leadSource,
-          targetVolume: csvLeads.length,
-          city: placesCity,
+          leadSource: 'csv',
+          targetVolume: totalLeads,
+          city: '',
           emailSubject,
           emailBody,
         },
@@ -637,7 +632,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         emailsSent: 0,
         emailsFailed: 0,
         accountsUsed: selectedAccountIds.size,
-        emailLeads: csvLeads.map((l: any, i: number) => ({
+        // Defensively dedupe in case the CSV or upstream passed duplicates.
+        emailLeads: dedupeLeads(csvLeads).map((l: any, i: number) => ({
           leadId: l.id ?? l.leadId ?? i,
           name: l.business_name || l.name || 'Lead',
           email: l.email || '',
@@ -697,18 +693,33 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       const perLead: any[] = [];
       // Single source of truth — every event that updates a lead's record goes
       // through upsertPerLead() which dedupes by (leadId || email || slug ||
-      // index). This prevents the same lead from being counted twice when
-      // site:staged and send:sent both push entries with different identifiers.
+      // index) AND also matches by email/slug even when the primary key differs.
+      // This prevents the same lead from being counted twice when site:staged and
+      // send:sent emit the same lead with different identifiers.
       const upsertPerLead = (entry: any) => {
         const key = entry.leadId ?? entry.email ?? entry.slug ?? entry.index;
         if (key === undefined || key === null) {
           perLead.push(entry);
           return;
         }
-        const existingIdx = perLead.findIndex((p) => {
+        // First try exact key match
+        let existingIdx = perLead.findIndex((p) => {
           const pKey = p.leadId ?? p.email ?? p.slug ?? p.index;
           return pKey !== undefined && pKey !== null && pKey === key;
         });
+        // If no exact match, try matching by email OR slug (handles the case where
+        // site:staged and send:sent emit the same lead with different identifiers)
+        if (existingIdx < 0) {
+          existingIdx = perLead.findIndex((p) => {
+            // Match by email
+            if (entry.email && p.email && entry.email.toLowerCase() === p.email.toLowerCase()) return true;
+            // Match by slug
+            if (entry.slug && p.slug && entry.slug === p.slug) return true;
+            // Match by name when email is missing (for anonymous leads)
+            if (!entry.email && !p.email && entry.name && p.name && entry.name === p.name) return true;
+            return false;
+          });
+        }
         if (existingIdx >= 0) {
           perLead[existingIdx] = { ...perLead[existingIdx], ...entry };
         } else {
@@ -951,6 +962,13 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               ? e.perAccount
               : Object.values(accountMap);
 
+            // CRITICAL: Deduplicate perLead BEFORE building the final payload.
+            // The dork path can occasionally emit duplicate entries (Phase 1
+            // staging + Phase 2 URL-swap can both add the same lead under
+            // slightly different identifiers). Without this, the recent-campaigns
+            // card shows the same lead twice in Prospect Details.
+            const dedupedPerLead = dedupeLeads(perLead);
+
             // Update campaign in list with final results - ONLY ONCE
             const finalCampaign = {
               id: campaignId,
@@ -962,7 +980,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               createdAt: new Date().toISOString(),
               emailSubject,
               emailBody,
-              leadsFound: perLead.length,
+              leadsFound: dedupedPerLead.length,
               emailAccountsUsed: finalPerAccount.map((a: any) => ({
                 accountId: a.accountId || a.id || '',
                 accountEmail: a.accountEmail || a.email || '',
@@ -973,8 +991,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               emailsFailed: finalFailed,
               // sitesGenerated = unique leads that have a siteUrl (deduped by leadId /
               // email / slug / index — see upsertPerLead).
-              sitesGenerated: perLead.filter((p: any) => p.siteUrl).length,
-              deployedSites: perLead.filter((p: any) => p.siteUrl).map((p: any, idx: number) => ({
+              sitesGenerated: dedupedPerLead.filter((p: any) => p.siteUrl).length,
+              deployedSites: dedupedPerLead.filter((p: any) => p.siteUrl).map((p: any, idx: number) => ({
                 slug: p.slug || (p.email || p.name || `lead-${idx}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
                 name: p.name || 'Lead',
                 city: undefined,
@@ -982,7 +1000,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 leadId: p.leadId,
                 status: 'live' as const,
               })),
-              emailLeads: perLead.map((p: any) => ({
+              emailLeads: dedupedPerLead.map((p: any) => ({
                 leadId: p.leadId,
                 name: p.name,
                 email: p.email,
@@ -1030,6 +1048,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             }
           }
           const fallbackPerAccount = Object.values(accountMap);
+          // CRITICAL: Deduplicate perLead BEFORE building the fallback payload.
+          const dedupedPerLead = dedupeLeads(perLead);
           const finalCampaign = {
             id: campaignIdForFallback,
             name: campaignNameForFallback,
@@ -1040,7 +1060,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             createdAt: new Date().toISOString(),
             emailSubject,
             emailBody,
-            leadsFound: perLead.length,
+            leadsFound: dedupedPerLead.length,
             emailAccountsUsed: fallbackPerAccount.map((a: any) => ({
               accountId: a.accountId || '',
               accountEmail: a.accountEmail || '',
@@ -1049,15 +1069,15 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             })),
             emailsSent: currentSent,
             emailsFailed: currentFailed,
-            sitesGenerated: perLead.filter((p: any) => p.siteUrl).length,
-            deployedSites: perLead.filter((p: any) => p.siteUrl).map((p: any, idx: number) => ({
+            sitesGenerated: dedupedPerLead.filter((p: any) => p.siteUrl).length,
+            deployedSites: dedupedPerLead.filter((p: any) => p.siteUrl).map((p: any, idx: number) => ({
               slug: (p.email || p.name || `lead-${idx}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
               name: p.name || 'Lead',
               city: undefined,
               url: p.siteUrl,
               status: 'live' as const,
             })),
-            emailLeads: perLead.map((p: any) => ({
+            emailLeads: dedupedPerLead.map((p: any) => ({
               leadId: p.leadId,
               name: p.name,
               email: p.email,
@@ -1161,10 +1181,24 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         perLead.push(entry);
         return;
       }
-      const existingIdx = perLead.findIndex((p) => {
+      // First try exact key match
+      let existingIdx = perLead.findIndex((p) => {
         const pKey = p.leadId ?? p.email ?? p.slug ?? p.index;
         return pKey !== undefined && pKey !== null && pKey === key;
       });
+      // If no exact match, try matching by email OR slug (handles the case where
+      // site:staged and send:sent emit the same lead with different identifiers)
+      if (existingIdx < 0) {
+        existingIdx = perLead.findIndex((p) => {
+          // Match by email
+          if (entry.email && p.email && entry.email.toLowerCase() === p.email.toLowerCase()) return true;
+          // Match by slug
+          if (entry.slug && p.slug && entry.slug === p.slug) return true;
+          // Match by name when email is missing (for anonymous leads)
+          if (!entry.email && !p.email && entry.name && p.name && entry.name === p.name) return true;
+          return false;
+        });
+      }
       if (existingIdx >= 0) {
         perLead[existingIdx] = { ...perLead[existingIdx], ...entry };
       } else {
@@ -1222,7 +1256,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       leadsTarget: dorkTargetVolume,
       emailLeads: [],
       // Explicitly tag so the floating toggle's isDorkRun detection fires reliably.
-      leadSource: 'dork' as const,
+      leadSource: 'leads' as const,
     });
 
     onCampaignCreated?.({
@@ -1231,7 +1265,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       niche: selectedNiche,
       templateId: selectedTemplateId,
       type: 'email',
-      leadSource: 'dork',
+      leadSource: 'leads',
       status: 'Active',
       createdAt: new Date().toISOString(),
       emailSubject,
@@ -1353,13 +1387,13 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 status: 'pending',
               });
               window.dispatchEvent(new CustomEvent('lunao:campaign-progress', { detail: {
-                id: tempCampaignId,
+                id: currentRunId,
                 emailsSent: 0,
                 emailsFailed: 0,
                 lead: { leadId: leadKey, name: e.name, slug: e.slug, siteUrl: e.siteUrl, status: 'pending' },
               }}));
               const uniqueSites = new Set(perLead.filter((p: any) => p.siteUrl).map((p: any) => p.leadId ?? p.index)).size;
-              updateActiveRun?.(tempCampaignId, { sitesGenerated: uniqueSites });
+              updateActiveRun?.(currentRunId, { sitesGenerated: uniqueSites });
               return;
             }
 
@@ -1385,30 +1419,37 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
 
             if (e.type === 'send:sent') {
               setLiveCounters(c => ({ ...c, emailsSent: c.emailsSent + 1 }));
-              upsertPerLead({
+              const sentEntry = {
                 leadId: e.leadId,
                 name: e.name,
                 email: e.email,
                 accountEmail: e.accountEmail,
                 subject: e.subject,
                 siteUrl: e.siteUrl,
-                status: 'sent',
-              });
+                status: 'sent' as const,
+              };
+              upsertPerLead(sentEntry);
               setLaunchResults(prev => {
                 const prevSent = prev?.sent || 0;
                 const prevPerLead = prev?.perLead || [];
                 const prevPerAccount = prev?.perAccount || [];
-                const newPerLead = prevPerLead.some((p: any) => p.leadId === e.leadId && p.status === 'sent')
-                  ? prevPerLead
-                  : [...prevPerLead, {
-                      leadId: e.leadId,
-                      name: e.name,
-                      email: e.email,
-                      accountEmail: e.accountEmail,
-                      subject: e.subject,
-                      siteUrl: e.siteUrl,
-                      status: 'sent',
-                    }];
+                // Match by leadId first (any previous status), then fall back to
+                // email/slug — same dedupe strategy as upsertPerLead so a
+                // 'pending' row from site:staged is overwritten by the 'sent'
+                // row instead of producing a second entry for the same lead.
+                const sentKey = sentEntry.leadId ?? sentEntry.email ?? sentEntry.slug;
+                const existingIdx = sentKey === undefined
+                  ? -1
+                  : prevPerLead.findIndex((p: any) => {
+                      const pKey = p.leadId ?? p.email ?? p.slug;
+                      if (pKey !== undefined && pKey !== null && pKey === sentKey) return true;
+                      if (sentEntry.email && p.email && sentEntry.email.toLowerCase() === p.email.toLowerCase()) return true;
+                      if (sentEntry.slug && p.slug && sentEntry.slug === p.slug) return true;
+                      return false;
+                    });
+                const newPerLead = existingIdx >= 0
+                  ? prevPerLead.map((p: any, i: number) => i === existingIdx ? { ...p, ...sentEntry } : p)
+                  : [...prevPerLead, sentEntry];
                 let newPerAccount = prevPerAccount;
                 const accIdx = newPerAccount.findIndex((a: any) => (a.accountEmail || a.email) === e.accountEmail);
                 if (accIdx >= 0) {
@@ -1427,39 +1468,51 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 };
               });
               window.dispatchEvent(new CustomEvent('lunao:campaign-progress', { detail: {
-                id: tempCampaignId,
+                id: currentRunId,
                 emailsSent: 1,
                 emailsFailed: 0,
                 lead: { leadId: e.leadId, name: e.name, email: e.email, slug: e.slug, accountEmail: e.accountEmail, siteUrl: e.siteUrl, status: 'sent' },
               }}));
-              updateActiveRun?.(tempCampaignId, { status: 'running' });
+              updateActiveRun?.(currentRunId, { status: 'running' });
               return;
             }
 
             if (e.type === 'send:failed' || e.type === 'send:error') {
               setLiveCounters(c => ({ ...c, emailsFailed: c.emailsFailed + 1 }));
-              upsertPerLead({
+              const failedEntry = {
                 leadId: e.leadId,
                 name: e.name,
+                email: e.email,
                 accountEmail: e.accountEmail,
-                status: 'failed',
+                status: 'failed' as const,
                 reason: e.reason || e.error,
+              };
+              upsertPerLead(failedEntry);
+              setLaunchResults(prev => {
+                const prevPerLead = prev?.perLead || [];
+                const failedKey = failedEntry.leadId ?? failedEntry.email ?? failedEntry.slug;
+                const existingIdx = failedKey === undefined
+                  ? -1
+                  : prevPerLead.findIndex((p: any) => {
+                      const pKey = p.leadId ?? p.email ?? p.slug;
+                      if (pKey !== undefined && pKey !== null && pKey === failedKey) return true;
+                      if (failedEntry.email && p.email && failedEntry.email.toLowerCase() === p.email.toLowerCase()) return true;
+                      if (failedEntry.slug && p.slug && failedEntry.slug === p.slug) return true;
+                      return false;
+                    });
+                const newPerLead = existingIdx >= 0
+                  ? prevPerLead.map((p: any, i: number) => i === existingIdx ? { ...p, ...failedEntry } : p)
+                  : [...prevPerLead, failedEntry];
+                return {
+                  sent: prev?.sent || 0,
+                  failed: (prev?.failed || 0) + 1,
+                  status: prev?.status || 'running',
+                  perLead: newPerLead,
+                  perAccount: prev?.perAccount || [],
+                };
               });
-              setLaunchResults(prev => ({
-                sent: prev?.sent || 0,
-                failed: (prev?.failed || 0) + 1,
-                status: prev?.status || 'running',
-                perLead: [...(prev?.perLead || []), {
-                  leadId: e.leadId,
-                  name: e.name,
-                  accountEmail: e.accountEmail,
-                  status: 'failed',
-                  reason: e.reason || e.error,
-                }],
-                perAccount: prev?.perAccount || [],
-              }));
               window.dispatchEvent(new CustomEvent('lunao:campaign-progress', { detail: {
-                id: tempCampaignId,
+                id: currentRunId,
                 emailsSent: 0,
                 emailsFailed: 1,
                 lead: { leadId: e.leadId, name: e.name, accountEmail: e.accountEmail, status: 'failed', reason: e.reason || e.error },
@@ -1468,6 +1521,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             }
 
             if (e.type === 'complete') {
+              // Use currentRunId (updated by 'campaign' event) to match the real server ID
               const finalSent = e.sent !== undefined ? e.sent : perLead.filter(p => p.status === 'sent').length;
               const finalFailed = e.failed !== undefined ? e.failed : perLead.filter(p => p.status === 'failed').length;
               setLaunchProgress(100);
@@ -1476,23 +1530,25 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 failed: finalFailed,
                 status: e.status || 'completed',
                 perAccount: e.perAccount && e.perAccount.length > 0 ? e.perAccount : (launchResults?.perAccount || []),
-                perLead: perLead.length > 0 ? perLead : (launchResults?.perLead || []),
+                perLead: perLead.length > 0 ? dedupeLeads(perLead) : (launchResults?.perLead || []),
               });
               setLaunchComplete(true);
               setIsShowingCompletion(true);
 
+              // CRITICAL: Deduplicate perLead BEFORE building the final payload.
+              const dedupedPerLead = dedupeLeads(perLead);
               const finalCampaign = {
-                id: tempCampaignId,
+                id: currentRunId,
                 name: campaignName,
                 niche: selectedNiche,
-                leadSource: 'dork',
+                leadSource: 'leads',
                 templateId: selectedTemplateId,
                 type: 'email',
                 status: 'Completed',
                 createdAt: new Date().toISOString(),
                 emailSubject,
                 emailBody,
-                leadsFound: perLead.length,
+                leadsFound: dedupedPerLead.length,
                 emailAccountsUsed: (e.perAccount || []).map((a: any) => ({
                   accountId: a.accountId || a.id || '',
                   accountEmail: a.accountEmail || a.email || '',
@@ -1501,8 +1557,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 })),
                 emailsSent: finalSent,
                 emailsFailed: finalFailed,
-                sitesGenerated: perLead.filter((p: any) => p.siteUrl).length,
-                deployedSites: perLead.filter((p: any) => p.siteUrl).map((p: any, idx: number) => ({
+                sitesGenerated: dedupedPerLead.filter((p: any) => p.siteUrl).length,
+                deployedSites: dedupedPerLead.filter((p: any) => p.siteUrl).map((p: any, idx: number) => ({
                   slug: p.slug || (p.email || p.name || `lead-${idx}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
                   name: p.name || 'Lead',
                   city: undefined,
@@ -1510,7 +1566,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                   leadId: p.leadId,
                   status: 'live' as const,
                 })),
-                emailLeads: perLead.map((p: any) => ({
+                emailLeads: dedupedPerLead.map((p: any) => ({
                   leadId: p.leadId,
                   name: p.name,
                   email: p.email,
@@ -1653,7 +1709,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   // Wrap the global "Next Step" button so step 2 can do its own gate.
   const handleNextStep = useCallback(async () => {
     playGentleChime();
-    if (activeStep === 2 && leadSource === 'dork') {
+    if (activeStep === 2 && leadSource === 'leads') {
       const ok = await validateDorkCityForNext();
       if (!ok) return;
     }
@@ -1677,7 +1733,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     setSelectedAccountIds(new Set());
     setEmailSubject(DEFAULT_EMAIL_SUBJECT);
     setEmailBody(DEFAULT_EMAIL_BODY);
-    setPlacesResults([]);
     // Clear progress toggle and celebration state to prevent stale data
     setActiveProgressToggle(null);
     setCelebratedCampaign(null);
@@ -1707,7 +1762,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
 
   // True lead count for the active campaign on the Review step.
   // Auto Email Sender uses the user-chosen dork target; CSV uses parsed row count.
-  const reviewLeadCount = leadSource === 'dork' ? (dorkTargetVolume || 0) : csvParsedCount;
+  const reviewLeadCount = leadSource === 'leads' ? (dorkTargetVolume || 0) : csvParsedCount;
 
   if (celebratedCampaign) {
     const sent = isLaunching ? liveCounters.emailsSent : (launchResults?.sent ?? liveCounters.emailsSent ?? 0);
@@ -1724,7 +1779,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     const campaignId = celebratedCampaign?.id || '';
     // Dork runs always show a Leads tile: found (from launchResults or live counters)
     // vs target (the user-chosen dork target volume). For CSV runs this is hidden.
-    const isDork = leadSource === 'dork';
+    const isDork = leadSource === 'leads';
     const leadsFound = isLaunching
       ? liveCounters.leadsFound
       : (launchResults?.perLead?.length ?? liveCounters.leadsFound ?? 0);
@@ -1986,11 +2041,23 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
           <div className="space-y-5 animate-fade-in">
             <div className="space-y-1">
               <h3 className="font-serif text-2xl text-ink">Choose your leads</h3>
-              <p className="text-sm text-ink-secondary">Upload a CSV or use Places API to find businesses.</p>
+              <p className="text-sm text-ink-secondary">Upload a CSV with business data or use Auto Email Sender to find leads automatically.</p>
             </div>
             
-            {/* Lead Source Tabs - Brand New Design */}
+            {/* Lead Source Tabs */}
             <div className="flex gap-2 p-1.5 bg-gradient-to-r from-surface to-off-white rounded-2xl w-fit shadow-inner">
+              <button
+                type="button"
+                onClick={() => { playSoftTap(); setLeadSource('leads'); }}
+                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
+                  leadSource === 'leads'
+                    ? 'bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30'
+                    : 'text-ink-secondary hover:text-ink hover:bg-white/50'
+                }`}
+              >
+                <Globe className="w-5 h-5" />
+                Auto Email Sender
+              </button>
               <button
                 type="button"
                 onClick={() => { playSoftTap(); setLeadSource('csv'); }}
@@ -2003,36 +2070,9 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 <Upload className="w-5 h-5" />
                 Upload CSV
               </button>
-              <button
-                type="button"
-                onClick={() => { playSoftTap(); setLeadSource('places_api'); }}
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
-                  leadSource === 'places_api'
-                    ? 'bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30'
-                    : `text-ink-secondary hover:text-ink hover:bg-white/50 ${!isPro ? 'opacity-60' : ''}`
-                } ${!isPro ? 'opacity-60' : ''}`}
-                disabled={!isPro}
-                title={!isPro ? 'Places API is a Pro feature' : undefined}
-              >
-                <Zap className="w-5 h-5" />
-                Places API
-                {!isPro && <span className="ml-1 text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">Pro</span>}
-              </button>
-              <button
-                type="button"
-                onClick={() => { playSoftTap(); setLeadSource('dork'); }}
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
-                  leadSource === 'dork'
-                    ? 'bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30'
-                    : 'text-ink-secondary hover:text-ink hover:bg-white/50'
-                }`}
-              >
-                <Globe className="w-5 h-5" />
-                Auto Email Sender
-              </button>
             </div>
-            
-            {/* CSV Upload - BRAND NEW BEAUTIFUL DESIGN */}
+
+            {/* CSV Upload */}
             {leadSource === 'csv' && (
               <div className="space-y-5">
                 {!csvFileName ? (
@@ -2111,71 +2151,31 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 )}
               </div>
             )}
-            
-            {/* Places API */}
-            {leadSource === 'places_api' && isPro && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-ink-secondary mb-1.5">City</label>
-                    <input
-                      type="text"
-                      value={placesCity}
-                      onChange={(e) => setPlacesCity(e.target.value)}
-                      placeholder="e.g., Austin, TX"
-                      className="w-full px-3 py-2 border border-border-main rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-ink-secondary mb-1.5">Business Category</label>
-                    <select
-                      value={selectedNiche}
-                      onChange={(e) => setSelectedNiche(e.target.value)}
-                      className="w-full px-3 py-2 border border-border-main rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
-                    >
-                      {nicheList.map(n => <option key={n.id} value={n.id}>{n.label}</option>)}
-                    </select>
-                  </div>
-                </div>
-                
-                <button
-                  type="button"
-                  onClick={() => { setPlacesLoading(true); setTimeout(() => setPlacesLoading(false), 1500); }}
-                  disabled={!placesCity || placesLoading}
-                  className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-2 ${
-                    !placesCity || placesLoading
-                      ? 'bg-surface text-ink-tertiary cursor-not-allowed'
-                      : 'bg-accent hover:bg-accent-hover text-white'
-                  }`}
-                >
-                  {placesLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                  <span>Find Businesses</span>
-                </button>
-                
-                {placesResults.length > 0 && (
-                  <div className="bg-success-soft border border-success/20 rounded-xl p-4">
-                    <p className="text-sm font-semibold text-success">{placesResults.length} businesses found</p>
-                  </div>
-                )}
-              </div>
-            )}
 
-            {/* Auto Email Sender (Google Dork) */}
-            {leadSource === 'dork' && (
+            {/* Auto Email Sender */}
+            {leadSource === 'leads' && (
               <div className="space-y-5">
-                {/* Descriptive card above the city input */}
-                <div className="relative overflow-hidden rounded-2xl border border-accent/20 bg-gradient-to-br from-accent-soft/40 via-white to-accent-soft/20 shadow-sm">
-                  <div className="absolute -top-10 -right-10 w-32 h-32 bg-accent/10 rounded-full blur-3xl pointer-events-none" />
-                  <div className="relative flex items-start gap-3 p-4">
-                    <div className="shrink-0 w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
-                      <Globe className="w-5 h-5 text-accent" />
+                {/* Branded descriptive card */}
+                <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-accent/30 bg-gradient-to-br from-accent-soft/30 via-white to-accent-soft/10 p-6 transition-all duration-300 shadow-sm">
+                  {/* Decorative elements */}
+                  <div className="absolute -top-16 -right-16 w-40 h-40 bg-accent/8 rounded-full blur-3xl pointer-events-none" />
+                  <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-accent/6 rounded-full blur-2xl pointer-events-none" />
+                  <div className="relative flex items-start gap-4">
+                    {/* Icon */}
+                    <div className="relative shrink-0">
+                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-accent to-accent-hover flex items-center justify-center shadow-xl shadow-accent/30">
+                        <Globe className="w-7 h-7 text-white" />
+                      </div>
+                      <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-white rounded-full shadow-md flex items-center justify-center">
+                        <Sparkles className="w-2.5 h-2.5 text-accent" />
+                      </div>
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2 mb-1">
-                        <p className="text-sm font-serif font-semibold text-ink">Auto Email Sender</p>
+                        <p className="text-base font-serif font-semibold text-ink leading-tight">Auto Email Sender</p>
                         {dorkStatus && (
                           <span
-                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            className={`shrink-0 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                               dorkStatus.provider === 'mock'
                                 ? 'bg-warning/10 text-warning border border-warning/30'
                                 : 'bg-success/10 text-success border border-success/30'
@@ -2197,21 +2197,21 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                           </span>
                         )}
                       </div>
-                      <p className="text-[12px] text-ink-secondary leading-relaxed">
-                        Type a city and we&apos;ll Google-dork it for local businesses in your niche,
-                        pull out valid Gmail addresses, build each one a personalized site, and
-                        send them a friendly introduction — all in one click. If the first city
-                        doesn&apos;t have enough leads, we&apos;ll silently expand to nearby cities.
+                      <p className="text-sm text-ink-secondary leading-relaxed">
+                        Type a city and we&apos;ll find local businesses in your niche, pull out their email addresses,
+                        build each one a personalized site, and send them a friendly introduction — all in one click.
+                        If the first city doesn&apos;t have enough leads, we&apos;ll silently expand to nearby cities.
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-border-light bg-white p-5 shadow-sm space-y-5">
+                {/* Input card — matching the CSV drop zone card's visual weight */}
+                <div className="rounded-2xl border border-border-main bg-white p-5 shadow-sm space-y-5">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
                       <label className="block text-xs font-semibold text-ink-secondary mb-1.5">
-                        Only input city name here
+                        City
                       </label>
                       <div className="relative">
                         <input
@@ -2794,7 +2794,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             </div>
 
             {/* Primary summary row */}
-            <div className={`grid gap-3 ${leadSource === 'dork' ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-3'}`}>
+            <div className={`grid gap-3 ${leadSource === 'leads' ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-3'}`}>
               <div className="bg-white rounded-2xl border border-border-light p-4 text-center shadow-sm">
                 <div className="w-10 h-10 bg-accent-soft rounded-xl flex items-center justify-center mx-auto mb-2">
                   <Users className="w-5 h-5 text-accent" />
@@ -2809,7 +2809,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 <p className="text-2xl font-bold text-success font-mono">{selectedNiche}</p>
                 <p className="text-[10px] uppercase tracking-widest text-ink-tertiary font-semibold mt-0.5">Niche</p>
               </div>
-              {leadSource === 'dork' && (
+              {leadSource === 'leads' && (
                 <div className="bg-white rounded-2xl border border-border-light p-4 text-center shadow-sm">
                   <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center mx-auto mb-2">
                     <MapPin className="w-5 h-5 text-amber-600" />
@@ -3144,9 +3144,9 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             )}
 
             {/* Stats Row - Compact */}
-            <div className={`px-4 py-3 grid ${leadSource === 'dork' ? 'grid-cols-5' : 'grid-cols-4'} gap-2`}>
+            <div className={`px-4 py-3 grid ${leadSource === 'leads' ? 'grid-cols-5' : 'grid-cols-4'} gap-2`}>
               {/* Leads (dork-only) — leads discovered so far out of the user-chosen target */}
-              {leadSource === 'dork' && (
+              {leadSource === 'leads' && (
                 <div className="bg-blue-50 rounded-xl p-2.5 text-center border border-blue-100">
                   <div className="text-lg mb-0.5">👤</div>
                   <div className="text-xl font-black text-blue-700 font-mono tabular-nums">

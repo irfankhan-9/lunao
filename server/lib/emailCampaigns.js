@@ -130,7 +130,26 @@ export function createEmailCampaign({
   );
   
   // Bulk-insert all leads in a single transaction.
+  // CRITICAL: Dedupe by (email + business_name + city) BEFORE inserting.
+  // The dork pipeline already dedupes by email at discovery time, but a
+  // belt-and-braces dedup here also handles:
+  //  - the Phase 1 staging + Phase 2 URL-swap creating two rows with
+  //    slightly different emails (e.g. one row's email gets cleared)
+  //  - caller-side CSV files that already contain duplicate rows
   if (leads.length > 0) {
+    const seen = new Set();
+    const dedupedLeads = leads.filter((lead) => {
+      const k = [
+        (lead.email || '').toLowerCase().trim(),
+        (lead.name || lead.business_name || '').toLowerCase().trim(),
+        (lead.city || '').toLowerCase().trim(),
+      ].join('|');
+      if (!k || k === '||') return true; // keep anonymous rows
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+
     const insert = db.prepare(`
       INSERT INTO email_leads (
         campaign_id, business_name, phone, city, website, email,
@@ -152,7 +171,10 @@ export function createEmailCampaign({
         );
       });
     });
-    insertAll(leads);
+    insertAll(dedupedLeads);
+    if (dedupedLeads.length < leads.length) {
+      console.log(`[email-campaigns] createEmailCampaign: deduped ${leads.length - dedupedLeads.length} duplicate leads before insert (kept ${dedupedLeads.length})`);
+    }
   }
 
   return getEmailCampaign(id);
@@ -308,8 +330,8 @@ export function listEmailLeads(campaignId) {
 
 // Get leads for an email campaign with account email info for display
 export function listEmailLeadsWithAccounts(campaignId) {
-  return db.prepare(`
-    SELECT 
+  const rows = db.prepare(`
+    SELECT
       el.*,
       ea.email as account_email,
       ea.provider as account_provider
@@ -318,6 +340,27 @@ export function listEmailLeadsWithAccounts(campaignId) {
     WHERE el.campaign_id = ?
     ORDER BY el.index_in_campaign
   `).all(campaignId);
+
+  // Server-side defensive dedupe by (email|business_name|city) for display.
+  // The UI also dedupes, but doing it here guarantees that the API always
+  // returns at most one row per logical lead — no matter what transient
+  // state the campaign row is in (e.g. a Phase 1 staging row + Phase 2
+  // URL-swap row for the same business that somehow both survived a
+  // mid-flight crash). First row per identity key wins.
+  const seen = new Set();
+  const out = [];
+  for (const r of rows) {
+    const key = `${(r.email || '').toLowerCase()}|${(r.business_name || '').toLowerCase()}|${(r.city || '').toLowerCase()}`;
+    if (!key || key === '||') {
+      // Anonymous row (no usable identity) — keep it so we don't drop it
+      out.push(r);
+      continue;
+    }
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(r);
+  }
+  return out;
 }
 
 // Get leads pending email discovery

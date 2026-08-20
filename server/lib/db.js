@@ -484,11 +484,123 @@ function migrateSqlite() {
       }
     }
   }
+
+  // v5: Deduplicate email_leads + add UNIQUE INDEX to prevent future dupes.
+  // The dork pipeline's Phase 1 staging + Phase 2 URL-swap could create two
+  // rows for the same (campaign, email, business, city). Keep the OLDEST row
+  // per group and delete the rest so future runs report accurate counts.
+  try {
+    const before = _db.prepare('SELECT COUNT(*) AS n FROM email_leads').get().n;
+    _db.exec(`
+      DELETE FROM email_leads
+      WHERE id NOT IN (
+        SELECT MIN(id) FROM email_leads
+        GROUP BY campaign_id, lower(email), lower(business_name), lower(city)
+      );
+    `);
+    const after = _db.prepare('SELECT COUNT(*) AS n FROM email_leads').get().n;
+    const removed = before - after;
+    if (removed > 0) {
+      console.log(`[db] migration v5: removed ${removed} duplicate email_leads rows (kept oldest per campaign+email+business+city)`);
+    }
+
+    // Database-level safety net: UNIQUE INDEX prevents future duplicate inserts
+    // even if all dedup logic in the application layer fails.
+    _db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uniq_email_leads_campaign_email_biz_city
+      ON email_leads (campaign_id, lower(email), lower(business_name), lower(city))
+      WHERE email != '' AND business_name != '';
+    `);
+    console.log('[db] migration v5: ensured UNIQUE INDEX on email_leads (campaign, email, business, city)');
+  } catch (err) {
+    console.error(`[db] migration v5 failed: ${err.message}`);
+  }
+
+  // v5b: Recompute cached counts on email_campaigns after dedup so the
+  // dashboard's Leads / Sites / Sent tiles stop double-counting.
+  try {
+    const campaigns = _db.prepare('SELECT id FROM email_campaigns').all();
+    for (const c of campaigns) {
+      _db.prepare(`
+        UPDATE email_campaigns SET
+          emails_sent = COALESCE((
+            SELECT COUNT(*) FROM email_leads
+            WHERE campaign_id = ? AND send_status = 'sent'
+          ), 0),
+          emails_failed = COALESCE((
+            SELECT COUNT(*) FROM email_leads
+            WHERE campaign_id = ? AND send_status = 'failed'
+          ), 0),
+          sites_generated = COALESCE((
+            SELECT COUNT(*) FROM email_leads
+            WHERE campaign_id = ? AND generated_site_url IS NOT NULL AND generated_site_url != ''
+          ), 0),
+          leads_found = COALESCE((
+            SELECT COUNT(*) FROM email_leads WHERE campaign_id = ?
+          ), 0)
+        WHERE id = ?
+      `).run(c.id, c.id, c.id, c.id, c.id);
+    }
+    console.log(`[db] migration v5b: recomputed cached counts for ${campaigns.length} campaigns`);
+  } catch (err) {
+    console.error(`[db] migration v5b failed: ${err.message}`);
+  }
+}
+
+// ---- Postgres migrations (mirror of SQLite v5) --------------------------
+async function migratePg() {
+  try {
+    const before = await _db.prepare('SELECT COUNT(*) AS n FROM email_leads').get();
+    const beforeN = Number(before?.n ?? 0);
+
+    await _db.exec(`
+      DELETE FROM email_leads
+      WHERE id NOT IN (
+        SELECT MIN(id) FROM email_leads
+        GROUP BY campaign_id, lower(email), lower(business_name), lower(city)
+      );
+    `);
+
+    const after = await _db.prepare('SELECT COUNT(*) AS n FROM email_leads').get();
+    const afterN = Number(after?.n ?? 0);
+    const removed = beforeN - afterN;
+    if (removed > 0) {
+      console.log(`[db] migration v5 (pg): removed ${removed} duplicate email_leads rows`);
+    }
+
+    await _db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uniq_email_leads_campaign_email_biz_city
+      ON email_leads (campaign_id, lower(email), lower(business_name), lower(city))
+      WHERE email <> '' AND business_name <> '';
+    `);
+    console.log('[db] migration v5 (pg): ensured UNIQUE INDEX on email_leads');
+  } catch (err) {
+    console.error(`[db] migration v5 (pg) failed: ${err.message}`);
+  }
+
+  try {
+    const campaigns = await _db.prepare('SELECT id FROM email_campaigns').all();
+    for (const c of campaigns) {
+      await _db.prepare(`
+        UPDATE email_campaigns SET
+          emails_sent = COALESCE((SELECT COUNT(*) FROM email_leads WHERE campaign_id = $1 AND send_status = 'sent'), 0),
+          emails_failed = COALESCE((SELECT COUNT(*) FROM email_leads WHERE campaign_id = $1 AND send_status = 'failed'), 0),
+          sites_generated = COALESCE((SELECT COUNT(*) FROM email_leads WHERE campaign_id = $1 AND generated_site_url IS NOT NULL AND generated_site_url <> ''), 0),
+          leads_found = COALESCE((SELECT COUNT(*) FROM email_leads WHERE campaign_id = $1), 0)
+        WHERE id = $1
+      `).run(c.id);
+    }
+    console.log(`[db] migration v5b (pg): recomputed cached counts for ${campaigns.length} campaigns`);
+  } catch (err) {
+    console.error(`[db] migration v5b (pg) failed: ${err.message}`);
+  }
 }
 
 if (HAS_PG && pgPool) {
   _db = makePgAdapter(pgPool);
   await _db.exec(SCHEMA_SQL);
+  // Same dedup + UNIQUE INDEX + count-recompute migration runs against Postgres too.
+  await migratePg();
   console.log('[db] Connected to Postgres (DATABASE_URL detected)');
 } else {
   const DB_PATH = path.join(DATA_DIR, 'lunao.db');

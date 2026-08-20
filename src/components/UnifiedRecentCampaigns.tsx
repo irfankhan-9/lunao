@@ -52,6 +52,7 @@ import {
   playSoftTap,
   playDialogPop,
 } from '../utils/audio';
+import { dedupeLeads } from '../utils/leads';
 import { Template } from '../types';
 
 type FilterTab = 'all' | 'site-deploy' | 'email';
@@ -80,6 +81,10 @@ interface UnifiedRecentCampaignsProps {
   // One-click outreach edit — opens a fresh email wizard with the source
   // campaign's subject/body pre-filled. Only meaningful for email campaigns.
   onEditOutreach?: (campaign: Campaign) => void;
+  // The currently-active progress toggle run (if any). Used to show the
+  // user-chosen target volume on dork runs while they are still running —
+  // before the post-complete API backfill has written leadsFound.
+  activeCampaignRuns?: { id: string; kind: string; total: number; leadsFound?: number; leadsTarget?: number; leadSource?: string }[];
 }
 
 const formatDate = (iso: string) => {
@@ -120,7 +125,8 @@ export const UnifiedRecentCampaigns: React.FC<UnifiedRecentCampaignsProps> = ({
   compact = false,
   onViewDetails,
   onEditOutreach,
-}) => {
+  activeCampaignRuns,
+}: UnifiedRecentCampaignsProps) => {
   // ── Filter tab (All / Site Deploy / Email) ──
   const [filter, setFilter] = useState<FilterTab>('all');
 
@@ -450,6 +456,7 @@ export const UnifiedRecentCampaigns: React.FC<UnifiedRecentCampaignsProps> = ({
               onDelete={() => handleSingleDelete(camp.id)}
               onViewDetails={() => onViewDetails?.(camp.id)}
               onEditOutreach={onEditOutreach ? () => onEditOutreach(camp) : undefined}
+              activeCampaignRuns={activeCampaignRuns}
             />
           ))}
         </div>
@@ -528,6 +535,9 @@ interface CampaignCardProps {
   onDelete: () => void;
   onViewDetails?: () => void;
   onEditOutreach?: () => void;
+  // Passed through from App → Campaigns → UnifiedRecentCampaigns so we can
+  // detect the active progress toggle for this specific card.
+  activeCampaignRuns?: { id: string; kind: string; total: number; leadsFound?: number; leadsTarget?: number; leadSource?: string }[];
 }
 
 const CampaignCard: React.FC<CampaignCardProps> = ({
@@ -541,7 +551,16 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
   onDelete,
   onViewDetails,
   onEditOutreach,
+  activeCampaignRuns,
 }) => {
+  // ── Derive the active progress toggle for this specific card.
+  // The wizard pushes a run to activeCampaignRuns via upsertActiveRun.
+  // We match by id so we can read total (user's chosen target) even
+  // before the post-complete API backfill has written leadsFound.
+  const activeProgressToggle = React.useMemo(
+    () => activeCampaignRuns?.find((r) => r.id === camp.id && r.kind === 'email') ?? null,
+    [activeCampaignRuns, camp.id],
+  );
   const isRunning = camp.status === 'Active';
   const isFrozen = camp.status === 'Completed' || camp.status === 'Crashed';
   const isSiteDeploy = camp.type === 'site-deploy';
@@ -560,11 +579,24 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
   // while `emailLeads` is always slug-deduped. Falling back to `liveCount` or
   // `deployedSites.length` is forbidden here — those can be inflated by retries
   // and would cause the "Leads" tile to show e.g. 8 when the user picked 3.
+  // For dork runs that are still running and haven't yet had their post-complete
+  // API backfill, use the activeProgressToggle's leadsFound (live discovery count)
+  // and total (user-chosen target) so the row always shows the right numbers.
+  const isDorkToggle = (activeProgressToggle as any)?.leadSource === 'dork';
+  const isRunningDork = isDorkToggle && camp.status === 'Active';
   const computedLeads = (() => {
+    if (isRunningDork) {
+      const found = activeProgressToggle?.leadsFound ?? 0;
+      const target = activeProgressToggle?.total ?? 0;
+      // Always prefer the user's chosen target when available and > 0,
+      // falling back to discovered leads count.
+      return target > 0 ? target : found;
+    }
     const a = camp.leadsFound;
     const b = camp.emailLeads?.length ?? 0;
     if (typeof a === 'number' && a > 0 && b > 0) return Math.min(a, b);
-    return a ?? (b || 0);
+    if (typeof a === 'number' && a > 0) return a;
+    return b;
   })();
   const leadsCount = computedLeads || 0;
   const tpl = useMemo(
@@ -824,7 +856,9 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
 }) => {
   const isEmail = camp.type === 'email';
   const isSiteDeploy = camp.type === 'site-deploy';
-  const [emailLeads, setEmailLeads] = useState<CampaignEmailLead[]>(camp.emailLeads || []);
+  // Defensively dedupe the initial state — the parent may have stored
+  // duplicates when the wizard payload was processed before the dedup fix.
+  const [emailLeads, setEmailLeads] = useState<CampaignEmailLead[]>(dedupeLeads(camp.emailLeads || []));
   // Start in loading state so the spinner covers the brief 0-lead window
   // between modal mount and the first fetch response. Without this, the
   // user sees a misleading "No per-prospect data yet" placeholder for a
@@ -856,8 +890,13 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
         return r.json();
       })
       .then((data: any) => {
-        const leads = data?.leads || [];
-        const mapped: CampaignEmailLead[] = (leads || []).map((l: any) => ({
+        const rawLeads = data?.leads || [];
+        // CRITICAL: Deduplicate leads BEFORE displaying. The API may return
+        // duplicate rows for the same lead (e.g., Phase 1 staging + Phase 2
+        // URL-swap). Use the centralized dedupe utility so all call sites
+        // produce identical, consistent deduplication.
+        const deduped = dedupeLeads(rawLeads);
+        const mapped: CampaignEmailLead[] = (deduped || []).map((l: any) => ({
           // The `CampaignEmailLead` shape uses `name` (per src/types.ts) so the
           // per-prospect row in EmailBody can read `row.name` directly. Mapping
           // to `businessName` here left `row.name` undefined and made every
@@ -1166,6 +1205,33 @@ const EmailBody: React.FC<{
   loading?: boolean;
 }> = ({ leads, accountStats, loading }) => {
   const [copied, setCopied] = useState<{ row: number; which: 'url' | 'email' } | null>(null);
+  // Final defensive dedupe before render. The API and the wizard payload
+  // already dedupe, but a stale closure or a re-mount with mixed data
+  // sources can still produce a second row for the same lead. We collapse
+  // by composite (email|businessName|city) here so the table can NEVER
+  // show two rows for the same business — even if some upstream layer
+  // forgot to dedupe. The server already enforces the same guarantee via
+  // the unique index, so this is purely a render-time safety net.
+  const displayRows = useMemo(() => {
+    const seen = new Set<string>();
+    const out: CampaignEmailLead[] = [];
+    const keyOf = (l: CampaignEmailLead) => {
+      const biz = (l.businessName || l.name || '').toLowerCase().trim();
+      const city = (l.city || '').toLowerCase().trim();
+      const slug = (l.leadId ? String(l.leadId) : '') || (l.siteUrl ? l.siteUrl.split('/').filter(Boolean).pop() || '' : '');
+      if (biz && city) return `${biz}|${city}|${slug}`;
+      if (biz) return `biz:${biz}`;
+      return '';
+    };
+    for (const l of leads || []) {
+      const k = keyOf(l);
+      if (!k) { out.push(l); continue; }
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(l);
+    }
+    return out;
+  }, [leads]);
   const handleCopy = async (text: string, row: number, which: 'url' | 'email') => {
     if (!text) return;
     try { await navigator.clipboard.writeText(text); } catch { /* ignore */ }
@@ -1184,7 +1250,7 @@ const EmailBody: React.FC<{
     );
   }
 
-  if (leads.length === 0) {
+  if (displayRows.length === 0) {
     return (
       <div className="px-6 py-8 text-center text-ink-secondary">
         <Mail className="w-10 h-10 mx-auto mb-2 opacity-30" />
@@ -1194,10 +1260,10 @@ const EmailBody: React.FC<{
     );
   }
 
-  const totalSent = leads.filter(l => l.status === 'sent').length;
-  const totalFailed = leads.filter(l => l.status === 'failed').length;
-  const totalQueued = leads.filter(l => l.status === 'queued').length;
-  const leadsWithSite = leads.filter(l => l.siteUrl).length;
+  const totalSent = displayRows.filter(l => l.status === 'sent').length;
+  const totalFailed = displayRows.filter(l => l.status === 'failed').length;
+  const totalQueued = displayRows.filter(l => l.status === 'queued').length;
+  const leadsWithSite = displayRows.filter(l => l.siteUrl).length;
 
   return (
     <div className="px-6 py-5 space-y-5">
@@ -1226,7 +1292,7 @@ const EmailBody: React.FC<{
             {leadsWithSite} Site{leadsWithSite !== 1 ? 's' : ''} Deployed
           </span>
         )}
-        <span className="ml-auto text-[10px] text-ink-tertiary font-medium">{leads.length} total lead{leads.length !== 1 ? 's' : ''}</span>
+        <span className="ml-auto text-[10px] text-ink-tertiary font-medium">{displayRows.length} total lead{displayRows.length !== 1 ? 's' : ''}</span>
       </div>
 
       {/* ── Per-account breakdown ── */}
@@ -1285,16 +1351,19 @@ const EmailBody: React.FC<{
         </div>
       )}
 
+      {/* (Diagnostic card removed per user request — duplicates are now
+         prevented at the source instead of explained post-hoc.) */}
+
       {/* ── Per-prospect log ── */}
       <div className="space-y-2">
         <div className="flex items-center gap-2 px-1">
           <Users className="w-3.5 h-3.5 text-ink-tertiary" />
           <p className="text-[10px] text-ink font-bold uppercase tracking-widest">Prospect Details</p>
-          <span className="ml-auto text-[10px] text-ink-tertiary">{leads.length} lead{leads.length !== 1 ? 's' : ''}</span>
+          <span className="ml-auto text-[10px] text-ink-tertiary">{displayRows.length} lead{displayRows.length !== 1 ? 's' : ''}</span>
         </div>
         <div className="rounded-xl border border-border-light overflow-hidden">
           <div className="divide-y divide-border-light">
-            {leads.map((row, i) => {
+            {displayRows.map((row, i) => {
               const isSent = row.status === 'sent';
               const isQueued = row.status === 'queued';
               const pill = isSent
@@ -1316,9 +1385,12 @@ const EmailBody: React.FC<{
 
                     {/* Main content */}
                     <div className="flex-1 min-w-0 space-y-1.5">
-                      {/* Name + status pill */}
+                      {/* Name + email + status pill */}
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-xs font-bold text-ink leading-tight truncate" title={row.name}>{row.name || 'Prospect'}</p>
+                        {row.email && (
+                          <span className="text-[10px] text-ink-secondary font-mono truncate max-w-[180px]" title={row.email}>{row.email}</span>
+                        )}
                         <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${pill}`}>
                           <span className="w-1 h-1 rounded-full bg-current opacity-70" />
                           {pillLabel}

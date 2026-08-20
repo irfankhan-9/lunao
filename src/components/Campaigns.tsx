@@ -7,6 +7,7 @@ import {
 import { nicheList } from '../data';
 import { getTemplateContent, getNicheBgImage } from './Templates';
 import { playGentleChime, playLaunchSwell, playVictoryCelebration, playSoftTap, playSoftBubble, playElegantBell, playSlideTick, playElegantError, playTiktokLike, playConfirmSuccess } from '../utils/audio';
+import { dedupeLeads } from '../utils/leads';
 import { CelebrationEffect } from './CelebrationEffect';
 import { TemplateSimPreview } from './TemplateSimPreview';
 import { UnifiedRecentCampaigns } from './UnifiedRecentCampaigns';
@@ -725,10 +726,25 @@ The Lunao Team`);
       const campaign = (e as CustomEvent).detail;
       console.log('[Campaigns] Received campaign-complete event:', campaign.id, 'status:', campaign.status, 'sent:', campaign.emailsSent);
       setCampaigns(prev => {
-        // Update existing campaign or add new one. We adopt the wizard's
-        // metadata (name, niche, templateId, etc.) immediately so the row
-        // appears in the UI without waiting for the API fetch.
-        const exists = prev.find(c => c.id === campaign.id);
+        // Find the existing row. We match by FOUR criteria so we never end up
+        // with two rows for the same campaign after completion:
+        //   1. Exact id match (the campaign-complete event uses the real id
+        //      that the SSE `campaign` event replaced temp id with).
+        //   2. The wizard's temp id (emc_run_<ts>) for THIS campaign — we
+        //      match by (niche+city+name) so two concurrent dork campaigns
+        //      can't grab each other's temp-id rows.
+        //   3. Matching (niche + city) for a still-Active campaign with the
+        //      same wizard — covers edge cases where the SSE `campaign` event
+        //      was missed entirely (e.g. HMR reload, page reload).
+        const sameTarget = (c: any) =>
+          c.type === 'email'
+          && c.status === 'Active'
+          && c.niche === campaign.niche
+          && c.city === campaign.city
+          && c.name === campaign.name;
+        const exists = prev.find(c => c.id === campaign.id)
+          || prev.find(c => typeof c.id === 'string' && c.id.startsWith('emc_run_') && sameTarget(c))
+          || prev.find(sameTarget);
         // Adopt wizard payload fields, but KEEP authoritative counts that may
         // have been backfilled from a polling cycle (sitesGenerated,
         // emailsSent, emailsFailed, deployedSites, emailAccountsUsed). For
@@ -742,15 +758,29 @@ The Lunao Team`);
           ? {
               ...exists,
               ...campaign,
+              // CRITICAL: use the real id, not the temp id, so subsequent
+              // polls and detail-modal fetches target the server row.
+              id: campaign.id,
               deployedSites: exists.deployedSites,
               sitesGenerated: exists.sitesGenerated,
               emailsSent: exists.emailsSent,
               emailsFailed: exists.emailsFailed,
               emailAccountsUsed: campaign.emailAccountsUsed || exists.emailAccountsUsed,
+              // Defensively dedupe emailLeads on adoption — the wizard
+              // payload can ship with duplicates when the dork pipeline
+              // emits the same lead under slightly different identifiers.
+              emailLeads: dedupeLeads(campaign.emailLeads || exists.emailLeads || []),
             }
-          : { ...campaign, deployedSites: [], sitesGenerated: 0, emailLeads: campaign.emailLeads || [] };
+          : {
+              ...campaign,
+              deployedSites: [],
+              sitesGenerated: 0,
+              emailLeads: dedupeLeads(campaign.emailLeads || []),
+            };
         const updated = exists
-          ? prev.map(c => c.id === campaign.id ? adopted : c)
+          // Update in place — never prepend, so we don't end up with two
+          // rows for the same campaign (temp id + real id both in state).
+          ? prev.map(c => c.id === exists.id ? adopted : c)
           : [adopted, ...prev];
         try {
           localStorage.setItem('lunao_campaigns', JSON.stringify(updated));
@@ -763,17 +793,24 @@ The Lunao Team`);
       // adopted placeholders with exact DB values. We do this in a separate
       // effect to keep the optimistic UI update snappy.
       const campaignId = campaign.id;
+      // Skip the wizard's temporary id (emc_run_<ts>) — the server uses
+      // bare emc_<ts>_<rand> and only knows the real id once the SSE
+      // `campaign` event has replaced it. Hitting the API with the temp id
+      // just produces 404 noise on every poll.
+      if (typeof campaignId === 'string' && campaignId.startsWith('emc_run_')) return;
       (async () => {
         try {
           const result = await fetchEmailCampaign(campaignId);
           if (!result) return;
           const { campaign: dbCamp, leads } = result;
-          const sentCount = leads.filter((l: any) => l.send_status === 'sent').length;
-          const failedCount = leads.filter((l: any) => l.send_status === 'failed').length;
-          const sitesCount = leads.filter((l: any) => l.generated_site_url).length;
-          // Defensive dedupe by slug — should be one row per lead, but a
-          // stale DB row could theoretically duplicate.
-          const rawSites = leads
+          // CRITICAL: Deduplicate leads BEFORE counting. The API may return
+          // duplicate rows for the same lead (e.g., Phase 1 staging + Phase 2
+          // URL-swap). Use the centralized dedupe utility.
+          const dedupedLeads: any[] = dedupeLeads(leads);
+          const sentCount = dedupedLeads.filter((l: any) => l.send_status === 'sent').length;
+          const failedCount = dedupedLeads.filter((l: any) => l.send_status === 'failed').length;
+          // Build deployedSites from deduped leads so sitesCount is accurate.
+          const rawSites = dedupedLeads
             .filter((l: any) => l.generated_site_url)
             .map((l: any) => ({
               slug: l.slug || (l.email || l.business_name || `lead-${l.id}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
@@ -790,7 +827,8 @@ The Lunao Team`);
             if (k) bySlug.set(k, s);
           }
           const deployedSites = Array.from(bySlug.values());
-          // Build per-account breakdown from server-side data.
+          const sitesCount = deployedSites.length;
+          // Build per-account breakdown from deduped leads.
           let accountsById: Record<string, string> = {};
           try {
             const ownerKey = (typeof localStorage !== 'undefined' && localStorage.getItem('lunao_owner_key')) || 'dash-Free-Plan';
@@ -798,7 +836,7 @@ The Lunao Team`);
             for (const a of accs || []) accountsById[a.id] = a.email;
           } catch { /* ignore */ }
           const perAccount: Record<string, any> = {};
-          for (const l of leads) {
+          for (const l of dedupedLeads) {
             const aid = l.assigned_account_id;
             if (!aid) continue;
             const accEmail = accountsById[aid] || aid;
@@ -806,33 +844,21 @@ The Lunao Team`);
             if (l.send_status === 'sent') perAccount[aid].sent++;
             else if (l.send_status === 'failed') perAccount[aid].failed++;
           }
-          // Build per-prospect list from the same authoritative fetch. This
-          // is what feeds the rich detail modal — prospect business_name,
-          // business email, deployed site URL, sending account, status +
-          // failure reason. Without this the modal would have to re-fetch
-          // on every open AND would previously render with empty rows
-          // because the wizard payload's `emailLeads: []` would win the
-          // Optimistic merge. Deduplicate by slug so wizard payload entries
-          // (string leadId) never stack on top of API entries (numeric id).
-          const emailLeads: any[] = [];
-          const seenSlug = new Set<string>();
-          for (const l of leads) {
-            const slug = l.slug || (l.email || l.business_name || `lead-${l.id}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-            if (seenSlug.has(slug)) continue;
-            seenSlug.add(slug);
-            emailLeads.push({
-              leadId: l.id,
-              name: l.business_name || l.name || '',
-              email: l.email || l.business_email || '',
-              businessName: l.business_name || l.name || '',
-              siteUrl: l.generated_site_url || l.site_url || '',
-              accountEmail: l.account_email || l.from_email || '',
-              status: l.send_status === 'sent' ? 'sent' : l.send_status === 'failed' ? 'failed' : 'queued',
-              reason: l.send_error || l.error || '',
-              city: l.city || '',
-              discoverySource: l.discovery_source || undefined,
-            });
-          }
+          // Build per-prospect list from deduped leads. This feeds the rich
+          // detail modal — prospect business_name, business email, deployed
+          // site URL, sending account, status + failure reason.
+          const emailLeads = dedupedLeads.map((l: any) => ({
+            leadId: l.id,
+            name: l.business_name || l.name || '',
+            email: l.email || l.business_email || '',
+            businessName: l.business_name || l.name || '',
+            siteUrl: l.generated_site_url || l.site_url || '',
+            accountEmail: l.account_email || l.from_email || '',
+            status: l.send_status === 'sent' ? 'sent' : l.send_status === 'failed' ? 'failed' : 'queued',
+            reason: l.send_error || l.error || '',
+            city: l.city || '',
+            discoverySource: l.discovery_source || undefined,
+          }));
           setCampaigns(prev2 => {
             const next = prev2.map(c => c.id === campaignId ? {
               ...c,
@@ -841,6 +867,14 @@ The Lunao Team`);
               emailsSent: sentCount,
               emailsFailed: failedCount,
               emailAccountsUsed: Object.values(perAccount),
+              // Always set leadsFound alongside emailLeads so the two stay in
+              // sync. If only emailLeads is set (without leadsFound), a
+              // subsequent polling tick that hasn't yet fired can briefly show
+              // Math.min(0, emailLeads.length) = 0 on the card row — fix
+              // by always writing both fields atomically here.
+              // CRITICAL: Use emailLeads.length (deduped count) instead of
+              // leads.length (raw API count with potential duplicates).
+              leadsFound: emailLeads.length,
               emailLeads,
               status: dbCamp.status === 'completed' ? 'Completed' : dbCamp.status === 'failed' ? 'Crashed' : dbCamp.status === 'cancelled' ? 'Crashed' : c.status,
             } : c);
@@ -860,7 +894,7 @@ The Lunao Team`);
                 if (k) bySlug.set(k, s);
               }
               const deployedSites = Array.from(bySlug.values());
-              return { ...c, deployedSites, sitesGenerated: deployedSites.length };
+              return { ...c, deployedSites, sitesGenerated: deployedSites.length, leadsFound: deployedSites.length };
             });
             try { localStorage.setItem('lunao_campaigns', JSON.stringify(next)); } catch { /* ignore */ }
             return next;
@@ -934,7 +968,11 @@ The Lunao Team`);
         try {
           // camp.id IS the server's campaign id (the wizard passes the
           // backend's id directly as the local id when adding the row).
+          // Skip the temp id the wizard allocates before the server returns
+          // the real one (emc_run_<ts>) — that id never exists in the DB
+          // and would only generate a 404 console error per poll.
           const id = camp.id;
+          if (typeof id === 'string' && id.startsWith('emc_run_')) continue;
           const result = await fetchEmailCampaign(id);
           if (cancelled || !result) continue;
           const { campaign: dbCamp, leads } = result;
@@ -1007,29 +1045,22 @@ The Lunao Team`);
           // source — it gets persisted to localStorage so the card row's Leads
           // count and the detail modal's per-prospect rows both reflect real
           // data, including for rows created before the emailLeads backfill
-          // existed. Deduplicate by slug so that entries from the wizard payload
-          // (string leadId, added by the 1.5s fallback) never stack on top of
-          // API entries (numeric id, set by the post-complete authoritative fetch).
-          // Keying by slug is safe because slugs are stable across staging → live.
-          const emailLeadsForRow: any[] = [];
-          const seenSlug = new Set<string>();
-          for (const l of leads) {
-            const slug = l.slug || (l.email || l.business_name || `lead-${l.id}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-            if (seenSlug.has(slug)) continue;
-            seenSlug.add(slug);
-            emailLeadsForRow.push({
-              leadId: l.id,
-              name: l.business_name || l.name || '',
-              email: l.email || l.business_email || '',
-              businessName: l.business_name || l.name || '',
-              siteUrl: l.generated_site_url || l.site_url || '',
-              accountEmail: l.account_email || l.from_email || '',
-              status: l.send_status === 'sent' ? 'sent' : l.send_status === 'failed' ? 'failed' : 'queued',
-              reason: l.send_error || l.error || '',
-              city: l.city || '',
-              discoverySource: l.discovery_source || undefined,
-            });
-          }
+          // existed. Uses the centralized dedupe utility which is robust
+          // against both Phase 1 staging + Phase 2 URL-swap duplicates and
+          // wizard-payload (string leadId) + API (numeric id) stack-ups.
+          const dedupedApiLeads = dedupeLeads(leads);
+          const emailLeadsForRow: any[] = dedupedApiLeads.map((l: any) => ({
+            leadId: l.id,
+            name: l.business_name || l.name || '',
+            email: l.email || l.business_email || '',
+            businessName: l.business_name || l.name || '',
+            siteUrl: l.generated_site_url || l.site_url || '',
+            accountEmail: l.account_email || l.from_email || '',
+            status: l.send_status === 'sent' ? 'sent' : l.send_status === 'failed' ? 'failed' : 'queued',
+            reason: l.send_error || l.error || '',
+            city: l.city || '',
+            discoverySource: l.discovery_source || undefined,
+          }));
 
           setCampaigns((prev) =>
             prev.map((c) =>
@@ -2406,6 +2437,7 @@ The Lunao Team`);
         customTemplates={customTemplates}
         initialOpenId={pendingOpenId}
         onConsumedInitialOpen={() => setPendingOpenId(null)}
+        activeCampaignRuns={activeCampaignRuns}
         onViewDetails={(id) => {
           // User clicked "View details" on a row — set the scroll target
           // so the section lands itself at the top, and briefly pulse

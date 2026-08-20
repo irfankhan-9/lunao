@@ -134,10 +134,39 @@ export async function runDorkPipeline({
   // 2) Build a queue of {city, page} entries. Start with the primary city.
   const queue = [{ city: primaryCity, page: 1, nearby: false }];
   const enqueuedKeys = new Set([`${primaryCity.name.toLowerCase()}::1`]);
-  const seenEmails = new Set();
   const leads = [];
   let queryBudget = 0;
   const visitedCities = new Set([primaryCity.name.toLowerCase()]);
+
+  // CRITICAL: Pre-seed dedup state with every email this owner has already
+  // touched in any prior campaign (any status — pending, sent, failed,
+  // queued, suppressed). Without this, the dork pipeline re-discovers the
+  // same Gmail addresses on every run in the same city (e.g. a Denver
+  // barbershop is the only one with a public inbox), causing repeated
+  // campaigns to mail the same business over and over. We also dedupe by
+  // composite (email|business|city) so two different addresses that lead
+  // to the same business_name are treated as the same lead.
+  const seenLeadKey = new Set();
+  try {
+    const userIdForLookup = userId || ownerKey;
+    const rows = db.prepare(`
+      SELECT lower(el.email) AS e, lower(el.business_name) AS b, lower(el.city) AS c
+      FROM email_leads el
+      JOIN email_campaigns ec ON ec.id = el.campaign_id
+      WHERE ec.user_id = ?
+        AND (el.email != '' OR el.business_name != '')
+    `).all(userIdForLookup);
+    for (const r of rows) {
+      const key = `${r.e || ''}|${r.b || ''}|${r.c || ''}`;
+      if (key === '||') continue;
+      seenLeadKey.add(key);
+    }
+    if (rows.length > 0) {
+      console.log(`[dork-pipeline] Pre-loaded ${seenLeadKey.size} unique (email|business|city) keys from prior campaigns for user=${userIdForLookup}`);
+    }
+  } catch (err) {
+    console.warn(`[dork-pipeline] cross-campaign dedup preload failed: ${err.message}`);
+  }
 
   const expandNearest = () => {
     const neighbors = findNearestCities({
@@ -209,10 +238,21 @@ export async function runDorkPipeline({
       discoverySource,
     });
     const before = leads.length;
+    // CRITICAL: Dedupe by composite key (email + business_name + city). The
+    // outer `seenLeadKey` is pre-seeded at function entry with every
+    // (email|business|city) this user has already mailed in any prior
+    // campaign, so the dork loop won't re-discover and re-mail the same
+    // businesses across runs.
     for (const l of extracted) {
       const e = (l.email || '').toLowerCase();
-      if (!e || seenEmails.has(e)) continue;
-      seenEmails.add(e);
+      const biz = (l.business_name || '').toLowerCase().trim();
+      const city = (l.city || '').toLowerCase().trim();
+      // Skip leads with no usable identity — they would just become
+      // untraceable duplicates downstream.
+      if (!e && !biz) continue;
+      const key = `${e}|${biz}|${city}`;
+      if (seenLeadKey.has(key)) continue;
+      seenLeadKey.add(key);
       leads.push(l);
     }
     emit('dork:found', {

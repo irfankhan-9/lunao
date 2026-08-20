@@ -245,7 +245,36 @@ function DashboardApp() {
     } catch {
       sdResults = {};
     }
-    return (persisted || []).map((c) => {
+    // One-time localStorage migration: dedupe stale emailLeads persisted from
+    // before the leadIdentityKey fix (which previously keyed by email so a
+    // site:staged entry with no email and a send:sent entry with email were
+    // treated as different leads, doubling the count in the modal). Now we
+    // collapse by (businessName + city) regardless of email presence.
+    const byBizCityKey = (l: any) => {
+      const biz = (l.businessName || l.name || l.business_name || '').toLowerCase().trim();
+      const city = (l.city || '').toLowerCase().trim();
+      const slug = (l.leadId ? String(l.leadId) : '') || (l.siteUrl ? l.siteUrl.split('/').filter(Boolean).pop() || '' : '');
+      if (biz && city) return `${biz}|${city}|${slug}`;
+      if (biz) return `biz:${biz}`;
+      return '';
+    };
+    const dedupedPersisted = (persisted || []).map((c: any) => {
+      if (c.type !== 'email' || !Array.isArray(c.emailLeads)) return c;
+      const seen = new Set<string>();
+      const out: any[] = [];
+      for (const l of c.emailLeads) {
+        const k = byBizCityKey(l);
+        if (!k || !seen.has(k)) {
+          seen.add(k);
+          out.push(l);
+        }
+      }
+      if (out.length !== c.emailLeads.length) {
+        return { ...c, emailLeads: out, leadsFound: out.length };
+      }
+      return c;
+    });
+    return dedupedPersisted.map((c) => {
       if (c.type === 'site-deploy' && c.status === 'Active') {
         // Has persisted results → Cloudflare definitely finished it.
         if (sdResults[c.id]) return { ...c, status: 'Completed' as const };

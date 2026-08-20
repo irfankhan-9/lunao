@@ -65,6 +65,10 @@ function useCampaignPolling(
     let cancelled = false;
     const poll = async () => {
       try {
+        // Skip the wizard's temporary id (emc_run_<ts>) — the server only
+        // knows the real id once the SSE `campaign` event has replaced it,
+        // so polling with the temp id is pure 404 noise.
+        if (typeof campaignId === 'string' && campaignId.startsWith('emc_run_')) return;
         const result = await getEmailCampaign(campaignId);
         if (cancelled) return;
         if (result && result.campaign) {
