@@ -1384,23 +1384,45 @@ const EmailBody: React.FC<{
                     </div>
 
                     {/* Main content */}
-                    <div className="flex-1 min-w-0 space-y-1.5">
-                      {/* Name + email + status pill */}
+                    <div className="flex-1 min-w-0 space-y-2">
+                      {/* Row 1: Name + status pill */}
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-xs font-bold text-ink leading-tight truncate" title={row.name}>{row.name || 'Prospect'}</p>
-                        {row.email && (
-                          <span className="text-[10px] text-ink-secondary font-mono truncate max-w-[180px]" title={row.email}>{row.email}</span>
-                        )}
                         <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${pill}`}>
                           <span className="w-1 h-1 rounded-full bg-current opacity-70" />
                           {pillLabel}
                         </span>
                       </div>
 
-                      {/* Two-column info grid */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      {/* Row 2: Email (always prominent) */}
+                      {row.email ? (
+                        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-purple-50 border border-purple-100 min-w-0">
+                          <Mail className="w-3 h-3 text-purple-500 shrink-0" />
+                          <span className="flex-1 min-w-0 text-[11px] text-purple-700 font-mono truncate" title={row.email}>{row.email}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(row.email!, i, 'email')}
+                            aria-label="Copy email"
+                            className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-purple-400 hover:text-purple-600 hover:bg-purple-100 transition-colors"
+                          >
+                            {copied?.row === i && copied.which === 'email' ? (
+                              <Check className="w-3 h-3 text-purple-600" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface border border-border-light">
+                          <Mail className="w-3 h-3 text-ink-tertiary shrink-0" />
+                          <span className="text-[10px] text-ink-tertiary italic">No email found</span>
+                        </div>
+                      )}
+
+                      {/* Row 3: Site URL + sent-from info */}
+                      <div className="flex flex-col gap-1.5">
                         {/* Deployed site */}
-                        {row.siteUrl && (
+                        {row.siteUrl ? (
                           <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-accent-soft/40 border border-accent/15 min-w-0">
                             <Globe className="w-3 h-3 text-accent shrink-0" />
                             <a
@@ -1434,44 +1456,24 @@ const EmailBody: React.FC<{
                               <ExternalLink className="w-3 h-3" />
                             </a>
                           </div>
-                        )}
+                        ) : null}
 
-                        {/* Business email */}
-                        {row.email && (
-                          <div className="flex items-center gap-1.5 p-1.5 rounded-lg bg-surface border border-border-light min-w-0">
-                            <Mail className="w-3 h-3 text-ink-tertiary shrink-0" />
-                            <span className="flex-1 min-w-0 text-[10px] text-ink-secondary font-mono truncate" title={row.email}>{row.email}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleCopy(row.email!, i, 'email')}
-                              aria-label="Copy email"
-                              className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded text-ink-tertiary hover:text-accent hover:bg-accent/10 transition-colors"
-                            >
-                              {copied?.row === i && copied.which === 'email' ? (
-                                <Check className="w-3 h-3 text-success" />
-                              ) : (
-                                <Copy className="w-3 h-3" />
-                              )}
-                            </button>
+                        {/* Sent from account */}
+                        {row.accountEmail && (
+                          <div className="flex items-center gap-1.5">
+                            <Send className="w-3 h-3 text-ink-tertiary shrink-0" />
+                            <span className="text-[10px] text-ink-tertiary font-mono truncate">{row.accountEmail}</span>
                           </div>
                         )}
+
+                        {/* Failure reason */}
+                        {row.reason && (
+                          <p className="flex items-center gap-1.5 text-[10px] text-danger font-medium">
+                            <AlertTriangle className="w-3 h-3 shrink-0" />
+                            {row.reason}
+                          </p>
+                        )}
                       </div>
-
-                      {/* Sent from account */}
-                      {row.accountEmail && (
-                        <div className="flex items-center gap-1.5">
-                          <Send className="w-3 h-3 text-ink-tertiary shrink-0" />
-                          <span className="text-[10px] text-ink-tertiary font-mono truncate">{row.accountEmail}</span>
-                        </div>
-                      )}
-
-                      {/* Failure reason */}
-                      {row.reason && (
-                        <p className="flex items-center gap-1.5 text-[10px] text-danger font-medium">
-                          <AlertTriangle className="w-3 h-3 shrink-0" />
-                          {row.reason}
-                        </p>
-                      )}
                     </div>
                   </div>
                 </div>
