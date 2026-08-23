@@ -1690,3 +1690,191 @@ export async function fetchAllSites(
     return { sites: [], counts: { total: 0, siteDeploy: 0, email: 0 } };
   }
 }
+
+// =============================================================================
+// Google Dork / City Lookup — client stubs
+// (Backend implementation pending; these keep the wizard importable without crashing)
+// =============================================================================
+
+export interface CitySuggestion {
+  name: string;
+  country: string;
+  admin?: string;
+  lat?: number;
+  lon?: number;
+  population?: number;
+}
+
+export interface CityLookupResponse {
+  exact: boolean;
+  city: string;
+  country: string;
+  state?: string;
+  population?: number;
+  lat?: number;
+  lon?: number;
+  suggestions: CitySuggestion[];
+}
+
+export interface DorkStatus {
+  apiKeyConfigured: boolean;
+  lastError?: string;
+}
+
+export async function getDorkStatus(): Promise<DorkStatus> {
+  try {
+    const res = await fetch(`${API_BASE}/api/dork/status`);
+    if (!res.ok) return { apiKeyConfigured: false };
+    const data = await res.json();
+    return data as DorkStatus;
+  } catch {
+    return { apiKeyConfigured: false };
+  }
+}
+
+export async function lookupCity(query: string): Promise<CityLookupResponse | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/dork/lookup-city?q=${encodeURIComponent(query)}`);
+    if (!res.ok) return null;
+    return await res.json() as CityLookupResponse;
+  } catch {
+    return null;
+  }
+}
+
+export interface DorkEmailResult {
+  campaignId: string;
+  sent: number;
+  failed: number;
+}
+
+export async function runDorkEmailCampaign(
+  campaignId: string,
+  accountIds: string[],
+  onEvent: (e: EmailCampaignEvent) => void,
+): Promise<DorkEmailResult> {
+  const res = await fetch(`${API_BASE}/api/email-campaigns/${encodeURIComponent(campaignId)}/run-dork`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accountIds }),
+  });
+  if (!res.ok || !res.body) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Dork email campaign failed (${res.status})`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: DorkEmailResult = { campaignId: '', sent: 0, failed: 0 };
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const chunks = buffer.split('\n\n');
+    buffer = chunks.pop() || '';
+    for (const chunk of chunks) {
+      const line = chunk.trim();
+      if (!line.startsWith('data:')) continue;
+      const json = line.slice(5).trim();
+      if (!json) continue;
+      try {
+        const event: EmailCampaignEvent = JSON.parse(json);
+        onEvent(event);
+        if (event.type === 'campaign') result.campaignId = event.campaignId || '';
+        if (event.type === 'complete') {
+          result.sent = event.sent || 0;
+          result.failed = event.failed || 0;
+        }
+      } catch { /* ignore malformed */ }
+    }
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Manual tick-to-pick dork discovery
+// ---------------------------------------------------------------------------
+
+export interface DiscoveredLead {
+  business_name: string;
+  email: string;
+  email_host: string;
+  city: string;
+  state?: string;
+  source_query: string;
+  source_page: number;
+  source_rank: number;
+  slug: string;
+}
+
+export interface DorkNextCity {
+  name: string;
+  country: string;
+  state?: string;
+  page: number;
+  budget: number;
+  isNearby: boolean;
+}
+
+export interface DorkNextRequest {
+  lockedCity: {
+    name: string;
+    country: string;
+    admin?: string;
+    lat?: number;
+    lon?: number;
+    population?: number;
+  };
+  // Each entry is either a city name (string) or { name, page } when the
+  // server has already walked multiple pages of the same city.
+  visited: Array<string | { name: string; page: number }>;
+  seenEmails: string[];
+  niche: string;
+}
+
+export interface DorkNextResponse {
+  ok: true;
+  done: boolean;
+  nextCity: DorkNextCity | null;
+  leads: DiscoveredLead[];
+}
+
+export async function dorkNext(
+  campaignId: string,
+  payload: DorkNextRequest,
+  signal?: AbortSignal,
+): Promise<DorkNextResponse> {
+  const res = await fetch(
+    `${API_BASE}/api/email-campaigns/${encodeURIComponent(campaignId)}/dork-next`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal,
+    },
+  );
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Dork discover failed (${res.status})`);
+  }
+  return await res.json() as DorkNextResponse;
+}
+
+export async function saveDorkLeads(
+  campaignId: string,
+  leads: DiscoveredLead[],
+): Promise<{ ok: true; inserted: number }> {
+  const res = await fetch(
+    `${API_BASE}/api/email-campaigns/${encodeURIComponent(campaignId)}/save-leads`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leads }),
+    },
+  );
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Save leads failed (${res.status})`);
+  }
+  return await res.json() as { ok: true; inserted: number };
+}

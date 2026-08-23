@@ -34,6 +34,7 @@ import { createBooking, listBookings, updateBookingStatus } from './lib/bookings
 import { chatTurn } from './lib/chatbot.js';
 import { getAddons, setAddons } from './lib/widget.js';
 import { db } from './lib/db.js';
+import { lookup as lookupCity, getStatus as getCitiesStatus, loadPromise as citiesLoadPromise, pickNextCity } from './lib/cities.js';
 import {
   listCodes,
   createCode,
@@ -1607,6 +1608,33 @@ app.delete('/api/email-accounts/:id', authenticate, (req, res) => {
   }
 });
 
+// =============================================================================
+// DORK / CITY LOOKUP API ENDPOINTS
+// =============================================================================
+
+// City resolution lives in ./lib/cities.js. That module loads a small
+// seed list synchronously at import time, then streams the full GeoNames
+// cities500.txt dump (~200k world cities, ~40 MB on disk) into an
+// in-memory index in the background. The lookup endpoint below is the
+// thin Express wrapper around it.
+
+app.get('/api/dork/lookup-city', (req, res) => {
+  const q = String(req.query.q || '').trim();
+  res.json(lookupCity(q));
+});
+
+app.get('/api/dork/status', (_req, res) => {
+  const s = getCitiesStatus();
+  res.json({
+    apiKeyConfigured: false,
+    lastError: s.fileLoaded
+      ? undefined
+      : `Dork API is using built-in city database (${s.records.toLocaleString()} cities; ${s.error || 'GeoNames file still loading'})`,
+    cityCount: s.records,
+    citiesLoaded: s.fileLoaded,
+  });
+});
+
 // ---- Gmail OAuth flow (Connect Gmail button) ----
 
 // Build the provider's authorization URL. The frontend opens this URL, the
@@ -1818,6 +1846,207 @@ app.get('/api/email-campaigns/:id/pending-discovery', authenticate, (req, res) =
     res.json({ ok: true, leads });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ---- Manual Tick-to-Pick Dork Discovery ----
+
+// Deterministic mock dork provider. The real provider integration (SerpAPI
+// or Google CSE) is wired in via the same `fetchDorkPage()` seam below.
+// Until a key is configured we serve 6–10 realistic mock leads per page,
+// derived from city name + niche + page so the wizard renders the same
+// rows on re-fetch (avoids visual flicker on rerenders).
+function makeMockLeads({ city, niche, page }) {
+  const seed = `${(city || '').toLowerCase()}|${(niche || '').toLowerCase()}|${page}`;
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  const rand = () => {
+    h = (h * 1664525 + 1013904223) | 0;
+    return ((h >>> 0) % 10_000) / 10_000;
+  };
+  const suffixes = ['Studio', 'Co.', 'Lounge', 'Barbers', 'Salon', 'Shop', 'Atelier', 'Clinic', 'Works', 'House'];
+  const firstNames = ['Alex', 'Jordan', 'Sam', 'Taylor', 'Casey', 'Morgan', 'Riley', 'Cameron', 'Quinn', 'Avery', 'Drew', 'Reese'];
+  const lastNames  = ['Smith', 'Patel', 'Garcia', 'Brown', 'Khan', 'Singh', 'Lopez', 'Martin', 'Clark', 'Nguyen', 'Wong', 'Carter'];
+  const hosts = ['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'icloud.com'];
+  const n = 6 + Math.floor(rand() * 5); // 6..10
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const fn = firstNames[Math.floor(rand() * firstNames.length)];
+    const ln = lastNames[Math.floor(rand() * lastNames.length)];
+    const suffix = suffixes[Math.floor(rand() * suffixes.length)];
+    const host = hosts[Math.floor(rand() * hosts.length)];
+    const biz = `${city} ${niche} ${suffix} ${i + 1}`;
+    const slug = `${niche}-${city}-${page}-${i + 1}`.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const email = `${fn.toLowerCase()}.${ln.toLowerCase()}${page}${i + 1}@${host}`;
+    out.push({
+      business_name: biz,
+      email,
+      email_host: host,
+      city,
+      state: undefined,
+      source_query: `"${niche}" "${city}" email`,
+      source_page: page,
+      source_rank: (page - 1) * 10 + i + 1,
+      slug,
+    });
+  }
+  return out;
+}
+
+// Real provider seam. Right now always returns null so we fall through to
+// the mock above. Future: when SERPAPI_KEY / GOOGLE_CSE_KEY env vars are
+// set, call the real API here and translate its results into the same
+// shape returned by makeMockLeads().
+async function fetchDorkPage({ city, niche, page }) {
+  return null; // hand off to mock for now
+}
+
+// Single-page dork walk. The wizard calls this on every "Find More" click.
+// Server is stateless — the client passes the locked city, the list of
+// already-visited cities, and the list of already-seen emails so we never
+// emit duplicates and never re-walk the same page.
+app.post('/api/email-campaigns/:id/dork-next', authenticate, async (req, res) => {
+  try {
+    const { lockedCity, visited = [], seenEmails = [], niche = '' } = req.body || {};
+    if (!lockedCity || !lockedCity.name || !lockedCity.country) {
+      return res.status(400).json({ ok: false, error: 'lockedCity (name, country) is required' });
+    }
+    // Reconstruct the per-city page count from the visited map.
+    const pageInCity = {};
+    for (const v of visited) {
+      if (typeof v === 'string') {
+        pageInCity[v] = Math.max(pageInCity[v] || 0, 1);
+      } else if (v && v.name) {
+        pageInCity[v.name] = Math.max(pageInCity[v.name] || 0, v.page || 1);
+      }
+    }
+    const next = pickNextCity({ lockedCity, visited, pageInCity });
+    if (next.kind === 'done') {
+      return res.json({ ok: true, done: true, nextCity: null, leads: [] });
+    }
+
+    // Real provider first, mock as a fallback. The mock is deterministic
+    // by (city, niche, page) so re-running the same query is idempotent.
+    const realLeads = await fetchDorkPage({ city: next.name, niche, page: next.page });
+    const raw = realLeads || makeMockLeads({ city: next.name, niche, page: next.page });
+
+    // Filter out anything the client has already seen, drop empty rows,
+    // and key-dedupe by (business_name | city).
+    const seen = new Set((seenEmails || []).map((e) => String(e || '').toLowerCase().trim()));
+    const keyedSeen = new Set();
+    const leads = [];
+    for (const r of raw) {
+      const email = String(r.email || '').toLowerCase().trim();
+      const biz = String(r.business_name || '').trim();
+      const cityName = r.city || next.name;
+      if (!email || !biz) continue;
+      if (seen.has(email)) continue;
+      const key = `${biz.toLowerCase()}|${cityName.toLowerCase()}`;
+      if (keyedSeen.has(key)) continue;
+      keyedSeen.add(key);
+      seen.add(email);
+      leads.push({
+        business_name: biz,
+        email,
+        email_host: r.email_host || email.split('@')[1] || '',
+        city: cityName,
+        state: r.state || next.admin || undefined,
+        source_query: r.source_query || `"${niche}" "${cityName}" email`,
+        source_page: r.source_page || next.page,
+        source_rank: r.source_rank || ((next.page - 1) * 10) + leads.length + 1,
+        slug: r.slug || `${biz}-${cityName}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 80),
+      });
+    }
+
+    return res.json({
+      ok: true,
+      done: false,
+      nextCity: {
+        name: next.name,
+        country: next.country,
+        state: next.admin,
+        page: next.page,
+        budget: next.budget,
+        isNearby: !!next.isNearby,
+      },
+      leads,
+    });
+  } catch (err) {
+    console.error('[dork-next] error:', err);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Persist the user's manually-ticked lead set into `email_leads`. Wipes
+// any prior picks for the campaign so re-edits start clean, then bulk
+// inserts with `email_source = 'dork_manual'` so the existing `/run`
+// pipeline picks them up unchanged.
+app.post('/api/email-campaigns/:id/save-leads', authenticate, (req, res) => {
+  try {
+    const { leads = [] } = req.body || {};
+    if (!Array.isArray(leads)) {
+      return res.status(400).json({ ok: false, error: 'leads must be an array' });
+    }
+    const campaign = getEmailCampaign(req.params.id);
+    if (!campaign) return res.status(404).json({ ok: false, error: 'Campaign not found' });
+
+    // Normalize + drop rows that would violate the email_leads schema
+    // (business_name NOT NULL DEFAULT '' but we still want a real value).
+    const clean = [];
+    for (const l of leads) {
+      const email = String(l.email || '').trim();
+      const biz = String(l.business_name || '').trim();
+      if (!email || !biz) continue;
+      clean.push({
+        business_name: biz,
+        email,
+        city: String(l.city || '').trim(),
+        state: l.state ? String(l.state).trim() : '',
+        website: '',
+        email_source: 'dork_manual',
+        verification_status: 'unverified',
+        source_query: l.source_query || '',
+        source_page: Number(l.source_page) || 0,
+        source_rank: Number(l.source_rank) || 0,
+        slug: l.slug || `${biz}-${l.city || ''}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 80),
+      });
+    }
+
+    const tx = db.transaction(() => {
+      db.prepare('DELETE FROM email_leads WHERE campaign_id = ?').run(req.params.id);
+      const stmt = db.prepare(`
+        INSERT INTO email_leads
+          (campaign_id, business_name, phone, city, website, email,
+           email_source, verification_status, slug, assigned_account_id,
+           send_status, send_error, sent_at, index_in_campaign, created_at)
+        VALUES
+          (?, ?, '', ?, ?, ?, ?, ?, ?, NULL, 'pending', NULL, NULL, ?, ?)
+      `);
+      const now = Date.now();
+      clean.forEach((l, i) => {
+        stmt.run(
+          req.params.id,
+          l.business_name,
+          l.city,
+          l.website,
+          l.email,
+          l.email_source,
+          l.verification_status,
+          l.slug,
+          i,
+          now,
+        );
+      });
+      db.prepare(
+        'UPDATE email_campaigns SET target_volume = ? WHERE id = ?'
+      ).run(clean.length, req.params.id);
+    });
+    tx();
+
+    return res.json({ ok: true, inserted: clean.length });
+  } catch (err) {
+    console.error('[save-leads] error:', err);
+    return res.status(500).json({ ok: false, error: err.message });
   }
 });
 
@@ -2706,5 +2935,11 @@ app.listen(PORT, () => {
     console.log(`                     Campaigns will fail with "0 sites generated".`);
     console.log(`                     Fix: git add public/templates-raw/*.html && git commit && git push.`);
   }
+  // City DB status — block (don't log until resolved) so the operator sees
+  // whether the 200k GeoNames file finished loading or only the seed list
+  // is available yet.
+  citiesLoadPromise.then((s) => {
+    console.log(`  Cities             : ${s.records.toLocaleString()} in-memory (${s.fileLoaded ? 'GeoNames cities500 loaded' : 'seed list only'})`);
+  });
   console.log('');
 });

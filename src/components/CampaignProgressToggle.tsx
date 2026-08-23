@@ -369,6 +369,11 @@ const isDorkRun = (campaign.leadsTarget !== undefined && campaign.leadsTarget !=
             <div className="flex items-center gap-2">
               {/* Quick emoji stats */}
               <div className="hidden sm:flex items-center gap-1.5 text-xs">
+                {isDorkRun && (displayData.leadsFound !== undefined && displayData.leadsFound > 0) && (
+                  <span className="bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full flex items-center gap-1 font-semibold">
+                    👤 {displayData.leadsFound}
+                  </span>
+                )}
                 {(displayData.sitesGenerated !== undefined && displayData.sitesGenerated > 0) && (
                   <span className="bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full flex items-center gap-1 font-semibold">
                     🌐 {displayData.sitesGenerated}
@@ -430,7 +435,7 @@ const isDorkRun = (campaign.leadsTarget !== undefined && campaign.leadsTarget !=
                     <span className="text-xl">👤</span>
                     <span className="text-xs font-bold text-blue-700 uppercase tracking-wide">Leads</span>
                   </div>
-                  <span className="text-[10px] font-bold text-blue-600/70 uppercase tracking-widest">discovered</span>
+                  <span className="text-[10px] font-bold text-blue-600/70 uppercase tracking-widest">selected</span>
                 </div>
                 <p className="text-2xl font-black text-blue-800">
                   <span className="tabular-nums">{displayData.leadsFound ?? 0}</span>
