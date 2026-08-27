@@ -377,6 +377,29 @@ const SCHEMA_SQL = `
     campaign_id TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_email_send_history_account ON email_send_history(account_id, sent_at DESC);
+
+  -- Telnyx OAuth connections — one row per (user, account) the user has
+  -- connected via the "Connect with Telnyx" button. Stores encrypted
+  -- access + refresh tokens (AES-256-GCM), the email that identifies the
+  -- Telnyx account, and a derived total_numbers count so the UI can show
+  -- "3 numbers connected" without round-tripping to Telnyx every render.
+  CREATE TABLE IF NOT EXISTS telnyx_connections (
+    id                      TEXT    PRIMARY KEY,
+    user_id                 TEXT    NOT NULL,
+    account_email           TEXT    NOT NULL DEFAULT '',
+    account_label           TEXT    NOT NULL DEFAULT '',
+    encrypted_access_token  TEXT    NOT NULL,
+    encrypted_refresh_token TEXT,
+    expires_at              INTEGER,
+    total_numbers           INTEGER NOT NULL DEFAULT 0,
+    status                  TEXT    NOT NULL DEFAULT 'active',
+    connected_at            INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_telnyx_connections_user ON telnyx_connections(user_id);
+  -- One row per (user, account_email). Re-connecting the same Telnyx
+  -- account upserts the tokens in place rather than creating duplicates.
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_telnyx_user_email
+    ON telnyx_connections(user_id, account_email);
 `;
 
 // ---------------------------------------------------------------------------
@@ -468,6 +491,11 @@ function migrateSqlite() {
     // Existing rows pick up the defaults (unpaused, battery = 300).
     { table: 'email_accounts', col: 'paused',           ddl: `ALTER TABLE email_accounts ADD COLUMN paused INTEGER NOT NULL DEFAULT 0` },
     { table: 'email_accounts', col: 'battery_capacity', ddl: `ALTER TABLE email_accounts ADD COLUMN battery_capacity INTEGER NOT NULL DEFAULT 300` },
+    // v4: telnyx_connections is created by the main SCHEMA_SQL block; these
+    // ALTERs handle legacy databases that pre-date the Telnyx OAuth feature.
+    { table: 'telnyx_connections', col: 'account_email', ddl: `ALTER TABLE telnyx_connections ADD COLUMN account_email TEXT NOT NULL DEFAULT ''` },
+    { table: 'telnyx_connections', col: 'account_label', ddl: `ALTER TABLE telnyx_connections ADD COLUMN account_label TEXT NOT NULL DEFAULT ''` },
+    { table: 'telnyx_connections', col: 'total_numbers', ddl: `ALTER TABLE telnyx_connections ADD COLUMN total_numbers INTEGER NOT NULL DEFAULT 0` },
   ];
   for (const m of migrations) {
     if (!columnExists(m.table, m.col)) {

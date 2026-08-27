@@ -60,6 +60,10 @@ export async function runPipeline({
   ownerKey = null,
   campaignId = null, // maps businesses[i] to leads[campaignId][i]
   leadIds = [],      // parallel array of DB lead ids; indexed by businesses[i]
+  // SMS auth overrides — when provided, sendSms uses the OAuth access token
+  // stored in telnyx_connections instead of the server-level TELNYX_API_KEY.
+  smsAccountId = null,
+  smsFrom = null,
 } = {}) {
   // Resolve the user-supplied template selection into the unified key.
   // Priority: explicit templateKey > templateFile > templateId > per-row
@@ -298,7 +302,7 @@ export async function runPipeline({
         leadId: result.leadId,
         ownerKey,
         to: dest,
-        from: telnyx.from,
+        from: smsFrom || telnyx.from,
         body: text,
         status: 'queued',
         segmentCount: countSegments(text),
@@ -308,9 +312,9 @@ export async function runPipeline({
     }
 
     emit('sms:sending', { index: result.index, name: result.name, to: dest });
-    console.log(`[pipeline] sms:sending #${result.index} "${result.name}" to=${dest} from=${telnyx.from} telnyx.live=${telnyx.live}`);
+    console.log(`[pipeline] sms:sending #${result.index} "${result.name}" to=${dest} from=${smsFrom || telnyx.from} account=${smsAccountId || 'server'} telnyx.live=${telnyx.live}`);
     try {
-      const sms = await sendSms({ to: result.phone, text });
+      const sms = await sendSms({ to: result.phone, text, accountId: smsAccountId, from: smsFrom });
       console.log(`[pipeline] sms:result #${result.index} status=${sms.status} simulated=${sms.simulated} telnyxId=${sms.id || 'null'}${sms.error ? ' error=' + sms.error : ''}${sms.errorCode ? ' code=' + sms.errorCode : ''}`);
       result.smsStatus = sms.status;
       result.smsSimulated = sms.simulated;
@@ -357,7 +361,7 @@ export async function runPipeline({
         // Best-effort: if Telnyx already reports delivered, upgrade the lead
         // and sms_log status so the dashboard shows the real outcome.
         if (!sms.simulated && sms.id) {
-          const status = await fetchMessageStatus(sms.id);
+          const status = await fetchMessageStatus(sms.id, { accountId: smsAccountId });
           if (status && status.status === 'delivered') {
             if (useDb) {
               recordLeadResult(result.leadId, { smsStatus: 'delivered' });

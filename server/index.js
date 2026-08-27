@@ -113,7 +113,26 @@ import {
   encryptRefreshTokenForStorage,
   decryptRefreshTokenForUse,
 } from './lib/gmail.js';
-import { googleOAuth } from './lib/config.js';
+import { googleOAuth, telnyxOAuth } from './lib/config.js';
+import {
+  // Telnyx OAuth (Connect with Telnyx button)
+  buildTelnyxAuthUrl,
+  exchangeTelnyxCode,
+  refreshTelnyxAccessToken,
+  getTelnyxProfile,
+  encryptTelnyxTokenForStorage,
+  decryptTelnyxTokenForUse,
+  generatePkcePair,
+} from './lib/telnyxOAuth.js';
+import {
+  createTelnyxConnection,
+  getTelnyxConnection,
+  listTelnyxConnections,
+  updateTelnyxConnectionTokens,
+  updateTelnyxConnectionStatus,
+  updateTelnyxConnectionNumbers,
+  deleteTelnyxConnection,
+} from './lib/telnyxConnections.js';
 import {
   gateProtected,
   handleSiteGateLogin,
@@ -335,6 +354,11 @@ app.post('/api/campaign/run', async (req, res) => {
       ownerKey,
       campaignId,
       leadIds,
+      // OAuth-aware SMS: when the request carries { sms: { accountId, from } },
+      // forward them to the pipeline so sendSms uses the per-owner OAuth token
+      // instead of the server-level TELNYX_API_KEY.
+      smsAccountId: req.body?.sms?.accountId || null,
+      smsFrom: req.body?.sms?.from || null,
     });
   } catch (err) {
     send({ type: 'error', error: err.message });
@@ -1773,6 +1797,336 @@ function escapeHtml(s) {
   }[c]));
 }
 
+// ---- Telnyx OAuth flow (Connect Telnyx button) ----
+//
+// Mirrors the Gmail OAuth pattern but lives in its own /api/telnyx/* namespace
+// so the two providers can evolve independently. State tokens live in the same
+// `oauthStateStore` Map() used by Gmail — they're namespaced via prefix so
+// the two flows cannot collide.
+
+// 1. Generate the authorization URL. The frontend opens this URL, the user
+//    approves on Telnyx's hosted consent page, and Telnyx redirects to
+//    /api/telnyx/callback with a one-time `code`.
+//
+//    PKCE: every registered Telnyx client has require_pkce=true, so we MUST
+//    generate a fresh verifier + S256 challenge per request. The verifier is
+//    stashed against the CSRF `state` token in `oauthStateStore` so the
+//    callback can read it back to complete the token exchange.
+function telnyxConnectHandler(req, res) {
+  try {
+    if (!telnyxOAuth.enabled) {
+      return res.status(503).json({
+        ok: false,
+        error: 'Telnyx OAuth not configured. Set TELNYX_CLIENT_ID and TELNYX_CLIENT_SECRET in .env.local.',
+      });
+    }
+    const ownerKey = ownerKeyForCallback(req);
+    const state = `tn_${Date.now()}_${Math.random().toString(36).slice(2, 14)}`;
+    const { codeVerifier, codeChallenge, codeChallengeMethod } = generatePkcePair();
+    oauthStateStore.set(state, {
+      ownerKey,
+      createdAt: Date.now(),
+      codeVerifier,
+      codeVerifierCreatedAt: Date.now(),
+    });
+
+    const redirectUri = `${redirectBase()}/api/telnyx/callback`;
+    const url = buildTelnyxAuthUrl({
+      redirectUri,
+      state,
+      codeChallenge,
+      codeChallengeMethod,
+    });
+    res.json({ ok: true, url, redirectUri });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+}
+app.get('/api/telnyx/oauth/url', authenticate, telnyxConnectHandler);
+app.get('/api/telnyx/connect', authenticate, telnyxConnectHandler);
+
+// 2. Provider redirect target. Exchanges the code for tokens, validates the
+//    access token by listing phone numbers, encrypts both tokens with
+//    AES-256-GCM, and stores them in telnyx_connections. Then shows a
+//    friendly HTML page that closes the popup and tells the user it worked.
+app.get('/api/telnyx/callback', async (req, res) => {
+  const { code, state, error } = req.query;
+
+  // Reuse Gmail's friendly HTML shell — same visual, but smarter close behaviour:
+// if this page was opened by the dashboard (window.opener is set) we postMessage
+// back to the opener and then close the popup. If the user navigated here
+// directly (no opener) we leave it open so they can read the message.
+const sendHtml = (title, body, status = 'ok') => {
+    const safeTitle = escapeHtml(title);
+    const statusJson = JSON.stringify({
+      type: 'lunao:telnyx-oauth-result',
+      status,
+      title,
+    });
+    // The opener targetOrigin should match the dashboard's origin. We can't
+    // know it server-side, so '*' is intentional — but we only ever send
+    // status info (no secrets). Same-window navigations fall back to the
+    // visible "click here" button if window.close() is blocked.
+    const openerScript = `
+      (function () {
+        try {
+          if (window.opener && !window.opener.closed) {
+            window.opener.postMessage(${statusJson}, '*');
+            // Give the message a moment to flush before closing. window.close()
+            // immediately after postMessage can race in some browsers.
+            setTimeout(function () {
+              try { window.close(); } catch (e) {}
+              // Some browsers refuse to close a tab they didn't open. Show
+              // a fallback link so the user can return manually.
+              setTimeout(function () {
+                if (!window.closed) {
+                  var btn = document.getElementById('lunao-close-fallback');
+                  if (btn) btn.style.display = 'block';
+                }
+              }, 300);
+            }, 400);
+          } else {
+            var btn = document.getElementById('lunao-close-fallback');
+            if (btn) btn.style.display = 'block';
+          }
+        } catch (e) { /* ignore */ }
+      })();
+    `;
+    const fallbackLink = status === 'ok'
+      ? '<a id="lunao-close-fallback" href="javascript:window.close()" style="display:none; margin-top: 16px; display: inline-block; padding: 8px 18px; border-radius: 8px; background: #047857; color: white; text-decoration: none; font-size: 13px; font-weight: 600;">Return to dashboard</a>'
+      : '<a id="lunao-close-fallback" href="javascript:window.close()" style="display:none; margin-top: 16px; display: inline-block; padding: 8px 18px; border-radius: 8px; background: #b91c1c; color: white; text-decoration: none; font-size: 13px; font-weight: 600;">Close window</a>';
+    const html = `<!doctype html><html><head><meta charset="utf-8" /><title>${safeTitle}</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f7f6f3; color: #1f2937; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 24px; }
+      .card { background: white; padding: 32px 40px; border-radius: 14px; box-shadow: 0 8px 30px rgba(15,23,42,0.08); max-width: 480px; text-align: center; }
+      h1 { font-size: 20px; margin: 0 0 8px; }
+      p { color: #6b7280; margin: 0 0 16px; line-height: 1.5; }
+      .spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid #e5e7eb; border-top: #1f2937 solid; animation: spin 0.8s linear infinite; margin: 8px auto 0; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .ok { color: #047857; }
+      .err { color: #b91c1c; }
+    </style></head>
+    <body><div class="card"><h1>${safeTitle}</h1>${body}${fallbackLink}<div class="spinner"></div></div>
+    <script>${openerScript}</script></body></html>`;
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  };
+
+  if (error) {
+    return sendHtml(
+      'Connection cancelled',
+      `<p class="err">Telnyx returned: <strong>${escapeHtml(String(error))}</strong></p><p>Close this window and try again from the dashboard.</p>`,
+      'error',
+    );
+  }
+  if (!code || !state) {
+    return sendHtml('Invalid callback', '<p class="err">Missing code or state from Telnyx.</p>', 'error');
+  }
+
+  const stateData = oauthStateStore.get(String(state));
+  if (!stateData) {
+    return sendHtml('Session expired', '<p class="err">Please return to the dashboard and click Connect again.</p>', 'error');
+  }
+  if (Date.now() - stateData.createdAt > OAUTH_STATE_TTL_MS) {
+    oauthStateStore.delete(String(state));
+    return sendHtml('Session timed out', '<p class="err">Restart the connection from the dashboard.</p>', 'error');
+  }
+
+  try {
+    const redirectUri = `${redirectBase()}/api/telnyx/callback`;
+    const tokens = await exchangeTelnyxCode({
+      code: String(code),
+      redirectUri,
+      codeVerifier: stateData.codeVerifier,
+    });
+
+    if (!tokens.access_token) {
+      throw new Error('Telnyx did not return an access_token. Make sure your OAuth client has the authorization_code grant enabled.');
+    }
+
+    // Validate the access token by listing phone numbers. This is our only
+    // way to confirm the token actually works — Telnyx has no userinfo
+    // endpoint today.
+    let totalNumbers = null;
+    try {
+      const profile = await getTelnyxProfile(tokens.access_token);
+      totalNumbers = profile.totalNumbers;
+    } catch (probeErr) {
+      // Don't fail the connection just because the probe failed — the
+      // token may still be valid for /v2/messages even if /v2/phone_numbers
+      // returns a transient error.
+      console.warn('[telnyx-oauth] probe after exchange failed:', probeErr.message);
+    }
+
+    const encryptedAccess = encryptTelnyxTokenForStorage(tokens.access_token);
+    const encryptedRefresh = tokens.refresh_token ? encryptTelnyxTokenForStorage(tokens.refresh_token) : null;
+    if (!encryptedAccess) {
+      throw new Error('Failed to encrypt access token. Check EMAIL_TOKEN_ENCRYPTION_KEY in .env.');
+    }
+
+    const expiresAt = tokens.expires_in
+      ? Math.floor(Date.now() / 1000) + Number(tokens.expires_in)
+      : null;
+
+    const accountLabel = totalNumbers != null
+      ? `Telnyx account (${totalNumbers} number${totalNumbers === 1 ? '' : 's'})`
+      : 'Telnyx account';
+
+    createTelnyxConnection({
+      userId: stateData.ownerKey,
+      accountEmail: '', // Telnyx OAuth doesn't expose an email today
+      accountLabel,
+      encryptedAccessToken: encryptedAccess,
+      encryptedRefreshToken: encryptedRefresh,
+      expiresAt,
+      totalNumbers: totalNumbers || 0,
+    });
+
+    oauthStateStore.delete(String(state));
+
+    return sendHtml(
+      'Telnyx connected',
+      `<p class="ok"><strong>${escapeHtml(accountLabel)}</strong> is ready to send.</p><p>You can close this window — your dashboard has updated.</p>`,
+      'success',
+    );
+  } catch (err) {
+    return sendHtml('Connection failed', `<p class="err">${escapeHtml(err.message)}</p><p>Close this window and try again.</p>`, 'error');
+  }
+});
+
+// 3. List every connected Telnyx account for the current owner.
+app.get('/api/telnyx/accounts', authenticate, (req, res) => {
+  try {
+    const ownerKey = ownerKeyForCallback(req);
+    const accounts = listTelnyxConnections(ownerKey).map((a) => {
+      // Strip the encrypted tokens from the wire payload — the dashboard
+      // never needs them. We expose status + total_numbers + expires_at so
+      // the UI can render "active", "needs reconnect", and the phone count.
+      const expiresIn = a.expires_at ? a.expires_at - Math.floor(Date.now() / 1000) : null;
+      return {
+        id: a.id,
+        account_email: a.account_email,
+        account_label: a.account_label,
+        total_numbers: a.total_numbers,
+        status: a.status,
+        expires_at: a.expires_at,
+        expires_in: expiresIn,
+        connected_at: a.connected_at,
+      };
+    });
+    res.json({ ok: true, accounts });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// 4. Delete a connected Telnyx account. Stops future SMS sends using this
+//    connection (the pipeline silently skips if no active connection exists).
+app.delete('/api/telnyx/accounts/:id', authenticate, (req, res) => {
+  try {
+    const ownerKey = ownerKeyForCallback(req);
+    const conn = getTelnyxConnection(req.params.id);
+    if (!conn) return res.status(404).json({ ok: false, error: 'Connection not found' });
+    if (conn.user_id !== ownerKey) {
+      return res.status(403).json({ ok: false, error: 'Not your connection' });
+    }
+    deleteTelnyxConnection(req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// 5. List phone numbers owned by the connected Telnyx account. The SMS
+//    campaign builder uses this to render the sender-number picker — every
+//    number on the account is offered as a potential "From" address.
+app.get('/api/telnyx/accounts/:id/numbers', authenticate, async (req, res) => {
+  try {
+    const ownerKey = ownerKeyForCallback(req);
+    const conn = getTelnyxConnection(req.params.id);
+    if (!conn) return res.status(404).json({ ok: false, error: 'Connection not found' });
+    if (conn.user_id !== ownerKey) {
+      return res.status(403).json({ ok: false, error: 'Not your connection' });
+    }
+
+    // Decrypt access token, refresh if expired, then list numbers.
+    const accessToken = await resolveTelnyxAccessToken(conn);
+    if (!accessToken) {
+      updateTelnyxConnectionStatus(conn.id, 'needs_reconnect');
+      return res.status(401).json({ ok: false, error: 'Access token expired or revoked. Please reconnect.' });
+    }
+
+    const listRes = await fetch('https://api.telnyx.com/v2/phone_numbers?page[size]=50', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!listRes.ok) {
+      const text = await listRes.text().catch(() => '');
+      if (listRes.status === 401 || listRes.status === 403) {
+        updateTelnyxConnectionStatus(conn.id, 'needs_reconnect');
+      }
+      return res.status(listRes.status).json({ ok: false, error: `Telnyx: ${text || listRes.statusText}` });
+    }
+    const data = await listRes.json().catch(() => ({}));
+    const numbers = Array.isArray(data?.data) ? data.data : [];
+    const result = numbers
+      .filter((n) => n?.phone_number)
+      .map((n) => ({
+        number: String(n.phone_number),
+        type: 'phone_number',
+        sms: true,
+        id: n.id || null,
+      }));
+
+    // Update the cached total_numbers count so the dashboard stays accurate.
+    updateTelnyxConnectionNumbers(conn.id, result.length);
+
+    res.json({ ok: true, numbers: result });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Internal helper: returns a fresh access_token for the given connection row,
+// refreshing from the stored refresh_token if the cached one is expired.
+// Returns null if the row is missing or all refresh attempts have failed.
+async function resolveTelnyxAccessToken(conn) {
+  if (!conn) return null;
+  const accessToken = decryptTelnyxTokenForUse(conn.encrypted_access_token);
+  if (!accessToken) return null;
+
+  const isExpired = conn.expires_at
+    ? conn.expires_at - Math.floor(Date.now() / 1000) < 30 // 30s safety window
+    : false;
+  if (!isExpired) return accessToken;
+
+  // Need a refresh — bail if we don't have one.
+  if (!conn.encrypted_refresh_token) return accessToken;
+
+  try {
+    const refreshToken = decryptTelnyxTokenForUse(conn.encrypted_refresh_token);
+    const data = await refreshTelnyxAccessToken(refreshToken);
+    const encryptedAccess = encryptTelnyxTokenForStorage(data.access_token);
+    const encryptedRefresh = data.refresh_token ? encryptTelnyxTokenForStorage(data.refresh_token) : null;
+    const expiresAt = data.expires_in
+      ? Math.floor(Date.now() / 1000) + Number(data.expires_in)
+      : null;
+    updateTelnyxConnectionTokens(conn.id, {
+      encryptedAccessToken: encryptedAccess,
+      encryptedRefreshToken: encryptedRefresh || undefined,
+      expiresAt,
+    });
+    return data.access_token;
+  } catch (err) {
+    if (err.code === 'TOKEN_REVOKED') {
+      updateTelnyxConnectionStatus(conn.id, 'needs_reconnect');
+    }
+    return null;
+  }
+}
+
+// Export the resolver so server/lib/telnyx.js can use it during SMS sends.
+export { resolveTelnyxAccessToken };
+
 // ---- Suppression List ----
 
 // Get suppression list
@@ -2117,6 +2471,62 @@ app.post('/api/email-campaigns/:id/run', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Telnyx Connection - Verify and save Telnyx credentials
+// ---------------------------------------------------------------------------
+app.post('/api/telnyx/connect', authenticate, async (req, res) => {
+  try {
+    const { apiKey, senderNumber } = req.body || {};
+
+    if (!apiKey || typeof apiKey !== 'string') {
+      return res.status(400).json({ ok: false, error: 'API key is required' });
+    }
+
+    // Verify the API key by making a test call to Telnyx
+    let validKey = false;
+    let availableNumbers = [];
+
+    try {
+      const response = await fetch('https://api.telnyx.com/v2/messaging_phone_numbers?page[size]=10', {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        validKey = true;
+        const data = await response.json();
+        availableNumbers = (data.data || []).map((num) => ({
+          number: num.phone_number,
+          country: num.country || 'United States',
+          type: num.phone_number && (num.phone_number.startsWith('+1800') || num.phone_number.startsWith('+1866') || num.phone_number.startsWith('+1888')) ? 'toll-free' : 'local',
+          capabilities: {
+            sms: num.capabilities && (num.capabilities.messaging === true || num.capabilities.sms === true),
+            voice: num.capabilities && num.capabilities.voice === true,
+          },
+          status: num.status === 'active' ? 'active' : 'pending',
+        }));
+      }
+    } catch (e) {
+      // API call failed - key might be invalid
+      console.error('[telnyx-connect] verification failed:', e);
+    }
+
+    // Return the verification result
+    // In production, you would save these to the database or environment
+    res.json({
+      ok: validKey,
+      connected: validKey,
+      message: validKey ? 'Telnyx connected successfully' : 'Invalid API key',
+      numbers: availableNumbers,
+      configuredNumber: senderNumber || null,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ---- Test SMS (Settings "Send test message" button) ----------------------
 
 app.post('/api/test-sms', authenticate, async (req, res) => {
@@ -2320,6 +2730,89 @@ app.post('/api/owner/sms', authenticate, async (req, res) => {
       refund(ownerKey, 3, 'oneoff_sms_failed_refund', { smsId: row.id });
       return res.status(502).json({ ok: false, error: err.message, smsId: row.id });
     }
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Messaging Stats - Aggregated SMS metrics for analytics dashboard
+// ---------------------------------------------------------------------------
+app.get('/api/messaging/stats', authenticate, (req, res) => {
+  try {
+    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+
+    // Get SMS stats from the database
+    const smsStats = db.prepare(`
+      SELECT 
+        COUNT(*) as total_sent,
+        SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) as total_delivered,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as total_failed,
+        COUNT(DISTINCT from_number) as active_numbers
+      FROM sms_logs 
+      WHERE owner_key = ?
+    `).get(ownerKey);
+
+    // Get inbound message count
+    const inboundCount = db.prepare(`
+      SELECT COUNT(*) as count FROM sms_inbound WHERE to_number IN (
+        SELECT DISTINCT from_number FROM sms_logs WHERE owner_key = ?
+      )
+    `).get(ownerKey);
+
+    const totalSent = smsStats?.total_sent || 0;
+    const totalDelivered = smsStats?.total_delivered || 0;
+    const deliveryRate = totalSent > 0 ? ((totalDelivered / totalSent) * 100).toFixed(1) : 0;
+
+    res.json({
+      ok: true,
+      stats: {
+        totalSent,
+        totalDelivered,
+        totalFailed: smsStats?.total_failed || 0,
+        deliveryRate: parseFloat(deliveryRate),
+        repliesReceived: inboundCount?.count || 0,
+        activeNumbers: smsStats?.active_numbers || 0,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Phone Numbers - List and manage Telnyx numbers
+// ---------------------------------------------------------------------------
+app.get('/api/numbers', authenticate, (req, res) => {
+  try {
+    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+
+    // Get unique numbers from SMS logs for this owner
+    const numbers = db.prepare(`
+      SELECT from_number as number, 'United States' as country, 'local' as type,
+        'active' as status
+      FROM sms_logs 
+      WHERE owner_key = ? AND from_number IS NOT NULL
+      GROUP BY from_number
+      ORDER BY MAX(created_at) DESC
+    `).all(ownerKey);
+
+    res.json({
+      ok: true,
+      numbers: numbers.map((n) => ({
+        id: n.number,
+        number: n.number,
+        country: n.country,
+        type: n.type,
+        status: n.status,
+        capabilities: {
+          sms: true,
+          voice: false,
+        },
+      })),
+    });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

@@ -192,17 +192,17 @@ export const Settings: React.FC<SettingsProps> = ({
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="block text-[11px] font-bold text-ink-secondary uppercase tracking-widest">Username / Email address</label>
-              <input
-                type="email"
-                value={userEmail}
-                onChange={(e) => setUserEmail(e.target.value)}
-                placeholder="davidorwot34@gmail.com"
-                className="w-full px-3 py-2 bg-off-white border border-border-main rounded text-xs text-ink-secondary font-mono focus:ring-1 focus:ring-accent focus:outline-none"
-                required
-              />
-            </div>
+<div className="space-y-1.5">
+                      <label className="block text-[11px] font-bold text-ink-secondary uppercase tracking-widest">Username / Email address</label>
+                      <input
+                        type="email"
+                        value={userEmail}
+                        onChange={(e) => setUserEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        className="w-full px-3 py-2 bg-off-white border border-border-main rounded text-xs text-ink-secondary font-mono focus:ring-1 focus:ring-accent focus:outline-none"
+                        required
+                      />
+                    </div>
 
             {isUpgraded && (
               <>
@@ -236,7 +236,7 @@ export const Settings: React.FC<SettingsProps> = ({
                           setTelnyxPhone(e.target.value);
                           setGlobalKeysSaved(false);
                         }}
-                        placeholder="+1234567890"
+                        placeholder="Paste your Telnyx DID here"
                         className="w-full px-3 py-2 bg-white border border-border-main rounded text-xs font-mono text-ink focus:ring-1 focus:ring-accent focus:outline-none"
                       />
                     </div>
@@ -299,7 +299,7 @@ export const Settings: React.FC<SettingsProps> = ({
                           type="tel"
                           value={testPhone}
                           onChange={(e) => setTestPhone(e.target.value)}
-                          placeholder="+15125550988"
+                          placeholder="Recipient phone (E.164)"
                           className="flex-1 px-3 py-2 bg-white border border-border-main rounded text-xs font-mono text-ink focus:ring-1 focus:ring-accent focus:outline-none"
                         />
                         <button

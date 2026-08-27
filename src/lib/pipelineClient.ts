@@ -1577,6 +1577,89 @@ export function initiateOAuthFlow(provider: 'gmail' | 'outlook'): void {
 }
 
 // =============================================================================
+// Telnyx OAuth — "Connect with Telnyx" button
+// =============================================================================
+//
+// Mirrors the email OAuth flow. The frontend calls /api/telnyx/oauth/url to
+// get the consent URL, then redirects. Telnyx returns to /api/telnyx/callback
+// which closes itself after persisting the row.
+
+export interface TelnyxAccount {
+  id: string;
+  account_email: string;
+  account_label: string;
+  total_numbers: number;
+  status: 'active' | 'needs_reconnect' | 'revoked';
+  expires_at: number | null;
+  expires_in: number | null;
+  connected_at: number;
+}
+
+export async function listTelnyxAccounts(ownerKey: string): Promise<TelnyxAccount[]> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/telnyx/accounts?ownerKey=${encodeURIComponent(ownerKey)}`,
+      { credentials: 'include' }
+    );
+    if (!res.ok) return [];
+    const d = await res.json();
+    return Array.isArray(d.accounts) ? d.accounts : [];
+  } catch {
+    return [];
+  }
+}
+
+export interface TelnyxPhoneNumber {
+  number: string;
+  type: string;
+  sms: boolean;
+  id: string | null;
+}
+
+export async function listTelnyxNumbers(accountId: string, ownerKey: string): Promise<TelnyxPhoneNumber[]> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/telnyx/accounts/${encodeURIComponent(accountId)}/numbers?ownerKey=${encodeURIComponent(ownerKey)}`,
+      { credentials: 'include' }
+    );
+    if (!res.ok) return [];
+    const d = await res.json();
+    return Array.isArray(d.numbers) ? d.numbers : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function disconnectTelnyxAccount(accountId: string, ownerKey: string): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/telnyx/accounts/${encodeURIComponent(accountId)}?ownerKey=${encodeURIComponent(ownerKey)}`,
+      { method: 'DELETE', credentials: 'include' }
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// Initiate the Telnyx OAuth flow from the frontend. Backend generates the
+// state and returns the authorization URL.
+export async function initiateTelnyxOAuth(): Promise<void> {
+  const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
+  const res = await fetch(
+    `${API_BASE}/api/telnyx/oauth/url?ownerKey=${encodeURIComponent(ownerKey)}`,
+    { credentials: 'include' }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  const d = await res.json();
+  if (!d.url) throw new Error('Backend did not return an OAuth URL');
+  window.location.href = d.url;
+}
+
+// =============================================================================
 // Dashboard counters
 // =============================================================================
 //
