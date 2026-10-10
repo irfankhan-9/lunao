@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --business-accent: #059669;
+    --business-accent-dark: #047857;
+    --business-accent-soft: #ecfdf5;
+    --business-accent-border: #a7f3d0;
+  }
+
+  /* Safe Area utilities for iOS PWA standalone mode */
+  html {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  body {
+    overscroll-behavior-y: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #f8fafc;
+    color: #0f172a;
+  }
+}
+
+/* Shake keyframe animation for authentication error feedback */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+.animate-shake {
+  animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+/* Custom utility for dynamic accent styling */
+.bg-tenant-accent {
+  background-color: var(--business-accent);
+}
+
+.text-tenant-accent {
+  color: var(--business-accent);
+}
+
+.border-tenant-accent {
+  border-color: var(--business-accent);
+}
+
+.bg-tenant-accent-soft {
+  background-color: var(--business-accent-soft);
+}
+
+.border-tenant-accent-border {
+  border-color: var(--business-accent-border);
+}
+
+/* Custom slim scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.15);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.25);
+}

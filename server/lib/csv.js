@@ -149,6 +149,60 @@ function digitCount(value) {
   return (String(value || '').match(/\d/g) || []).length;
 }
 
+// Strip everything but digits, keeping a leading +.
+function normalizePhone(raw) {
+  const s = String(raw || '').trim();
+  const plus = s.startsWith('+') ? '+' : '';
+  return plus + s.replace(/\D/g, '');
+}
+
+// Canadian area codes (NANP). Mirrors the set in smsLeads.js — keep in
+// sync if either is edited. Active geographic + overlay codes covering
+// all 13 provinces/territories, plus non-geographic 600/622/867.
+const CA_AREA_CODES = new Set([
+  '204','226','236','249','250','289','306','343','365','367','368','403',
+  '416','418','431','437','438','450','474','506','514','519','548','579',
+  '581','587','604','613','639','647','672','683','705','709','778','780',
+  '782','807','819','825','867','873','902','905','942',
+]);
+
+/**
+ * Classify a raw phone number string by country.
+ * Returns one of:
+ *   'CA'    — NANP number in a Canadian area code (or +1 with CA area code)
+ *   'US'    — NANP number but US area code
+ *   'INTL'  — Recognised as a phone number but non-NANP
+ *   null    — Too few digits to classify
+ */
+export function detectCountryFromPhone(raw) {
+  const norm = normalizePhone(raw);
+  const digits = norm.startsWith('+') ? norm.slice(1) : norm;
+
+  if (norm.startsWith('+1') && digits.length === 11) {
+    const area = digits.slice(1, 4);
+    return CA_AREA_CODES.has(area) ? 'CA' : 'US';
+  }
+  if (norm.startsWith('+') && digits.length >= 7) {
+    // Non-NANP international — strip the leading 1 if it's +1...
+    if (digits.startsWith('1') && digits.length === 11) {
+      const area = digits.slice(1, 4);
+      return CA_AREA_CODES.has(area) ? 'CA' : 'US';
+    }
+    return 'INTL';
+  }
+  // No plus — assume NANP if 10/11 digits and starts with a valid area code.
+  if (digits.length === 10 && /^[2-9]/.test(digits)) {
+    const area = digits.slice(0, 3);
+    return CA_AREA_CODES.has(area) ? 'CA' : 'US';
+  }
+  if (digits.length === 11 && digits.startsWith('1')) {
+    const area = digits.slice(1, 4);
+    return CA_AREA_CODES.has(area) ? 'CA' : 'US';
+  }
+  if (digits.length >= 7) return 'INTL';
+  return null;
+}
+
 const REQUIRED_FIELDS = [
   { key: 'name', label: 'Business Name' },
   { key: 'city', label: 'City Name' },
@@ -158,7 +212,13 @@ const REQUIRED_FIELDS = [
 // God-level CSV validator (no LLM). Confirms the sheet has the three required
 // columns and that every row carries a usable business name, city and phone.
 // Handles flexible header casing, spacing, separators, and BOM.
-export function validateCsv(text) {
+//
+// `opts.allowedCountries` — optional array of ISO-2 codes (e.g. ['CA']). When
+// provided, rows whose phone number is recognised as a different country are
+// rejected with a `country_blocked` issue so the wizard can render a branded
+// "Canada-only" error card.
+export function validateCsv(text, opts = {}) {
+  const { allowedCountries = null } = opts;
   const clean = String(text || '').replace(/^\uFEFF/, '');
   const lines = clean.split(/\r?\n/).filter((l) => l.trim().length > 0);
 
@@ -172,6 +232,10 @@ export function validateCsv(text) {
     leads: [],
     invalidRows: [],
     message: '',
+    // Plan-aware stats: how many rows were rejected because their phone
+    // number is in a country the user's plan does not support.
+    countryBlockedCount: 0,
+    allowedCountries: Array.isArray(allowedCountries) ? allowedCountries : null,
   };
 
   if (lines.length === 0) {
@@ -222,6 +286,22 @@ export function validateCsv(text) {
       issues.push('Missing phone number');
     } else if (digitCount(rec.phone) < 7) {
       issues.push('Phone number needs at least 7 digits');
+    } else if (allowedCountries && allowedCountries.length > 0) {
+      // Plan-aware country gate. Only fires when the plan restricts
+      // countries (Free/Starter = ['CA']). Tag the issue with a stable
+      // reason code so the wizard can group them into a premium
+      // "Canada-only" error card.
+      const cc = detectCountryFromPhone(rec.phone);
+      if (!cc) {
+        issues.push(`Phone number "${rec.phone}" could not be recognised as a valid Canadian number`);
+        report.countryBlockedCount += 1;
+      } else if (!allowedCountries.includes(cc)) {
+        const friendly = cc === 'US' ? 'American' : cc === 'INTL' ? 'international' : cc;
+        issues.push(
+          `Phone number is ${friendly} (${rec.phone}); Canadian numbers only`,
+        );
+        report.countryBlockedCount += 1;
+      }
     }
 
     if (issues.length === 0) {
@@ -232,6 +312,7 @@ export function validateCsv(text) {
       report.invalidRows.push({
         line: i + 1,
         name: rec.name || '(blank)',
+        phone: rec.phone || '',
         issues,
       });
     }
@@ -242,15 +323,29 @@ export function validateCsv(text) {
     return report;
   }
   if (report.validCount === 0) {
-    report.message =
-      'None of your rows are valid. Every row needs a Business Name, City Name and a Phone Number.';
+    if (allowedCountries && report.countryBlockedCount > 0 &&
+        report.countryBlockedCount === report.invalidCount) {
+      report.message =
+        `None of your rows are Canadian. ${report.invalidCount} row(s) were skipped because your plan ` +
+        `only supports Canadian numbers. Upgrade or upload a list of Canadian leads to continue.`;
+    } else {
+      report.message =
+        'None of your rows are valid. Every row needs a Business Name, City Name and a Phone Number.';
+    }
     return report;
   }
 
   report.ok = true;
-  report.message =
-    report.invalidCount > 0
-      ? `${report.validCount} of ${report.totalRows} rows are ready. ${report.invalidCount} row(s) were skipped — fix them to include everyone.`
-      : `All ${report.validCount} rows validated successfully.`;
+  if (report.countryBlockedCount > 0) {
+    report.message =
+      `${report.validCount} of ${report.totalRows} rows are ready. ` +
+      `${report.countryBlockedCount} non-Canadian row(s) were skipped. ` +
+      `Upgrade to Growth to send worldwide.`;
+  } else {
+    report.message =
+      report.invalidCount > 0
+        ? `${report.validCount} of ${report.totalRows} rows are ready. ${report.invalidCount} row(s) were skipped — fix them to include everyone.`
+        : `All ${report.validCount} rows validated successfully.`;
+  }
   return report;
 }

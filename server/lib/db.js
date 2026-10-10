@@ -400,6 +400,184 @@ const SCHEMA_SQL = `
   -- account upserts the tokens in place rather than creating duplicates.
   CREATE UNIQUE INDEX IF NOT EXISTS idx_telnyx_user_email
     ON telnyx_connections(user_id, account_email);
+
+  -- ---------------------------------------------------------------------
+  -- v5: Lunao Owner PWA — per-tenant state owned by the business owner.
+  -- ---------------------------------------------------------------------
+
+  -- Business profile (one row per slug). Backfilled from compiled HTML
+  -- metadata on first read if missing.
+  CREATE TABLE IF NOT EXISTS business_profiles (
+    slug                TEXT    PRIMARY KEY,
+    name                TEXT    NOT NULL,
+    niche               TEXT,
+    tagline             TEXT,
+    phone               TEXT,
+    phone_raw           TEXT,
+    email               TEXT,
+    address             TEXT,
+    city                TEXT,
+    state               TEXT,
+    timezone            TEXT,
+    logo_url            TEXT,
+    website_url         TEXT,
+    social_instagram    TEXT,
+    social_facebook     TEXT,
+    social_google_maps  TEXT,
+    theme_accent        TEXT    NOT NULL DEFAULT '#059669',
+    theme_accent_dark   TEXT    NOT NULL DEFAULT '#047857',
+    theme_accent_soft   TEXT    NOT NULL DEFAULT '#ecfdf5',
+    theme_accent_border TEXT    NOT NULL DEFAULT '#a7f3d0',
+    theme_radius        TEXT    NOT NULL DEFAULT 'lg',
+    feature_booking     INTEGER NOT NULL DEFAULT 1,
+    feature_chatbot     INTEGER NOT NULL DEFAULT 1,
+    feature_email       INTEGER NOT NULL DEFAULT 1,
+    feature_automations INTEGER NOT NULL DEFAULT 1,
+    created_at          INTEGER,
+    updated_at          INTEGER
+  );
+
+  -- AI receptionist settings (one row per slug)
+  CREATE TABLE IF NOT EXISTS pwa_ai_settings (
+    slug                  TEXT    PRIMARY KEY,
+    enabled               INTEGER NOT NULL DEFAULT 1,
+    greeting              TEXT,
+    tone                  TEXT,
+    business_description  TEXT,
+    business_hours        TEXT,
+    location_details      TEXT,
+    policies              TEXT,
+    booking_enabled       INTEGER NOT NULL DEFAULT 1,
+    booking_instructions  TEXT,
+    info_to_collect       TEXT,
+    confirmation_behavior TEXT,
+    do_not_claim          TEXT,
+    escalation_guidance   TEXT,
+    faqs_json             TEXT,
+    updated_at            INTEGER
+  );
+
+  -- Website config surfaced in the PWA
+  CREATE TABLE IF NOT EXISTS pwa_website_config (
+    slug           TEXT    PRIMARY KEY,
+    url            TEXT,
+    status         TEXT,
+    last_updated   TEXT,
+    last_deployed  TEXT,
+    headline       TEXT,
+    subheadline    TEXT,
+    hero_image     TEXT,
+    cta_text       TEXT,
+    announcement   TEXT,
+    updated_at     INTEGER
+  );
+
+  -- Automation rules owned by the tenant
+  CREATE TABLE IF NOT EXISTS pwa_automations (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug          TEXT    NOT NULL,
+    key           TEXT    NOT NULL,
+    enabled       INTEGER NOT NULL DEFAULT 1,
+    timing_value  INTEGER NOT NULL DEFAULT 1,
+    timing_unit   TEXT    NOT NULL DEFAULT 'hours',
+    template_id   INTEGER,
+    subject       TEXT,
+    body          TEXT,
+    config_json   TEXT,
+    updated_at    INTEGER,
+    UNIQUE(slug, key)
+  );
+  CREATE INDEX IF NOT EXISTS idx_pwa_automations_slug ON pwa_automations(slug);
+
+  -- Owner-managed email templates
+  CREATE TABLE IF NOT EXISTS pwa_email_templates (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug       TEXT    NOT NULL,
+    name       TEXT    NOT NULL,
+    subject    TEXT,
+    body       TEXT,
+    category   TEXT,
+    created_at INTEGER,
+    updated_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_pwa_email_templates_slug ON pwa_email_templates(slug);
+
+  -- Owner-visible email send activity
+  CREATE TABLE IF NOT EXISTS pwa_email_activity (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug             TEXT    NOT NULL,
+    recipient_name   TEXT,
+    recipient_email  TEXT,
+    template_name    TEXT,
+    subject          TEXT,
+    body_preview     TEXT,
+    sent_at          INTEGER,
+    status           TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_pwa_email_activity_slug ON pwa_email_activity(slug, sent_at DESC);
+
+  -- Reviews (initially owner-entered; future Google Places ingestion)
+  CREATE TABLE IF NOT EXISTS pwa_reviews (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug            TEXT    NOT NULL,
+    source          TEXT,
+    external_id     TEXT,
+    customer_name   TEXT,
+    customer_email  TEXT,
+    rating          INTEGER,
+    service         TEXT,
+    comment         TEXT,
+    response        TEXT,
+    responded_at    INTEGER,
+    created_at      INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_pwa_reviews_slug ON pwa_reviews(slug, created_at DESC);
+
+  -- Integrations registry (calendar, POS, webhook, etc.)
+  CREATE TABLE IF NOT EXISTS pwa_integrations (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug              TEXT    NOT NULL,
+    provider          TEXT    NOT NULL,
+    name              TEXT,
+    description       TEXT,
+    status            TEXT,
+    connected_account TEXT,
+    last_sync         TEXT,
+    config_json       TEXT,
+    updated_at        INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_pwa_integrations_slug ON pwa_integrations(slug);
+
+  -- Persistent OAuth state store — survives server restarts unlike the
+  -- in-memory Map. Stores Google/Telnyx OAuth state tokens keyed by the
+  -- state value so the callback can validate them even after a restart.
+  -- code_verifier is used by the Telnyx PKCE flow.
+  CREATE TABLE IF NOT EXISTS oauth_states (
+    state         TEXT    PRIMARY KEY,
+    owner_key     TEXT    NOT NULL,
+    provider      TEXT    NOT NULL DEFAULT 'gmail',
+    created_at    INTEGER NOT NULL,
+    expires_at    INTEGER NOT NULL,
+    code_verifier TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_oauth_states_expires ON oauth_states(expires_at);
+
+  -- Customer records (enrichment layer on top of derived-from-bookings)
+  CREATE TABLE IF NOT EXISTS pwa_customers (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug              TEXT    NOT NULL,
+    name              TEXT    NOT NULL,
+    phone             TEXT,
+    email             TEXT,
+    notes             TEXT,
+    booking_count     INTEGER NOT NULL DEFAULT 0,
+    last_booking_date TEXT,
+    last_service      TEXT,
+    created_at        INTEGER,
+    updated_at        INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_pwa_customers_slug ON pwa_customers(slug);
+  CREATE INDEX IF NOT EXISTS idx_pwa_customers_email ON pwa_customers(slug, email);
 `;
 
 // ---------------------------------------------------------------------------
@@ -415,6 +593,10 @@ function makePgAdapter(pool) {
     'sms_sent', 'sms_failed', 'sms_skipped', 'credits_charged',
     'credits_refunded', 'balance', 'lifetime_used', 'lifetime_refunded',
     'delta', 'balance_after', 'index_in_campaign', 'lead_id',
+    'enabled', 'timing_value', 'template_id', 'rating', 'responded_at',
+    'created_at', 'updated_at', 'sent_at',
+    'feature_booking', 'feature_chatbot', 'feature_email', 'feature_automations',
+    'booking_count',
   ]);
 
   const normalise = (row) => {
@@ -496,6 +678,8 @@ function migrateSqlite() {
     { table: 'telnyx_connections', col: 'account_email', ddl: `ALTER TABLE telnyx_connections ADD COLUMN account_email TEXT NOT NULL DEFAULT ''` },
     { table: 'telnyx_connections', col: 'account_label', ddl: `ALTER TABLE telnyx_connections ADD COLUMN account_label TEXT NOT NULL DEFAULT ''` },
     { table: 'telnyx_connections', col: 'total_numbers', ddl: `ALTER TABLE telnyx_connections ADD COLUMN total_numbers INTEGER NOT NULL DEFAULT 0` },
+    // v5: code_verifier for Telnyx PKCE OAuth flow.
+    { table: 'oauth_states', col: 'code_verifier', ddl: `ALTER TABLE oauth_states ADD COLUMN code_verifier TEXT` },
   ];
   for (const m of migrations) {
     if (!columnExists(m.table, m.col)) {

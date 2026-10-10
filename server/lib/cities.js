@@ -236,6 +236,12 @@ function addRecord(rec) {
     ? rec.alt.map(normalize).join('|')
     : '';
   rec._compact = norm; // already lowercase alphanumeric
+  // Also keep the 2-letter ISO code as `countryIso` if we know it. Both
+  // the SEED_CITIES and GeoNames loader call addRecord with a full name
+  // in `country`; we derive the ISO here so callers can filter by 'CA'.
+  if (!rec.countryIso && rec.country) {
+    rec.countryIso = countryToIso(rec.country) || null;
+  }
   // also build a "compact of every alt" view so "NYC" -> "New York City"
   // can match via alt compact lookup.
   if (Array.isArray(rec.alt)) {
@@ -287,6 +293,7 @@ async function loadCitiesFromGeoNames({ minPopulation = 500 } = {}) {
       const rec = {
         name: cols[1],
         country: countryLabel(countryCode),
+        countryIso: countryCode,
         admin: cols[10] || '',
         lat: parseFloat(cols[4]) || 0,
         lon: parseFloat(cols[5]) || 0,
@@ -564,6 +571,73 @@ function getNearbyByAdmin({ admin, country, excludeNames = [], limit = 50 } = {}
   return out;
 }
 
+// Bulk list cities, filterable by ISO country and admin (state/province).
+// Used by the SMS Google-Maps lead finder to populate the province → city
+// dropdowns. Returns plain objects sorted by population descending.
+//
+//   listCities({ country: 'CA', admin: 'ON', limit: 100 })
+//
+// `country` accepts either a 2-letter ISO code ('CA') or a full name
+// ('Canada'); we derive the ISO from the canonical name via the same
+// `countryToIso` map used everywhere else in this file.
+function listCities({ country, admin, limit = 500 } = {}) {
+  if (!country && !admin) return [];
+  const target = normaliseCountryForFilter(country);
+  const targetAdmin = admin ? normalize(admin) : null;
+  const out = [];
+  for (let i = 0; i < cities.length; i++) {
+    const c = cities[i];
+    if (target) {
+      const matches =
+        (c.countryIso && c.countryIso.toUpperCase() === target.iso) ||
+        (c.country && c.country.toLowerCase() === target.fullName.toLowerCase());
+      if (!matches) continue;
+    }
+    if (targetAdmin && normalize(c.admin) !== targetAdmin) continue;
+    out.push({
+      name: c.name,
+      country: c.country,
+      countryIso: c.countryIso || null,
+      admin: c.admin,
+      lat: c.lat,
+      lon: c.lon,
+      population: c.population || 0,
+    });
+  }
+  out.sort((a, b) => (b.population || 0) - (a.population || 0));
+  return out.slice(0, Math.max(0, limit));
+}
+
+// Best-effort country-name -> ISO2 lookup. Returns null if unknown.
+// Iterates COUNTRY_NAMES (iso -> full name) so we don't need a separate
+// reverse map; ~200 entries, sub-millisecond.
+function countryToIso(name) {
+  if (!name) return null;
+  const target = normalize(name);
+  // Direct 2-letter code match (callers sometimes pass 'CA' or 'ca').
+  const upper = target.toUpperCase();
+  if (upper.length === 2 && COUNTRY_NAMES[upper]) {
+    return upper;
+  }
+  for (const iso of Object.keys(COUNTRY_NAMES)) {
+    if (normalize(COUNTRY_NAMES[iso]) === target) return iso;
+  }
+  return null;
+}
+
+// Accept either 'CA' / 'ca' or 'Canada' / 'canada' and produce a
+// { iso, fullName } pair for comparison. `null` input returns null.
+function normaliseCountryForFilter(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  const upper = s.toUpperCase();
+  if (upper.length === 2 && COUNTRY_NAMES[upper]) {
+    return { iso: upper, fullName: COUNTRY_NAMES[upper] };
+  }
+  const iso = countryToIso(s) || '';
+  return { iso, fullName: s };
+}
+
 // Decide the next city + page the user should see, based on the locked
 // city and the list of cities the user has already had at least one page
 // returned from.
@@ -633,6 +707,7 @@ const loadPromise = loadCitiesFromGeoNames();
 export {
   lookup,
   lookup as lookupCity,
+  listCities,
   getStatus,
   loadPromise,
   pageBudgetFor,
@@ -642,6 +717,7 @@ export {
 export default {
   lookup,
   lookupCity: lookup,
+  listCities,
   getStatus,
   loadPromise,
   pageBudgetFor,

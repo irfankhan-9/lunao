@@ -9,7 +9,7 @@ import {
   Trophy, Star, PartyPopper, X, ExternalLink
 } from 'lucide-react';
 import { playVictoryCelebration } from '../utils/audio';
-import { getEmailCampaign } from '../lib/pipelineClient';
+import { getCampaign as getCampaignApi, getEmailCampaign } from '../lib/pipelineClient';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -58,65 +58,112 @@ function useCampaignPolling(
 ) {
   const [data, setData] = useState<CampaignProgressData | null>(null);
 
+  // 2.5s poll is enough to feel live, slow enough to be friendly to the
+  // server. We poll BOTH /api/email-campaigns/:id (dork + email) AND
+  // /api/campaigns/:id (SMS + CSV) — the server response shapes differ, so
+  // each is conditionally called.
   useEffect(() => {
-    // Don't start polling if campaign is already complete
-    if (!enabled || campaignStatus !== 'running' || !campaignId) return;
+    if (!enabled || !campaignId) return;
 
     let cancelled = false;
-    const poll = async () => {
+    let stoppedAt: number | null = null;
+
+    const tick = async () => {
+      if (cancelled) return;
       try {
-        const result = await getEmailCampaign(campaignId);
+        // Try the unified campaign endpoint first (works for both
+        // SMS and CSV-driven campaigns AND email pipelines).
+        const unified = await getCampaignApi(campaignId).catch(() => null);
         if (cancelled) return;
-        if (result && result.campaign) {
-          const c = result.campaign;
-          // Stop polling if campaign is no longer running (completed/cancelled).
-          // This prevents stale server data from overwriting accurate completion values.
-          if (c.status && c.status !== 'running' && c.status !== 'starting') {
-            cancelled = true;
-            clearInterval(pollInterval);
-            return;
-          }
-          // For dork runs the progress bar should reflect leads discovered so far
-          // (not emails sent, which stays at 0 during discovery). For CSV runs
-          // we keep the existing done=sent semantics.
-          const isDork = campaignLeadsTarget !== undefined;
-          const doneForBar = isDork
-            ? (typeof campaignLeadsFound === 'number' ? campaignLeadsFound : (c.sent || 0))
+
+        // Fall back to the email-campaigns endpoint for dork-runs whose
+        // data shape diverges.
+        const emailShaped = unified && unified.campaign
+          ? unified
+          : await getEmailCampaign(campaignId).catch(() => null);
+
+        if (cancelled) return;
+        const result = unified && unified.campaign ? unified : emailShaped;
+        if (!result || !result.campaign) {
+          setTimeout(tick, 2500);
+          return;
+        }
+
+        const c: any = result.campaign;
+        const status = String(c.status || '').toLowerCase();
+
+        // Done/total: prefer real deltas. For SMS campaigns the server
+        // returns smsSent, smsFailed, sitesGenerated on the campaign row,
+        // and per-lead smsStatus on the leads array. We sum to be safe.
+        const totalForBar = c.totalLeads ?? c.total_leads ?? campaignTotal;
+        // smsSent counts as "delivered + sent" for the bar (close enough to
+        // "done" for the user's perspective); dork campaigns use
+        // leadsFound instead.
+        let doneForBar: number;
+        if (campaignLeadsTarget !== undefined) {
+          doneForBar = typeof campaignLeadsFound === 'number'
+            ? campaignLeadsFound
             : (c.sent || 0);
-          const totalForBar = isDork ? (campaignLeadsTarget ?? c.totalLeads ?? campaignTotal) : (c.totalLeads ?? campaignTotal);
-          setData({
-            id: c.id || campaignId,
-            kind: 'email',
-            name: c.name || 'Campaign',
-            status: c.status === 'completed' ? 'completed' : 'running',
-            total: totalForBar,
-            done: doneForBar,
-            // Use the live count we now attach in getEmailCampaign — it's the
-            // authoritative unique-site count, not c.sent (which can include retries).
-            sitesGenerated: c.sites_generated || 0,
-            emailsSent: c.sent || 0,
-            emailsFailed: c.failed || 0,
-            accountsUsed: c.accountsUsed || 0,
-            // Carry through the dork-only fields so re-renders don't drop them.
-            // Prefer the wizard-seeded values (campaignLeadsFound/Target) when
-            // available, but fall back to API fields for stale campaigns.
-            leadsFound: campaignLeadsFound ?? c.leads_found ?? c.leadsFound ?? 0,
-            leadsTarget: campaignLeadsTarget ?? c.target_volume ?? c.leadsTarget ?? 0,
-            deployedSites: c.deployedSites || [],
-          });
+        } else {
+          doneForBar =
+            (typeof c.sent === 'number' ? c.sent : 0) ||
+            (typeof c.smsSent === 'number' ? c.smsSent : 0) ||
+            0;
+        }
+
+        setData({
+          id: c.id || campaignId,
+          kind: 'email',
+          name: c.name || 'Campaign',
+          status:
+            status === 'completed' ? 'completed'
+            : status === 'cancelled' ? 'cancelled'
+            : status === 'failed' ? 'cancelled'
+            : 'running',
+          total: totalForBar,
+          done: doneForBar,
+          sitesGenerated:
+            (typeof c.sites_generated === 'number' ? c.sites_generated : 0) ||
+            (typeof c.sitesGenerated === 'number' ? c.sitesGenerated : 0) ||
+            0,
+          emailsSent:
+            (typeof c.sent === 'number' ? c.sent : 0) ||
+            (typeof c.smsSent === 'number' ? c.smsSent : 0) ||
+            0,
+          emailsFailed:
+            (typeof c.failed === 'number' ? c.failed : 0) ||
+            (typeof c.smsFailed === 'number' ? c.smsFailed : 0) ||
+            0,
+          accountsUsed: c.accountsUsed || 0,
+          leadsFound: campaignLeadsFound ?? c.leads_found ?? c.leadsFound ?? 0,
+          leadsTarget: campaignLeadsTarget ?? c.target_volume ?? c.leadsTarget ?? 0,
+          deployedSites: c.deployedSites || [],
+        });
+
+        // Continue polling while campaign is still running.
+        if (status === 'running' || status === 'starting') {
+          stoppedAt = null;
+          setTimeout(tick, 2500);
+          return;
+        }
+        // After completion: keep polling for 60s so the final delivery
+        // receipts have time to land in the UI.
+        if (stoppedAt === null) stoppedAt = Date.now();
+        if (Date.now() - stoppedAt < 60_000) {
+          setTimeout(tick, 2500);
         }
       } catch (e) {
-        // Silent fail - keep using local data
+        // Silent fail — keep ticking.
+        setTimeout(tick, 2500);
       }
     };
 
-    // Poll every 2 seconds
-    const pollInterval = setInterval(poll, 2000);
+    tick();
+
     return () => {
       cancelled = true;
-      clearInterval(pollInterval);
     };
-  }, [campaignId, enabled, campaignStatus, campaignTotal, campaignLeadsFound, campaignLeadsTarget]);
+  }, [campaignId, enabled, campaignTotal, campaignLeadsFound, campaignLeadsTarget]);
 
   return data;
 }

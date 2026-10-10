@@ -35,7 +35,8 @@ export interface ActiveCampaignRun {
   niche: string;
   total: number;
   done: number;
-  status: 'starting' | 'running' | 'cancelling' | 'cancelled' | 'completed';
+  status: 'starting' | 'running' | 'delaying' | 'cancelling' | 'cancelled' | 'completed';
+  message?: string; // optional human-readable sub-status (e.g. "Sending next SMS in 7s…")
   startedAt: number;
   errorMessage?: string;
   // Site-deploy fields

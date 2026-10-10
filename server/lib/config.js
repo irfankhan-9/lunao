@@ -110,12 +110,17 @@ export const googleOAuth = {
 // billing integration.
 export const telnyxOAuth = {
   clientId: env.TELNYX_CLIENT_ID || '',
+  // Public OAuth clients (the recommended Lunao mode) have no client_secret —
+  // PKCE alone authenticates the token exchange. We still accept a secret
+  // for backward compatibility with confidential clients.
   clientSecret: env.TELNYX_CLIENT_SECRET || '',
   scopes: 'admin',
   authorizationUrl: 'https://api.telnyx.com/v2/oauth/authorize',
   tokenUrl: 'https://api.telnyx.com/v2/oauth/token',
   get enabled() {
-    return Boolean(this.clientId && this.clientSecret);
+    // Enabled whenever we have a client_id. PKCE substitutes for the secret
+    // when the registered Telnyx OAuth client is `client_type: "public"`.
+    return Boolean(this.clientId);
   },
 };
 

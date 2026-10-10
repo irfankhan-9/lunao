@@ -291,6 +291,19 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     loadConnectedAccounts();
   }, []);
 
+  // Listen for postMessage from OAuth callback (for same-window scenarios and popup close)
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // Email OAuth success
+      if (event.data?.type === 'LUNAO_EMAIL_CONNECTED') {
+        console.log('[email] OAuth connected message received');
+        loadConnectedAccounts();
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
   // One-shot fetch of the dork provider status so the UI can render a
   // "Live Google" / "DRY-RUN" badge above the Auto Email Sender panel.
   useEffect(() => {
@@ -537,9 +550,12 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     setIsLoadingAccounts(true);
     try {
       const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
+      console.log('[EmailCampaignWizard] Loading email accounts with key:', ownerKey);
       const { listEmailAccounts } = await import('../lib/pipelineClient');
       const raw = await listEmailAccounts(ownerKey);
+      console.log('[EmailCampaignWizard] Got raw accounts:', raw);
       const accounts = dedupeAccounts(raw);
+      console.log('[EmailCampaignWizard] Deduplicated accounts:', accounts);
       setConnectedAccounts(accounts.map(acc => ({
         id: acc.id,
         provider: acc.provider,
@@ -3637,17 +3653,12 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 {/* Victory Banner */}
                 <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-blue-100 border-t border-blue-200 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="text-2xl">🎉</span>
+                    <CheckCircle2 size={20} className="text-blue-600" strokeWidth={2.5} />
                     <p className="text-sm font-bold text-blue-800">
                       {launchResults?.sent && launchResults.sent > 0 
                         ? `${launchResults.sent} emails sent successfully!` 
                         : 'Campaign finished!'}
                     </p>
-                  </div>
-                  <div className="flex gap-1">
-                    {['🌟', '💪', '🏆', '🚀'].map((emoji, i) => (
-                      <span key={i} className="text-xl animate-bounce" style={{ animationDelay: `${i * 0.1}s` }}>{emoji}</span>
-                    ))}
                   </div>
                 </div>
 
@@ -3665,7 +3676,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 onClick={handleReset}
                 className="w-full px-4 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-sm font-bold rounded-xl transition-all shadow-md hover:shadow-lg"
               >
-                🚀 Launch Another Campaign
+                Launch Another Campaign
               </button>
             </div>
           </div>

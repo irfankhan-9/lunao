@@ -91,9 +91,15 @@ export async function exchangeTelnyxCode({ code, redirectUri, codeVerifier }) {
     grant_type: 'authorization_code',
     code,
     client_id: telnyxOAuth.clientId,
-    client_secret: telnyxOAuth.clientSecret,
     redirect_uri: redirectUri,
   });
+  // Only attach client_secret when the registered client is confidential.
+  // Public clients authenticate via PKCE alone (RFC 6749 §4.1.3); sending
+  // an empty `client_secret` would cause some OAuth providers to reject
+  // the request.
+  if (telnyxOAuth.clientSecret) {
+    body.set('client_secret', telnyxOAuth.clientSecret);
+  }
   if (codeVerifier) {
     body.set('code_verifier', codeVerifier);
   }
@@ -125,8 +131,10 @@ export async function refreshTelnyxAccessToken(refreshToken) {
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
     client_id: telnyxOAuth.clientId,
-    client_secret: telnyxOAuth.clientSecret,
   });
+  if (telnyxOAuth.clientSecret) {
+    body.set('client_secret', telnyxOAuth.clientSecret);
+  }
   const res = await fetchWithTimeout(TELNYX_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

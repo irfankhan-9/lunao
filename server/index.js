@@ -28,6 +28,20 @@ import { compileSite } from './lib/compile.js';
 import { parseCsv, validateCsv } from './lib/csv.js';
 import { runPipeline, COST_PER_LEAD, SITE_COST_PER_LEAD } from './lib/pipeline.js';
 import { listSites, readSite, writeSite, siteExists, isValidSlug, titleFromHtml, nicheFromHtml } from './lib/sites.js';
+import {
+  TIER,
+  normalisePlan,
+  tierLevel,
+  canUseOwnTelnyx,
+  isAutomatedSmsPlan,
+  allowedCountries,
+  requirePlan,
+} from './lib/planGates.js';
+import {
+  discoverSmsLeadsFromPlaces,
+  CA_PROVINCES,
+} from './lib/smsLeads.js';
+import { listCities } from './lib/cities.js';
 import { publishBatch, validateCloudflareToken } from './lib/cloudflare.js';
 import { streamEdit, isAiEnabled, cleanHtmlOutput } from './lib/anthropic.js';
 import { createBooking, listBookings, updateBookingStatus } from './lib/bookings.js';
@@ -46,6 +60,7 @@ import {
   touchCode,
   isValidCodeFormat,
 } from './lib/inviteCodes.js';
+import { mountPwaApi } from './lib/pwaApi.js';
 import {
   ensureAccount,
   getAccount,
@@ -133,6 +148,22 @@ import {
   updateTelnyxConnectionNumbers,
   deleteTelnyxConnection,
 } from './lib/telnyxConnections.js';
+import {
+  listMessagingProfiles,
+  setupNumberForSms,
+  checkNumberSmsCapability,
+  getNumberMessagingProfile,
+  assignNumbersToProfile,
+  checkProfileCountryEligibility,
+  checkProfileWebhookStatus,
+  updateMessagingProfileWebhook,
+  updateMessagingProfileAtomic,
+  getMessagingProfileDetails,
+} from './lib/telnyxMessagingProfile.js';
+import {
+  checkPhoneNumberEligibility,
+} from './lib/telnyxDestination.js';
+import { recheckSmsRows, startGlobalRechecker } from './lib/telnyxLiveRecheck.js';
 import {
   gateProtected,
   handleSiteGateLogin,
@@ -242,14 +273,33 @@ app.post('/api/compile', async (req, res) => {
 
 // Validate + parse a raw CSV body. Returns a structured validation report so
 // the dashboard can block launch and show precise, brand-consistent errors.
-app.post('/api/csv/parse', (req, res) => {
+//
+// Accepts either `csv` (raw text) in the body, or a `text` field for
+// multipart/form clients. Forwards an `allowedCountries` array (ISO-2
+// codes) so the SMS wizard can lock Free/Starter plans to Canada.
+app.post('/api/csv/parse', authenticate, (req, res) => {
   try {
-    const text = typeof req.body === 'string' ? req.body : req.body?.csv;
-    const report = validateCsv(text || '');
+    const text = typeof req.body === 'string' ? req.body : req.body?.csv || req.body?.text;
+    const ownerKey = ownerKeyForCallback(req);
+    // Resolve plan from request body, header, or stored account default.
+    const rawPlan = req.body?.plan || req.headers['x-user-plan'];
+    const plan = normalisePlan(rawPlan);
+    // For automated plans (Free/Starter), force the country restriction
+    // even if the caller forgot to send allowedCountries — defence in
+    // depth.
+    const planAllowed = allowedCountries(plan);
+    const requested = Array.isArray(req.body?.allowedCountries)
+      ? req.body.allowedCountries.map((c) => String(c).toUpperCase())
+      : null;
+    const allowed = planAllowed || requested || null;
+
+    const report = validateCsv(text || '', { allowedCountries: allowed });
     res.json({
       ok: report.ok,
       count: report.validCount,
       leads: report.leads,
+      plan,
+      allowedCountries: allowed,
       validation: report,
     });
   } catch (err) {
@@ -342,6 +392,30 @@ app.post('/api/campaign/run', async (req, res) => {
   // Always echo the campaign id so the client can fetch /api/campaigns/:id.
   if (campaignId) send({ type: 'campaign', campaignId });
 
+  // Resolve SMS routing BEFORE the pipeline starts:
+  //   - Free and Starter plans (automated) MUST NOT use the user's
+  //     connected Telnyx account. We drop smsAccountId and force
+  //     smsFrom to the Lunao shared Canadian sender (TELNYX_PHONE_NUMBER).
+  //   - Growth/Pro/Agency may optionally pass accountId+from to use
+  //     their own Telnyx account. If they didn't pass anything, we fall
+  //     back to the shared sender too (so the wizard doesn't need to
+  //     duplicate logic).
+  const resolvedPlan = normalisePlan(plan);
+  const requestedAccountId = req.body?.sms?.accountId || null;
+  const requestedFrom = req.body?.sms?.from || null;
+  let smsAccountId = requestedAccountId;
+  let smsFrom = requestedFrom;
+  if (isAutomatedSmsPlan(resolvedPlan)) {
+    // Defence in depth: even if the client lied, we strip it here.
+    smsAccountId = null;
+    smsFrom = telnyx.from || '';
+  } else if (requestedAccountId && !canUseOwnTelnyx(resolvedPlan)) {
+    return res.status(403).json({
+      ok: false,
+      error: 'Your plan does not allow connecting your own Telnyx. Upgrade to Growth.',
+    });
+  }
+
   try {
     await runPipeline({
       businesses: leads,
@@ -357,8 +431,8 @@ app.post('/api/campaign/run', async (req, res) => {
       // OAuth-aware SMS: when the request carries { sms: { accountId, from } },
       // forward them to the pipeline so sendSms uses the per-owner OAuth token
       // instead of the server-level TELNYX_API_KEY.
-      smsAccountId: req.body?.sms?.accountId || null,
-      smsFrom: req.body?.sms?.from || null,
+      smsAccountId,
+      smsFrom,
     });
   } catch (err) {
     send({ type: 'error', error: err.message });
@@ -954,15 +1028,9 @@ app.get('/api/owner/me', (req, res) => {
 });
 
 app.post('/api/owner/push-token', (req, res) => {
-  // In production: store the Expo push token keyed by slug and send push on
-  // every new booking for that slug via Expo's push service.
-  // Here we acknowledge receipt so the app flow completes.
-  const { token, platform, slug } = req.body || {};
-  if (!token || typeof token !== 'string') {
-    return res.status(400).json({ ok: false, error: 'token is required.' });
-  }
-  console.log(`[push-token] registered for ${slug || 'unknown'} on ${platform || 'unknown'}: ${token.slice(0, 20)}...`);
-  res.json({ ok: true, registered: true });
+  // Retired: the Owner App is a PWA, not a native Expo app. Push tokens are
+  // delivered via the Web Push API (future work) keyed by slug.
+  return res.status(410).json({ ok: false, error: 'Gone. Use Web Push (PWA).' });
 });
 
 // ---- Conversations (chat history) -------------------------------------------
@@ -1153,13 +1221,16 @@ app.get('/api/campaigns', authenticate, (req, res) => {
   }
 });
 
-app.get('/api/campaigns/:id', authenticate, (req, res) => {
+app.get('/api/campaigns/:id', authenticate, async (req, res) => {
   try {
     const c = getCampaign(req.params.id);
     if (!c) return res.status(404).json({ ok: false, error: 'Campaign not found' });
     const leads = listLeads(c.id);
     const sms = listSmsForCampaign(c.id);
-    res.json({ ok: true, campaign: c, leads, sms });
+    // Live re-check on every poll, so the UI shows real delivered/failed
+    // counts instead of whatever the webhook happened to land.
+    recheckSmsRows(sms).catch((e) => console.warn('[recheck] campaign:', e.message));
+    res.json({ ok: true, campaign: c, leads, sms, asOf: Date.now() });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -1664,8 +1735,62 @@ app.get('/api/dork/status', (_req, res) => {
 // Build the provider's authorization URL. The frontend opens this URL, the
 // user approves on Google's own consent screen, and Google redirects back to
 // /api/email-accounts/callback with a one-time `code`.
-const oauthStateStore = new Map(); // state -> { ownerKey, createdAt }
+// OAuth state storage. Persisted to SQLite so OAuth survives server restarts.
+// The in-memory Map (`oauthStateStore`) is now a read-through cache backed by
+// the `oauth_states` table. Reads check DB first, then cache. Writes go to both.
+const oauthStateStore = new Map(); // state -> { ownerKey, createdAt, provider } (cache)
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+const OAUTH_STATE_CACHE_TTL_MS = 5 * 60 * 1000; // keep in cache for 5 min
+
+// DB-backed OAuth state helpers
+function getOauthState(state) {
+  // Check cache first
+  const cached = oauthStateStore.get(state);
+  if (cached) {
+    if (Date.now() - cached.createdAt < OAUTH_STATE_CACHE_TTL_MS) return cached;
+    oauthStateStore.delete(state);
+  }
+  // Fall back to DB
+  const row = db.prepare('SELECT * FROM oauth_states WHERE state = ? AND expires_at > ?')
+    .get(state, Date.now());
+  if (row) {
+    const data = {
+      ownerKey: row.owner_key,
+      createdAt: row.created_at,
+      provider: row.provider,
+      codeVerifier: row.code_verifier,
+    };
+    oauthStateStore.set(state, data);
+    return data;
+  }
+  return null;
+}
+
+function setOauthState(state, data) {
+  // Write to DB
+  db.prepare(
+    'INSERT OR REPLACE INTO oauth_states (state, owner_key, provider, created_at, expires_at, code_verifier) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(state, data.ownerKey, data.provider || 'gmail', data.createdAt, data.createdAt + OAUTH_STATE_TTL_MS, data.codeVerifier || null);
+  // Also cache
+  oauthStateStore.set(state, { ownerKey: data.ownerKey, createdAt: data.createdAt, provider: data.provider || 'gmail', codeVerifier: data.codeVerifier || null });
+}
+
+function deleteOauthState(state) {
+  oauthStateStore.delete(state);
+  db.prepare('DELETE FROM oauth_states WHERE state = ?').run(state);
+}
+
+// Periodic cleanup of expired OAuth states (run every 2 minutes)
+function startOauthStateCleanup() {
+  setInterval(() => {
+    const deleted = db.prepare('DELETE FROM oauth_states WHERE expires_at < ?').run(Date.now());
+    if (deleted.changes > 0) {
+      console.log(`[oauth] cleaned up ${deleted.changes} expired state(s)`);
+    }
+  }, 2 * 60 * 1000);
+}
+// Start cleanup after DB is ready (server startup calls this after citiesLoadPromise)
+export function startOauthCleanupAfterInit() { startOauthStateCleanup(); }
 
 function ownerKeyForCallback(req) {
   const legacyKey = req.headers['x-owner-key'] || req.query.ownerKey || req.body?.ownerKey;
@@ -1692,7 +1817,8 @@ app.get('/api/email-accounts/oauth/url', authenticate, (req, res) => {
 
     const ownerKey = ownerKeyForCallback(req);
     const state = `lk_${Date.now()}_${Math.random().toString(36).slice(2, 14)}`;
-    oauthStateStore.set(state, { ownerKey, createdAt: Date.now() });
+    // Persist to DB (survives server restarts)
+    setOauthState(state, { ownerKey, createdAt: Date.now(), provider });
 
     const redirectUri = `${redirectBase()}/api/email-accounts/callback`;
     let url;
@@ -1715,9 +1841,21 @@ app.get('/api/email-accounts/oauth/url', authenticate, (req, res) => {
 // to the dashboard (window.close) and tells the user it worked.
 app.get('/api/email-accounts/callback', async (req, res) => {
   const { code, state, error } = req.query;
-  
+  // The frontend passes the opener URL as base64-encoded JSON in `_ru`.
+  const _ru = String(req.query._ru || '');
+  let openerUrl = null;
+  if (_ru) { try { openerUrl = decodeURIComponent(atob(_ru)); } catch { /* ignore */ } }
+
   // Friendly HTML shell so the user always sees SOMETHING, even on errors.
   const sendHtml = (title, body, autoClose = true) => {
+    const postMsgScript = autoClose ? `
+      if (window.opener) {
+        try { window.opener.postMessage({ type: 'LUNAO_EMAIL_CONNECTED' }, '*'); } catch(e) {}
+        setTimeout(function(){ try { window.close(); } catch(e) {} }, 800);
+      } else if (${JSON.stringify(openerUrl || '')}) {
+        setTimeout(function(){ window.location.href = ${JSON.stringify(openerUrl || '')} + '?email_connected=true'; }, 1000);
+      }
+    ` : '';
     const html = `<!doctype html><html><head><meta charset="utf-8" /><title>${title}</title>
     <style>
       body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f7f6f3; color: #1f2937; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 24px; }
@@ -1731,7 +1869,7 @@ app.get('/api/email-accounts/callback', async (req, res) => {
     </style></head>
     <body><div class="card"><h1>${title}</h1>${body}${autoClose ? '<div class="spinner"></div>' : ''}</div>
     <script>
-      ${autoClose ? `setTimeout(function(){ try { window.close(); } catch(e) {} }, 1500);` : ''}
+      ${postMsgScript}
     </script></body></html>`;
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
@@ -1748,27 +1886,27 @@ app.get('/api/email-accounts/callback', async (req, res) => {
     return sendHtml('Invalid callback', '<p class="err">Missing code or state from Google.</p>', false);
   }
   
-  const stateData = oauthStateStore.get(String(state));
+  const stateData = getOauthState(String(state));
   if (!stateData) {
     return sendHtml('Session expired', '<p class="err">Please return to the dashboard and click Connect again.</p>', false);
   }
   if (Date.now() - stateData.createdAt > OAUTH_STATE_TTL_MS) {
-    oauthStateStore.delete(String(state));
+    deleteOauthState(String(state));
     return sendHtml('Session timed out', '<p class="err">Restart the connection from the dashboard.</p>', false);
   }
-  
+
   try {
     const redirectUri = `${redirectBase()}/api/email-accounts/callback`;
-    
+
     // Gmail only for now
     const tokens = await exchangeGmailCode({ code: String(code), redirectUri });
     const profile = await getGmailUserProfile(tokens.access_token);
-    
+
     const encrypted = encryptRefreshTokenForStorage(tokens.refresh_token);
     if (!encrypted) {
       throw new Error('Failed to encrypt refresh token. Check EMAIL_TOKEN_ENCRYPTION_KEY.');
     }
-    
+
     const userId = stateData.ownerKey;
     const account = createEmailAccount({
       userId,
@@ -1778,8 +1916,8 @@ app.get('/api/email-accounts/callback', async (req, res) => {
       encryptedRefreshToken: encrypted,
       dailyCap: 80,
     });
-    
-    oauthStateStore.delete(String(state));
+
+    deleteOauthState(String(state));
     
     return sendHtml(
       'Gmail connected',
@@ -1823,11 +1961,12 @@ function telnyxConnectHandler(req, res) {
     const ownerKey = ownerKeyForCallback(req);
     const state = `tn_${Date.now()}_${Math.random().toString(36).slice(2, 14)}`;
     const { codeVerifier, codeChallenge, codeChallengeMethod } = generatePkcePair();
-    oauthStateStore.set(state, {
+    // Persist to DB (survives server restarts)
+    setOauthState(state, {
       ownerKey,
       createdAt: Date.now(),
+      provider: 'telnyx',
       codeVerifier,
-      codeVerifierCreatedAt: Date.now(),
     });
 
     const redirectUri = `${redirectBase()}/api/telnyx/callback`;
@@ -1842,8 +1981,203 @@ function telnyxConnectHandler(req, res) {
     res.status(500).json({ ok: false, error: err.message });
   }
 }
-app.get('/api/telnyx/oauth/url', authenticate, telnyxConnectHandler);
-app.get('/api/telnyx/connect', authenticate, telnyxConnectHandler);
+// Telnyx OAuth integration health check — no auth required so the UI can
+// surface connection status without a login round-trip.
+app.get('/api/telnyx/status', (req, res) => {
+  res.json({
+    ok: true,
+    oauthEnabled: telnyxOAuth.enabled,
+    clientId: telnyxOAuth.clientId ? telnyxOAuth.clientId.slice(0, 8) + '***' : null,
+    redirectUri: telnyxOAuth.enabled ? telnyxOAuth.authorizationUrl : null,
+    note: telnyxOAuth.enabled
+      ? 'Telnyx OAuth is ready. Users can click "Connect with Telnyx" in Settings.'
+      : 'Set TELNYX_CLIENT_ID in .env.local to enable Telnyx OAuth.',
+  });
+});
+
+// Aggregate Telnyx connection health for the SMS campaign wizard.
+// Returns ONE compact payload so the frontend can render a smooth,
+// single-shot loading state and pick the right CTA — instead of a
+// sequence of fetches that flips the UI between three empty states.
+//
+//   {
+//     ok: true,
+//     connected:        boolean,   // any Telnyx account row exists
+//     accountsActive:   number,    // count of status === 'active'
+//     accountsNeedReconnect: number,
+//     hasValidToken:    boolean,   // at least one active account whose access
+//                                  // token we can decrypt + refresh right now
+//     primaryAccount:   { email, label, expiresAt, expiresInSec } | null,
+//     numbersTotal:     number,    // sum of numbers on active accounts
+//     readyNumbers:     number,    // numbers with messaging profile assigned
+//   }
+app.get('/api/telnyx/connection-status', authenticate, async (req, res) => {
+  try {
+    const ownerKey = ownerKeyForCallback(req);
+    const plan = normalisePlan(req.query?.plan || req.headers['x-user-plan']);
+    // telnyx is the shared Lunao account — used for Free/Starter automated SMS.
+    const sharedEnabled = Boolean(telnyx.enabled && telnyx.apiKey && telnyx.from);
+
+    // Free / Starter users never see a connected Telnyx account. They
+    // use Lunao's shared sender. Return a synthetic "ready" status so
+    // the wizard renders the Lunao shared-sender card without the
+    // previous "Connect with Telnyx" CTA.
+    if (isAutomatedSmsPlan(plan)) {
+      // Note: we intentionally skip the app_settings lookup here since the
+      // `app_settings` table may not exist in all deployments. We rely
+      // solely on the env-based telnyx config (telnyx.from / telnyx.enabled).
+      const from = telnyx.from || '';
+      const apiKeyOk = sharedEnabled;
+      return res.json({
+        ok: true,
+        plan,
+        automated: true,
+        connected: apiKeyOk,
+        hasValidToken: apiKeyOk,
+        accountsActive: apiKeyOk ? 1 : 0,
+        accountsNeedReconnect: apiKeyOk ? 0 : 1,
+        primaryAccount: apiKeyOk
+          ? {
+              email: 'lunao@shared',
+              label: 'Lunao shared Canadian sender',
+              expiresAt: null,
+              expiresInSec: null,
+              shared: true,
+            }
+          : null,
+        senderNumber: from,
+        // numbersTotal + readyNumbers are 0 here; the wizard's automated
+        // path doesn't need a per-account number count.
+        numbersTotal: 0,
+        readyNumbers: 0,
+        // Surface the configured price so the wizard can show e.g.
+        // "From +1 437-555-0142 · verified Canadian sender".
+        note: apiKeyOk
+          ? null
+          : 'LUNAO_TELNYX_API_KEY or TELNYX_PHONE_NUMBER is not configured. Set them in .env to enable automated SMS for Free and Starter.',
+      });
+    }
+
+    const allAccounts = listTelnyxConnections(ownerKey);
+    const active = allAccounts.filter((a) => a.status === 'active');
+    const needsReconnect = allAccounts.length - active.length;
+
+    if (allAccounts.length === 0) {
+      return res.json({
+        ok: true,
+        plan,
+        automated: false,
+        connected: false,
+        accountsActive: 0,
+        accountsNeedReconnect: 0,
+        hasValidToken: false,
+        primaryAccount: null,
+        numbersTotal: 0,
+        readyNumbers: 0,
+      });
+    }
+
+    // Pick the first active account to probe for token health. If it 401s,
+    // the backend will set status='needs_reconnect' automatically and
+    // we re-list to reflect that in the response.
+    let primaryAccount = active[0] || null;
+    let hasValidToken = false;
+    let expiresAt = null;
+    let expiresInSec = null;
+
+    if (primaryAccount) {
+      try {
+        const token = await resolveTelnyxAccessToken(primaryAccount);
+        if (token) {
+          hasValidToken = true;
+          expiresAt = primaryAccount.expires_at || null;
+          expiresInSec = expiresAt ? Math.max(0, expiresAt - Math.floor(Date.now() / 1000)) : null;
+        }
+      } catch (_) {
+        hasValidToken = false;
+      }
+
+      // If the active account just got demoted to needs_reconnect, refresh.
+      if (!hasValidToken && active.length > 0) {
+        try {
+          const fresh = listTelnyxConnections(ownerKey);
+          const refreshedActive = fresh.filter((a) => a.status === 'active');
+          if (refreshedActive.length !== active.length) {
+            // We re-read the rows; rebuild the snapshot.
+            const freshPrimary = refreshedActive[0] || primaryAccount;
+            return res.json({
+              ok: true,
+              plan,
+              automated: false,
+              connected: true,
+              accountsActive: refreshedActive.length,
+              accountsNeedReconnect: fresh.length - refreshedActive.length,
+              hasValidToken: false,
+              primaryAccount: freshPrimary
+                ? {
+                    email: freshPrimary.account_email,
+                    label: freshPrimary.account_label,
+                    expiresAt: freshPrimary.expires_at || null,
+                    expiresInSec:
+                      freshPrimary.expires_at
+                        ? Math.max(0, freshPrimary.expires_at - Math.floor(Date.now() / 1000))
+                        : null,
+                  }
+                : null,
+              numbersTotal: 0,
+              readyNumbers: 0,
+            });
+          }
+        } catch (_) {
+          // ignore — fall through with what we have
+        }
+      }
+    }
+
+    res.json({
+      ok: true,
+      plan,
+      automated: false,
+      connected: true,
+      accountsActive: active.length,
+      accountsNeedReconnect: needsReconnect,
+      hasValidToken,
+      primaryAccount: primaryAccount
+        ? {
+            email: primaryAccount.account_email,
+            label: primaryAccount.account_label,
+            expiresAt,
+            expiresInSec,
+          }
+        : null,
+      // numbersTotal + readyNumbers are populated by a follow-up request
+      // when active accounts exist and a token is valid; here we just
+      // expose the row count so the wizard can show "X numbers on file".
+      numbersTotal: active.reduce((sum, a) => sum + (a.total_numbers || 0), 0),
+      readyNumbers: 0,
+    });
+  } catch (err) {
+    console.error('[telnyx/connection-status]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Telnyx OAuth "Connect" entry-point. Gated to Growth/Pro/Agency plans —
+// Free and Starter do not see the OAuth UI in the wizard, and these
+// endpoints 403 them even if they hand-craft the URL. This is the
+// server-side enforcement of the plan-tier boundary.
+app.get(
+  '/api/telnyx/oauth/url',
+  authenticate,
+  requirePlan('Growth Plan'),
+  telnyxConnectHandler,
+);
+app.get(
+  '/api/telnyx/connect',
+  authenticate,
+  requirePlan('Growth Plan'),
+  telnyxConnectHandler,
+);
 
 // 2. Provider redirect target. Exchanges the code for tokens, validates the
 //    access token by listing phone numbers, encrypts both tokens with
@@ -1923,12 +2257,12 @@ const sendHtml = (title, body, status = 'ok') => {
     return sendHtml('Invalid callback', '<p class="err">Missing code or state from Telnyx.</p>', 'error');
   }
 
-  const stateData = oauthStateStore.get(String(state));
+  const stateData = getOauthState(String(state));
   if (!stateData) {
     return sendHtml('Session expired', '<p class="err">Please return to the dashboard and click Connect again.</p>', 'error');
   }
   if (Date.now() - stateData.createdAt > OAUTH_STATE_TTL_MS) {
-    oauthStateStore.delete(String(state));
+    deleteOauthState(String(state));
     return sendHtml('Session timed out', '<p class="err">Restart the connection from the dashboard.</p>', 'error');
   }
 
@@ -1982,7 +2316,7 @@ const sendHtml = (title, body, status = 'ok') => {
       totalNumbers: totalNumbers || 0,
     });
 
-    oauthStateStore.delete(String(state));
+    deleteOauthState(String(state));
 
     return sendHtml(
       'Telnyx connected',
@@ -1998,6 +2332,14 @@ const sendHtml = (title, body, status = 'ok') => {
 app.get('/api/telnyx/accounts', authenticate, (req, res) => {
   try {
     const ownerKey = ownerKeyForCallback(req);
+    const plan = normalisePlan(req.query?.plan || req.headers['x-user-plan']);
+    // Free and Starter users always have zero connected accounts — they
+    // use Lunao's shared sender. Return an empty list (NOT 403) so the
+    // wizard's "list accounts" call simply yields no rows and the UI
+    // renders the Lunao shared-sender view.
+    if (isAutomatedSmsPlan(plan)) {
+      return res.json({ ok: true, accounts: [], plan, automated: true });
+    }
     const accounts = listTelnyxConnections(ownerKey).map((a) => {
       // Strip the encrypted tokens from the wire payload — the dashboard
       // never needs them. We expose status + total_numbers + expires_at so
@@ -2014,7 +2356,7 @@ app.get('/api/telnyx/accounts', authenticate, (req, res) => {
         connected_at: a.connected_at,
       };
     });
-    res.json({ ok: true, accounts });
+    res.json({ ok: true, accounts, plan });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -2022,7 +2364,7 @@ app.get('/api/telnyx/accounts', authenticate, (req, res) => {
 
 // 4. Delete a connected Telnyx account. Stops future SMS sends using this
 //    connection (the pipeline silently skips if no active connection exists).
-app.delete('/api/telnyx/accounts/:id', authenticate, (req, res) => {
+app.delete('/api/telnyx/accounts/:id', authenticate, requirePlan('Growth Plan'), (req, res) => {
   try {
     const ownerKey = ownerKeyForCallback(req);
     const conn = getTelnyxConnection(req.params.id);
@@ -2082,6 +2424,461 @@ app.get('/api/telnyx/accounts/:id/numbers', authenticate, async (req, res) => {
 
     res.json({ ok: true, numbers: result });
   } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Get phone numbers with their messaging profile status (eligibility check)
+app.get('/api/telnyx/accounts/:id/numbers-with-status', authenticate, async (req, res) => {
+  try {
+    const ownerKey = ownerKeyForCallback(req);
+    const conn = getTelnyxConnection(req.params.id);
+    if (!conn) return res.status(404).json({ ok: false, error: 'Connection not found' });
+    if (conn.user_id !== ownerKey) {
+      return res.status(403).json({ ok: false, error: 'Not your connection' });
+    }
+
+    // Get fresh access token
+    const accessToken = await resolveTelnyxAccessToken(conn);
+    if (!accessToken) {
+      updateTelnyxConnectionStatus(conn.id, 'needs_reconnect');
+      return res.status(401).json({ ok: false, error: 'Access token expired or revoked. Please reconnect.' });
+    }
+
+    console.log(`[telnyx] numbers-with-status: fetching numbers for account ${conn.id}`);
+    // Get the list of numbers from Telnyx - request all messaging profile info
+    const listRes = await fetch('https://api.telnyx.com/v2/phone_numbers?page[size]=50', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!listRes.ok) {
+      const errorText = await listRes.text().catch(() => '');
+      console.error(`[telnyx] numbers-with-status: Telnyx API returned ${listRes.status}:`, errorText);
+      return res.status(listRes.status).json({ ok: false, error: `Telnyx: ${listRes.statusText || errorText}` });
+    }
+    const data = await listRes.json().catch(() => ({}));
+    const numbers = Array.isArray(data?.data) ? data.data : [];
+    console.log(`[telnyx] numbers-with-status: Got ${numbers.length} numbers from Telnyx`);
+
+    // Debug: log the raw structure of the first number
+    if (numbers.length > 0) {
+      console.log('[telnyx] First number raw:', JSON.stringify(numbers[0], null, 2));
+    }
+
+    // For each number, check if it has a messaging profile assigned
+    const result = await Promise.all(
+      numbers
+        .filter((n) => n?.phone_number)
+        .map(async (n) => {
+          const number = String(n.phone_number);
+
+          // First try: messaging_profile_id directly from the response
+          let profileId = n.messaging_profile_id || n.messaging_profile?.id || null;
+          let profileName = n.messaging_profile?.name || null;
+
+          console.log(`[telnyx] Checking ${number}:`);
+          console.log(`  - status: ${n.status}`);
+          console.log(`  - messaging_profile_id from list: ${profileId}`);
+
+          // If no profile ID, try the lookup helper as fallback
+          if (!profileId) {
+            console.log(`  - Falling back to lookup for ${number}`);
+            const capability = await checkNumberSmsCapability({
+              apiKey: accessToken,
+              phoneNumber: number,
+            });
+            profileId = capability.profileId;
+            profileName = capability.profileName;
+            console.log(`  - Lookup result for ${number}: profileId=${profileId}, canSend=${capability.canSend}`);
+          }
+
+          const canSend = !!profileId && (n.status === 'active' || n.status === 'enabled' || !n.status);
+
+          return {
+            number,
+            type: 'phone_number',
+            id: n.id || null,
+            canSend,
+            profileId,
+            profileName,
+            reason: profileId ? null : 'not_assigned',
+            status: n.status,
+            features: n.features || [],
+          };
+        })
+    );
+
+    console.log(`[telnyx] numbers-with-status: Returning ${result.length} numbers with status`);
+    res.json({ ok: true, numbers: result, totalFound: numbers.length });
+  } catch (err) {
+    console.error('[telnyx] numbers-with-status error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Create a messaging profile and assign a phone number to it
+app.post('/api/telnyx/messaging-profiles/create', authenticate, async (req, res) => {
+  try {
+    const ownerKey = ownerKeyForCallback(req);
+    const { accountId, phoneNumber, profileName } = req.body || {};
+
+    if (!accountId || !phoneNumber) {
+      return res.status(400).json({ ok: false, error: 'accountId and phoneNumber are required' });
+    }
+
+    // Verify the connection belongs to this owner
+    const conn = getTelnyxConnection(accountId);
+    if (!conn) return res.status(404).json({ ok: false, error: 'Connection not found' });
+    if (conn.user_id !== ownerKey) {
+      return res.status(403).json({ ok: false, error: 'Not your connection' });
+    }
+
+    // Get fresh access token
+    const accessToken = await resolveTelnyxAccessToken(conn);
+    if (!accessToken) {
+      updateTelnyxConnectionStatus(conn.id, 'needs_reconnect');
+      return res.status(401).json({ ok: false, error: 'Access token expired or revoked. Please reconnect.' });
+    }
+
+    // Create messaging profile and assign the number
+    const result = await setupNumberForSms({
+      apiKey: accessToken,
+      phoneNumber,
+      profileName: profileName || `Lunao - ${conn.account_email || phoneNumber}`,
+    });
+
+    if (!result.success) {
+      return res.status(400).json({ ok: false, error: result.error });
+    }
+
+    res.json({
+      ok: true,
+      success: true,
+      profileId: result.profileId,
+      profileName: result.profileName,
+      webhookUrl: result.webhookUrl,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Get messaging profiles for a connected account
+app.get('/api/telnyx/accounts/:id/messaging-profiles', authenticate, async (req, res) => {
+  try {
+    const ownerKey = ownerKeyForCallback(req);
+    const conn = getTelnyxConnection(req.params.id);
+    if (!conn) return res.status(404).json({ ok: false, error: 'Connection not found' });
+    if (conn.user_id !== ownerKey) {
+      return res.status(403).json({ ok: false, error: 'Not your connection' });
+    }
+
+    // Get fresh access token
+    const accessToken = await resolveTelnyxAccessToken(conn);
+    if (!accessToken) {
+      return res.status(401).json({ ok: false, error: 'Access token expired or revoked.' });
+    }
+
+    const profiles = await listMessagingProfiles({ apiKey: accessToken });
+    res.json({ ok: true, profiles });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Check if messaging profile can SMS the countries in the CSV leads
+// Also checks webhook configuration
+app.post('/api/telnyx/profile-eligibility', authenticate, async (req, res) => {
+  try {
+    const ownerKey = ownerKeyForCallback(req);
+    const { accountId, profileId, targetCountries } = req.body || {};
+
+    if (!accountId || !profileId) {
+      return res.status(400).json({ ok: false, error: 'accountId and profileId are required' });
+    }
+
+    // Verify the connection belongs to this owner
+    const conn = getTelnyxConnection(accountId);
+    if (!conn) return res.status(404).json({ ok: false, error: 'Connection not found' });
+    if (conn.user_id !== ownerKey) {
+      return res.status(403).json({ ok: false, error: 'Not your connection' });
+    }
+
+    // Get fresh access token
+    const accessToken = await resolveTelnyxAccessToken(conn);
+    if (!accessToken) {
+      updateTelnyxConnectionStatus(conn.id, 'needs_reconnect');
+      return res.status(401).json({ ok: false, error: 'Access token expired or revoked. Please reconnect.' });
+    }
+
+    // Check country eligibility
+    const countryCheck = await checkProfileCountryEligibility({
+      apiKey: accessToken,
+      profileId,
+      targetCountries: targetCountries || [],
+    });
+
+    // Check webhook configuration
+    const webhookCheck = await checkProfileWebhookStatus({
+      apiKey: accessToken,
+      profileId,
+    });
+
+    // Get profile details
+    const profile = await getMessagingProfileDetails({
+      apiKey: accessToken,
+      profileId,
+    });
+
+    res.json({
+      ok: true,
+      profileId,
+      profileName: profile?.name || null,
+      countryCheck,
+      webhookCheck,
+      needsSetup: countryCheck.needsConfiguration || !webhookCheck.correct,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Configure a messaging profile: set webhook URL, assign number, add country destinations.
+// Returns step-by-step results so the UI can show pass/fail per action.
+app.post('/api/telnyx/profile-configure', authenticate, async (req, res) => {
+  try {
+    const ownerKey = ownerKeyForCallback(req);
+    const {
+      accountId,
+      profileId,
+      phoneNumber,           // optional: also assign this number to the profile
+      targetCountries,       // ISO codes the user wants to send to (eligibility already filtered client-side)
+      countries,             // backwards-compat: addCountries
+      addCountries,
+    } = req.body || {};
+
+    if (!accountId || !profileId) {
+      return res.status(400).json({ ok: false, error: 'accountId and profileId are required' });
+    }
+
+    // Verify the connection belongs to this owner
+    const conn = getTelnyxConnection(accountId);
+    if (!conn) return res.status(404).json({ ok: false, error: 'Connection not found' });
+    if (conn.user_id !== ownerKey) {
+      return res.status(403).json({ ok: false, error: 'Not your connection' });
+    }
+
+    // Get fresh access token
+    const accessToken = await resolveTelnyxAccessToken(conn);
+    if (!accessToken) {
+      updateTelnyxConnectionStatus(conn.id, 'needs_reconnect');
+      return res.status(401).json({ ok: false, error: 'Access token expired or revoked. Please reconnect.' });
+    }
+
+    const steps = [];
+    const blockedCountries = [];
+
+    // Determine which countries to whitelist.
+    // We only auto-configure countries whose eligibility was 'fixable' — the
+    // client has already filtered targetCountries to exclude 10DLC/DLT/AE/SG.
+    const countriesToAdd = Array.isArray(targetCountries)
+      ? targetCountries
+      : (Array.isArray(addCountries)
+          ? addCountries
+          : (Array.isArray(countries) ? countries : []));
+
+    // ---- Step 1: Atomic profile PATCH (webhook + whitelist) ----
+    const patchResult = await updateMessagingProfileAtomic({
+      apiKey: accessToken,
+      profileId,
+      addCountries: countriesToAdd,
+    });
+    steps.push(...patchResult.steps);
+
+    // ---- Step 2: Assign phone number to profile if provided ----
+    if (phoneNumber) {
+      const assignResult = await assignNumbersToProfile({
+        apiKey: accessToken,
+        profileId,
+        phoneNumbers: [phoneNumber],
+      });
+      steps.push({
+        step: 'number_assignment',
+        ok: !!assignResult.success,
+        message: assignResult.success
+          ? `${phoneNumber} assigned to profile`
+          : `Number assignment failed: ${assignResult.error}`,
+      });
+    }
+
+    // ---- Step 3: Post-flight recheck ----
+    const postFlight = await postFlightRecheck({
+      apiKey: accessToken,
+      phoneNumber,
+      profileId,
+      targetCountries: countriesToAdd,
+    });
+    // Merge post-flight steps
+    if (Array.isArray(postFlight.steps)) {
+      for (const s of postFlight.steps) steps.push(s);
+    }
+
+    // Identify countries that are still not whitelisted after the attempt
+    const countrySteps = steps.filter((s) => s.step.startsWith('country_'));
+    for (const s of countrySteps) {
+      if (!s.ok) {
+        const code = s.step.replace('country_', '').replace('_whitelisted', '');
+        if (code && !blockedCountries.includes(code)) blockedCountries.push(code);
+      }
+    }
+
+    const allOk = steps.every((s) => s.ok);
+
+    res.json({
+      ok: true,
+      steps,
+      overallSuccess: allOk,
+      blockedCountries,
+      postFlightCheck: {
+        allPassed: postFlight.allPassed,
+        whitelistedCountries: countriesToAdd,
+      },
+    });
+  } catch (err) {
+    console.error('[telnyx] profile-configure error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Check destination eligibility for a specific phone number + target countries.
+// This is the smart pre-flight that calls Telnyx to learn the number's type,
+// then maps each destination to either auto-configure or a manual registration.
+app.post('/api/telnyx/destination-eligibility', authenticate, async (req, res) => {
+  try {
+    const ownerKey = ownerKeyForCallback(req);
+    const { accountId, phoneNumber, targetCountries } = req.body || {};
+
+    if (!accountId || !phoneNumber) {
+      return res.status(400).json({ ok: false, error: 'accountId and phoneNumber are required' });
+    }
+
+    const conn = getTelnyxConnection(accountId);
+    if (!conn) return res.status(404).json({ ok: false, error: 'Connection not found' });
+    if (conn.user_id !== ownerKey) {
+      return res.status(403).json({ ok: false, error: 'Not your connection' });
+    }
+
+    const accessToken = await resolveTelnyxAccessToken(conn);
+    if (!accessToken) {
+      updateTelnyxConnectionStatus(conn.id, 'needs_reconnect');
+      return res.status(401).json({ ok: false, error: 'Access token expired or revoked. Please reconnect.' });
+    }
+
+    // Build the Lunao webhook URL that the messaging profile must point at.
+    const expectedWebhookUrl = `${PUBLIC_API_BASE_URL || `http://localhost:${PORT}`}/api/webhooks/telnyx`;
+
+    const report = await checkPhoneNumberEligibility({
+      apiKey: accessToken,
+      phoneNumber,
+      targetCountries: Array.isArray(targetCountries) ? targetCountries : [],
+      expectedWebhookUrl,
+    });
+
+    res.json({ ok: true, ...report });
+  } catch (err) {
+    console.error('[telnyx] destination-eligibility error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Get Telnyx portal URL for manual messaging profile creation
+app.get('/api/telnyx/portal-url', authenticate, (req, res) => {
+  try {
+    const ownerKey = ownerKeyForCallback(req);
+    if (!ownerKey) {
+      return res.status(400).json({ ok: false, error: 'ownerKey required' });
+    }
+    
+    // Return the Telnyx messaging profiles portal URL
+    res.json({
+      ok: true,
+      portalUrl: 'https://portal.telnyx.com/#/app/messaging-profiles',
+      docsUrl: 'https://portal.telnyx.com/docs/v2/messaging',
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// =============================================================================
+// SMS Lead Discovery — Google Maps Places API (Free/Starter automated flow)
+// =============================================================================
+
+// GET /api/sms-campaigns/canada/provinces
+// Returns the list of 13 Canadian provinces and territories for the wizard's
+// province dropdown in the "Find Leads in Canada" tab.
+app.get('/api/sms-campaigns/canada/provinces', authenticate, (req, res) => {
+  res.json({ ok: true, provinces: CA_PROVINCES });
+});
+
+// GET /api/sms-campaigns/canada/cities?province=ON&limit=100
+// Returns cities within a Canadian province, sorted by population descending.
+// Used to populate the city dropdown after a province is selected.
+app.get('/api/sms-campaigns/canada/cities', authenticate, (req, res) => {
+  const { province, limit } = req.query || {};
+  if (!province) {
+    return res.status(400).json({ ok: false, error: '`province` query param is required' });
+  }
+  const cities = listCities({ country: 'CA', admin: province, limit: Number(limit) || 100 });
+  res.json({ ok: true, cities });
+});
+
+// POST /api/sms-campaigns/discover-places
+// Triggers a Google Places search for businesses in the given city, then
+// filters to those with phone numbers and (optionally) in Canada. Returns
+// an array of leads the wizard can display in a tickable table.
+//
+// Body: { niche, city, lat, lon, country? }
+// Plan-gated: Free/Starter users can only request country='CA'. Growth+ can
+// request any country but Lunao's API key is used regardless.
+app.post('/api/sms-campaigns/discover-places', authenticate, async (req, res) => {
+  try {
+    const ownerKey = ownerKeyForCallback(req);
+    const { niche, city, lat, lon, country = 'CA', limit } = req.body || {};
+    const plan = normalisePlan(req.body?.plan || req.headers['x-user-plan']);
+
+    if (!niche || !city) {
+      return res.status(400).json({ ok: false, error: '`niche` and `city` are required' });
+    }
+
+    // Enforce CA-only for Free/Starter plans.
+    if (isAutomatedSmsPlan(plan) && country && country.toUpperCase() !== 'CA') {
+      return res.status(403).json({
+        ok: false,
+        error: 'Your plan only supports Canadian leads. Remove the country filter to continue.',
+      });
+    }
+
+    // Use Lunao's own Google Maps API key. The key lives server-side
+    // only — never exposed to the client. Quota is pooled across all
+    // Free/Starter users on the platform.
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ ok: false, error: 'Google Maps API is not configured. Set GOOGLE_MAPS_API_KEY in .env to enable this feature.' });
+    }
+
+    const results = await discoverSmsLeadsFromPlaces({
+      apiKey,
+      niche,
+      city,
+      lat: lat ? Number(lat) : undefined,
+      lon: lon ? Number(lon) : undefined,
+      country: country || 'CA',
+      limit: Math.min(Number(limit) || 20, 50),
+    });
+
+    res.json({ ok: true, leads: results, count: results.length, niche, city, country });
+  } catch (err) {
+    console.error('[/sms-campaigns/discover-places]', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -2654,12 +3451,18 @@ app.get('/api/sms/status', (_req, res) => {
 });
 
 // ---- Owner SMS log (per-owner aggregated view) ---------------------------
-app.get('/api/owner/sms', authenticate, (req, res) => {
+// Each GET fires a fast (≤2s) recheck of any non-terminal Telnyx rows so the
+// UI sees delivered/failed within a single poll cycle, even when the
+// webhook is slow/delayed/missed.
+app.get('/api/owner/sms', authenticate, async (req, res) => {
   try {
     const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
     if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
     const limit = parseInt(req.query.limit, 10) || 100;
-    res.json({ ok: true, sms: listSmsForOwner(ownerKey, limit) });
+    const rows = listSmsForOwner(ownerKey, limit);
+    // Live re-check (never blocks the response — fire & read fresh on next tick).
+    recheckSmsRows(rows).catch((e) => console.warn('[recheck] owner sms:', e.message));
+    res.json({ ok: true, sms: rows, asOf: Date.now() });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -3409,7 +4212,43 @@ function checkTemplates() {
 
 export const templatesCheck = checkTemplates();
 
+// ---- Lunao Owner PWA (one global PWA at /) -------------------------------
+// Mount all /api/pwa/* routes behind the pwaAuth middleware. Must be done
+// BEFORE app.use(express.static(...)) so /api/* always wins precedence.
+mountPwaApi(app);
+
+// Serve the built Lunao Owner PWA at /owner/* — isolated from the agency SPA
+// at / and from /api/*.  In production, the PWA is deployed at owner.lunao.com;
+// in development, /owner/ serves the static bundle while :3001 is the Vite HMR
+// dev server (which proxies to the backend).
+const PWA_DIST = path.join(ROOT_DIR, 'lunaoownerpwa', 'dist');
+const FRONTEND_DIST = path.join(ROOT_DIR, 'dist');
+if (fs.existsSync(PWA_DIST)) {
+  app.use('/owner', express.static(PWA_DIST));
+}
+if (fs.existsSync(FRONTEND_DIST)) {
+  app.use(express.static(FRONTEND_DIST));
+}
+
+// Catch-all for SPA deep-links. The Owner PWA lives at /owner/* so it must be
+// excluded from the catch-all. Must run AFTER /api/* routes so JSON 404s aren't
+// masked by HTML.
+const spaEntry = fs.existsSync(path.join(PWA_DIST, 'index.html'))
+  ? path.join(PWA_DIST, 'index.html')
+  : fs.existsSync(path.join(FRONTEND_DIST, 'index.html'))
+    ? path.join(FRONTEND_DIST, 'index.html')
+    : null;
+if (spaEntry) {
+  app.get(/^(?!\/api\/|\/sites\/|\/uploads\/|\/static\/|\/owner\/).*/, (req, res) => {
+    res.sendFile(spaEntry);
+  });
+}
+
 app.listen(PORT, () => {
+  // Background safety net: re-check non-terminal SMS rows every 30s, in case
+  // the dashboard isn't open (so a Telnyx webhook that lands while nobody's
+  // looking still gets reflected in the DB before the user next loads).
+  startGlobalRechecker();
   const mode = modeSummary();
   console.log(`\n  Lunao pipeline API  ->  http://localhost:${PORT}`);
   console.log(`  Public base        : ${PUBLIC_BASE}`);
@@ -3428,6 +4267,8 @@ app.listen(PORT, () => {
     console.log(`                     Campaigns will fail with "0 sites generated".`);
     console.log(`                     Fix: git add public/templates-raw/*.html && git commit && git push.`);
   }
+  // Start OAuth state cleanup timer
+  startOauthStateCleanup();
   // City DB status — block (don't log until resolved) so the operator sees
   // whether the 200k GeoNames file finished loading or only the seed list
   // is available yet.
