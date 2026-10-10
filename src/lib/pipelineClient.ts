@@ -79,20 +79,52 @@ export interface CsvValidation {
   leads: PipelineLead[];
   invalidRows: CsvRowIssue[];
   message: string;
+  // Plan-aware fields
+  countryBlockedCount?: number;
+  allowedCountries?: string[] | null;
+}
+
+export interface CsvRowIssue {
+  line: number;
+  name: string;
+  phone?: string;
+  issues: string[];
 }
 
 // Validate + parse a CSV File via the backend. Returns a full validation report
 // (missing columns, per-row issues, valid leads) so the UI can gate the wizard.
-export async function validateCsvFile(file: File): Promise<CsvValidation> {
+//
+// Passes `ownerKey` and `plan` so the server can auto-apply the Canada-only
+// restriction for Free/Starter plans without the client needing to pass
+// `allowedCountries` explicitly.
+export async function validateCsvFile(
+  file: File,
+  ownerKey?: string,
+  plan?: string,
+): Promise<CsvValidation> {
   const text = await file.text();
+  const headers = {
+    'Content-Type': 'text/csv',
+    ...(ownerKey ? { 'x-owner-key': ownerKey } : {}),
+    ...(plan ? { 'x-user-plan': plan } : {}),
+  };
   const res = await fetch(`${API_BASE}/api/csv/parse`, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/csv' },
+    headers,
     body: text,
   });
   if (!res.ok) throw new Error(`CSV parse failed (${res.status})`);
   const data = await res.json();
-  if (data.validation) return data.validation as CsvValidation;
+  if (data.validation) {
+    const v = data.validation as CsvValidation;
+    // Backfill server-side additions if the client already had a cached
+    // type without them.
+    return {
+      ...v,
+      countryBlockedCount: v.countryBlockedCount ?? data.countryBlockedCount ?? 0,
+      allowedCountries: v.allowedCountries ?? data.allowedCountries ?? null,
+    };
+  }
   // Backwards-compatible fallback.
   return {
     ok: (data.leads || []).length > 0,
@@ -104,6 +136,8 @@ export async function validateCsvFile(file: File): Promise<CsvValidation> {
     leads: data.leads || [],
     invalidRows: [],
     message: '',
+    countryBlockedCount: 0,
+    allowedCountries: null,
   };
 }
 
@@ -1696,16 +1730,620 @@ export async function exchangeOAuthCode(
   };
 }
 
-// Initiate OAuth flow from frontend
-export function initiateOAuthFlow(provider: 'gmail' | 'outlook'): void {
-  const redirectUri = `${window.location.origin}/api/email-accounts/callback`;
-  const state = btoa(JSON.stringify({ provider, timestamp: Date.now() }));
+// Initiate OAuth flow from frontend.
+// IMPORTANT: must go through the server's `/api/email-accounts/oauth/url`
+// endpoint so the CSRF `state` token is registered in the server's
+// `oauthStateStore`. Building the URL client-side generates a state that
+// the server has never seen → the callback returns "Session expired".
+//
+// Flow: open popup → Google → callback in popup → popup posts message to
+// parent → parent reloads accounts.  The return URL is baked into the state
+// so the callback can redirect correctly without needing auth cookies.
+export async function initiateOAuthFlow(
+  provider: 'gmail' | 'outlook',
+  options: { returnUrl?: string } = {},
+): Promise<void> {
+  const ownerKey =
+    (typeof localStorage !== 'undefined' && localStorage.getItem('lunao_owner_key')) || '';
+  const qs = new URLSearchParams({ provider });
+  if (ownerKey) qs.set('ownerKey', ownerKey);
 
-  const url = provider === 'gmail'
-    ? getGmailOAuthUrl(redirectUri, state)
-    : getOutlookOAuthUrl(redirectUri, state);
+  const res = await fetch(`${API_BASE}/api/email-accounts/oauth/url?${qs.toString()}`, {
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `OAuth init failed (${res.status})`);
+  }
+  const d = await res.json();
+  if (!d.url) throw new Error('Backend did not return an OAuth URL');
 
-  window.location.href = url;
+  // Append returnUrl to state so the callback knows where to redirect.
+  // Encode it in the URL fragment so it survives the Google redirect.
+  const returnUrl = options.returnUrl || window.location.href;
+  const stateObj = { returnUrl };
+  const encoded = btoa(encodeURIComponent(JSON.stringify(stateObj)));
+  const url = new URL(d.url);
+  // The state param is already set by the server — append our extras to it.
+  // We stash the extras in a separate param that the callback will decode.
+  url.searchParams.set('_ru', encoded);
+  window.open(url.toString(), 'lunao_email_oauth', 'width=600,height=700,popup=1');
+}
+
+// =============================================================================
+// Telnyx OAuth — "Connect with Telnyx" button
+// =============================================================================
+//
+// Mirrors the email OAuth flow. The frontend calls /api/telnyx/oauth/url to
+// get the consent URL, then redirects. Telnyx returns to /api/telnyx/callback
+// which closes itself after persisting the row.
+
+export interface TelnyxAccount {
+  id: string;
+  account_email: string;
+  account_label: string;
+  total_numbers: number;
+  status: 'active' | 'needs_reconnect' | 'revoked';
+  expires_at: number | null;
+  expires_in: number | null;
+  connected_at: number;
+}
+
+// ====== Telnyx connection-status aggregate ======
+//
+// Single round-trip health probe so the SMS wizard can render a smooth
+// loading skeleton then snap to the right state (empty / connected /
+// needs-reconnect / token-expired) in one render cycle.
+export interface TelnyxConnectionStatus {
+  ok: boolean;
+  plan?: string;               // normalised plan name from server
+  automated?: boolean;          // true for Free/Starter (uses Lunao shared sender)
+  connected: boolean;
+  accountsActive: number;
+  accountsNeedReconnect: number;
+  hasValidToken: boolean;
+  primaryAccount: {
+    email: string;
+    label: string | null;
+    expiresAt: number | null;
+    expiresInSec: number | null;
+    shared?: boolean;           // true when this is Lunao's shared account
+  } | null;
+  senderNumber?: string;        // the Lunao shared sender (for automated plans)
+  numbersTotal: number;
+  readyNumbers: number;
+  note?: string;               // warning/error if shared sender misconfigured
+  error?: string;
+}
+
+export async function getTelnyxConnectionStatus(
+  ownerKey: string,
+): Promise<TelnyxConnectionStatus> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/telnyx/connection-status?ownerKey=${encodeURIComponent(ownerKey)}`,
+      { credentials: 'include', cache: 'no-store' },
+    );
+    if (!res.ok) {
+      return {
+        ok: false,
+        connected: false,
+        accountsActive: 0,
+        accountsNeedReconnect: 0,
+        hasValidToken: false,
+        primaryAccount: null,
+        numbersTotal: 0,
+        readyNumbers: 0,
+        error: `HTTP ${res.status}`,
+      };
+    }
+    return (await res.json()) as TelnyxConnectionStatus;
+  } catch (err: any) {
+    return {
+      ok: false,
+      connected: false,
+      accountsActive: 0,
+      accountsNeedReconnect: 0,
+      hasValidToken: false,
+      primaryAccount: null,
+      numbersTotal: 0,
+      readyNumbers: 0,
+      error: err?.message || 'Network error',
+    };
+  }
+}
+
+// =============================================================================
+// Plan / tier utilities (mirrors server/lib/planGates.js)
+// =============================================================================
+
+const PLAN_TIER = Object.freeze({
+  'Free Plan': 0,
+  'Starter Plan': 1,
+  'Growth Plan': 2,
+  'Pro Plan': 3,
+  'Agency Plan': 4,
+});
+
+export function normalisePlan(raw: string | undefined): string {
+  if (!raw) return 'Free Plan';
+  const t = String(raw).trim();
+  if (PLAN_TIER[t as keyof typeof PLAN_TIER] !== undefined) return t;
+  const withSuffix = t.endsWith('Plan') ? t : `${t} Plan`;
+  if (PLAN_TIER[withSuffix as keyof typeof PLAN_TIER] !== undefined) return withSuffix;
+  return 'Free Plan';
+}
+
+export function tierLevel(plan: string): number {
+  return PLAN_TIER[normalisePlan(plan) as keyof typeof PLAN_TIER] ?? 0;
+}
+
+export function canUseOwnTelnyx(plan: string): boolean {
+  return tierLevel(plan) >= PLAN_TIER['Growth Plan'];
+}
+
+export function isAutomatedSmsPlan(plan: string): boolean {
+  return !canUseOwnTelnyx(plan);
+}
+
+export function isCountryAllowed(plan: string, country: string | null | undefined): boolean {
+  if (isAutomatedSmsPlan(plan)) return country?.toUpperCase() === 'CA';
+  return true;
+}
+
+export async function listTelnyxAccounts(ownerKey: string): Promise<TelnyxAccount[]> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/telnyx/accounts?ownerKey=${encodeURIComponent(ownerKey)}`,
+      { credentials: 'include' }
+    );
+    if (!res.ok) return [];
+    const d = await res.json();
+    return Array.isArray(d.accounts) ? d.accounts : [];
+  } catch {
+    return [];
+  }
+}
+
+// =============================================================================
+// SMS Lead Discovery — Google Maps Places API (Free/Starter automated flow)
+// =============================================================================
+
+export interface SmsPlaceLead {
+  name: string;
+  phone: string;
+  address: string;
+  city: string;
+  province: string;
+  country: string;
+  placeId: string;
+}
+
+export interface CanadaCity {
+  name: string;
+  country: string;
+  countryIso: string | null;
+  admin: string;
+  lat: number;
+  lon: number;
+  population: number;
+}
+
+export interface CanadaProvince {
+  code: string;
+  name: string;
+}
+
+// GET /api/sms-campaigns/canada/provinces
+export async function listCanadaProvinces(ownerKey: string): Promise<CanadaProvince[]> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/sms-campaigns/canada/provinces?ownerKey=${encodeURIComponent(ownerKey)}`,
+      { credentials: 'include' }
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return Array.isArray(data.provinces) ? data.provinces : [];
+  } catch {
+    return [];
+  }
+}
+
+// GET /api/sms-campaigns/canada/cities?province=ON&limit=100
+export async function listCanadaCities(
+  ownerKey: string,
+  province: string,
+  limit = 100
+): Promise<CanadaCity[]> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/sms-campaigns/canada/cities?ownerKey=${encodeURIComponent(ownerKey)}&province=${encodeURIComponent(province)}&limit=${limit}`,
+      { credentials: 'include' }
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return Array.isArray(data.cities) ? data.cities : [];
+  } catch {
+    return [];
+  }
+}
+
+// POST /api/sms-campaigns/discover-places
+// Discover SMS leads from Google Places for the given niche + city.
+export async function discoverSmsLeads(
+  ownerKey: string,
+  params: {
+    niche: string;
+    city: string;
+    lat?: number;
+    lon?: number;
+    country?: string;
+    limit?: number;
+  }
+): Promise<SmsPlaceLead[]> {
+  const { niche, city, lat, lon, country = 'CA', limit = 20 } = params;
+  try {
+    const body: Record<string, unknown> = { niche, city, country, limit };
+    if (lat != null) body.lat = lat;
+    if (lon != null) body.lon = lon;
+    const res = await fetch(
+      `${API_BASE}/api/sms-campaigns/discover-places?ownerKey=${encodeURIComponent(ownerKey)}`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    return Array.isArray(data.leads) ? data.leads : [];
+  } catch (err: unknown) {
+    console.error('[discoverSmsLeads]', err);
+    throw err;
+  }
+}
+
+export interface TelnyxPhoneNumber {
+  number: string;
+  type: string;
+  sms: boolean;
+  id: string | null;
+}
+
+export async function listTelnyxNumbers(accountId: string, ownerKey: string): Promise<TelnyxPhoneNumber[]> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/telnyx/accounts/${encodeURIComponent(accountId)}/numbers?ownerKey=${encodeURIComponent(ownerKey)}`,
+      { credentials: 'include' }
+    );
+    if (!res.ok) return [];
+    const d = await res.json();
+    return Array.isArray(d.numbers) ? d.numbers : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function disconnectTelnyxAccount(accountId: string, ownerKey: string): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/telnyx/accounts/${encodeURIComponent(accountId)}?ownerKey=${encodeURIComponent(ownerKey)}`,
+      { method: 'DELETE', credentials: 'include' }
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// Initiate the Telnyx OAuth flow from the frontend. Backend generates the
+// state and returns the authorization URL.
+export async function initiateTelnyxOAuth(): Promise<void> {
+  const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
+  const res = await fetch(
+    `${API_BASE}/api/telnyx/oauth/url?ownerKey=${encodeURIComponent(ownerKey)}`,
+    { credentials: 'include' }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  const d = await res.json();
+  if (!d.url) throw new Error('Backend did not return an OAuth URL');
+  window.location.href = d.url;
+}
+
+// =============================================================================
+// Telnyx Messaging Profile Management
+// =============================================================================
+
+export interface TelnyxPhoneNumberWithStatus {
+  number: string;
+  type: string;
+  id: string | null;
+  canSend: boolean;
+  profileId: string | null;
+  profileName: string | null;
+  reason: string | null;
+  status: string;
+  features: string[];
+}
+
+export interface MessagingProfileInfo {
+  id: string;
+  name: string;
+  phoneNumbers: string[];
+  webhookUrl: string | null;
+  whitelistedDestinations: string[];
+}
+
+export interface CreateMessagingProfileResult {
+  ok: boolean;
+  success?: boolean;
+  profileId?: string;
+  profileName?: string;
+  webhookUrl?: string;
+  error?: string;
+}
+
+// Get phone numbers with their SMS eligibility status
+export async function listTelnyxNumbersWithStatus(
+  accountId: string,
+  ownerKey: string
+): Promise<TelnyxPhoneNumberWithStatus[]> {
+  try {
+    const url = `/api/telnyx/accounts/${encodeURIComponent(accountId)}/numbers-with-status?ownerKey=${encodeURIComponent(ownerKey)}`;
+    console.log('[listTelnyxNumbersWithStatus] Fetching:', url);
+    const res = await fetch(url, { credentials: 'include' });
+    console.log('[listTelnyxNumbersWithStatus] Response status:', res.status);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error('[listTelnyxNumbersWithStatus] API error:', err);
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    console.log('[listTelnyxNumbersWithStatus] Response data:', data);
+    return data.numbers || [];
+  } catch (err) {
+    console.error('[listTelnyxNumbersWithStatus] Failed to list numbers with status:', err);
+    return [];
+  }
+}
+
+// Create a messaging profile and assign a phone number to it
+export async function createTelnyxMessagingProfile(
+  accountId: string,
+  phoneNumber: string,
+  ownerKey: string,
+  profileName?: string
+): Promise<CreateMessagingProfileResult> {
+  try {
+    const res = await fetch('/api/telnyx/messaging-profiles/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        accountId,
+        phoneNumber,
+        profileName,
+        ownerKey,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, error: data.error || `HTTP ${res.status}` };
+    }
+    return data;
+  } catch (err: any) {
+    console.error('[telnyx] Failed to create messaging profile:', err);
+    return { ok: false, error: err.message };
+  }
+}
+
+// Get messaging profiles for a connected account
+export async function listTelnyxMessagingProfiles(
+  accountId: string,
+  ownerKey: string
+): Promise<MessagingProfileInfo[]> {
+  try {
+    const res = await fetch(
+      `/api/telnyx/accounts/${encodeURIComponent(accountId)}/messaging-profiles?ownerKey=${encodeURIComponent(ownerKey)}`,
+      { credentials: 'include' }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    return data.profiles || [];
+  } catch (err) {
+    console.error('[telnyx] Failed to list messaging profiles:', err);
+    return [];
+  }
+}
+
+// Check if a messaging profile can SMS the target countries (from CSV leads)
+export interface ProfileEligibilityResult {
+  ok: boolean;
+  profileId: string;
+  profileName: string | null;
+  countryCheck: {
+    supported: string[];
+    unsupported: string[];
+    needsConfiguration: boolean;
+    reason: string | null;
+  };
+  webhookCheck: {
+    correct: boolean;
+    currentUrl: string | null;
+    neededUrl: string;
+    reason: string | null;
+  };
+  needsSetup: boolean;
+}
+
+export async function checkProfileEligibility(
+  accountId: string,
+  profileId: string,
+  targetCountries: string[],
+  ownerKey: string
+): Promise<ProfileEligibilityResult | null> {
+  try {
+    const res = await fetch('/api/telnyx/profile-eligibility', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        accountId,
+        profileId,
+        targetCountries,
+        ownerKey,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error('[telnyx] Profile eligibility check failed:', err);
+      return null;
+    }
+    return res.json();
+  } catch (err) {
+    console.error('[telnyx] Profile eligibility check error:', err);
+    return null;
+  }
+}
+
+// Configure a messaging profile: set webhook URL and add country destinations
+export interface ProfileConfigureResult {
+  ok: boolean;
+  steps: Array<{ step: string; ok: boolean; message: string }>;
+  overallSuccess: boolean;
+  blockedCountries: string[];
+  postFlightCheck: {
+    allPassed: boolean;
+    whitelistedCountries: string[];
+  };
+}
+
+export async function configureMessagingProfile(
+  accountId: string,
+  profileId: string,
+  addCountries: string[],
+  ownerKey: string,
+  options?: { phoneNumber?: string }
+): Promise<ProfileConfigureResult | null> {
+  try {
+    const res = await fetch('/api/telnyx/profile-configure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        accountId,
+        profileId,
+        phoneNumber: options?.phoneNumber,
+        targetCountries: addCountries,
+        ownerKey,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error('[telnyx] Profile configure failed:', err);
+      return null;
+    }
+    return res.json();
+  } catch (err) {
+    console.error('[telnyx] Profile configure error:', err);
+    return null;
+  }
+}
+
+// ---- Smart destination eligibility ----
+// Per-phone-number diagnostic. Returns a flat list of ISSUES (errors),
+// each with a precise "Fix in Telnyx" CTA. NO auto-configuration.
+export interface DestinationIssue {
+  severity: 'error' | 'warning';
+  code:
+    | 'NO_PROFILE'
+    | 'PROFILE_NOT_FOUND'
+    | 'PROFILE_DISABLED'
+    | 'WEBHOOK_MISSING'
+    | 'WEBHOOK_WRONG'
+    | 'COUNTRIES_NOT_ALLOWED'
+    | 'US_10DLC_REQUIRED'
+    | 'TOLL_FREE_VERIFY_REQUIRED'
+    | 'IN_DLT_REQUIRED'
+    | 'AE_SENDER_ID_REQUIRED';
+  title: string;
+  detail: string;
+  fixLabel: string;
+  fixUrl: string;
+  docsUrl?: string;
+  requirement?: string;
+  steps?: string[];
+  expectedValue?: string;
+  missingCountries?: string[];
+}
+
+export interface DestinationEligibilityResult {
+  ok: boolean;
+  phoneNumber: string;
+  numberType: string | null;
+  numberCountry: string | null;
+  profile: {
+    id: string;
+    name: string;
+    enabled: boolean;
+    webhookUrl: string | null;
+    webhookFailoverUrl?: string | null;
+    whitelistedDestinations: string[];
+  } | null;
+  targetCountries: string[];
+  expectedWebhookUrl?: string | null;
+  issues: DestinationIssue[];
+  overallStatus: 'ready' | 'blocked';
+}
+
+export async function checkDestinationEligibility(
+  accountId: string,
+  phoneNumber: string,
+  targetCountries: string[],
+  ownerKey: string
+): Promise<DestinationEligibilityResult | null> {
+  try {
+    const res = await fetch('/api/telnyx/destination-eligibility', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ accountId, phoneNumber, targetCountries, ownerKey }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error('[telnyx] destination-eligibility failed:', err);
+      return null;
+    }
+    return res.json();
+  } catch (err) {
+    console.error('[telnyx] destination-eligibility error:', err);
+    return null;
+  }
+}
+
+// Get Telnyx portal URL for manual messaging profile creation
+export async function getTelnyxPortalUrl(ownerKey: string): Promise<{ portalUrl: string; docsUrl: string } | null> {
+  try {
+    const res = await fetch(
+      `/api/telnyx/portal-url?ownerKey=${encodeURIComponent(ownerKey)}`,
+      { credentials: 'include' }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return { portalUrl: data.portalUrl, docsUrl: data.docsUrl };
+  } catch {
+    return null;
+  }
 }
 
 // =============================================================================
@@ -1821,4 +2459,192 @@ export async function fetchAllSites(
   } catch {
     return { sites: [], counts: { total: 0, siteDeploy: 0, email: 0 } };
   }
+}
+
+// =============================================================================
+// Google Dork / City Lookup — client stubs
+// (Backend implementation pending; these keep the wizard importable without crashing)
+// =============================================================================
+
+export interface CitySuggestion {
+  name: string;
+  country: string;
+  admin?: string;
+  lat?: number;
+  lon?: number;
+  population?: number;
+}
+
+export interface CityLookupResponse {
+  exact: boolean;
+  city: string;
+  country: string;
+  state?: string;
+  population?: number;
+  lat?: number;
+  lon?: number;
+  suggestions: CitySuggestion[];
+}
+
+export interface DorkStatus {
+  apiKeyConfigured: boolean;
+  lastError?: string;
+}
+
+export async function getDorkStatus(): Promise<DorkStatus> {
+  try {
+    const res = await fetch(`${API_BASE}/api/dork/status`);
+    if (!res.ok) return { apiKeyConfigured: false };
+    const data = await res.json();
+    return data as DorkStatus;
+  } catch {
+    return { apiKeyConfigured: false };
+  }
+}
+
+export async function lookupCity(query: string): Promise<CityLookupResponse | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/dork/lookup-city?q=${encodeURIComponent(query)}`);
+    if (!res.ok) return null;
+    return await res.json() as CityLookupResponse;
+  } catch {
+    return null;
+  }
+}
+
+export interface DorkEmailResult {
+  campaignId: string;
+  sent: number;
+  failed: number;
+}
+
+export async function runDorkEmailCampaign(
+  campaignId: string,
+  accountIds: string[],
+  onEvent: (e: EmailCampaignEvent) => void,
+): Promise<DorkEmailResult> {
+  const res = await fetch(`${API_BASE}/api/email-campaigns/${encodeURIComponent(campaignId)}/run-dork`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accountIds }),
+  });
+  if (!res.ok || !res.body) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Dork email campaign failed (${res.status})`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: DorkEmailResult = { campaignId: '', sent: 0, failed: 0 };
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const chunks = buffer.split('\n\n');
+    buffer = chunks.pop() || '';
+    for (const chunk of chunks) {
+      const line = chunk.trim();
+      if (!line.startsWith('data:')) continue;
+      const json = line.slice(5).trim();
+      if (!json) continue;
+      try {
+        const event: EmailCampaignEvent = JSON.parse(json);
+        onEvent(event);
+        if (event.type === 'campaign') result.campaignId = event.campaignId || '';
+        if (event.type === 'complete') {
+          result.sent = event.sent || 0;
+          result.failed = event.failed || 0;
+        }
+      } catch { /* ignore malformed */ }
+    }
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Manual tick-to-pick dork discovery
+// ---------------------------------------------------------------------------
+
+export interface DiscoveredLead {
+  business_name: string;
+  email: string;
+  email_host: string;
+  city: string;
+  state?: string;
+  source_query: string;
+  source_page: number;
+  source_rank: number;
+  slug: string;
+}
+
+export interface DorkNextCity {
+  name: string;
+  country: string;
+  state?: string;
+  page: number;
+  budget: number;
+  isNearby: boolean;
+}
+
+export interface DorkNextRequest {
+  lockedCity: {
+    name: string;
+    country: string;
+    admin?: string;
+    lat?: number;
+    lon?: number;
+    population?: number;
+  };
+  // Each entry is either a city name (string) or { name, page } when the
+  // server has already walked multiple pages of the same city.
+  visited: Array<string | { name: string; page: number }>;
+  seenEmails: string[];
+  niche: string;
+}
+
+export interface DorkNextResponse {
+  ok: true;
+  done: boolean;
+  nextCity: DorkNextCity | null;
+  leads: DiscoveredLead[];
+}
+
+export async function dorkNext(
+  campaignId: string,
+  payload: DorkNextRequest,
+  signal?: AbortSignal,
+): Promise<DorkNextResponse> {
+  const res = await fetch(
+    `${API_BASE}/api/email-campaigns/${encodeURIComponent(campaignId)}/dork-next`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal,
+    },
+  );
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Dork discover failed (${res.status})`);
+  }
+  return await res.json() as DorkNextResponse;
+}
+
+export async function saveDorkLeads(
+  campaignId: string,
+  leads: DiscoveredLead[],
+): Promise<{ ok: true; inserted: number }> {
+  const res = await fetch(
+    `${API_BASE}/api/email-campaigns/${encodeURIComponent(campaignId)}/save-leads`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leads }),
+    },
+  );
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Save leads failed (${res.status})`);
+  }
+  return await res.json() as { ok: true; inserted: number };
 }

@@ -1,0 +1,6 @@
+{
+  "name": "Lunao Owner Portal",
+  "description": "Mobile-first business owner operating portal and PWA for local business management, bookings, AI receptionist, website, automations, and customer relations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

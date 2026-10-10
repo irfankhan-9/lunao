@@ -1,7 +1,7 @@
 // Email Accounts Management Component
 // Shows connected email accounts and health metrics
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Mail, Plus, Trash2, RefreshCw, AlertCircle, CheckCircle, Clock,
   TrendingUp, TrendingDown, AlertTriangle, ExternalLink, ShieldCheck, X
@@ -44,12 +44,10 @@ export const EmailAccountsManager: React.FC<EmailAccountsManagerProps> = ({
   const [connectProvider, setConnectProvider] = useState<'gmail' | 'outlook'>('gmail');
   const [connecting, setConnecting] = useState<boolean>(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  
-  useEffect(() => {
-    loadAccounts();
-  }, []);
-  
-  const loadAccounts = async () => {
+  // Track OAuth popup for instant reload on close
+  const [oauthPopup, setOauthPopup] = useState<Window | null>(null);
+
+  const loadAccounts = useCallback(async () => {
     setIsLoading(true);
     try {
       const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
@@ -88,14 +86,92 @@ export const EmailAccountsManager: React.FC<EmailAccountsManagerProps> = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    loadAccounts();
+  }, [loadAccounts]);
+
+  // Listen for postMessage from the OAuth popup window.
+  // When the popup succeeds, it posts { type: 'LUNAO_EMAIL_CONNECTED' }
+  // and we reload the accounts list.
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data && e.data.type === 'LUNAO_EMAIL_CONNECTED') {
+        loadAccounts();
+        onAccountsChange?.();
+      }
+    };
+    window.addEventListener('message', handler);
+
+    // Also reload if the page URL has ?email_connected=true (fallback for
+    // when the popup couldn't use postMessage for any reason).
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('email_connected') === 'true') {
+      loadAccounts();
+      onAccountsChange?.();
+      // Clean the param so a refresh doesn't re-trigger.
+      const cleanUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, '', cleanUrl);
+    }
+
+    return () => window.removeEventListener('message', handler);
+  }, [loadAccounts, onAccountsChange]);
+
+  // Poll popup closure and reload accounts instantly when it closes
+  useEffect(() => {
+    if (!oauthPopup) return;
+    const poll = setInterval(() => {
+      if (oauthPopup.closed) {
+        clearInterval(poll);
+        setOauthPopup(null);
+        setConnecting(false);
+        // Instantly reload accounts when popup closes
+        loadAccounts();
+        onAccountsChange?.();
+      }
+    }, 300);
+    return () => clearInterval(poll);
+  }, [oauthPopup, loadAccounts, onAccountsChange]);
   
   const handleConnect = async () => {
     setConnecting(true);
     try {
-      const { initiateOAuthFlow } = await import('../lib/pipelineClient');
-      initiateOAuthFlow(connectProvider);
-    } catch (err) {
+      const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
+      const qs = new URLSearchParams({ provider: connectProvider });
+      if (ownerKey) qs.set('ownerKey', ownerKey);
+
+      const res = await fetch(`/api/email-accounts/oauth/url?${qs.toString()}`, {
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `OAuth init failed (${res.status})`);
+      }
+      const d = await res.json();
+      if (!d.url) throw new Error('Backend did not return an OAuth URL');
+
+      // Append returnUrl to state so the callback knows where to redirect
+      const returnUrl = window.location.href;
+      const stateObj = { returnUrl };
+      const encoded = btoa(encodeURIComponent(JSON.stringify(stateObj)));
+      const url = new URL(d.url);
+      url.searchParams.set('_ru', encoded);
+      
+      // Open OAuth popup - we'll track it for instant reload on close
+      const popup = window.open(url.toString(), 'lunao_email_oauth', 'width=600,height=700,popup=1');
+      if (popup) {
+        setOauthPopup(popup);
+        popup.focus();
+      } else {
+        // Popup blocked
+        playElegantError();
+        alert('Please allow popups for this site to connect your email account.');
+        setConnecting(false);
+      }
+    } catch (err: any) {
+      console.error('OAuth init failed:', err);
       playElegantError();
       setConnecting(false);
     }

@@ -17,6 +17,12 @@ server/.data/
 # Temp/debug files
 temp*.js
 debug*.js
+*.bak
+
+# Bootstrap scripts — one-off credential registration scripts MUST NEVER
+# be committed. Each one is created on demand, run once, then deleted.
+# The folder is recreated as needed, never tracked.
+scripts-bootstrap/
 
 # Vite entry point (unignored so Railway can build)
 !index.html

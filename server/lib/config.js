@@ -104,6 +104,26 @@ export const googleOAuth = {
   },
 };
 
+// Telnyx OAuth — "Connect with Telnyx" button in the Messaging section.
+// Telnyx only exposes a single scope today ("admin"), which grants full
+// account access. Users must trust Lunao the same way they'd trust a SaaS
+// billing integration.
+export const telnyxOAuth = {
+  clientId: env.TELNYX_CLIENT_ID || '',
+  // Public OAuth clients (the recommended Lunao mode) have no client_secret —
+  // PKCE alone authenticates the token exchange. We still accept a secret
+  // for backward compatibility with confidential clients.
+  clientSecret: env.TELNYX_CLIENT_SECRET || '',
+  scopes: 'admin',
+  authorizationUrl: 'https://api.telnyx.com/v2/oauth/authorize',
+  tokenUrl: 'https://api.telnyx.com/v2/oauth/token',
+  get enabled() {
+    // Enabled whenever we have a client_id. PKCE substitutes for the secret
+    // when the registered Telnyx OAuth client is `client_type: "public"`.
+    return Boolean(this.clientId);
+  },
+};
+
 // AES-256-GCM encryption key for refresh tokens. Falls back to a derived key
 // from JWT secret in dev so we never silently store tokens in plaintext.
 export const emailCrypto = {

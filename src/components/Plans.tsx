@@ -58,6 +58,7 @@ export const Plans: React.FC<PlansProps> = ({
       features: [
         '5 outreach credits for testing',
         'Target 1 city per campaign',
+        'SMS campaigns (Canadian businesses only · fully automated)',
         'Website deployment and preview generation',
         'Standard processing speeds',
         'Basic templates access'
@@ -76,8 +77,10 @@ export const Plans: React.FC<PlansProps> = ({
       features: [
         'Lead generation matching niche & city',
         'Target up to 3 cities per campaign',
+        'SMS campaigns (Canadian businesses only · fully automated)',
         'Website deployment and preview generation',
-        'SMS outreach capability with custom copy',
+        'Standard processing speeds',
+        'Basic templates access',
         'Single active campaign at any time'
       ]
     },
@@ -94,7 +97,9 @@ export const Plans: React.FC<PlansProps> = ({
       isPopular: true,
       features: [
         'Everything in Starter included',
+        'Bring your own Telnyx API Key & Phone',
         'Target up to 3 cities per campaign',
+        'Send SMS globally to any country/city',
         'Higher overall campaign dispatch volume',
         'Priority layout & preview batch building',
         'Up to 3 concurrent active campaigns'

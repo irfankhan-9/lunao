@@ -7,7 +7,8 @@ import {
   Building2, 
   Settings,
   CreditCard,
-  Code2
+  Code2,
+  MessageSquare
 } from 'lucide-react';
 import { playSoftTap, playTiktokLike } from '../utils/audio';
 
@@ -41,6 +42,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'campaigns' as SidebarTab, label: 'Launch', icon: Megaphone },
     { id: 'templates' as SidebarTab, label: 'Templates', icon: LayoutTemplate },
     { id: 'editor' as SidebarTab, label: 'Site Editor', icon: Code2 },
+    { id: 'messaging' as SidebarTab, label: 'Messaging', icon: MessageSquare },
     { id: 'plans' as SidebarTab, label: 'Plans & Credits', icon: CreditCard },
     { id: 'settings' as SidebarTab, label: 'Settings', icon: Settings },
   ];

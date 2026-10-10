@@ -55,7 +55,7 @@ import {
 import { dedupeLeads } from '../utils/leads';
 import { Template } from '../types';
 
-type FilterTab = 'all' | 'site-deploy' | 'email';
+type FilterTab = 'all' | 'site-deploy' | 'email' | 'sms';
 
 interface UnifiedRecentCampaignsProps {
   campaigns: Campaign[];
@@ -174,6 +174,7 @@ export const UnifiedRecentCampaigns: React.FC<UnifiedRecentCampaignsProps> = ({
       if (filter === 'all') return true;
       if (filter === 'site-deploy') return c.type === 'site-deploy';
       if (filter === 'email') return c.type === 'email';
+      if (filter === 'sms') return c.type === 'sms';
       return true;
     });
     return [...filtered].sort((a, b) => {
@@ -185,6 +186,7 @@ export const UnifiedRecentCampaigns: React.FC<UnifiedRecentCampaignsProps> = ({
 
   const sdCount = useMemo(() => campaigns.filter((c) => c.type === 'site-deploy').length, [campaigns]);
   const emailCount = useMemo(() => campaigns.filter((c) => c.type === 'email').length, [campaigns]);
+  const smsCount = useMemo(() => campaigns.filter((c) => c.type === 'sms').length, [campaigns]);
 
   // Clear selection when the underlying list changes (so we never try to
   // bulk-delete rows that have already been removed).
@@ -362,6 +364,7 @@ export const UnifiedRecentCampaigns: React.FC<UnifiedRecentCampaignsProps> = ({
               { id: 'all', label: 'All', count: campaigns.length },
               { id: 'site-deploy', label: 'Site Deploy', count: sdCount, color: 'text-accent' },
               { id: 'email', label: 'Email', count: emailCount, color: 'text-blue-600' },
+              { id: 'sms', label: 'SMS', count: smsCount, color: 'text-green-600' },
             ] as const).map((t) => (
               <button
                 key={t.id}
@@ -439,7 +442,7 @@ export const UnifiedRecentCampaigns: React.FC<UnifiedRecentCampaignsProps> = ({
             <Filter className="w-5 h-5" />
           </div>
           <p className="text-sm font-semibold text-ink">No campaigns yet</p>
-          <p className="text-xs text-ink-secondary mt-1">Launch a site-deploy or email campaign and it will appear here.</p>
+          <p className="text-xs text-ink-secondary mt-1">Launch a site-deploy, email, or SMS campaign and it will appear here.</p>
         </div>
       ) : (
         <div className={`grid gap-3 ${compact ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'}`}>
@@ -616,6 +619,10 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent-soft text-accent border border-accent/20 text-[9px] font-bold uppercase tracking-wider shrink-0">
       <Mail className="w-3 h-3" /> Email Campaign
     </span>
+  ) : camp.type === 'sms' ? (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 text-[9px] font-bold uppercase tracking-wider shrink-0">
+      <Send className="w-3 h-3" /> SMS Campaign
+    </span>
   ) : isSiteDeploy ? (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent-soft text-accent border border-accent/20 text-[9px] font-bold uppercase tracking-wider shrink-0">
       <Globe className="w-3 h-3" /> Site Deploy
@@ -742,6 +749,18 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
                 <>
                   <div className="w-px bg-border-light" />
                   <StatPill label="Accts" value={camp.emailAccountsUsed.length} color="text-ink" />
+                </>
+              )}
+            </>
+          ) : camp.type === 'sms' ? (
+            <>
+              <StatPill label="Leads" value={leadsCount} color="text-blue-600" />
+              <div className="w-px bg-border-light" />
+              <StatPill label="Sent" value={sent} color="text-success" />
+              {failed > 0 && (
+                <>
+                  <div className="w-px bg-border-light" />
+                  <StatPill label="Failed" value={failed} color="text-danger" />
                 </>
               )}
             </>
@@ -1025,6 +1044,10 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-accent-soft text-accent border border-accent/20 text-[11px] font-bold uppercase tracking-wider">
                     <Mail className="w-3.5 h-3.5" /> Email Campaign
                   </span>
+                ) : camp.type === 'sms' ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50 text-green-700 border border-green-200 text-[11px] font-bold uppercase tracking-wider">
+                    <Send className="w-3.5 h-3.5" /> SMS Campaign
+                  </span>
                 ) : isSiteDeploy ? (
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-accent-soft text-accent border border-accent/20 text-[11px] font-bold uppercase tracking-wider">
                     <Globe className="w-3.5 h-3.5" /> Site Deploy
@@ -1090,8 +1113,10 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
         {/* Footer */}
         <div className="px-6 py-4 border-t border-border-light bg-off-white flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2 text-[11px] text-ink-secondary min-w-0">
-            {isEmail ? <Mail className="w-4 h-4 shrink-0" /> : <Globe className="w-4 h-4 shrink-0" />}
-            <span className="truncate">{isEmail ? 'Email Campaign' : 'Site Deploy Campaign'} · {tpl?.name ?? camp.templateId ?? 'Template unknown'}</span>
+            {isEmail ? <Mail className="w-4 h-4 shrink-0" /> : camp.type === 'sms' ? <Send className="w-4 h-4 shrink-0" /> : <Globe className="w-4 h-4 shrink-0" />}
+            <span className="truncate">
+              {isEmail ? 'Email Campaign' : camp.type === 'sms' ? 'SMS Campaign' : 'Site Deploy Campaign'} · {tpl?.name ?? camp.templateId ?? 'Template unknown'}
+            </span>
           </div>
           <button
             type="button"

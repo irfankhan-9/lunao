@@ -1,11 +1,25 @@
 // src/lib/useOwnerSmsPolling.ts
 //
-// Polls GET /api/owner/sms on a fast interval (4s by default) until every
-// row has reached a terminal status (`delivered` or `failed`) or a timeout
-// (60s default) elapses. Used by the Messages tab so the user sees the
-// double-blue ✓ within seconds of the Telnyx webhook landing, even though
-// the webhook is asynchronous and can arrive anywhere from <1s to minutes
-// after send.
+// Polls GET /api/owner/sms every 2.5 seconds. The server's response is the
+// source of truth — it (a) returns the rows from sms_logs, AND
+// (b) fires a Telnyx API re-check for every row whose status isn't yet
+// `delivered` / `failed` / `simulated`, AND
+// (c) writes the fresh status back to the DB so the next poll sees it.
+//
+// The hook keeps polling for the lifetime of the component (rather than
+// stopping once rows hit a terminal status) so the dashboard shows new
+// sends in real time no matter when the user lands on the page.
+//
+// Mount safe: each component instance owns its own timer. We de-dup
+// in-flight requests with a per-instance flag. Server-side throttles the
+// real API call to once / 5s / telnyx_id so cost stays negligible.
+//
+// Each tick calls /api/owner/sms and diffs by `id`. Rows are added/updated
+// in-place; rows that disappear (e.g. older than the limit) are pruned.
+//
+// The hook is designed to be safe to mount many times simultaneously —
+// the timer is owned per-instance and is torn down on unmount. A global
+// deduper (requestSeq) prevents in-flight overlap.
 //
 // Each tick calls /api/owner/sms and diffs by `id`. Rows are added/updated
 // in-place; rows that disappear (e.g. older than the limit) are pruned.
@@ -57,7 +71,7 @@ interface PollingState {
 const API_BASE = '';
 
 export function useOwnerSmsPolling(opts: Options = {}): PollingState {
-  const { ownerKey = 'dashboard', intervalMs = 4000, timeoutMs = 60_000, limit = 200 } = opts;
+  const { ownerKey = 'dashboard', intervalMs = 2500, limit = 200 } = opts;
   const [sms, setSms] = useState<OwnerSmsRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +79,6 @@ export function useOwnerSmsPolling(opts: Options = {}): PollingState {
   const [lastPolledAt, setLastPolledAt] = useState<number | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const stopAtRef = useRef<number>(0);
   const inflightRef = useRef<boolean>(false);
 
   const fetchOnce = useCallback(async (): Promise<OwnerSmsRow[] | null> => {
@@ -105,25 +118,16 @@ export function useOwnerSmsPolling(opts: Options = {}): PollingState {
     setLastPolledAt(Date.now());
     if (rows) reconcile(rows);
 
-    // Decide whether to keep polling.
-    const stillInflight = rows?.some((r) => !TERMINAL_STATUSES.has(r.status));
-    const timedOut = Date.now() >= stopAtRef.current;
-    if (stillInflight && !timedOut) {
-      timerRef.current = setTimeout(tick, intervalMs);
-    } else {
-      setIsPolling(false);
-      if (timedOut && stillInflight) {
-        // We've hit the cap but rows still pending. We could keep going,
-        // but stop here to avoid hammering the server if something is wedged.
-        // Callers can forceRefresh() to resume.
-      }
-    }
+    // Always keep polling. Server-side throttling keeps costs negligible.
+    // We never auto-stop — the user expects the dashboard to keep showing
+    // live updates while the page is open.
+    setIsPolling(false); // not "still in flight" — we are simply watching
+    timerRef.current = setTimeout(tick, intervalMs);
   }, [fetchOnce, reconcile, intervalMs]);
 
   // First paint + bootstrap the polling loop.
   useEffect(() => {
     let cancelled = false;
-    stopAtRef.current = Date.now() + timeoutMs;
     setIsPolling(true);
     (async () => {
       const rows = await fetchOnce();
@@ -131,12 +135,8 @@ export function useOwnerSmsPolling(opts: Options = {}): PollingState {
       setLastPolledAt(Date.now());
       if (rows) reconcile(rows);
       setLoading(false);
-      const stillInflight = rows?.some((r) => !TERMINAL_STATUSES.has(r.status));
-      if (stillInflight && Date.now() < stopAtRef.current) {
-        timerRef.current = setTimeout(tick, intervalMs);
-      } else {
-        setIsPolling(false);
-      }
+      // Schedule the next tick 2.5s out.
+      timerRef.current = setTimeout(tick, intervalMs);
     })();
     return () => {
       cancelled = true;
@@ -148,15 +148,12 @@ export function useOwnerSmsPolling(opts: Options = {}): PollingState {
     // We deliberately don't depend on `tick` — `tick` closes over current
     // intervalMs via refs to keep this effect mount-only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownerKey, intervalMs, timeoutMs]);
+  }, [ownerKey, intervalMs]);
 
   const forceRefresh = useCallback(() => {
-    // Bump the stop window and re-arm the loop if it had given up.
-    stopAtRef.current = Date.now() + timeoutMs;
     if (timerRef.current) clearTimeout(timerRef.current);
-    setIsPolling(true);
     tick();
-  }, [tick, timeoutMs]);
+  }, [tick]);
 
   const sendOneOff = useCallback(async (to: string, text: string, leadName?: string): Promise<OwnerSmsRow | null> => {
     try {

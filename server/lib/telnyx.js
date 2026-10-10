@@ -1,4 +1,12 @@
 // Telnyx SMS delivery.
+//
+// Two ways to authenticate against Telnyx:
+//   1. Single-tenant API key (TELNYX_API_KEY + TELNYX_PHONE_NUMBER in .env) —
+//      used when SMS is enabled at the server level. Owner-agnostic.
+//   2. Per-owner OAuth token stored in telnyx_connections — used when the
+//      caller passes { accountId } to sendSms. The token is decrypted and
+//      refreshed if expired before each send.
+//
 // LIVE mode (TELNYX_API_KEY + TELNYX_PHONE_NUMBER set): real outbound SMS.
 // DRY-RUN mode: the message is logged and returned as "simulated" so the full
 // pipeline can be tested without spending money or needing carrier approval.
@@ -55,28 +63,78 @@ function sleep(ms) {
 }
 
 // Single attempt (no retry). Used internally and by the retry wrapper below.
-async function attemptSend({ to, text }) {
+//
+// authMode:
+//   "apiKey" (default) — uses TELNYX_API_KEY from .env, sends from TELNYX_PHONE_NUMBER
+//   "oauth"            — uses the access token resolved from telnyx_connections
+//                        row identified by `accountId`; sends from `from`
+async function attemptSend({ to, text, accountId, from, authMode = 'apiKey', accessToken }) {
   const dest = toE164(to);
   if (!dest) {
     return { status: 'failed', simulated: !telnyx.live, error: 'Invalid destination phone', errorCode: 'E_INVALID_PHONE' };
   }
-  if (!telnyx.live) {
-    return { status: 'simulated', simulated: true, to: dest, text, segmentCount: countSegments(text) };
+
+  // DRY-RUN gate. The OAuth path follows the same "if SMS master switch is
+  // off, simulate" rule — we never send real SMS in DRY-RUN, regardless of
+  // which auth path the caller chose.
+  if (!telnyx.enabled) {
+    return {
+      status: 'simulated',
+      simulated: true,
+      to: dest,
+      text,
+      segmentCount: countSegments(text),
+    };
+  }
+
+  let bearerToken;
+  let senderNumber;
+  let messagingProfileId = null;
+
+  if (authMode === 'oauth') {
+    if (!accessToken) {
+      return {
+        status: 'failed',
+        simulated: false,
+        to: dest,
+        error: 'No OAuth access token available — Telnyx account not connected or token expired.',
+        errorCode: 'E_NO_TOKEN',
+      };
+    }
+    bearerToken = accessToken;
+    senderNumber = from;
+    // OAuth connections don't expose a messaging_profile_id by default.
+  } else {
+    bearerToken = telnyx.apiKey;
+    senderNumber = from || telnyx.from;
+    messagingProfileId = telnyx.messagingProfileId || null;
+  }
+
+  if (!senderNumber) {
+    return {
+      status: 'failed',
+      simulated: false,
+      to: dest,
+      error: authMode === 'oauth'
+        ? 'Sender number not selected for this Telnyx account.'
+        : 'No sender number configured. Set TELNYX_PHONE_NUMBER.',
+      errorCode: 'E_NO_FROM',
+    };
   }
 
   const body = {
-    from: telnyx.from,
+    from: senderNumber,
     to: dest,
     text,
   };
-  if (telnyx.messagingProfileId) body.messaging_profile_id = telnyx.messagingProfileId;
+  if (messagingProfileId) body.messaging_profile_id = messagingProfileId;
 
   let res;
   try {
     res = await fetch('https://api.telnyx.com/v2/messages', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${telnyx.apiKey}`,
+        Authorization: `Bearer ${bearerToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
@@ -106,10 +164,85 @@ async function attemptSend({ to, text }) {
 
 // sendSms: public send with exponential-backoff retry (1s, 2s) on transient
 // errors. Permanent Telnyx codes fail fast without retry.
-export async function sendSms({ to, text, maxAttempts = 3 } = {}) {
+//
+// When `accountId` is supplied, the OAuth path is used: the row's stored
+// access token is decrypted (and refreshed if expired) before each attempt.
+// Otherwise we fall back to the single-tenant TELNYX_API_KEY auth.
+//
+// `from` is required when accountId is supplied (the chosen sender number).
+export async function sendSms({ to, text, maxAttempts = 3, accountId, from } = {}) {
+  // Resolve OAuth access token up-front (lazily importing the OAuth module
+  // so this file keeps working in environments without emailCrypto).
+  let accessToken = null;
+  let authMode = 'apiKey';
+  if (accountId) {
+    authMode = 'oauth';
+    try {
+      // Dynamic import keeps the OAuth module out of the boot path of
+      // contexts that don't use it (e.g. the SMS dry-run unit tests).
+      const { resolveTelnyxAccessToken: resolver, getTelnyxConnection: getter } =
+        await import('./telnyxConnections.js');
+      const { refreshTelnyxAccessToken: refresher, decryptTelnyxTokenForUse: decrypter } =
+        await import('./telnyxOAuth.js');
+      const { encryptTelnyxTokenForStorage: encrypter } = await import('./telnyxOAuth.js');
+
+      const conn = getter(accountId);
+      if (!conn) {
+        return {
+          status: 'failed',
+          simulated: false,
+          to: toE164(to),
+          error: `Telnyx account ${accountId} not found.`,
+          errorCode: 'E_NO_ACCOUNT',
+        };
+      }
+
+      accessToken = decrypter(conn.encrypted_access_token);
+      if (!accessToken) {
+        return {
+          status: 'failed',
+          simulated: false,
+          to: toE164(to),
+          error: 'Stored Telnyx access token could not be decrypted.',
+          errorCode: 'E_TOKEN_DECRYPT',
+        };
+      }
+
+      // Refresh if expired (30s safety window).
+      const now = Math.floor(Date.now() / 1000);
+      const expired = conn.expires_at ? conn.expires_at - now < 30 : false;
+      if (expired && conn.encrypted_refresh_token) {
+        const refreshToken = decrypter(conn.encrypted_refresh_token);
+        if (refreshToken) {
+          try {
+            const data = await refresher(refreshToken);
+            accessToken = data.access_token;
+            const { updateTelnyxConnectionTokens: updater } = await import('./telnyxConnections.js');
+            updater(conn.id, {
+              encryptedAccessToken: encrypter(data.access_token),
+              encryptedRefreshToken: data.refresh_token ? encrypter(data.refresh_token) : undefined,
+              expiresAt: data.expires_in ? Math.floor(Date.now() / 1000) + Number(data.expires_in) : null,
+            });
+          } catch (refreshErr) {
+            // Refresh failed — try the stale token once, then bail.
+            console.warn('[telnyx] token refresh failed:', refreshErr.message);
+          }
+        }
+      }
+    } catch (importErr) {
+      return {
+        status: 'failed',
+        simulated: false,
+        to: toE164(to),
+        error: `Telnyx OAuth module unavailable: ${importErr.message}`,
+        errorCode: 'E_OAUTH_MODULE',
+      };
+    }
+  }
+
   let lastResult = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const result = await attemptSend({ to, text });
+    const result = await attemptSend({ to, text, accountId, from, authMode, accessToken });
     if (result.status === 'sent' || result.status === 'simulated') return result;
     if (isPermanentError(result.errorCode)) return result;
     lastResult = result;
@@ -121,12 +254,36 @@ export async function sendSms({ to, text, maxAttempts = 3 } = {}) {
 // fetchMessage: poll Telnyx for the current status of a sent message. Used by
 // the pipeline right after sending to upgrade "sent" -> "delivered" if the
 // webhook hasn't arrived yet. Optional — never throws.
-export async function fetchMessageStatus(telnyxId) {
-  if (!telnyxId || !telnyx.live) return null;
+//
+// `accountId` is optional. When supplied we use the OAuth access token from
+// that connection; otherwise we fall back to the server-level TELNYX_API_KEY.
+export async function fetchMessageStatus(telnyxId, { accountId, accessToken: callerToken } = {}) {
+  if (!telnyxId) return null;
+  if (!telnyx.enabled && !accountId) return null;
+
+  let bearerToken = null;
+  if (accountId) {
+    if (callerToken) {
+      bearerToken = callerToken;
+    } else {
+      try {
+        const { getTelnyxConnection: getter } = await import('./telnyxConnections.js');
+        const { decryptTelnyxTokenForUse: decrypter } = await import('./telnyxOAuth.js');
+        const conn = getter(accountId);
+        if (conn) bearerToken = decrypter(conn.encrypted_access_token);
+      } catch {
+        return null;
+      }
+    }
+  } else {
+    bearerToken = telnyx.apiKey;
+  }
+  if (!bearerToken) return null;
+
   try {
     const res = await fetch(`https://api.telnyx.com/v2/messages/${telnyxId}`, {
       method: 'GET',
-      headers: { Authorization: `Bearer ${telnyx.apiKey}` },
+      headers: { Authorization: `Bearer ${bearerToken}` },
     });
     if (!res.ok) return null;
     const data = await res.json().catch(() => ({}));

@@ -12,6 +12,7 @@ import { CelebrationEffect } from './CelebrationEffect';
 import { TemplateSimPreview } from './TemplateSimPreview';
 import { UnifiedRecentCampaigns } from './UnifiedRecentCampaigns';
 import { EmailCampaignWizard } from './EmailCampaignWizard';
+import { SmsCampaignWizard } from './SmsCampaignWizard';
 import { validateCsvFile, runCampaign, runSiteDeployCampaign, PipelineLead, PipelineResultRow, CsvValidation, listCustomTemplates, CustomTemplate, listEmailAccounts, createEmailCampaign, probeAllEmailAccounts, runEmailCampaign, cancelCampaign, cancelEmailCampaign, EmailCampaignEvent, getEmailCampaign as fetchEmailCampaign } from '../lib/pipelineClient';
 import { ActiveCampaignRun } from '../App';
 
@@ -435,7 +436,7 @@ export const Campaigns: React.FC<CampaignsProps> = ({
 
   // Draft Message
   const [smsText, setSmsText] = useState<string>(
-    `Hi, we noticed {{business_name}} doesn't have a website yet to showcase your services in {{city}}.\n\nWe built a beautiful custom preview for you — take a look: {{site_url}}\n\nReply YES to publish it instantly!\n\n— The Lunao Team`
+    `Hi, we noticed {{business_name}} doesn't have a website yet to showcase your services in {{city}}.\n\nWe built a beautiful custom preview for you — take a look: {{site_url}}\n\nReply YES to publish it instantly.\n\n— The Lunao Team`
   );
 
   // Generation status
@@ -626,7 +627,7 @@ export const Campaigns: React.FC<CampaignsProps> = ({
 
   // (Per-campaign detail modal state now lives inside the unified
   // Recent Campaigns component — no need to hoist it here.)
-  const [activeCampaignType, setActiveCampaignType] = useState<'sms' | 'site-deploy'>('site-deploy');
+  const [activeCampaignType, setActiveCampaignType] = useState<'sms' | 'email' | 'site-deploy'>('site-deploy');
   const [sdActiveStep, setSdActiveStep] = useState<number>(1);
   const [emailActiveStep, setEmailActiveStep] = useState<number>(1);
   const [emailCsvFileName, setEmailCsvFileName] = useState<string | null>(null);
@@ -1638,6 +1639,21 @@ The Lunao Team`);
               });
             }
             setTimeout(() => removeActiveRun?.(campId), 1500);
+          } else if (e.type === 'sms:delaying') {
+            // 10-second throttle between SMS sends — update the Active card's
+            // message so the user can see the pacing in real time.
+            if (typeof e.remainingMs === 'number') {
+              const secs = Math.ceil(e.remainingMs / 1000);
+              updateActiveRun?.(campId, {
+                status: 'delaying',
+                message: `Sending next SMS in ${secs}s…`,
+              });
+            } else {
+              updateActiveRun?.(campId, {
+                status: 'delaying',
+                message: `Throttling SMS sends (10s between each)…`,
+              });
+            }
           }
         },
       );
@@ -1900,11 +1916,15 @@ The Lunao Team`);
                     activeCampaignType === 'email' ? 'bg-accent/15 text-accent' : 'bg-surface text-ink-tertiary'
                   }`}>2 credits/lead</span>
                 </button>
-                {/* SMS Campaign — locked */}
-                <button disabled onClick={() => {}}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold font-sans transition-all opacity-60 cursor-not-allowed">
+                {/* SMS Campaign */}
+                <button onClick={() => { playSoftBubble(); setActiveCampaignType('sms'); }}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold font-sans transition-all ${
+                    activeCampaignType === 'sms' ? 'bg-accent-soft text-accent shadow-sm border border-accent/20' : 'text-ink-secondary hover:text-ink hover:bg-off-white'
+                  }`}>
                   <MessageSquare className="w-3.5 h-3.5" /> SMS Campaign
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-700">Soon</span>
+                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                    activeCampaignType === 'sms' ? 'bg-accent/15 text-accent' : 'bg-surface text-ink-tertiary'
+                  }`}>3 credits/lead</span>
                 </button>
               </div>
             </div>
@@ -2410,16 +2430,50 @@ The Lunao Team`);
               initialSubject={initialEmailSubject}
               initialBody={initialEmailBody}
             />
+          ) : activeCampaignType === 'sms' ? (
+            <SmsCampaignWizard
+              templates={templates}
+              customTemplates={customTemplates}
+              userPlan={userPlan}
+              userCredits={userCredits}
+              ownerKey={localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan'}
+              onCreditsChange={(credits) => setUserCredits(credits)}
+              onLaunch={() => {
+                // Refresh campaigns list on launch
+                setUserCredits(userCredits);
+              }}
+              onCampaignCreated={(campaign) => {
+                // Add to campaigns list
+                const newCampaign: Campaign = {
+                  id: campaign.id,
+                  name: campaign.name,
+                  niche: 'SMS',
+                  leadsFound: campaign.totalLeads || 0,
+                  sites: 0,
+                  smsSent: campaign.smsSent || 0,
+                  claimed: 0,
+                  status: 'Active',
+                  createdAt: new Date().toISOString(),
+                  templateId: '',
+                  type: 'sms',
+                };
+                setCampaigns(prev => [newCampaign, ...prev]);
+              }}
+              onViewDetails={(campaignId) => {
+                setScrollTarget?.(campaignId);
+              }}
+              onStepChange={(step) => {
+                // Track SMS wizard step (for future analytics)
+              }}
+            />
           ) : (
-            <>
-              <div className="text-center py-16 space-y-4">
-                <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto border border-amber-200">
-                  <MessageSquare className="w-8 h-8" />
-                </div>
-                <h3 className="font-serif text-2xl text-ink">SMS Campaigns Coming Soon</h3>
-                <p className="text-sm text-ink-secondary max-w-sm mx-auto">Our SMS outreach system is being upgraded with new automation features. Stay tuned!</p>
+            <div className="text-center py-16 space-y-4">
+              <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto border border-amber-200">
+                <MessageSquare className="w-8 h-8" />
               </div>
-            </>
+              <h3 className="font-serif text-2xl text-ink">SMS Campaigns Coming Soon</h3>
+              <p className="text-sm text-ink-secondary max-w-sm mx-auto">Our SMS outreach system is being upgraded with new automation features. Stay tuned!</p>
+            </div>
           )}
         </div>
       </section>
@@ -2607,6 +2661,7 @@ const ActiveCampaignsCard: React.FC<{
         {runs.map((run) => {
           const pct = run.total > 0 ? Math.min(100, Math.round((run.done / run.total) * 100)) : 0;
           const isCancelling = run.status === 'cancelling' || run.status === 'cancelled';
+          const isDelaying = run.status === 'delaying';
           return (
             <li key={run.id} className={`border rounded-lg p-3 transition-colors ${isCancelling ? 'bg-danger-soft/30 border-danger/30' : 'bg-blue-50/40 border-blue-200/60'}`}>
               <div className="flex items-start justify-between gap-3">
@@ -2619,7 +2674,7 @@ const ActiveCampaignsCard: React.FC<{
                   </div>
                   <div className="mt-2 h-2 w-full bg-blue-100 rounded-full overflow-hidden">
                     <div
-                      className={`h-full transition-all duration-500 ease-out rounded-full ${isCancelling ? 'bg-danger' : 'bg-accent'}`}
+                      className={`h-full transition-all duration-500 ease-out rounded-full ${isCancelling ? 'bg-danger' : isDelaying ? 'bg-amber-400' : 'bg-accent'}`}
                       style={{ width: `${pct}%` }}
                       aria-valuenow={pct}
                       aria-valuemin={0}
@@ -2630,12 +2685,16 @@ const ActiveCampaignsCard: React.FC<{
                     <span className="font-mono">
                       {run.done}/{run.total} ({pct}%)
                     </span>
-                    <span className="font-mono uppercase tracking-wider">
+                    <span className="font-mono uppercase tracking-wider flex items-center gap-1.5">
+                      {run.status === 'delaying' && run.message && (
+                        <span className="text-amber-600 not-sr-only">{run.message}</span>
+                      )}
                       {run.status === 'cancelling' && 'Cancelling…'}
                       {run.status === 'cancelled' && 'Cancelled'}
                       {run.status === 'completed' && 'Completed'}
                       {run.status === 'starting' && 'Starting…'}
                       {run.status === 'running' && 'Running'}
+                      {run.status === 'delaying' && !run.message && 'Delaying…'}
                     </span>
                   </div>
                 </div>

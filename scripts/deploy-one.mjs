@@ -8,24 +8,24 @@ import { modeSummary } from '../server/lib/config.js';
 
 // ── Business data ─────────────────────────────────────────────────────────────
 const business = {
-  name:                 'Lunao',
-  business_name_short:  'Lunao',
-  city:                 'New York, NY',
-  state:                'NY',
-  phone:                '030-457-1380',
-  phone_raw:            '0304571380',
-  email:                'hello@lunao.io',
-  address:              'Downtown Manhattan, New York',
-  years_in_business:    '2019',
-  instagram_handle:     'lunao_nyc',
-  facebook_url:         'https://facebook.com/lunao',
+  name:                 'Summit HVAC Solutions',
+  business_name_short:  'SummitHVAC',
+  city:                 'Phoenix, AZ',
+  state:                'AZ',
+  phone:                '602-555-4422',
+  phone_raw:            '6025554422',
+  email:                'service@summithvacaz.com',
+  address:              '2847 W Camelback Rd, Phoenix, AZ 85017',
+  years_in_business:    '2010',
+  instagram_handle:     'summit_hvac_az',
+  facebook_url:         'https://facebook.com/summithvacaz',
   google_rating:        '4.9',
-  google_review_count:  '214',
+  google_review_count:  '612',
 };
 
 // ── Template ──────────────────────────────────────────────────────────────────
-const NICHE    = 'dentist';
-const TEMPLATE = 'dentist-template-01.html';
+const NICHE    = 'hvac';
+const TEMPLATE = 'hvac-template-01.html';
 
 // ─────────────────────────────────────────────────────────────────────────────
 const mode = modeSummary();
@@ -48,7 +48,7 @@ for (const [k, v] of Object.entries(placeholders)) {
 }
 
 // Step B – stage to disk
-const slug = slugify(business.name, business.city) + '-dentist';
+const slug = slugify(business.name, business.city) + '-hvac';
 console.log(`\n📁  Staging site as slug: "${slug}"`);
 const siteUrl = await stageSite(slug, html);
 console.log(`    Staged URL (if local): ${siteUrl}`);

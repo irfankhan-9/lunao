@@ -28,8 +28,13 @@ import {
 } from './campaigns.js';
 import { refund, getAccount } from './credits.js';
 
+// Local helper — small promise-based delay used for the between-SMS throttle.
+// Mirrors the helper in telnyx.js but kept local so pipeline.js doesn't need
+// to export its own module surface.
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 const DEFAULT_SMS =
-  "Hi, we noticed {{business_name}} doesn't have a website yet to showcase your services in {{city}}.\n\nWe built a beautiful custom preview for you — take a look: {{site_url}}\n\nReply YES to publish it instantly!\n\n— The Lunao Team";
+  "Hi, we noticed {{business_name}} doesn't have a website yet to showcase your services in {{city}}.\n\nWe built a beautiful custom preview for you — take a look: {{site_url}}\n\nReply YES to publish it instantly.\n\n— The Lunao Team";
 
 // Cost model — kept in sync with src/App.tsx (COST_PER_LEAD = 4).
 // 3 credits are reserved per lead for SMS (refunded on SMS failure),
@@ -37,6 +42,11 @@ const DEFAULT_SMS =
 export const COST_PER_LEAD = 4;
 export const SMS_COST_PER_LEAD = 3;
 export const SITE_COST_PER_LEAD = 1;
+
+// Per-SMS throttle: wait this many milliseconds between consecutive sends so
+// carriers don't flag the campaign as spam. Only applied between *real* sends
+// (skipped/coming_soon rows don't count toward the delay).
+export const SMS_DELAY_MS = 10_000;
 
 // When skipSms === true, Phase C is skipped entirely. Used by the
 // sites-only "Site Deploy" campaign flow.
@@ -60,6 +70,10 @@ export async function runPipeline({
   ownerKey = null,
   campaignId = null, // maps businesses[i] to leads[campaignId][i]
   leadIds = [],      // parallel array of DB lead ids; indexed by businesses[i]
+  // SMS auth overrides — when provided, sendSms uses the OAuth access token
+  // stored in telnyx_connections instead of the server-level TELNYX_API_KEY.
+  smsAccountId = null,
+  smsFrom = null,
 } = {}) {
   // Resolve the user-supplied template selection into the unified key.
   // Priority: explicit templateKey > templateFile > templateId > per-row
@@ -242,9 +256,49 @@ export async function runPipeline({
 
   // Phase C: dispatch SMS — skipped when skipSms (sites-only pipeline).
   if (!skipSms) {
+  // Track the index of the previous *real* SMS send so we can throttle
+  // by `SMS_DELAY_MS` between consecutive live sends. The loop yields a
+  // `sms:delaying` SSE event so the dashboard UI shows the countdown
+  // progress bar in real time.
+  let lastSentIndex = -1;
   for (const result of results) {
     if (result.siteStatus !== 'generated') continue;
     if (checkCancelled()) return { summary: null, results };
+
+    // Throttle: wait SMS_DELAY_MS between consecutive live sends so carriers
+    // don't flag the campaign as spam. We emit a `sms:delaying` event with a
+    // server-tracked countdown so the UI shows a live progress bar.
+    if (lastSentIndex >= 0 && SMS_DELAY_MS > 0) {
+      const delayStart = Date.now();
+      const delayEnd = delayStart + SMS_DELAY_MS;
+      emit('sms:delaying', {
+        index: result.index,
+        name: result.name,
+        delayMs: SMS_DELAY_MS,
+        delayUntil: delayEnd,
+        delayStartedAt: delayStart,
+      });
+      const tickInterval = 1000;
+      let elapsed = 0;
+      while (elapsed < SMS_DELAY_MS) {
+        if (checkCancelled()) return { summary: null, results };
+        const remaining = SMS_DELAY_MS - elapsed;
+        const slice = Math.min(tickInterval, remaining);
+        await sleep(slice);
+        elapsed += slice;
+        if (elapsed < SMS_DELAY_MS) {
+          emit('sms:delaying', {
+            index: result.index,
+            name: result.name,
+            delayMs: SMS_DELAY_MS,
+            delayUntil: delayEnd,
+            delayStartedAt: delayStart,
+            remainingMs: SMS_DELAY_MS - elapsed,
+            progress: Math.min(1, elapsed / SMS_DELAY_MS),
+          });
+        }
+      }
+    }
     const text = renderSms(template, {
       businessName: result.name,
       city: result.city,
@@ -298,7 +352,7 @@ export async function runPipeline({
         leadId: result.leadId,
         ownerKey,
         to: dest,
-        from: telnyx.from,
+        from: smsFrom || telnyx.from,
         body: text,
         status: 'queued',
         segmentCount: countSegments(text),
@@ -308,9 +362,9 @@ export async function runPipeline({
     }
 
     emit('sms:sending', { index: result.index, name: result.name, to: dest });
-    console.log(`[pipeline] sms:sending #${result.index} "${result.name}" to=${dest} from=${telnyx.from} telnyx.live=${telnyx.live}`);
+    console.log(`[pipeline] sms:sending #${result.index} "${result.name}" to=${dest} from=${smsFrom || telnyx.from} account=${smsAccountId || 'server'} telnyx.live=${telnyx.live}`);
     try {
-      const sms = await sendSms({ to: result.phone, text });
+      const sms = await sendSms({ to: result.phone, text, accountId: smsAccountId, from: smsFrom });
       console.log(`[pipeline] sms:result #${result.index} status=${sms.status} simulated=${sms.simulated} telnyxId=${sms.id || 'null'}${sms.error ? ' error=' + sms.error : ''}${sms.errorCode ? ' code=' + sms.errorCode : ''}`);
       result.smsStatus = sms.status;
       result.smsSimulated = sms.simulated;
@@ -340,6 +394,9 @@ export async function runPipeline({
           recordLeadResult(result.leadId, { smsStatus: 'simulated' });
           if (smsLogId) updateSmsStatus(smsLogId, { status: 'simulated' });
         }
+        // Simulated sends count toward the throttle so the dashboard UI
+        // shows the same pacing for both dry-run and live campaigns.
+        lastSentIndex = result.index;
         emit('sms:sent', {
           index: result.index,
           name: result.name,
@@ -357,7 +414,7 @@ export async function runPipeline({
         // Best-effort: if Telnyx already reports delivered, upgrade the lead
         // and sms_log status so the dashboard shows the real outcome.
         if (!sms.simulated && sms.id) {
-          const status = await fetchMessageStatus(sms.id);
+          const status = await fetchMessageStatus(sms.id, { accountId: smsAccountId });
           if (status && status.status === 'delivered') {
             if (useDb) {
               recordLeadResult(result.leadId, { smsStatus: 'delivered' });
@@ -366,6 +423,10 @@ export async function runPipeline({
             result.smsStatus = 'delivered';
           }
         }
+        // Mark this index as the last successful live send so the next lead
+        // pays the SMS_DELAY_MS throttle. Stamped AFTER status upgrade so the
+        // delivered status is recorded first.
+        lastSentIndex = result.index;
         emit('sms:sent', {
           index: result.index,
           name: result.name,

@@ -22,7 +22,7 @@ import {
   playElegantBell, playConfirmSuccess, playVictoryCelebration, playGentleChime,
   playElegantError, playCancelTone, playMagicWhoosh,
 } from '../utils/audio';
-import { InviteClientDrawer } from './InviteClientDrawer';
+import { OwnerPWADrawer } from './OwnerPWADrawer';
 import { TemplateLabPage } from './TemplateLabPage';
 
 interface EditorProps {
@@ -687,9 +687,9 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
           className={`relative inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium font-sans active:scale-[0.98] transition-all border ${
             activeInviteCount > 0 ? 'bg-accent-soft text-accent border-accent/30' : 'bg-white text-ink-secondary border-border-main hover:text-ink'
           }`}
-          title="Generate an invite code your client can use in the Lunao Owner app"
+          title="Generate an Owner PWA access code for this business"
         >
-          <UserPlus className="w-4 h-4" /> <span className="hidden sm:inline">Invite Client</span>
+          <UserPlus className="w-4 h-4" /> <span className="hidden sm:inline">Generate Owner PWA</span>
           {activeInviteCount > 0 && (
             <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-accent text-white text-[10px] font-bold tabular-nums">
               {activeInviteCount}
@@ -935,7 +935,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
 
       {/* Invite Client drawer — full-screen overlay, mounted at the editor
           root so its backdrop covers the entire workspace. */}
-      <InviteClientDrawer
+      <OwnerPWADrawer
         slug={selected.slug}
         businessName={selected.title}
         siteUrl={selected.url}

@@ -7,6 +7,7 @@ import { Templates } from './components/Templates';
 import { Editor } from './components/Editor';
 import { Settings } from './components/Settings';
 import { Plans } from './components/Plans';
+import { MessagingLayout } from './components/MessagingLayout';
 import { playTiktokLike, playSoftTap } from './utils/audio';
 import { Landing } from './Landing';
 import { GateProvider, useGate } from './contexts/GateContext';
@@ -34,7 +35,8 @@ export interface ActiveCampaignRun {
   niche: string;
   total: number;
   done: number;
-  status: 'starting' | 'running' | 'cancelling' | 'cancelled' | 'completed';
+  status: 'starting' | 'running' | 'delaying' | 'cancelling' | 'cancelled' | 'completed';
+  message?: string; // optional human-readable sub-status (e.g. "Sending next SMS in 7s…")
   startedAt: number;
   errorMessage?: string;
   // Site-deploy fields
@@ -526,6 +528,9 @@ function DashboardApp() {
           </div>
           <div className={activeTab === 'editor' ? 'block animate-fade-in' : 'hidden'}>
             <Editor active={activeTab === 'editor'} />
+          </div>
+          <div className={activeTab === 'messaging' ? 'block animate-fade-in' : 'hidden'}>
+            <MessagingLayout />
           </div>
           <div className={activeTab === 'settings' ? 'block animate-fade-in' : 'hidden'}>
             <Settings userName={userName} setUserName={setUserName} userEmail={userEmail} setUserEmail={setUserEmail} userPlan={userPlan} setUserPlan={handleSetUserPlan} userCredits={userCredits} telnyxKey={telnyxKey} setTelnyxKey={setTelnyxKey} telnyxPhone={telnyxPhone} setTelnyxPhone={setTelnyxPhone} setActiveTab={setActiveTab} />
