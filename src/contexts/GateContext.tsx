@@ -26,9 +26,17 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
   const isLocalhost = typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
+  const isMockEnv = isLocalhost ||
+    (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_STANDALONE_MOCK === 'true') ||
+    (typeof window !== 'undefined' && (
+      window.location.hostname.includes('webcontainer') ||
+      window.location.hostname.includes('aistudio') ||
+      window.location.hostname.includes('stackblitz')
+    ));
+
   const refresh = useCallback(async () => {
-    // For localhost development: skip the gate check and unlock directly.
-    if (isLocalhost) {
+    // For localhost / AI Studio / standalone mock development: skip gate check and unlock directly.
+    if (isMockEnv) {
       setUnlocked(true);
       return;
     }

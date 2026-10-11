@@ -1,8 +1,19 @@
 import { Campaign, Template, Business, SmsLog } from './types';
+import { mockCampaigns, mockBusinesses, mockSmsLogs, mockActivitiesLog } from './data/mockData';
 
-// No mock campaigns — real campaigns are created by running the live pipeline
-// and persisted via localStorage (see App.tsx).
-export const initialCampaigns: Campaign[] = [];
+export { mockCampaigns, mockBusinesses, mockSmsLogs, mockActivitiesLog };
+
+// Standalone Mock Mode: Auto-active in AI Studio, WebContainers, or when VITE_STANDALONE_MOCK='true'
+export const IS_MOCK_ENV = 
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_STANDALONE_MOCK === 'true') ||
+  (typeof window !== 'undefined' && (
+    window.location.hostname.includes('webcontainer') || 
+    window.location.hostname.includes('aistudio') || 
+    window.location.hostname.includes('stackblitz')
+  ));
+
+// Populated with rich mock campaigns when in AI Studio / Mock mode, clean empty in production
+export const initialCampaigns: Campaign[] = IS_MOCK_ENV ? mockCampaigns : [];
 
 // Built-in templates. The `id` here is the canonical template key used
 // everywhere — picker, launch payload, campaign card, preview iframe.
@@ -100,14 +111,14 @@ export const initialTemplates: Template[] = [
   }
 ];
 
-// No mock businesses — populated for real from live campaign deployments.
-export const initialBusinesses: Business[] = [];
+// Populated with rich dummy data when in AI Studio / Mock mode
+export const initialBusinesses: Business[] = IS_MOCK_ENV ? mockBusinesses : [];
 
-// No mock SMS logs — populated for real once SMS is live (Coming Soon).
-export const initialSmsLogs: SmsLog[] = [];
+// Populated with sample logs in Mock mode
+export const initialSmsLogs: SmsLog[] = IS_MOCK_ENV ? mockSmsLogs : [];
 
-// No mock activity feed.
-export const activitiesLog: { text: string; time: string; type: string }[] = [];
+// Populated with activity items in Mock mode
+export const activitiesLog: { text: string; time: string; type: string }[] = IS_MOCK_ENV ? mockActivitiesLog : [];
 
 export const nicheList = [
   { id: 'Barber', emoji: '💈', label: 'Barber' },

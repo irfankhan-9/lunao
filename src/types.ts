@@ -80,6 +80,8 @@ export interface Template {
   rating: number;
   tag?: string;
   isMostUsed?: boolean;
+  emoji?: string;
+  description?: string;
   // The raw HTML file under /public/templates-raw/ that the server should
   // compile when this template is selected. Without this, every selection
   // silently falls back to the default barber template.
