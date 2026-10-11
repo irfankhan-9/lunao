@@ -29,6 +29,9 @@ interface BusinessContextType {
   updateAISettings: (updates: Partial<TenantBusiness['aiSettings']>) => Promise<void>;
   updateWebsiteConfig: (updates: Partial<TenantBusiness['websiteConfig']>) => Promise<void>;
   showToast: (message: string) => void;
+  availableDemoProfiles: { code: string; name: string; niche: string; city: string }[];
+  switchTenantByCode: (code: string) => Promise<boolean>;
+  isDemoMode: boolean;
 }
 
 const BusinessContext = createContext<BusinessContextType | undefined>(undefined);
@@ -238,6 +241,9 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         updateAISettings,
         updateWebsiteConfig,
         showToast,
+        availableDemoProfiles: tenantAuthService.getAvailableDemoProfiles(),
+        switchTenantByCode: loginWithCode,
+        isDemoMode: false,
       }}
     >
       {children}

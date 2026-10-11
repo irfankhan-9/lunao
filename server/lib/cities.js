@@ -547,6 +547,41 @@ function pageBudgetFor(population, { locked = false } = {}) {
 //
 // Pure in-memory linear scan over the `cities[]` array. ~200k records
 // → ~5 ms on a cold laptop, well under any request budget.
+function haversineDistanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function findNearestCities({ lat, lon, excludeNames = [], limit = 15, maxRadiusKm = 150 } = {}) {
+  if (lat == null || lon == null) return [];
+  const exclude = new Set(excludeNames.map((n) => normalize(n)));
+  const candidates = [];
+  for (let i = 0; i < cities.length; i++) {
+    const c = cities[i];
+    if (exclude.has(normalize(c.name))) continue;
+    const dist = haversineDistanceKm(lat, lon, c.lat, c.lon);
+    if (dist <= maxRadiusKm) {
+      candidates.push({
+        name: c.name,
+        country: c.country,
+        admin: c.admin,
+        lat: c.lat,
+        lon: c.lon,
+        population: c.population,
+        distanceKm: dist,
+      });
+    }
+  }
+  candidates.sort((a, b) => a.distanceKm - b.distanceKm);
+  return candidates.slice(0, limit);
+}
+
 function getNearbyByAdmin({ admin, country, excludeNames = [], limit = 50 } = {}) {
   if (!admin || !country) return [];
   const exclude = new Set(excludeNames.map((n) => normalize(n)));
@@ -712,6 +747,7 @@ export {
   loadPromise,
   pageBudgetFor,
   getNearbyByAdmin,
+  findNearestCities,
   pickNextCity,
 };
 export default {
@@ -722,5 +758,6 @@ export default {
   loadPromise,
   pageBudgetFor,
   getNearbyByAdmin,
+  findNearestCities,
   pickNextCity,
 };

@@ -121,7 +121,6 @@ import {
   probeAllEmailAccountTokens,
   listEmailLeadsWithAccounts,
 } from './lib/emailCampaigns.js';
-import { lookupCity } from './lib/cities.js';
 import { runDorkPipeline } from './lib/dorkPipeline.js';
 import {
   buildGmailAuthUrl,
@@ -4246,36 +4245,50 @@ if (spaEntry) {
   });
 }
 
-app.listen(PORT, () => {
-  // Background safety net: re-check non-terminal SMS rows every 30s, in case
-  // the dashboard isn't open (so a Telnyx webhook that lands while nobody's
-  // looking still gets reflected in the DB before the user next loads).
-  startGlobalRechecker();
-  const mode = modeSummary();
-  console.log(`\n  Lunao pipeline API  ->  http://localhost:${PORT}`);
-  console.log(`  Public base        : ${PUBLIC_BASE}`);
-  console.log(`  Telnyx SMS         : ${mode.telnyx}`);
-  console.log(`  Cloudflare Pages   : ${mode.cloudflare}`);
-  console.log(`  Google Maps        : ${mode.googleMaps}`);
-  console.log(`  AI Editor          : ${mode.aiEditor}`);
-  console.log(`  Chatbot            : ${mode.chatbot}`);
-  console.log(`  Site base URL      : ${mode.siteBaseUrl}`);
-  console.log(`  DB                 : ${process.env.DATABASE_URL ? 'Postgres (Railway)' : 'SQLite (local)'}`);
-  console.log(`  Auth cookies       : secure=${process.env.NODE_ENV === 'production'} sameSite=lax trustProxy=${app.get('trust proxy')}`);
-  if (templatesCheck.ok) {
-    console.log(`  Raw templates      : ${templatesCheck.count} files at ${templatesCheck.path}`);
-  } else {
-    console.log(`  Raw templates      : MISSING (${templatesCheck.reason}) at ${templatesCheck.path}`);
-    console.log(`                     Campaigns will fail with "0 sites generated".`);
-    console.log(`                     Fix: git add public/templates-raw/*.html && git commit && git push.`);
+export function startBackgroundServices() {
+  try {
+    startGlobalRechecker();
+    startOauthStateCleanup();
+  } catch (err) {
+    console.error('Failed to start background services:', err);
   }
-  // Start OAuth state cleanup timer
-  startOauthStateCleanup();
-  // City DB status — block (don't log until resolved) so the operator sees
-  // whether the 200k GeoNames file finished loading or only the seed list
-  // is available yet.
-  citiesLoadPromise.then((s) => {
-    console.log(`  Cities             : ${s.records.toLocaleString()} in-memory (${s.fileLoaded ? 'GeoNames cities500 loaded' : 'seed list only'})`);
+}
+
+export { app };
+export default app;
+
+if (process.env.NO_SERVER_LISTEN !== 'true') {
+  app.listen(PORT, () => {
+    // Background safety net: re-check non-terminal SMS rows every 30s, in case
+    // the dashboard isn't open (so a Telnyx webhook that lands while nobody's
+    // looking still gets reflected in the DB before the user next loads).
+    startGlobalRechecker();
+    const mode = modeSummary();
+    console.log(`\n  Lunao pipeline API  ->  http://localhost:${PORT}`);
+    console.log(`  Public base        : ${PUBLIC_BASE}`);
+    console.log(`  Telnyx SMS         : ${mode.telnyx}`);
+    console.log(`  Cloudflare Pages   : ${mode.cloudflare}`);
+    console.log(`  Google Maps        : ${mode.googleMaps}`);
+    console.log(`  AI Editor          : ${mode.aiEditor}`);
+    console.log(`  Chatbot            : ${mode.chatbot}`);
+    console.log(`  Site base URL      : ${mode.siteBaseUrl}`);
+    console.log(`  DB                 : ${process.env.DATABASE_URL ? 'Postgres (Railway)' : 'SQLite (local)'}`);
+    console.log(`  Auth cookies       : secure=${process.env.NODE_ENV === 'production'} sameSite=lax trustProxy=${app.get('trust proxy')}`);
+    if (templatesCheck.ok) {
+      console.log(`  Raw templates      : ${templatesCheck.count} files at ${templatesCheck.path}`);
+    } else {
+      console.log(`  Raw templates      : MISSING (${templatesCheck.reason}) at ${templatesCheck.path}`);
+      console.log(`                     Campaigns will fail with "0 sites generated".`);
+      console.log(`                     Fix: git add public/templates-raw/*.html && git commit && git push.`);
+    }
+    // Start OAuth state cleanup timer
+    startOauthStateCleanup();
+    // City DB status — block (don't log until resolved) so the operator sees
+    // whether the 200k GeoNames file finished loading or only the seed list
+    // is available yet.
+    citiesLoadPromise.then((s) => {
+      console.log(`  Cities             : ${s.records.toLocaleString()} in-memory (${s.fileLoaded ? 'GeoNames cities500 loaded' : 'seed list only'})`);
+    });
+    console.log('');
   });
-  console.log('');
-});
+}

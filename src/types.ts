@@ -51,6 +51,7 @@ export interface Campaign {
 export interface CampaignEmailLead {
   leadId?: string | number;
   name: string;
+  businessName?: string;
   email?: string;
   accountEmail?: string;
   siteUrl?: string;

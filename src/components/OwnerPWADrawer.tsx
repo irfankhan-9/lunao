@@ -32,9 +32,7 @@ import {
 const OWNER_PWA_URL =
   typeof window !== 'undefined'
     ? window.location.origin
-    : (typeof process !== 'undefined' && process.env?.VITE_OWNER_PWA_URL)
-      ? process.env.VITE_OWNER_PWA_URL
-      : 'http://localhost:3001';
+    : ((typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_OWNER_PWA_URL) || 'http://localhost:3001');
 
 interface OwnerPWADrawerProps {
   slug: string;

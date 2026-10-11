@@ -31,6 +31,8 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
     (typeof window !== 'undefined' && (
       window.location.hostname.includes('webcontainer') ||
       window.location.hostname.includes('aistudio') ||
+      window.location.hostname.includes('run.app') ||
+      window.location.hostname.includes('googleusercontent.com') ||
       window.location.hostname.includes('stackblitz')
     ));
 

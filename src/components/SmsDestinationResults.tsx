@@ -129,7 +129,7 @@ function CopyableUrl({
   );
 }
 
-function IssueRow({ issue, defaultExpanded }: { issue: Issue; defaultExpanded?: boolean }) {
+function IssueRow({ issue, defaultExpanded }: { issue: Issue; defaultExpanded?: boolean; key?: React.Key }) {
   const [expanded, setExpanded] = React.useState(!!defaultExpanded);
   const hasSteps = Array.isArray(issue.steps) && issue.steps.length > 0;
 

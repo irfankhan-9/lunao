@@ -41,17 +41,9 @@ export interface PipelineSummary {
   cloudflare: string;
 }
 
-// In dev: '' (same-origin via Vite proxy to localhost:8787).
-// In prod / tunnel: use the public API tunnel URL so the browser can
-// call the API from any origin without CORS or proxy issues.
-const API_BASE = (() => {
-  // If we're not on localhost, use the public API tunnel.
-  if (typeof window !== 'undefined' && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1')) {
-    // The API tunnel URL — update this when you restart the tunnel.
-    return 'https://slow-lines-start.loca.lt';
-  }
-  return ''; // same-origin dev proxy
-})();
+// In dev & prod: use relative '' for same-origin proxying.
+// Can be overridden via VITE_PUBLIC_API_BASE_URL if an external server is configured.
+const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_PUBLIC_API_BASE_URL) || '';
 
 export async function getHealth(): Promise<any | null> {
   try {
@@ -1162,6 +1154,7 @@ export async function processUploadedHtml(params: {
 // =============================================================================
 
 export interface EmailCampaignPayload {
+  name?: string;
   niche: string;
   templateId?: string;
   templateKey?: string;
@@ -1169,6 +1162,7 @@ export interface EmailCampaignPayload {
   targetVolume: number;
   city: string;
   category?: string;
+  status?: string;
   emailSubject?: string;
   emailBody?: string;
   csvSnapshot?: string;
@@ -1196,6 +1190,7 @@ export interface CityLookupResult {
 export interface CityLookupResponse {
   exact: boolean;
   match?: { name: string; country: string; population: number; lat: number; lon: number };
+  city?: string;
   suggestions: CitySuggestion[];
 }
 

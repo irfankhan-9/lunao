@@ -83,6 +83,7 @@ export interface TenantBusiness {
   email: string;
   address: string;
   city: string;
+  state?: string;
   timezone: string;
   websiteUrl: string;
   socialLinks: SocialLinks;
@@ -148,7 +149,7 @@ export type AutomationTrigger =
   | 'no_booking_days';
 
 export interface AutomationTimingConfig {
-  timingType: 'instant' | 'hours_before' | 'after_appointment' | 'inactivity_days';
+  timingType?: 'instant' | 'hours_before' | 'after_appointment' | 'inactivity_days';
   value: number; // e.g. 0 for instant, 24 for 24h before, 2 for 2 hours/days, 45 for 45 days
   unit: 'minutes' | 'hours' | 'days';
 }

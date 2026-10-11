@@ -229,7 +229,7 @@ export const UnifiedRecentCampaigns: React.FC<UnifiedRecentCampaignsProps> = ({
   useEffect(() => {
     const timers = collapseTimers.current;
     return () => {
-      Object.values(timers).forEach((t) => window.clearTimeout(t));
+      Object.values(timers).forEach((t) => window.clearTimeout(t as any));
     };
   }, []);
 
@@ -297,7 +297,7 @@ export const UnifiedRecentCampaigns: React.FC<UnifiedRecentCampaignsProps> = ({
   const handleBatchDeleteConfirm = () => {
     playCancelTone();
     setConfirmBatchDelete(false);
-    const ids = Array.from(selectedIds);
+    const ids = Array.from(selectedIds) as string[];
     if (ids.length === 0) return;
     setSelectedIds(new Set());
     beginCollapse(ids);

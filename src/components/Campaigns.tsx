@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { nicheList } from '../data';
 import { getTemplateContent, getNicheBgImage } from './Templates';
-import { playGentleChime, playLaunchSwell, playVictoryCelebration, playSoftTap, playSoftBubble, playElegantBell, playSlideTick, playElegantError, playTiktokLike, playConfirmSuccess } from '../utils/audio';
+import { playGentleChime, playLaunchSwell, playVictoryCelebration, playSoftTap, playSoftBubble, playElegantBell, playSlideTick, playElegantError, playTiktokLike, playConfirmSuccess, playCancelTone } from '../utils/audio';
 import { dedupeLeads } from '../utils/leads';
 import { CelebrationEffect } from './CelebrationEffect';
 import { TemplateSimPreview } from './TemplateSimPreview';
@@ -996,7 +996,7 @@ The Lunao Team`);
             }));
           const deployedBySlug = new Map<string, any>();
           for (const s of rawDeployedSites) {
-            const k = s.slug ?? s.email ?? s.leadId ?? s.url;
+            const k = s.slug ?? (s as any).email ?? (s as any).leadId ?? s.url;
             if (k) deployedBySlug.set(k, s);
           }
           const cleanDeployedSites = Array.from(deployedBySlug.values());

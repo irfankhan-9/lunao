@@ -73,6 +73,7 @@ const sfx = {
   copy: playElegantBell,
   swap: playSoftBubble,
   saved: playConfirmSuccess,
+  confirmSuccess: playConfirmSuccess,
   deployed: playVictoryCelebration,
   aiDone: () => playGentleChime(3),
   magic: playMagicWhoosh,     // AI starts generating a template
@@ -81,7 +82,7 @@ const sfx = {
 };
 
 export const Editor: React.FC<EditorProps> = ({ active }) => {
-  const [view, setView] = useState<'list' | 'edit'>('list');
+  const [view, setView] = useState<'list' | 'edit' | 'lab'>('list');
   const [sites, setSites] = useState<EditorSite[]>([]);
   const [aiEnabled, setAiEnabled] = useState(false);
   const [listLoading, setListLoading] = useState(false);
@@ -121,8 +122,6 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   const [inviteRefreshKey, setInviteRefreshKey] = useState(0);
 
   // Template Lab — unified AI site builder
-  const [labOpen, setLabOpen] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false); // reserved for future
   const [browseOpen, setBrowseOpen] = useState(false);
 
   // AI chat (legacy — AI edit now lives in TemplateLabPage)
@@ -390,18 +389,30 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   };
 
   // ===========================================================================
-  // TemplateLabPage component imported below
-  // LAB OPEN — full-page Template Lab
+  // LAB VIEW — embedded AI Vibe Studio
   // ===========================================================================
 
-  if (labOpen) {
+  if (view === 'lab') {
     return (
-      <TemplateLabPage
-        aiEnabled={aiEnabled}
-        onClose={() => { sfx.close(); setLabOpen(false); }}
-        onBrowseTemplates={() => { sfx.open(); setBrowseOpen(true); }}
-        flashToast={flashToast}
-      />
+      <div key="editor-lab" className="w-full h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] flex flex-col animate-editor-rise">
+        {toast && <ToastBanner toast={toast} onClose={() => setToast(null)} />}
+        <TemplateLabPage
+          aiEnabled={aiEnabled}
+          embedded={true}
+          onClose={() => { sfx.close(); setView('list'); }}
+          onBrowseTemplates={() => { sfx.open(); setBrowseOpen(true); }}
+          flashToast={flashToast}
+        />
+        <BrowseTemplatesSheet
+          open={browseOpen}
+          onClose={() => { sfx.close(); setBrowseOpen(false); }}
+          onUseTemplate={(t) => {
+            sfx.engage();
+            flashToast({ type: 'info', text: `Template "${t.name}" selected.` });
+            setBrowseOpen(false);
+          }}
+        />
+      </div>
     );
   }
 
@@ -461,7 +472,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
           }}
           onOpenStudio={() => {
             sfx.primary();
-            setLabOpen(true);
+            setView('lab');
           }}
         />
 

@@ -5,11 +5,12 @@
 // website, and city.
 
 import { db } from './db.js';
+import { addEmailLead } from './emailCampaigns.js';
 
 const PLACES_API_BASE = 'https://places.googleapis.com/v1/places:searchText';
 
 // Niche to search query mapping
-const NICHE_SEARCH_TERMS: Record<string, string> = {
+const NICHE_SEARCH_TERMS = {
   'Barber': 'barbershop barbers near me',
   'Salon': 'hair salon beauty salon near me',
   'Dentist': 'dentist dental clinic near me',
@@ -19,23 +20,8 @@ const NICHE_SEARCH_TERMS: Record<string, string> = {
   'Real Estate': 'real estate agent realtor near me',
 };
 
-export interface PlacesBusinessResult {
-  name: string;
-  phone: string;
-  website: string;
-  address: string;
-  city: string;
-  placeId: string;
-}
-
-export interface PlacesSearchParams {
-  city: string;
-  niche: string;
-  limit?: number;
-}
-
 // Search for places using Text Search
-export async function searchPlaces(query: string, apiKey: string, pageSize = 20): Promise<any[]> {
+export async function searchPlaces(query, apiKey, pageSize = 20) {
   if (!apiKey) {
     throw new Error('Google Places API key not configured');
   }
@@ -73,7 +59,7 @@ export async function searchPlaces(query: string, apiKey: string, pageSize = 20)
 }
 
 // Get place details for a specific place
-export async function getPlaceDetails(placeId: string, apiKey: string): Promise<any> {
+export async function getPlaceDetails(placeId, apiKey) {
   if (!apiKey) {
     throw new Error('Google Places API key not configured');
   }
@@ -102,10 +88,9 @@ export async function getPlaceDetails(placeId: string, apiKey: string): Promise<
 }
 
 // Extract city from address components
-function extractCity(addressComponents: any[]): string {
+function extractCity(addressComponents) {
   if (!addressComponents) return '';
 
-  // Priority: locality > sublocality > postalTown
   for (const component of addressComponents) {
     const types = component.types || [];
     if (types.includes('locality')) {
@@ -131,11 +116,7 @@ function extractCity(addressComponents: any[]): string {
 }
 
 // Main discovery function - finds businesses with websites
-export async function discoverLeadsFromPlaces(
-  params: PlacesSearchParams,
-  apiKey: string,
-  onProgress?: (progress: { current: number; total: number; found: number; currentName: string }) => void
-): Promise<PlacesBusinessResult[]> {
+export async function discoverLeadsFromPlaces(params, apiKey, onProgress) {
   const { city, niche, limit = 50 } = params;
   
   if (!apiKey) {
@@ -145,18 +126,16 @@ export async function discoverLeadsFromPlaces(
   const searchTerm = NICHE_SEARCH_TERMS[niche] || `${niche} near ${city}`;
   const fullQuery = `${searchTerm} in ${city}`;
   
-  const results: PlacesBusinessResult[] = [];
+  const results = [];
   let totalFound = 0;
 
   try {
-    // Phase 1: Text Search
     if (onProgress) {
       onProgress({ current: 0, total: limit, found: 0, currentName: 'Searching...' });
     }
 
     const places = await searchPlaces(fullQuery, apiKey);
     
-    // Phase 2: Get details for each place
     for (const place of places) {
       if (results.length >= limit) break;
       
@@ -169,35 +148,31 @@ export async function discoverLeadsFromPlaces(
         });
       }
 
-      // Skip places without required data
       if (!place.id) continue;
 
       try {
-        // Small delay to respect rate limits
         await sleep(100);
 
         const details = await getPlaceDetails(place.id, apiKey);
         
-        // Only include businesses with a website (for email discovery)
         if (!details.website) {
           continue;
         }
 
-        const city = extractCity(details.addressComponents);
+        const resolvedCity = extractCity(details.addressComponents) || city;
 
         results.push({
           name: details.displayName?.text || place.displayName?.text || '',
           phone: details.nationalPhoneNumber || '',
           website: details.website,
           address: details.formattedAddress || '',
-          city,
+          city: resolvedCity,
           placeId: place.id,
         });
 
         totalFound++;
       } catch (err) {
         console.log(`[placesApi] Failed to get details for ${place.displayName?.text}: ${err.message}`);
-        // Continue to next place
       }
     }
 
@@ -218,10 +193,7 @@ export async function discoverLeadsFromPlaces(
 }
 
 // Store discovered leads in the campaign
-export function storeDiscoveredLeads(
-  campaignId: string,
-  leads: PlacesBusinessResult[]
-): number {
+export function storeDiscoveredLeads(campaignId, leads) {
   let count = 0;
   
   for (const lead of leads) {
@@ -232,7 +204,7 @@ export function storeDiscoveredLeads(
         phone: lead.phone,
         city: lead.city,
         website: lead.website,
-        email: '', // Email discovery happens separately
+        email: '',
         emailSource: 'places_api',
         verificationStatus: 'pending',
         slug: slugify(lead.name, lead.city),
@@ -246,18 +218,13 @@ export function storeDiscoveredLeads(
   return count;
 }
 
-function sleep(ms: number): Promise<void> {
+function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function slugify(name: string, city: string): string {
+function slugify(name, city) {
   const base = `${name} ${city}`.toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
   return base.slice(0, 50);
 }
-
-// Import database functions
-import {
-  addEmailLead,
-} from './emailCampaigns.js';

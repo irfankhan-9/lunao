@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BarChart3, TrendingUp, MessageSquare, Send, CheckCircle, Reply, Phone, Loader2 } from 'lucide-react';
 
 interface MessagingStats {

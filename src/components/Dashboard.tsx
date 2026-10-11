@@ -209,7 +209,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         phone: '',
         city: site.city || '',
         niche: camp.niche,
-        webStatus: 'live' as const,
+        webStatus: 'Has website' as const,
         siteStatus: 'Converted' as const,
         slug: site.slug,
         smsHistory: [],

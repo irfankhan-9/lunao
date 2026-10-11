@@ -10,6 +10,7 @@ import {
   Smartphone, Monitor, Maximize2, Users, Layout, Type, Search, MapPin
 } from 'lucide-react';
 import { playGentleChime, playLaunchSwell, playVictoryCelebration, playSoftTap, playElegantError, playSoftBubble, playElegantBell } from '../utils/audio';
+import { dedupeLeads } from '../utils/leads';
 import { validateCsvFile, CsvValidation, PipelineLead, runEmailCampaign, createEmailCampaign, probeAllEmailAccounts, initiateOAuthFlow, EmailAccountProbeResult, EmailCampaignEvent, lookupCity, runDorkEmailCampaign, CityLookupResponse, CitySuggestion, getDorkStatus, DiscoveredLead, dorkNext, saveDorkLeads } from '../lib/pipelineClient';
 import { Template } from '../types';
 import { nicheList } from '../data';
@@ -783,7 +784,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
           niche: selectedNiche,
           templateKey: selectedTemplateId,
           leadSource: 'csv',
-          targetVolume: totalLeads,
+          targetVolume: csvLeads.length,
           city: '',
           emailSubject,
           emailBody,
@@ -1645,14 +1646,14 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 // email/slug — same dedupe strategy as upsertPerLead so a
                 // 'pending' row from site:staged is overwritten by the 'sent'
                 // row instead of producing a second entry for the same lead.
-                const sentKey = sentEntry.leadId ?? sentEntry.email ?? sentEntry.slug;
+                const sentKey = (sentEntry as any).leadId ?? (sentEntry as any).email ?? (sentEntry as any).slug;
                 const existingIdx = sentKey === undefined
                   ? -1
                   : prevPerLead.findIndex((p: any) => {
                       const pKey = p.leadId ?? p.email ?? p.slug;
                       if (pKey !== undefined && pKey !== null && pKey === sentKey) return true;
                       if (sentEntry.email && p.email && sentEntry.email.toLowerCase() === p.email.toLowerCase()) return true;
-                      if (sentEntry.slug && p.slug && sentEntry.slug === p.slug) return true;
+                      if ((sentEntry as any).slug && p.slug && (sentEntry as any).slug === p.slug) return true;
                       return false;
                     });
                 const newPerLead = existingIdx >= 0
@@ -1698,14 +1699,14 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               upsertPerLead(failedEntry);
               setLaunchResults(prev => {
                 const prevPerLead = prev?.perLead || [];
-                const failedKey = failedEntry.leadId ?? failedEntry.email ?? failedEntry.slug;
+                const failedKey = (failedEntry as any).leadId ?? (failedEntry as any).email ?? (failedEntry as any).slug;
                 const existingIdx = failedKey === undefined
                   ? -1
                   : prevPerLead.findIndex((p: any) => {
                       const pKey = p.leadId ?? p.email ?? p.slug;
                       if (pKey !== undefined && pKey !== null && pKey === failedKey) return true;
                       if (failedEntry.email && p.email && failedEntry.email.toLowerCase() === p.email.toLowerCase()) return true;
-                      if (failedEntry.slug && p.slug && failedEntry.slug === p.slug) return true;
+                      if ((failedEntry as any).slug && p.slug && (failedEntry as any).slug === p.slug) return true;
                       return false;
                     });
                 const newPerLead = existingIdx >= 0
@@ -3040,14 +3041,14 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 <div className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg border text-xs ${
                   isProbingTokens
                     ? 'bg-blue-50 border-blue-200 text-blue-700'
-                    : Object.values(accountProbes).some(p => !p.ok)
+                    : (Object.values(accountProbes) as EmailAccountProbeResult[]).some(p => !p.ok)
                       ? 'bg-danger/10 border-danger/30 text-danger'
                       : 'bg-success-soft border-success/20 text-success'
                 }`}>
                   <div className="flex items-center gap-2">
                     {isProbingTokens ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : Object.values(accountProbes).some(p => !p.ok) ? (
+                    ) : (Object.values(accountProbes) as EmailAccountProbeResult[]).some(p => !p.ok) ? (
                       <ShieldAlert className="w-3.5 h-3.5" />
                     ) : (
                       <CheckCircle className="w-3.5 h-3.5" />
@@ -3055,8 +3056,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                     <span className="font-semibold">
                       {isProbingTokens
                         ? 'Verifying connected accounts…'
-                        : Object.values(accountProbes).some(p => !p.ok)
-                          ? `${Object.values(accountProbes).filter(p => !p.ok).length} account${Object.values(accountProbes).filter(p => !p.ok).length === 1 ? '' : 's'} need${Object.values(accountProbes).filter(p => !p.ok).length === 1 ? 's' : ''} to reconnect`
+                        : (Object.values(accountProbes) as EmailAccountProbeResult[]).some(p => !p.ok)
+                          ? `${(Object.values(accountProbes) as EmailAccountProbeResult[]).filter(p => !p.ok).length} account${(Object.values(accountProbes) as EmailAccountProbeResult[]).filter(p => !p.ok).length === 1 ? '' : 's'} need${(Object.values(accountProbes) as EmailAccountProbeResult[]).filter(p => !p.ok).length === 1 ? 's' : ''} to reconnect`
                           : 'All connected accounts verified'}
                     </span>
                   </div>
@@ -3557,7 +3558,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               <div className="px-4 pb-3">
                 <div className="flex items-center gap-1.5 mb-2">
                   {(['discovering', 'building', 'sending'] as const).map((s, i) => {
-                    const labels: Record<typeof s, string> = {
+                    const labels: Record<string, string> = {
                       discovering: '1. Discovering leads',
                       building: '2. Building sites',
                       sending: '3. Sending emails',

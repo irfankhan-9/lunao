@@ -60,7 +60,9 @@ export const EmailAccountsManager: React.FC<EmailAccountsManagerProps> = ({
       for (const acc of raw) {
         const key = `${acc.provider}::${String(acc.email || '').toLowerCase()}`;
         const prev = seen.get(key);
-        if (!prev || (acc.connected_at || 0) > (prev.connected_at || 0)) {
+        const accTime = (acc as any).connected_at || acc.connectedAt || 0;
+        const prevTime = prev ? ((prev as any).connected_at || prev.connectedAt || 0) : 0;
+        if (!prev || accTime > prevTime) {
           seen.set(key, acc);
         }
       }
