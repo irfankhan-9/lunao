@@ -150,7 +150,7 @@ export function modeSummary() {
     telnyx: telnyx.live ? 'LIVE' : telnyx.enabled ? 'DRY-RUN (simulated)' : 'COMING SOON (disabled)',
     cloudflare: cloudflare.live ? 'LIVE' : 'DRY-RUN (served locally)',
     googleMaps: google.live ? 'LIVE' : 'COMING SOON (CSV mode)',
-    aiEditor: anthropic.live ? 'LIVE' : 'disabled (no ANTHROPIC_API_KEY)',
+    aiEditor: (gemini.live || anthropic.live) ? 'LIVE (Gemini 2.5 Flash)' : 'disabled',
     chatbot: gemini.live ? 'LIVE (Gemini)' : 'rule-based (no GEMINI_API_KEY)',
     siteBaseUrl: siteBaseUrl(),
     apiBaseUrl: PUBLIC_API_BASE_URL,

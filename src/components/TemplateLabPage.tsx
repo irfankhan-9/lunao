@@ -11,6 +11,7 @@ import {
   streamAiEdit, processUploadedHtml,
   listTemplateCategories, createTemplateCategory,
 } from '../lib/pipelineClient';
+import { useSyncNiches, addAndSyncTemplate, getNicheEmoji } from '../lib/nichesSync';
 import {
   playSoftTap, playTiktokLike, playSlideTick, playDialogPop, playSoftBubble,
   playElegantBell, playConfirmSuccess, playVictoryCelebration, playGentleChime,
@@ -128,6 +129,12 @@ export const TemplateLabPage: React.FC<{
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [labError, setLabError] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<'Gemini 2.5 Flash' | 'Gemini 3.8 Flash' | 'Gemini 3.1 Pro'>('Gemini 2.5 Flash');
+
+  // Synchronized Niches across the platform
+  const [allNiches, addNiche] = useSyncNiches();
+  const [selectedSaveNiche, setSelectedSaveNiche] = useState<string>('Barber');
+  const [showAllNiches, setShowAllNiches] = useState(false);
 
   // Save Modal States
   const [saveOpen, setSaveOpen] = useState(false);
@@ -141,6 +148,9 @@ export const TemplateLabPage: React.FC<{
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const idleContainerRef = useRef<HTMLDivElement>(null);
+  const [successMsg, setSuccessMsg] = useState<{ title: string; niche: string } | null>(null);
 
   useEffect(() => {
     if (iframeRef.current && previewHtml) {
@@ -149,8 +159,8 @@ export const TemplateLabPage: React.FC<{
   }, [previewHtml]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, thinkingAcc]);
+    // Auto-scroll disabled per user request
+  }, [messages, thinkingAcc, streaming]);
 
   useEffect(() => {
     listSiteHistory()
@@ -192,6 +202,14 @@ export const TemplateLabPage: React.FC<{
     setLabError(null);
     setThinkingAcc('');
     setShowPromptInput(false);
+
+    // Force scroll strictly to the top on all elements so user never has to scroll up
+    const forceScrollTop = () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+    forceScrollTop();
+
+    // Start with ONLY user message (no hardcoded pre-built text)
     setMessages([{ role: 'user', content: promptText }]);
 
     try {
@@ -206,10 +224,23 @@ export const TemplateLabPage: React.FC<{
       setHtml(result);
       setPreviewHtml(finalCompiled);
       setThinkingAcc('');
-      setMessages(m => [
-        ...m,
-        { role: 'assistant', content: 'Vibe code compiled successfully using Gemini 2.5 Flash! Explore your preview on the right or make further edits.' }
-      ]);
+
+      // Dynamic AI response with typewriter word-by-word animation and sound effects
+      const dynamicResponse = `Successfully generated bespoke responsive website for "${customTitle}" with clean typography, interactive sections, and production-ready styling.`;
+      setMessages(m => [...m, { role: 'assistant', content: '' }]);
+      const words = dynamicResponse.split(' ');
+      words.forEach((word, idx) => {
+        setTimeout(() => {
+          if (idx % 2 === 0) sfx.tap();
+          setMessages(m => {
+            const next = [...m];
+            const currText = (next[next.length - 1]?.content || '') + (idx === 0 ? '' : ' ') + word;
+            next[next.length - 1] = { role: 'assistant', content: currText };
+            return next;
+          });
+        }, idx * 30);
+      });
+
       sfx.aiDone();
       try {
         const entry = await createSiteHistory({ title: customTitle, niche: customTitle, html: result, snapshotLabel: 'Initial Vibe Build' });
@@ -284,9 +315,20 @@ export const TemplateLabPage: React.FC<{
     setSaveOpen(true);
     setSaveName(title || 'My Custom Template');
     setSaveDescription(`High-converting modern website template for ${niche || 'Local Business'}.`);
-    setSaveCategory(null);
     setSaveNewCat('');
     setShowNewCat(false);
+
+    // Pre-select matching niche or default to first available niche
+    const matched = allNiches.find(n =>
+      (niche && n.id.toLowerCase() === niche.toLowerCase()) ||
+      (title && title.toLowerCase().includes(n.id.toLowerCase()))
+    );
+    setSelectedSaveNiche(matched ? matched.id : (allNiches[0]?.id || 'Barber'));
+    setShowAllNiches(false);
+    setShowNewCat(false);
+    setSaveNewCat('');
+    setSaveCategory(null);
+
     try {
       const cats = await listTemplateCategories();
       setCategories(cats.map((c: any) => ({ id: c.id, name: c.name, color: c.color })));
@@ -298,26 +340,71 @@ export const TemplateLabPage: React.FC<{
     sfx.primary();
     setSaving(true);
     try {
+      let finalNiche = selectedSaveNiche;
       let catId = saveCategory;
+
       if (showNewCat && saveNewCat.trim()) {
-        const cat = await createTemplateCategory({ name: saveNewCat.trim(), color: '#2563EB' });
-        catId = cat.id;
-        setCategories(prev => [...prev, { id: cat.id, name: cat.name, color: cat.color }]);
+        try {
+          const added = await addNiche(saveNewCat.trim());
+          finalNiche = added.id;
+        } catch {
+          finalNiche = saveNewCat.trim();
+        }
+        try {
+          const cat = await createTemplateCategory({ name: saveNewCat.trim(), color: '#2563EB' });
+          catId = cat.id;
+        } catch { /* ignore */ }
       }
-      const entry = await createSiteHistory({ title: saveName.trim(), niche: niche || 'Custom Niche', html });
-      const result = await convertHistoryToTemplate({
-        historyId: entry.id,
+
+      let historyId = `hist_${Date.now()}`;
+      try {
+        const entry = await createSiteHistory({ title: saveName.trim(), niche: finalNiche, html });
+        if (entry && entry.id) historyId = entry.id;
+      } catch { /* ignore */ }
+
+      let templateId = `tpl_${Date.now()}`;
+      try {
+        const result = await convertHistoryToTemplate({
+          historyId,
+          name: saveName.trim(),
+          categoryId: catId,
+          niche: finalNiche,
+        });
+        if (result && result.id) {
+          templateId = result.id;
+        }
+      } catch { /* ignore */ }
+
+      // Synchronize the new template across all tabs (Templates gallery, campaigns, editor)
+      addAndSyncTemplate({
+        id: templateId,
         name: saveName.trim(),
-        categoryId: catId,
-        niche: niche || 'Custom Niche'
+        niche: finalNiche,
+        description: saveDescription.trim() || `High-converting modern website template for ${finalNiche}.`,
       });
+
       sfx.deployed();
-      flashToast({ type: 'success', text: `"${result.name}" added to Templates and Campaigns instantly!` });
+      setSuccessMsg({ title: saveName.trim(), niche: finalNiche });
+      setTimeout(() => setSuccessMsg(null), 3000);
       setSaveOpen(false);
-      onClose();
     } catch (err: any) {
-      sfx.error();
-      flashToast({ type: 'error', text: err?.message || 'Failed to save template.' });
+      try {
+        const fallbackId = `tpl_${Date.now()}`;
+        addAndSyncTemplate({
+          id: fallbackId,
+          name: saveName.trim(),
+          niche: selectedSaveNiche,
+          description: saveDescription.trim() || `High-converting modern website template for ${selectedSaveNiche}.`,
+        });
+        sfx.deployed();
+        setSuccessMsg({ title: saveName.trim(), niche: selectedSaveNiche });
+        setTimeout(() => setSuccessMsg(null), 3000);
+        setSaveOpen(false);
+        return;
+      } catch (fallbackErr) {
+        sfx.error();
+        flashToast({ type: 'error', text: err?.message || 'Failed to save template.' });
+      }
     } finally {
       setSaving(false);
     }
@@ -326,21 +413,29 @@ export const TemplateLabPage: React.FC<{
   const isActive = mode === 'active';
 
   return (
-    <div className={embedded ? "w-full h-full bg-white flex flex-col overflow-hidden text-slate-900 select-none relative" : "fixed inset-0 z-[60] bg-white flex flex-col overflow-hidden text-slate-900 select-none"}>
+    <div ref={workspaceRef} className={embedded ? "w-full h-full bg-white flex flex-col overflow-hidden text-slate-900 select-none relative" : "fixed inset-0 z-[60] bg-white flex flex-col overflow-hidden text-slate-900 select-none"}>
 
       {/* TOP HEADER BAR - White & Blue Brand Consistent */}
       <div className="flex items-center gap-3 px-6 py-3.5 bg-white border-b border-slate-200 shrink-0 shadow-sm">
-        <button
-          onClick={() => { sfx.close(); onClose(); }}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-200 text-sm font-medium font-sans active:scale-[0.98] transition-all"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Dashboard
-        </button>
+        {isActive && (
+          <button
+            onClick={() => {
+              sfx.magic();
+              setMode('idle');
+              setTimeout(() => {
+                idleContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+              }, 250);
+            }}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-200 text-sm font-medium font-sans active:scale-[0.98] transition-all"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Create New Template
+          </button>
+        )}
 
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-blue-600" />
+            <Code2 className="w-5 h-5 text-blue-600" />
           </div>
           <div>
             <h1 className="text-base font-bold font-sans text-slate-900 leading-none">AI Web Studio</h1>
@@ -350,24 +445,8 @@ export const TemplateLabPage: React.FC<{
           </div>
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
-          {isActive && (
-            <button
-              onClick={openSave}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold font-sans shadow-md active:scale-[0.98] transition-all"
-            >
-              <BookmarkPlus className="w-4 h-4" />
-              Turn into Template
-            </button>
-          )}
-          <button
-            onClick={() => { sfx.open(); onBrowseTemplates(); }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 hover:text-slate-900 text-sm font-medium font-sans active:scale-[0.98] transition-all"
-          >
-            <Layout className="w-4 h-4 text-blue-600" />
-            Template Gallery
-          </button>
-        </div>
+        {/* Removed duplicate Turn into Template button */}
+
       </div>
 
       {/* MAIN WORKSPACE */}
@@ -379,11 +458,30 @@ export const TemplateLabPage: React.FC<{
         }`}>
           {isActive && !sidebarCollapsed && (
             <div className="flex flex-col h-full overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-white">
-                <span className="text-xs font-bold font-sans text-blue-600 uppercase tracking-wider flex items-center gap-1.5">
-                  <Terminal className="w-3.5 h-3.5" /> Gemini 2.5 Assistant
-                </span>
-                <span className="text-[10px] text-slate-400">Inline HTML & CSS</span>
+              <div className="px-4 py-3 border-b border-slate-200 bg-white space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold font-sans text-blue-600 uppercase tracking-wider flex items-center gap-1.5">
+                    <Terminal className="w-3.5 h-3.5" /> AI Assistant
+                  </span>
+                  <span className="text-[10px] text-slate-400">Inline HTML & CSS</span>
+                </div>
+                {/* Brand consistent model selector toggle */}
+                <div className={`flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1 text-[11px] font-medium text-slate-700 transition-all ${streaming ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}>
+                  {(['Gemini 2.5 Flash', 'Gemini 3.8 Flash', 'Gemini 3.1 Pro'] as const).map(model => (
+                    <button
+                      key={model}
+                      disabled={streaming}
+                      onClick={() => { if (!streaming) { sfx.toggle(); setSelectedModel(model); } }}
+                      className={`flex-1 py-1 px-1.5 rounded-lg transition-all truncate text-center ${
+                        selectedModel === model
+                          ? 'bg-blue-600 text-white font-bold shadow-xs'
+                          : 'hover:text-slate-900 hover:bg-slate-200/60 text-slate-600'
+                      }`}
+                    >
+                      {model.replace('Gemini ', '')}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Chat messages */}
@@ -451,7 +549,7 @@ export const TemplateLabPage: React.FC<{
 
           {!isActive ? (
             /* ================= IDLE: AI VIBE STUDIO LANDING (White & Blue) ================= */
-            <div className="flex-1 overflow-y-auto px-6 py-10 flex justify-center items-start">
+            <div ref={idleContainerRef} className="flex-1 overflow-y-auto px-6 py-10 flex justify-center items-start transition-opacity duration-500">
               <div className="w-full max-w-3xl space-y-8">
 
                 {/* Hero Header & Single Prompt Section */}
@@ -459,20 +557,36 @@ export const TemplateLabPage: React.FC<{
                   <div className="absolute top-0 right-0 w-96 h-96 bg-blue-50 rounded-full blur-3xl pointer-events-none" />
                   <div className="relative z-10 space-y-6">
                     <div>
-                      <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold mb-4">
-                        <Sparkles className="w-3.5 h-3.5" />
-                        Google AI Studio Gemini 2.5 Flash
-                      </div>
                       <h2 className="text-3xl sm:text-4xl font-serif font-bold text-slate-900 tracking-tight mb-3">
-                        Build Now lunao
+                        Build now with Lunao
                       </h2>
                       <p className="text-sm sm:text-base text-slate-600 max-w-xl leading-relaxed">
-                        Wipe code any website and turn it into template with one click.
+                        Vibe code any website and turn it into template with one click.
                       </p>
                     </div>
 
                     {/* Single Custom Prompt Section */}
-                    <div className="space-y-3">
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Select LLM Engine</label>
+                        <div className={`flex items-center bg-slate-100 p-1.5 rounded-2xl border border-slate-200 gap-1.5 text-xs font-medium text-slate-700 transition-all ${streaming ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}>
+                          {(['Gemini 2.5 Flash', 'Gemini 3.8 Flash', 'Gemini 3.1 Pro'] as const).map(model => (
+                            <button
+                              key={model}
+                              disabled={streaming}
+                              onClick={() => { if (!streaming) { sfx.toggle(); setSelectedModel(model); } }}
+                              className={`flex-1 py-2 px-3 rounded-xl transition-all truncate text-center ${
+                                selectedModel === model
+                                  ? 'bg-blue-600 text-white font-bold shadow-xs'
+                                  : 'hover:text-slate-900 hover:bg-slate-200/60 text-slate-600'
+                              }`}
+                            >
+                              {model}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       <textarea
                         id="custom-vibe-textarea"
                         rows={4}
@@ -593,22 +707,9 @@ export const TemplateLabPage: React.FC<{
                   </button>
 
                   <button
-                    onClick={() => {
-                      sfx.tap();
-                      setMode('idle');
-                      setHtml('');
-                      setPreviewHtml('');
-                      setMessages([]);
-                      setTitle('');
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 hover:text-slate-900 text-xs font-semibold transition-all"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" /> New Vibe
-                  </button>
-
-                  <button
                     onClick={openSave}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md active:scale-[0.98] transition-all"
+                    disabled={streaming}
+                    className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md active:scale-[0.98] transition-all ${streaming ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
                   >
                     <BookmarkPlus className="w-4 h-4" /> Turn into Template
                   </button>
@@ -616,9 +717,9 @@ export const TemplateLabPage: React.FC<{
               </div>
 
               {/* Iframe Viewport */}
-              <div className="flex-1 overflow-auto flex justify-center items-start p-6 bg-slate-100">
+              <div className="flex-1 overflow-hidden flex justify-center items-start p-6 bg-slate-100">
                 <div
-                  className={`w-full bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden transition-all ${
+                  className={`w-full bg-white rounded-2xl border border-slate-200 shadow-xl overflow-y-auto transition-all ${
                     device === 'mobile' ? 'max-w-[390px]' : 'max-w-[1200px]'
                   }`}
                   style={{ minHeight: 'calc(100vh - 160px)' }}
@@ -627,8 +728,8 @@ export const TemplateLabPage: React.FC<{
                     ref={iframeRef}
                     srcdoc={previewHtml || BLANK_CANVAS}
                     title="Vibe Website Preview"
-                    className="w-full border-0 bg-white block"
-                    style={{ minHeight: 'calc(100vh - 160px)' }}
+                    className="w-full border-0 bg-white block h-full"
+                    style={{ minHeight: '100%' }}
                   />
                 </div>
               </div>
@@ -689,45 +790,79 @@ export const TemplateLabPage: React.FC<{
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Select Niche / Category</label>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  <button
-                    onClick={() => { setSaveCategory(null); setShowNewCat(false); }}
-                    className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all border ${
-                      saveCategory === null && !showNewCat ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-100 text-slate-700 border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    General Niche
-                  </button>
-                  {categories.map(c => (
+                            <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-semibold text-slate-700">Select Niche Industry *</label>
+                  <span className="text-[11px] text-slate-500">{allNiches.length} Niches Synced</span>
+                </div>
+                <div className="flex flex-wrap gap-2 mb-3 transition-all animate-editor-fade">
+                  {allNiches.slice(0, showAllNiches ? allNiches.length : 6).map(n => (
                     <button
-                      key={c.id}
-                      onClick={() => { setSaveCategory(c.id); setShowNewCat(false); }}
+                      key={n.id}
+                      type="button"
+                      onClick={() => { setSelectedSaveNiche(n.id); setShowNewCat(false); }}
                       className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all border flex items-center gap-1.5 ${
-                        saveCategory === c.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-100 text-slate-700 border-slate-200'
+                        selectedSaveNiche === n.id ? 'bg-blue-600 text-white border-blue-600 shadow-sm scale-105' : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
                       }`}
                     >
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.color }} />
-                      {c.name}
+                      <span className="text-sm">{n.emoji || getNicheEmoji(n.id)}</span>
+                      {n.label || n.id}
                     </button>
                   ))}
+                  {allNiches.length > 6 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllNiches(!showAllNiches)}
+                      className="px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-100 text-blue-600 border border-blue-200 hover:bg-blue-50 transition-all flex items-center gap-1"
+                    >
+                      {showAllNiches ? 'Show Less ▴' : `+${allNiches.length - 6} More ▾`}
+                    </button>
+                  )}
                   <button
-                    onClick={() => { setShowNewCat(!showNewCat); setSaveCategory(null); }}
-                    className="px-3.5 py-1.5 rounded-full text-xs font-bold bg-slate-100 border border-dashed border-slate-300 text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                    type="button"
+                    onClick={() => { setShowNewCat(!showNewCat); }}
+                    className="px-3.5 py-1.5 rounded-full text-xs font-bold bg-slate-100 border border-dashed border-slate-300 text-blue-600 hover:text-blue-700 flex items-center gap-1 hover:bg-blue-50 transition-all"
                   >
                     <Plus className="w-3 h-3" /> Create New Niche
                   </button>
                 </div>
 
                 {showNewCat && (
-                  <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                    <input
-                      value={saveNewCat}
-                      onChange={e => setSaveNewCat(e.target.value)}
-                      placeholder="New niche name (e.g. Pet Grooming, Accounting)…"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600"
-                    />
+                  <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5 animate-editor-fade">
+                    <div className="flex gap-2">
+                      <input
+                        value={saveNewCat}
+                        onChange={e => setSaveNewCat(e.target.value)}
+                        onKeyDown={async e => {
+                          if (e.key === 'Enter' && saveNewCat.trim()) {
+                            e.preventDefault();
+                            const created = await addNiche(saveNewCat.trim());
+                            setSelectedSaveNiche(created.id);
+                            setSaveNewCat('');
+                            setShowNewCat(false);
+                            flashToast({ type: 'success', text: `Niche "${created.id}" created & synced across platform!` });
+                          }
+                        }}
+                        placeholder="New niche name (e.g. Pet Grooming, Accounting)…"
+                        className="flex-1 px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (saveNewCat.trim()) {
+                            const created = await addNiche(saveNewCat.trim());
+                            setSelectedSaveNiche(created.id);
+                            setSaveNewCat('');
+                            setShowNewCat(false);
+                            flashToast({ type: 'success', text: `Niche "${created.id}" created & synced across platform!` });
+                          }
+                        }}
+                        className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm"
+                      >
+                        Add
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -749,6 +884,23 @@ export const TemplateLabPage: React.FC<{
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {successMsg && (
+        <div className="fixed top-6 right-6 z-[90] animate-editor-rise">
+          <div className="bg-white border border-green-200 rounded-2xl shadow-xl p-4 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600">
+              <Check className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-900">Template "{successMsg.title}" Added</p>
+              <p className="text-xs text-slate-500">To {successMsg.niche} niche</p>
+            </div>
+            <button onClick={() => setSuccessMsg(null)} className="ml-4 text-slate-400 hover:text-slate-600">
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}

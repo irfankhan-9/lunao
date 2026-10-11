@@ -43,7 +43,7 @@ import {
 } from './lib/smsLeads.js';
 import { listCities } from './lib/cities.js';
 import { publishBatch, validateCloudflareToken } from './lib/cloudflare.js';
-import { streamEdit, isAiEnabled, cleanHtmlOutput } from './lib/anthropic.js';
+import { streamEdit, isAiEnabled, cleanHtmlOutput, generateTemplateHtml } from './lib/geminiAi.js';
 import { createBooking, listBookings, updateBookingStatus } from './lib/bookings.js';
 import { chatTurn } from './lib/chatbot.js';
 import { getAddons, setAddons } from './lib/widget.js';
@@ -697,9 +697,9 @@ app.post('/api/sites/:slug/deploy', async (req, res) => {
 
 // AI code edit (SSE). Streams Claude's HTML output chunk-by-chunk so the
 // editor can refresh its live preview as the code is written.
-// Supports user-supplied anthropicApiKey for BYOK usage.
+// AI site editing powered by Google AI Studio Gemini 2.5 Flash built-in
 app.post('/api/ai/edit', async (req, res) => {
-  const { html, instruction, history, anthropicApiKey } = req.body || {};
+  const { html, instruction, history, anthropicApiKey, apiKey, geminiApiKey } = req.body || {};
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -707,10 +707,10 @@ app.post('/api/ai/edit', async (req, res) => {
   res.flushHeaders?.();
   const send = (event) => res.write(`data: ${JSON.stringify(event)}\n\n`);
 
-  // Require either a user-supplied key or a server-side key
-  const hasUserKey = typeof anthropicApiKey === 'string' && anthropicApiKey.trim().length > 10;
+  const userKey = (geminiApiKey || apiKey || (typeof anthropicApiKey === 'string' && anthropicApiKey.startsWith('AI') ? anthropicApiKey : null));
+  const hasUserKey = typeof userKey === 'string' && userKey.trim().length > 10;
   if (!hasUserKey && !isAiEnabled()) {
-    send({ type: 'error', error: 'AI editor needs an Anthropic key. Add yours below or configure ANTHROPIC_API_KEY on the server.' });
+    send({ type: 'error', error: 'AI engine initializing. Google AI Studio Gemini API key is being configured.' });
     return res.end();
   }
   if (typeof html !== 'string' || !html.trim() || typeof instruction !== 'string' || !instruction.trim()) {
@@ -721,7 +721,7 @@ app.post('/api/ai/edit', async (req, res) => {
   try {
     send({ type: 'start' });
     const full = await streamEdit(
-      { html, instruction, history, anthropicApiKey },
+      { html, instruction, history, apiKey: userKey || undefined },
       (delta, isThinking) => {
         if (isThinking) {
           send({ type: 'thinking', delta });
@@ -3707,9 +3707,9 @@ app.get('/api/site-history/:id', authenticate, (req, res) => {
 });
 
 // Turn a history entry into a named template (saves to custom_templates).
-app.post('/api/site-history/:id/convert-to-template', authenticate, (req, res) => {
+app.post('/api/site-history/:id/convert-to-template', authenticate, async (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.body?.ownerKey || req.query?.ownerKey || '').trim();
+    const ownerKey = req.userId ? `user_${req.userId}` : String(req.body?.ownerKey || req.query?.ownerKey || 'dashboard').trim();
     const { name, categoryId = null, niche = '', templateId: existingTemplateId = null } = req.body || {};
 
     const row = db.prepare('SELECT * FROM site_history WHERE id = ? AND owner_key = ?').get(req.params.id, ownerKey);
@@ -3719,6 +3719,16 @@ app.post('/api/site-history/:id/convert-to-template', authenticate, (req, res) =
     const templateId = existingTemplateId || `tmpl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const slug = templateName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const now = Math.floor(Date.now() / 1000);
+    const targetNiche = (niche || row.niche || 'General').trim();
+
+    // Persist and synchronize the niche into template_categories if provided
+    if (targetNiche && targetNiche !== 'General') {
+      try {
+        await createNiche(targetNiche, '', '#2563EB', ownerKey);
+      } catch (catErr) {
+        console.warn('[templates] failed to auto-register niche category:', catErr.message);
+      }
+    }
 
     // Insert into custom_templates if not already a template
     if (!row.is_template) {
@@ -3757,7 +3767,7 @@ app.post('/api/site-history/:id/convert-to-template', authenticate, (req, res) =
       db.prepare(
         `INSERT INTO custom_templates (id, owner_key, category_id, name, slug, niche, raw_html, preview_html, style_tags, used_count, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', 0, ?)`,
-      ).run(templateId, ownerKey, categoryId || null, templateName, slug, niche || row.niche, row.html, previewHtml, now);
+      ).run(templateId, ownerKey, categoryId || null, templateName, slug, targetNiche, row.html, previewHtml, now);
 
       // Mark history entry as converted
       db.prepare(
@@ -3765,15 +3775,18 @@ app.post('/api/site-history/:id/convert-to-template', authenticate, (req, res) =
       ).run(templateId, templateName, req.params.id);
     }
 
+    const updatedNiches = await getAllNiches(ownerKey);
+
     res.json({
       ok: true,
       template: {
         id: templateId,
         name: templateName,
         slug,
-        niche: niche || row.niche,
+        niche: targetNiche,
         categoryId: categoryId || null,
       },
+      niches: updatedNiches,
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -3896,20 +3909,42 @@ CRITICAL RULES:
 //   - built-in: "barber-dark-luxury", "hvac-everest", ...
 //   - custom:   "tmpl_xxx" (matches custom_templates.id)
 
-import { resolveTemplate, listTemplates, loadPreviewHtml, NICHE_LIST } from './lib/templates.js';
+import { resolveTemplate, listTemplates, loadPreviewHtml, NICHE_LIST, getAllNiches, createNiche } from './lib/templates.js';
 
-// Back-compat: expose the niche list derived from the built-in registry.
-// The frontend can fall back to its own static list if this 404s.
-app.get('/api/niches', (req, res) => {
-  res.json({ ok: true, niches: NICHE_LIST });
+// Expose all niches: built-in defaults + persistent categories + custom template niches.
+app.get('/api/niches', async (req, res) => {
+  try {
+    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    const niches = await getAllNiches(ownerKey || null);
+    res.json({ ok: true, niches });
+  } catch (err) {
+    res.json({ ok: true, niches: NICHE_LIST });
+  }
 });
 
-// Unified list — built-ins + this user's customs.
+// Create a new niche in the backend and return updated list of all niches.
+app.post('/api/niches', async (req, res) => {
+  try {
+    const ownerKey = req.userId ? `user_${req.userId}` : String(req.body?.ownerKey || req.query?.ownerKey || 'dashboard').trim();
+    const { name, emoji, color } = req.body || {};
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ ok: false, error: 'Niche name is required.' });
+    }
+    const niche = await createNiche(name.trim(), emoji, color, ownerKey);
+    const niches = await getAllNiches(ownerKey);
+    res.json({ ok: true, niche, niches });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Unified list — built-ins + this user's customs + all synchronized niches.
 app.get('/api/templates', authenticate, async (req, res) => {
   try {
     const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
     const payload = await listTemplates(ownerKey || null);
-    res.json({ ok: true, ...payload });
+    const niches = await getAllNiches(ownerKey || null);
+    res.json({ ok: true, ...payload, niches });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -4096,19 +4131,16 @@ app.post('/api/custom-templates/generate', authenticate, async (req, res) => {
 
     let rawHtml, previewHtml;
     try {
-      ({ rawHtml, previewHtml } = await import('./lib/anthropic.js').then((m) =>
-        m.generateTemplateHtml(prompt.trim(), niche, anthropicApiKey),
-      ));
+      ({ rawHtml, previewHtml } = await generateTemplateHtml(prompt.trim(), niche, anthropicApiKey));
+      if (niche && niche !== 'Local Business') {
+        try {
+          await createNiche(niche, '', '#2563EB', ownerKey);
+        } catch { /* ignore */ }
+      }
     } catch (genErr) {
       // Refund the 2 credits on AI failure
       refund(ownerKey, 2, 'template_gen_failed_refund', null);
       const msg = genErr instanceof Error ? genErr.message : 'Generation failed';
-      // Distinguish between missing key and invalid key
-      const isMissingKey = msg.includes('missing ANTHROPIC_API_KEY') || msg.includes('not configured');
-      const isInvalidKey = msg.includes('401') || msg.includes('invalid') || msg.includes('Unauthorized') || msg.includes('authentication_error');
-      if (isInvalidKey) {
-        return res.status(401).json({ ok: false, error: 'Your Anthropic key is invalid. Please check it and try again.' });
-      }
       return res.status(422).json({ ok: false, error: msg });
     }
 

@@ -18,6 +18,7 @@ import {
   initialSmsLogs
 } from './data';
 import { SidebarTab, Campaign, Business, SmsLog, CampaignEmailLead, CampaignDeployedSite } from './types';
+import { useSyncTemplates } from './lib/nichesSync';
 
 const ROUTE_STORAGE = 'lunao_route';
 
@@ -311,6 +312,7 @@ function DashboardApp() {
   const [businesses, setBusinesses] = useState<Business[]>(() => loadPersisted('lunao_businesses', initialBusinesses));
   const [smsLogs, setSmsLogs] = useState<SmsLog[]>(() => loadPersisted('lunao_sms_logs', initialSmsLogs));
   const [sharedNiche, setSharedNiche] = useState<string>('All');
+  const [syncedTemplates] = useSyncTemplates();
 
   useEffect(() => {
     localStorage.setItem('lunao_campaigns', JSON.stringify(campaigns));
@@ -497,11 +499,11 @@ function DashboardApp() {
               onEditOutreach={handleEditOutreach}
             />
           </div>
-          <div className={activeTab === 'campaigns' ? 'block animate-fade-in' : 'hidden'}>
+           <div className={activeTab === 'campaigns' ? 'block animate-fade-in' : 'hidden'}>
             <Campaigns
               campaigns={campaigns}
               setCampaigns={setCampaigns}
-              templates={initialTemplates}
+              templates={syncedTemplates}
               businesses={businesses}
               setBusinesses={setBusinesses}
               addSmsLog={addSmsLog}
@@ -524,7 +526,7 @@ function DashboardApp() {
             />
           </div>
           <div className={activeTab === 'templates' ? 'block animate-fade-in' : 'hidden'}>
-            <Templates templates={initialTemplates} previewTemplateId={previewTemplateId} setPreviewTemplateId={setPreviewTemplateId} selectedNicheFilter={sharedNiche} setSelectedNicheFilter={setSharedNiche} setActiveTab={setActiveTab} />
+            <Templates templates={syncedTemplates} previewTemplateId={previewTemplateId} setPreviewTemplateId={setPreviewTemplateId} selectedNicheFilter={sharedNiche} setSelectedNicheFilter={setSharedNiche} setActiveTab={setActiveTab} />
           </div>
           <div className={activeTab === 'editor' ? 'block animate-fade-in' : 'hidden'}>
             <Editor active={activeTab === 'editor'} />

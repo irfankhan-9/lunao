@@ -13,7 +13,7 @@ import { playGentleChime, playLaunchSwell, playVictoryCelebration, playSoftTap, 
 import { dedupeLeads } from '../utils/leads';
 import { validateCsvFile, CsvValidation, PipelineLead, runEmailCampaign, createEmailCampaign, probeAllEmailAccounts, initiateOAuthFlow, EmailAccountProbeResult, EmailCampaignEvent, lookupCity, runDorkEmailCampaign, CityLookupResponse, CitySuggestion, getDorkStatus, DiscoveredLead, dorkNext, saveDorkLeads } from '../lib/pipelineClient';
 import { Template } from '../types';
-import { nicheList } from '../data';
+import { useSyncNiches } from '../lib/nichesSync';
 import { TemplateSimPreview } from './TemplateSimPreview';
 import { CsvPreview } from './CsvPreview';
 import { TemplatePreviewModal } from './TemplatePreviewModal';
@@ -104,6 +104,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   removeActiveRun,
 }) => {
   const isPro = userPlan === 'Pro Plan' || userPlan === 'Agency Plan';
+  const [allNiches] = useSyncNiches();
 
   // State for the progress toggle
   const [activeProgressToggle, setActiveProgressToggle] = useState<CampaignProgressData | null>(null);
@@ -2200,7 +2201,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-              {nicheList.map((niche) => {
+              {allNiches.map((niche) => {
                 const isSelected = selectedNiche === niche.id;
                 return (
                   <button

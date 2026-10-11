@@ -22,7 +22,7 @@ import {
   runCampaign,
   isAutomatedSmsPlan, canUseOwnTelnyx,
 } from '../lib/pipelineClient';
-import { nicheList } from '../data';
+import { useSyncNiches } from '../lib/nichesSync';
 import { Template } from '../types';
 import { TemplateSimPreview } from './TemplateSimPreview';
 import { CsvPreview } from './CsvPreview';
@@ -68,6 +68,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
   onViewDetails,
   onStepChange,
 }) => {
+  const [allNiches] = useSyncNiches();
   // Progress tracking
   const [activeProgressToggle, setActiveProgressToggle] = useState<CampaignProgressData | null>(null);
   const [isShowingCompletion, setIsShowingCompletion] = useState(false);
@@ -395,7 +396,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
             </p>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {nicheList.map((niche) => {
+            {allNiches.map((niche) => {
               // nicheList items are objects: { id, emoji, label }
               const nicheId = (niche as any).id || niche;
               const nicheLabel = (niche as any).label || (niche as any).id || niche;

@@ -4,7 +4,7 @@ import {
   Plus, Trash2, Eye, EyeOff, ExternalLink, ChevronRight, Upload,
   MapPin, Sliders, CheckCircle, CheckCircle2, Smartphone, SlidersHorizontal, Loader2, Sparkles, Check, Minus, Info, Users, Star, X, ShieldAlert, Send, Globe, Key, Compass, ShieldCheck, Layout, MessageSquare, Mail, AlertCircle, Search, RefreshCw, Activity, Save, Link2, Copy, Square, Battery
 } from 'lucide-react';
-import { nicheList } from '../data';
+import { useSyncNiches } from '../lib/nichesSync';
 import { getTemplateContent, getNicheBgImage } from './Templates';
 import { playGentleChime, playLaunchSwell, playVictoryCelebration, playSoftTap, playSoftBubble, playElegantBell, playSlideTick, playElegantError, playTiktokLike, playConfirmSuccess, playCancelTone } from '../utils/audio';
 import { dedupeLeads } from '../utils/leads';
@@ -346,6 +346,7 @@ export const Campaigns: React.FC<CampaignsProps> = ({
   initialEmailNonce,
 }) => {
   const isUpgraded = userPlan === 'Pro Plan' || userPlan === 'Agency Plan';
+  const [allNiches] = useSyncNiches();
   
   const planNameStr = typeof userPlan === 'string' ? userPlan.replace(' Plan', '') : 'Growth';
   const userQuotaLeft = userCredits;
@@ -2111,7 +2112,7 @@ The Lunao Team`);
                         <p className="text-sm text-ink-secondary">Choose the niche for your site deployment campaign.</p>
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                        {nicheList.map((niche) => (
+                        {allNiches.map((niche) => (
                           <button key={niche.id} onClick={() => { playSoftTap(); setSelectedNiche(niche.id); setSdActiveStep(2); playGentleChime(2); }}
                             className={`px-4 py-3 rounded-xl border text-xs font-semibold text-left transition-all ${selectedNiche === niche.id ? 'bg-accent-soft text-accent border-accent/30 shadow-sm' : 'bg-white text-ink border-border-light hover:border-accent/40 hover:bg-accent-soft/30'}`}>
                             {niche.emoji} {niche.label}

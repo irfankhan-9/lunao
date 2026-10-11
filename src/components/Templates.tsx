@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Template } from '../types';
 import { Star, Eye, Edit, Copy, Search, ChevronDown, Check, X, ShieldAlert, Zap } from 'lucide-react';
-import { nicheList } from '../data';
+import { useSyncNiches } from '../lib/nichesSync';
 
 // Helper to retrieve gorgeous, realistic, personalized real-world content for each of the 14 niche templates
 export const getTemplateContent = (templateId: string, name: string, niche: string) => {
@@ -228,6 +228,7 @@ export const Templates: React.FC<TemplatesProps> = ({
   const setSelectedNicheFilter = propSetSelectedNicheFilter !== undefined ? propSetSelectedNicheFilter : setLocalSelectedNicheFilter;
   const [selectedTemplateForPreview, setSelectedTemplateForPreview] = useState<Template | null>(null);
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
+  const [allNiches] = useSyncNiches();
 
   // If a previewTemplateId is passed from parent (e.g. dashboard eye click), we auto open it
   React.useEffect(() => {
@@ -322,7 +323,7 @@ export const Templates: React.FC<TemplatesProps> = ({
               className="appearance-none bg-off-white/40 border border-border-main rounded-md pl-3 pr-8 py-1.5 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-accent-soft inline-flex items-center font-semibold cursor-pointer"
             >
               <option value="All">All Niche Industries</option>
-              {nicheList.map((n) => (
+              {allNiches.map((n) => (
                 <option key={n.id} value={n.id}>
                   {n.emoji} {n.label}
                 </option>
