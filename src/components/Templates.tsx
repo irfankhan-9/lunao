@@ -243,7 +243,7 @@ export const Templates: React.FC<TemplatesProps> = ({
   // Filter templates
   const filteredTemplates = templates.filter((temp) => {
     const matchesSearch = temp.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesNiche = selectedNicheFilter === 'All' || temp.niche === selectedNicheFilter;
+    const matchesNiche = selectedNicheFilter === 'All' || temp.niche.toLowerCase() === selectedNicheFilter.toLowerCase();
     return matchesSearch && matchesNiche;
   });
 

@@ -4297,7 +4297,7 @@ if (process.env.NO_SERVER_LISTEN !== 'true') {
     startGlobalRechecker();
     const mode = modeSummary();
     console.log(`\n  Lunao pipeline API  ->  http://localhost:${PORT}`);
-    console.log(`  Public base        : ${PUBLIC_BASE}`);
+    console.log(`  Public base        : ${PUBLIC_API_BASE_URL}`);
     console.log(`  Telnyx SMS         : ${mode.telnyx}`);
     console.log(`  Cloudflare Pages   : ${mode.cloudflare}`);
     console.log(`  Google Maps        : ${mode.googleMaps}`);

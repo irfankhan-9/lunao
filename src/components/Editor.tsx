@@ -24,6 +24,7 @@ import {
 } from '../utils/audio';
 import { OwnerPWADrawer } from './OwnerPWADrawer';
 import { TemplateLabPage } from './TemplateLabPage';
+import { useSyncNiches } from '../lib/nichesSync';
 
 interface EditorProps {
   active: boolean;
@@ -99,6 +100,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   const [streaming, setStreaming] = useState(false);
 
   // First-page filtering (real, runs over the loaded sites).
+  const [allNiches] = useSyncNiches();
   const [search, setSearch] = useState('');
   const [filterNiche, setFilterNiche] = useState('All');
   const [deploying, setDeploying] = useState(false);
@@ -394,7 +396,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
 
   if (view === 'lab') {
     return (
-      <div key="editor-lab" className="w-full h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] flex flex-col animate-editor-rise">
+      <div key="editor-lab" className="w-full min-h-[calc(100vh-100px)] flex flex-col animate-editor-rise -mt-2 -mx-4 sm:-mx-6 lg:-mx-8">
         {toast && <ToastBanner toast={toast} onClose={() => setToast(null)} />}
         <TemplateLabPage
           aiEnabled={aiEnabled}
@@ -420,7 +422,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   // LIST VIEW
   // ===========================================================================
   if (view === 'list') {
-    const niches = ['All', ...Array.from(new Set(sites.map((s) => s.niche)))];
+    const niches = ['All', ...Array.from(new Set([...allNiches.map((n) => n.id), ...sites.map((s) => s.niche)]))];
     const q = search.trim().toLowerCase();
     const filteredSites = sites.filter(
       (s) =>
@@ -1119,6 +1121,7 @@ const CreateTemplateModal: React.FC<{
   aiEnabled: boolean;
   onGenerated: (t: { id: string; name: string; slug: string; niche: string }) => void;
 }> = ({ open, onClose, aiEnabled, onGenerated }) => {
+  const [allNiches] = useSyncNiches();
   const [step, setStep] = useState<'form' | 'preview'>('form');
   const [name, setName] = useState('');
   const [niche, setNiche] = useState('Barber');
@@ -1311,7 +1314,7 @@ const CreateTemplateModal: React.FC<{
               <div>
                 <label className="block text-xs font-semibold font-sans text-ink-secondary mb-1.5">Business Niche</label>
                 <div className="flex flex-wrap gap-2">
-                  {NICHE_OPTIONS.map((n) => (
+                  {Array.from(new Set([...allNiches.map(n => n.id), 'Custom'])).map((n) => (
                     <button
                       key={n}
                       onClick={() => { sfx.toggle(); setNiche(n); }}

@@ -3,7 +3,7 @@ import {
   ArrowLeft, Key, ChevronDown, Loader2, Sparkles, AlertCircle,
   FlaskConical, Layout, Monitor, Smartphone, Upload, Copy,
   CheckSquare, RotateCcw, BookmarkPlus, X, Code2, Check, Plus,
-  RefreshCw, Wand2, PanelLeft, PanelLeftClose, Terminal, Layers
+  RefreshCw, Wand2, PanelLeft, PanelLeftClose, Terminal, Layers, Maximize2, Minimize2, Home
 } from 'lucide-react';
 import {
   AiChatMessage, SiteHistoryEntry,
@@ -90,6 +90,29 @@ const PLACEHOLDER_MAP: Record<string, string> = {
   SITE_URL: 'https://example.com',
 };
 
+// Cleanse any internal placeholders, file types, or template sauce from user-facing text
+function sanitizeUserFacingText(text: string): string {
+  if (!text || typeof text !== 'string') return '';
+  let cleaned = text;
+
+  // 1. Replace all {{PLACEHOLDERS}} with realistic friendly preview values
+  cleaned = cleaned.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+    key in PLACEHOLDER_MAP ? PLACEHOLDER_MAP[key] : 'Business'
+  );
+
+  // 2. Remove any references to HTML/CSS/CSV files or backend sauce
+  cleaned = cleaned
+    .replace(/\b(HTML|html|CSS|css|CSV|csv)\s*(code|file|files|syntax|markup|tags?|source|document)?\b/gi, 'website design')
+    .replace(/<!DOCTYPE[^>]*>/gi, '')
+    .replace(/<\/?(html|head|body|style|script|div|section)[^>]*>/gi, '')
+    .replace(/handlebars?|placeholders?|bracket tags?|template tags?/gi, 'business details')
+    .replace(/templates-raw/gi, 'designs')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  return cleaned;
+}
+
 function compilePreview(rawHtml: string): string {
   if (!rawHtml || typeof rawHtml !== 'string') return rawHtml || '';
   return rawHtml.replace(/\{\{(\w+)\}\}/g, (_, key) =>
@@ -97,11 +120,20 @@ function compilePreview(rawHtml: string): string {
   );
 }
 
-function summarizeHtml(rawHtml: string): string {
-  if (!rawHtml || typeof rawHtml !== 'string') return 'Done! Preview updated.';
+function summarizeHtml(rawHtml: string, promptInstruction?: string): string {
+  if (!rawHtml || typeof rawHtml !== 'string') return 'Updated your website preview with tailored design improvements.';
   const titleMatch = rawHtml.match(/<title>([^<]{0,60})/i);
-  if (titleMatch) return `Title: "${titleMatch[1].trim()}"`;
-  return 'Done! Preview updated.';
+  const cleanTitle = titleMatch ? sanitizeUserFacingText(titleMatch[1].trim()) : '';
+
+  if (promptInstruction) {
+    const briefClean = promptInstruction.slice(0, 50).trim();
+    return `Applied updates for "${briefClean}". Your live preview is updated and ready to review.`;
+  }
+
+  if (cleanTitle && cleanTitle.length > 2) {
+    return `Synthesized bespoke website experience for "${cleanTitle}". Ready to inspect.`;
+  }
+  return 'Updated your website preview with bespoke design improvements.';
 }
 
 export const TemplateLabPage: React.FC<{
@@ -136,6 +168,10 @@ export const TemplateLabPage: React.FC<{
   const [selectedSaveNiche, setSelectedSaveNiche] = useState<string>('Barber');
   const [showAllNiches, setShowAllNiches] = useState(false);
 
+  // Template turned state tracking
+  const [turnedTemplateId, setTurnedTemplateId] = useState<string | null>(null);
+  const [turnedTemplateNiche, setTurnedTemplateNiche] = useState<string | null>(null);
+
   // Save Modal States
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState('');
@@ -151,6 +187,7 @@ export const TemplateLabPage: React.FC<{
   const workspaceRef = useRef<HTMLDivElement>(null);
   const idleContainerRef = useRef<HTMLDivElement>(null);
   const [successMsg, setSuccessMsg] = useState<{ title: string; niche: string } | null>(null);
+  const [fullScreenPreview, setFullScreenPreview] = useState(false);
 
   useEffect(() => {
     if (iframeRef.current && previewHtml) {
@@ -189,6 +226,19 @@ export const TemplateLabPage: React.FC<{
   const commitTitle = () => {
     setTitle(titleDraft.trim() || title);
     setEditingTitle(false);
+  };
+
+  const goToStudioLanding = () => {
+    sfx.open();
+    setMode('idle');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (idleContainerRef.current) {
+      idleContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    setTimeout(() => {
+      const textarea = document.getElementById('custom-vibe-textarea') as HTMLTextAreaElement;
+      if (textarea) textarea.focus();
+    }, 100);
   };
 
   // Start vibe coding with Gemini 2.5 Flash
@@ -249,7 +299,7 @@ export const TemplateLabPage: React.FC<{
     } catch (err: any) {
       sfx.error();
       setThinkingAcc('');
-      setMessages(m => [...m, { role: 'assistant', content: 'Error: ' + (err?.message || 'Generation failed.') }]);
+      setMessages(m => [...m, { role: 'assistant', content: 'Server not responding, try later.' }]);
     } finally {
       setStreaming(false);
     }
@@ -278,10 +328,10 @@ export const TemplateLabPage: React.FC<{
       setHtml(result);
       setPreviewHtml(finalCompiled);
       setThinkingAcc('');
-      const summary = summarizeHtml(result);
+      const summary = summarizeHtml(result, instruction);
       setMessages(m => {
         const next = [...m];
-        next[next.length - 1] = { role: 'assistant', content: summary || 'Preview updated successfully!' };
+        next[next.length - 1] = { role: 'assistant', content: summary || 'Website preview updated successfully!' };
         return next;
       });
       sfx.aiDone();
@@ -292,7 +342,7 @@ export const TemplateLabPage: React.FC<{
     } catch (err: any) {
       sfx.error();
       setThinkingAcc('');
-      setMessages(m => [...m, { role: 'assistant', content: 'Error: ' + (err?.message || 'Generation failed.') }]);
+      setMessages(m => [...m, { role: 'assistant', content: 'Server not responding, try later.' }]);
     } finally {
       setStreaming(false);
     }
@@ -318,12 +368,13 @@ export const TemplateLabPage: React.FC<{
     setSaveNewCat('');
     setShowNewCat(false);
 
-    // Pre-select matching niche or default to first available niche
+    // If already turned into a template, show the existing niche user had selected for the template
+    let preselectedNiche = turnedTemplateNiche || niche;
     const matched = allNiches.find(n =>
-      (niche && n.id.toLowerCase() === niche.toLowerCase()) ||
+      (preselectedNiche && n.id.toLowerCase() === preselectedNiche.toLowerCase()) ||
       (title && title.toLowerCase().includes(n.id.toLowerCase()))
     );
-    setSelectedSaveNiche(matched ? matched.id : (allNiches[0]?.id || 'Barber'));
+    setSelectedSaveNiche(matched ? matched.id : (turnedTemplateNiche || allNiches[0]?.id || 'Barber'));
     setShowAllNiches(false);
     setShowNewCat(false);
     setSaveNewCat('');
@@ -362,7 +413,7 @@ export const TemplateLabPage: React.FC<{
         if (entry && entry.id) historyId = entry.id;
       } catch { /* ignore */ }
 
-      let templateId = `tpl_${Date.now()}`;
+      let templateId = turnedTemplateId || `tpl_${Date.now()}`;
       try {
         const result = await convertHistoryToTemplate({
           historyId,
@@ -376,6 +427,7 @@ export const TemplateLabPage: React.FC<{
       } catch { /* ignore */ }
 
       // Synchronize the new template across all tabs (Templates gallery, campaigns, editor)
+      // addAndSyncTemplate updates/replaces by ID, effectively removing it from previous niche if niche changed
       addAndSyncTemplate({
         id: templateId,
         name: saveName.trim(),
@@ -383,22 +435,25 @@ export const TemplateLabPage: React.FC<{
         description: saveDescription.trim() || `High-converting modern website template for ${finalNiche}.`,
       });
 
+      setTurnedTemplateId(templateId);
+      setTurnedTemplateNiche(finalNiche);
+
       sfx.deployed();
       setSuccessMsg({ title: saveName.trim(), niche: finalNiche });
-      setTimeout(() => setSuccessMsg(null), 3000);
       setSaveOpen(false);
     } catch (err: any) {
       try {
-        const fallbackId = `tpl_${Date.now()}`;
+        const fallbackId = turnedTemplateId || `tpl_${Date.now()}`;
         addAndSyncTemplate({
           id: fallbackId,
           name: saveName.trim(),
           niche: selectedSaveNiche,
           description: saveDescription.trim() || `High-converting modern website template for ${selectedSaveNiche}.`,
         });
+        setTurnedTemplateId(fallbackId);
+        setTurnedTemplateNiche(selectedSaveNiche);
         sfx.deployed();
         setSuccessMsg({ title: saveName.trim(), niche: selectedSaveNiche });
-        setTimeout(() => setSuccessMsg(null), 3000);
         setSaveOpen(false);
         return;
       } catch (fallbackErr) {
@@ -416,73 +471,98 @@ export const TemplateLabPage: React.FC<{
     <div ref={workspaceRef} className={embedded ? "w-full h-full bg-white flex flex-col text-slate-900 select-none relative" : "fixed inset-0 z-[60] bg-white flex flex-col text-slate-900 select-none"}>
 
       {/* TOP HEADER BAR - White & Blue Brand Consistent */}
-      <div className="flex items-center gap-3 px-6 py-3.5 bg-white border-b border-slate-200 shrink-0 shadow-sm">
-        <button
-          onClick={onClose}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-200 text-sm font-medium font-sans active:scale-[0.98] transition-all"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Editor
-        </button>
+      <div className="flex items-center justify-between gap-3 px-6 py-3.5 bg-white border-b border-slate-200 shrink-0 shadow-sm">
+        <div className="flex items-center gap-3 min-w-0">
+          {!isActive ? (
+            <button
+              onClick={onClose}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-200 text-sm font-medium font-sans active:scale-[0.98] transition-all shrink-0"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Editor
+            </button>
+          ) : (
+            <button
+              onClick={goToStudioLanding}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 border border-slate-200 text-slate-700 text-xs sm:text-sm font-semibold font-sans active:scale-[0.98] transition-all shrink-0 shadow-xs"
+              title="Return to Studio landing page to give new prompts"
+            >
+              <ArrowLeft className="w-4 h-4 text-blue-600" />
+              <span>Studio Home</span>
+            </button>
+          )}
 
-        {isActive && (
-          <button
-            onClick={() => {
-              sfx.magic();
-              setMode('idle');
-              setTimeout(() => {
-                idleContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-              }, 250);
-            }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-200 text-sm font-medium font-sans active:scale-[0.98] transition-all"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Create New Template
-          </button>
-        )}
-
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center">
-            <Code2 className="w-5 h-5 text-blue-600" />
-          </div>
-          <div>
-            <h1 className="text-base font-bold font-sans text-slate-900 leading-none">AI Web Studio</h1>
-            <p className="text-[11px] text-slate-500 font-sans mt-0.5">
-              {isActive ? title || 'Vibe Coding Session' : 'Powered by Google AI Studio Gemini 2.5 Flash'}
-            </p>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0">
+              <Code2 className="w-5 h-5 text-blue-600" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-base font-bold font-sans text-slate-900 leading-none truncate">AI Web Studio</h1>
+              <p className="text-[11px] text-slate-500 font-sans mt-0.5 truncate">
+                {isActive ? title || 'Vibe Coding Session' : 'Powered by Google AI Studio Gemini 2.5 Flash'}
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Removed duplicate Turn into Template button */}
-
+        {/* Turn into Template button prominently in Top Header - Always 100% visible and NEVER hidden */}
+        {isActive && (
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={openSave}
+              disabled={streaming}
+              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md hover:shadow-lg active:scale-[0.98] transition-all shrink-0 ${streaming ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
+              title="Save website as a reusable template"
+            >
+              <BookmarkPlus className="w-4 h-4" />
+              <span>Turn into Template</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* MAIN WORKSPACE */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* LEFT SIDEBAR (Active chat / controls) */}
+        {/* LEFT SIDEBAR (Active chat / controls) - Roomy, Large, Luxury UI */}
         <div className={`shrink-0 flex flex-col overflow-hidden bg-slate-50 border-r border-slate-200 transition-all duration-300 ${
-          !isActive ? 'w-[0px] md:w-[0px] overflow-hidden' : sidebarCollapsed ? 'w-0 border-0' : 'w-[340px]'
+          !isActive ? 'w-[0px] md:w-[0px] overflow-hidden' : sidebarCollapsed ? 'w-0 border-0' : 'w-[420px] lg:w-[460px] xl:w-[480px]'
         }`}>
           {isActive && !sidebarCollapsed && (
-            <div className="flex flex-col h-full overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-200 bg-white space-y-2">
+            <div className="flex flex-col h-full overflow-hidden bg-slate-50">
+              
+              {/* Chat Header & LLM Engine Selector */}
+              <div className="px-5 py-4 border-b border-slate-200 bg-white space-y-3 shrink-0 shadow-xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold font-sans text-blue-600 uppercase tracking-wider flex items-center gap-1.5">
-                    <Terminal className="w-3.5 h-3.5" /> AI Assistant
-                  </span>
-                  <span className="text-[10px] text-slate-400">Inline HTML & CSS</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
+                      <Terminal className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-sm font-bold font-sans text-slate-900 block leading-tight">
+                        Vibe Design Assistant
+                      </span>
+                      <span className="text-[11px] text-slate-500 font-sans">
+                        Real-time AI Synthesis & Interactive Design
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-[11px] font-semibold text-blue-700">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
+                    Active
+                  </div>
                 </div>
-                {/* Brand consistent model selector toggle */}
-                <div className={`flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1 text-[11px] font-medium text-slate-700 transition-all ${streaming ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}>
+
+                {/* Brand consistent model selector toggle - Large & Spacious */}
+                <div className={`flex items-center bg-slate-100 p-1.5 rounded-xl border border-slate-200 gap-1 text-xs font-medium text-slate-700 transition-all ${streaming ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}>
                   {(['Gemini 2.5 Flash', 'Gemini 3.8 Flash', 'Gemini 3.1 Pro'] as const).map(model => (
                     <button
                       key={model}
                       disabled={streaming}
                       onClick={() => { if (!streaming) { sfx.toggle(); setSelectedModel(model); } }}
-                      className={`flex-1 py-1 px-1.5 rounded-lg transition-all truncate text-center ${
+                      className={`flex-1 py-1.5 px-2 rounded-lg transition-all truncate text-center text-xs font-semibold ${
                         selectedModel === model
-                          ? 'bg-blue-600 text-white font-bold shadow-xs'
+                          ? 'bg-blue-600 text-white shadow-xs'
                           : 'hover:text-slate-900 hover:bg-slate-200/60 text-slate-600'
                       }`}
                     >
@@ -492,29 +572,65 @@ export const TemplateLabPage: React.FC<{
                 </div>
               </div>
 
-              {/* Chat messages */}
-              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0 bg-slate-50">
-                {messages.map((m, i) => (
-                  <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 text-xs font-sans leading-relaxed ${
-                      m.role === 'user'
-                        ? 'bg-blue-600 text-white rounded-br-sm shadow-sm'
-                        : 'bg-white border border-slate-200 text-slate-800 rounded-bl-sm shadow-xs'
-                    }`}>
-                      {m.content || <span className="inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Thinking…</span>}
+              {/* Chat messages list - Spacious & Highly readable */}
+              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 min-h-0 bg-slate-50">
+                {messages.length <= 1 && (
+                  <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2.5">
+                    <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      Quick Vibe Edits
+                    </p>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Click any prompt to instantly instruct the AI model to update the code in real-time:
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {[
+                        'Add a 3-tier pricing table',
+                        'Make the hero section bolder with dark mahogany theme',
+                        'Add a booking calendar form',
+                        'Add customer review stars badge',
+                        'Change main button color to royal emerald',
+                        'Add FAQ accordion section'
+                      ].map((promptSnippet, idx) => (
+                        <button
+                          key={idx}
+                          disabled={streaming}
+                          onClick={() => {
+                            setInput(promptSnippet);
+                            sfx.tap();
+                          }}
+                          className="text-left text-xs px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 border border-slate-200 text-slate-700 transition-all font-sans"
+                        >
+                          + {promptSnippet}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                ))}
+                )}
+
+                {messages.map((m, i) => {
+                  const displayContent = m.role === 'assistant' ? sanitizeUserFacingText(m.content) : m.content;
+                  return (
+                    <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm font-sans leading-relaxed shadow-xs ${
+                        m.role === 'user'
+                          ? 'bg-blue-600 text-white rounded-br-sm shadow-md'
+                          : 'bg-white border border-slate-200 text-slate-800 rounded-bl-sm'
+                      }`}>
+                        {displayContent || <span className="inline-flex items-center gap-1.5 text-slate-500"><Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" /> Synthesizing website updates…</span>}
+                      </div>
+                    </div>
+                  );
+                })}
 
                 {streaming && (
                   <div className="flex justify-start">
-                    <div className="max-w-[90%] rounded-2xl px-3.5 py-2.5 bg-white border border-slate-200 rounded-bl-sm shadow-xs">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <div className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping" />
-                        <span className="text-[10px] text-blue-600 font-semibold">Gemini 2.5 Flash Coding</span>
+                    <div className="max-w-[88%] rounded-2xl px-4 py-3 bg-white border border-blue-200 rounded-bl-sm shadow-md space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-blue-600 animate-ping" />
+                        <span className="text-xs text-blue-600 font-bold">{selectedModel} Designing in Real-Time</span>
                       </div>
-                      <p className="text-[11px] text-slate-500 italic">
-                        {thinkingAcc ? thinkingAcc.slice(-180) : 'Building responsive layout and styling…'}
+                      <p className="text-xs text-slate-600 leading-relaxed italic">
+                        {thinkingAcc ? sanitizeUserFacingText(thinkingAcc.slice(-220)) : 'Crafting clean, responsive layout and tailored presentation…'}
                       </p>
                     </div>
                   </div>
@@ -522,30 +638,26 @@ export const TemplateLabPage: React.FC<{
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Prompt input */}
-              <div className="p-3 border-t border-slate-200 bg-white">
-                {labError && (
-                  <div className="mb-2 p-2 rounded-xl bg-red-50 border border-red-200 text-red-600 text-[11px] flex items-center gap-1.5">
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                    {labError}
-                  </div>
-                )}
-                <textarea
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPrompt(); } }}
-                  placeholder="Describe edits… e.g. Add a pricing section"
-                  rows={2}
-                  disabled={streaming}
-                  className="w-full resize-none rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-sans text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 transition-all"
-                />
+              {/* Prompt input - Generous height & clear buttons */}
+              <div className="p-4 sm:p-5 border-t border-slate-200 bg-white shrink-0 shadow-lg space-y-3">
+                <div className="relative">
+                  <textarea
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPrompt(); } }}
+                    placeholder="Describe edits… e.g. 'Add a clean pricing section with 3 tiers and monthly billing toggle'"
+                    rows={3}
+                    disabled={streaming}
+                    className="w-full resize-none rounded-2xl border border-slate-300 bg-white p-3.5 text-sm font-sans text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition-all leading-relaxed shadow-inner"
+                  />
+                </div>
                 <button
                   onClick={sendPrompt}
                   disabled={streaming || !input.trim()}
-                  className="mt-2 w-full inline-flex items-center justify-center gap-2 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold font-sans hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-40"
+                  className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-600 text-white text-sm font-bold font-sans hover:bg-blue-700 active:scale-[0.98] transition-all shadow-md hover:shadow-lg disabled:opacity-40 disabled:hover:bg-blue-600"
                 >
-                  {streaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
-                  {streaming ? 'Updating…' : 'Apply AI Edit'}
+                  {streaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                  {streaming ? 'Applying AI Edits to Website…' : 'Apply AI Edit to Website'}
                 </button>
               </div>
             </div>
@@ -557,50 +669,85 @@ export const TemplateLabPage: React.FC<{
 
           {!isActive ? (
             /* ================= IDLE: AI VIBE STUDIO LANDING (White & Blue) ================= */
-            <div ref={idleContainerRef} className="flex-1 overflow-y-auto px-6 py-10 flex justify-center items-start transition-opacity duration-500">
-              <div className="w-full max-w-3xl space-y-8">
+            <div ref={idleContainerRef} className="flex-1 overflow-y-auto px-4 sm:px-8 py-8 flex justify-center items-start transition-opacity duration-500">
+              <div className="w-full max-w-4xl space-y-8">
 
                 {/* Hero Header & Single Prompt Section */}
-                <div className="relative rounded-3xl overflow-hidden bg-white border border-slate-200 p-8 sm:p-10 shadow-xl">
-                  <div className="absolute top-0 right-0 w-96 h-96 bg-blue-50 rounded-full blur-3xl pointer-events-none" />
-                  <div className="relative z-10 space-y-6">
-                    <div>
-                      <h2 className="text-3xl sm:text-4xl font-serif font-bold text-slate-900 tracking-tight mb-3">
-                        Build now with Lunao
-                      </h2>
-                      <p className="text-sm sm:text-base text-slate-600 max-w-xl leading-relaxed">
-                        Vibe code any website and turn it into template with one click.
-                      </p>
-                    </div>
-
-                    {/* Single Custom Prompt Section */}
-                    <div className="space-y-4">
+                <div className="relative rounded-3xl overflow-hidden bg-white border border-slate-200 p-8 sm:p-12 shadow-xl">
+                  <div className="absolute top-0 right-0 w-96 h-96 bg-blue-50/80 rounded-full blur-3xl pointer-events-none" />
+                  <div className="relative z-10 space-y-8">
+                    
+                    {/* Top Row: Title + Compact Model Selector */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-100 pb-6">
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Select LLM Engine</label>
-                        <div className={`flex items-center bg-slate-100 p-1.5 rounded-2xl border border-slate-200 gap-1.5 text-xs font-medium text-slate-700 transition-all ${streaming ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}>
+                        <h2 className="text-3xl sm:text-4xl font-serif font-bold text-slate-900 tracking-tight">
+                          AI Web Studio
+                        </h2>
+                        <p className="text-sm text-slate-600 max-w-lg mt-1.5 leading-relaxed">
+                          Describe any local service business in natural language. Instantly synthesize high-converting responsive websites optimized for client acquisition.
+                        </p>
+                      </div>
+
+                      {/* Sleek Compact Model Picker */}
+                      <div className="shrink-0">
+                        <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-widest mb-2">LLM Engine</label>
+                        <div className="inline-flex bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1 text-xs">
                           {(['Gemini 2.5 Flash', 'Gemini 3.8 Flash', 'Gemini 3.1 Pro'] as const).map(model => (
                             <button
                               key={model}
                               disabled={streaming}
                               onClick={() => { if (!streaming) { sfx.toggle(); setSelectedModel(model); } }}
-                              className={`flex-1 py-2 px-3 rounded-xl transition-all truncate text-center ${
+                              className={`py-1.5 px-3 rounded-lg transition-all text-xs font-medium ${
                                 selectedModel === model
-                                  ? 'bg-blue-600 text-white font-bold shadow-xs'
-                                  : 'hover:text-slate-900 hover:bg-slate-200/60 text-slate-600'
+                                  ? 'bg-blue-600 text-white shadow-sm font-semibold'
+                                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                               }`}
                             >
-                              {model}
+                              {model.replace('Gemini ', '')}
                             </button>
                           ))}
                         </div>
                       </div>
+                    </div>
 
-                      <textarea
-                        id="custom-vibe-textarea"
-                        rows={4}
-                        placeholder="Describe any website… e.g. A luxury vintage barber lounge in Austin, TX with online chair booking."
-                        className="w-full rounded-2xl border border-slate-300 bg-white p-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 transition-all shadow-inner"
-                      />
+                    {/* Prompt Input & Quick Sample Chips */}
+                    <div className="space-y-4">
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Business Brief & Prompt</label>
+                          <span className="text-[11px] text-slate-400">Ready to synthesize</span>
+                        </div>
+                        <textarea
+                          id="custom-vibe-textarea"
+                          rows={4}
+                          placeholder="e.g. A luxury vintage barber lounge in Austin, TX with dark mahogany aesthetics, chair booking form, pricing menu, and Google reviews badge."
+                          className="w-full rounded-2xl border border-slate-300 bg-white p-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 transition-all shadow-inner"
+                        />
+                      </div>
+
+                      {/* Quick sample prompt chips */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <span className="text-[11px] text-slate-500 font-medium">Quick samples:</span>
+                        {[
+                          'Luxury Barber Lounge, Austin TX',
+                          'Clinical Dental Studio, Boston MA',
+                          '24/7 HVAC Emergency Repair, Dallas TX',
+                        ].map((sample) => (
+                          <button
+                            key={sample}
+                            type="button"
+                            onClick={() => {
+                              const ta = document.getElementById('custom-vibe-textarea') as HTMLTextAreaElement;
+                              if (ta) ta.value = sample;
+                              sfx.tap();
+                            }}
+                            className="text-xs px-3 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 hover:text-slate-900 hover:border-blue-300 transition-all"
+                          >
+                            {sample}
+                          </button>
+                        ))}
+                      </div>
+
                       <button
                         onClick={() => {
                           const ta = document.getElementById('custom-vibe-textarea') as HTMLTextAreaElement;
@@ -609,12 +756,13 @@ export const TemplateLabPage: React.FC<{
                           handleStartVibeCode(val, val.slice(0, 30) + ' Site');
                         }}
                         disabled={streaming}
-                        className="w-full inline-flex items-center justify-center gap-2 py-4 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-base font-bold shadow-md active:scale-[0.99] transition-all"
+                        className="w-full inline-flex items-center justify-center gap-2 py-4 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-base font-bold shadow-md shadow-blue-600/20 active:scale-[0.99] transition-all mt-2"
                       >
-                        {streaming ? <Loader2 className="w-5 h-5 animate-spin" /> : <Wand2 className="w-5 h-5" />}
-                        Generate Website
+                        {streaming ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                        Generate Bespoke Website
                       </button>
                     </div>
+
                   </div>
                 </div>
 
@@ -658,88 +806,129 @@ export const TemplateLabPage: React.FC<{
           ) : (
             /* ================= ACTIVE PREVIEW MODE ================= */
             <>
-              {/* Preview toolbar */}
-              <div className="flex items-center gap-3 px-6 py-2.5 bg-white border-b border-slate-200 shrink-0 shadow-xs">
-                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              {/* Preview toolbar - Large, Spacious & High-Status */}
+              <div className="flex items-center gap-2 sm:gap-4 px-4 sm:px-6 py-3 bg-white border-b border-slate-200 shrink-0 shadow-xs overflow-x-auto no-scrollbar">
+                
+                {/* Desktop vs Mobile Toggle */}
+                <div className="flex items-center gap-1 bg-slate-100 p-1.5 rounded-xl border border-slate-200 shadow-inner shrink-0">
                   <button
                     onClick={() => { sfx.toggle(); setDevice('desktop'); }}
-                    className={`p-1.5 rounded-lg transition-all ${device === 'desktop' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
-                    title="Desktop view"
+                    className={`inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
+                      device === 'desktop'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                    }`}
+                    title="Desktop view (100% Full Width)"
                   >
                     <Monitor className="w-4 h-4" />
+                    <span>Desktop</span>
                   </button>
                   <button
                     onClick={() => { sfx.toggle(); setDevice('mobile'); }}
-                    className={`p-1.5 rounded-lg transition-all ${device === 'mobile' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
-                    title="Mobile view"
+                    className={`inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
+                      device === 'mobile'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                    }`}
+                    title="Mobile viewport simulation"
                   >
                     <Smartphone className="w-4 h-4" />
+                    <span>Mobile</span>
                   </button>
                 </div>
 
+                {/* Sidebar toggle button */}
                 <button
                   onClick={() => { sfx.tap(); setSidebarCollapsed(!sidebarCollapsed); }}
-                  className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 hover:text-slate-900 transition-all"
-                  title="Toggle Assistant Sidebar"
+                  className="p-2 sm:p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 hover:text-slate-900 transition-all shrink-0"
+                  title={sidebarCollapsed ? "Open Vibe Assistant Sidebar" : "Collapse Sidebar for Wider Canvas"}
                 >
                   {sidebarCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
                 </button>
 
-                {editingTitle ? (
-                  <input
-                    autoFocus
-                    value={titleDraft}
-                    onChange={e => setTitleDraft(e.target.value)}
-                    onBlur={commitTitle}
-                    onKeyDown={e => { if (e.key === 'Enter') commitTitle(); }}
-                    className="px-2.5 py-1 rounded-lg border border-blue-600 bg-white text-xs font-semibold text-slate-900 focus:outline-none"
-                  />
-                ) : (
-                  <button
-                    onClick={startEditTitle}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 hover:text-slate-900 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-all"
-                  >
-                    <FlaskConical className="w-3.5 h-3.5 text-blue-600" />
-                    <span className="max-w-[220px] truncate">{title || 'Vibe Website'}</span>
-                    <span className="text-slate-400 text-[10px]">✎</span>
-                  </button>
-                )}
+                {/* Website Title Editor */}
+                <div className="flex items-center min-w-0 shrink">
+                  {editingTitle ? (
+                    <input
+                      autoFocus
+                      value={titleDraft}
+                      onChange={e => setTitleDraft(e.target.value)}
+                      onBlur={commitTitle}
+                      onKeyDown={e => { if (e.key === 'Enter') commitTitle(); }}
+                      className="px-2.5 sm:px-3 py-1.5 rounded-xl border-2 border-blue-600 bg-white text-xs sm:text-sm font-bold text-slate-900 focus:outline-none shadow-sm max-w-[140px] sm:max-w-[200px]"
+                    />
+                  ) : (
+                    <button
+                      onClick={startEditTitle}
+                      className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-bold text-slate-800 hover:text-blue-600 px-2 sm:px-3 py-1.5 rounded-xl hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-all min-w-0"
+                      title="Click to rename website"
+                    >
+                      <FlaskConical className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span className="max-w-[120px] sm:max-w-[220px] truncate">{title || 'Vibe Website'}</span>
+                      <span className="text-slate-400 text-xs font-normal shrink-0">✎</span>
+                    </button>
+                  )}
+                </div>
 
-                <div className="ml-auto flex items-center gap-2">
+                {/* Right Action Controls - Guaranteed shrink-0 to prevent clipping */}
+                <div className="ml-auto flex items-center gap-2 sm:gap-3 shrink-0">
                   <button
                     onClick={refreshPreview}
-                    className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 hover:text-slate-900 transition-all"
-                    title="Refresh preview"
+                    className="p-2 sm:p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 hover:text-slate-900 transition-all shrink-0"
+                    title="Reload live preview"
                   >
                     <RefreshCw className="w-4 h-4" />
                   </button>
 
                   <button
+                    onClick={() => { sfx.open(); setFullScreenPreview(true); }}
+                    className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 hover:text-slate-900 text-xs font-bold transition-all shadow-xs active:scale-[0.98] shrink-0"
+                    title="View preview in full screen mode"
+                  >
+                    <Maximize2 className="w-4 h-4 text-blue-600 shrink-0" />
+                    <span>Full Screen</span>
+                  </button>
+
+                  <button
                     onClick={openSave}
                     disabled={streaming}
-                    className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md active:scale-[0.98] transition-all ${streaming ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
+                    className={`inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md hover:shadow-lg active:scale-[0.98] transition-all shrink-0 ${streaming ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
+                    title="Turn into reusable template"
                   >
-                    <BookmarkPlus className="w-4 h-4" /> Turn into Template
+                    <BookmarkPlus className="w-4 h-4 shrink-0" />
+                    <span>Turn into Template</span>
                   </button>
                 </div>
               </div>
 
-              {/* Iframe Viewport */}
-              <div className="flex-1 overflow-hidden flex justify-center items-start p-6 bg-slate-100">
-                <div
-                  className={`w-full bg-white rounded-2xl border border-slate-200 shadow-xl overflow-y-auto transition-all ${
-                    device === 'mobile' ? 'max-w-[390px]' : 'max-w-[1200px]'
-                  }`}
-                  style={{ minHeight: 'calc(100vh - 160px)' }}
-                >
-                  <iframe
-                    ref={iframeRef}
-                    srcdoc={previewHtml || BLANK_CANVAS}
-                    title="Vibe Website Preview"
-                    className="w-full border-0 bg-white block h-full"
-                    style={{ minHeight: '100%' }}
-                  />
-                </div>
+              {/* Iframe Viewport - Takes 100% of preview space in desktop, realistic frame in mobile */}
+              <div className="flex-1 w-full h-full min-h-0 overflow-hidden flex flex-col bg-slate-100">
+                {device === 'desktop' ? (
+                  <div className="w-full h-full flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
+                    <iframe
+                      ref={iframeRef}
+                      srcdoc={previewHtml || BLANK_CANVAS}
+                      title="Vibe Website Preview"
+                      className="w-full h-full flex-1 border-0 bg-white block"
+                      style={{ height: '100%', width: '100%', minHeight: '100%', display: 'block' }}
+                    />
+                  </div>
+                ) : (
+                  <div className="w-full h-full flex-1 min-h-0 flex items-center justify-center p-4 overflow-hidden">
+                    <div className="w-full max-w-[390px] h-full max-h-[820px] bg-white rounded-3xl border-4 border-slate-800 shadow-2xl flex flex-col overflow-hidden relative">
+                      <div className="h-6 bg-slate-800 flex items-center justify-center shrink-0">
+                        <div className="w-16 h-3 bg-slate-700 rounded-full" />
+                      </div>
+                      <iframe
+                        ref={iframeRef}
+                        srcdoc={previewHtml || BLANK_CANVAS}
+                        title="Vibe Website Preview Mobile"
+                        className="w-full h-full flex-1 border-0 bg-white block"
+                        style={{ height: '100%', width: '100%' }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -803,8 +992,8 @@ export const TemplateLabPage: React.FC<{
                   <label className="block text-xs font-semibold text-slate-700">Select Niche Industry *</label>
                   <span className="text-[11px] text-slate-500">{allNiches.length} Niches Synced</span>
                 </div>
-                <div className="flex flex-wrap gap-2 mb-3 transition-all animate-editor-fade">
-                  {allNiches.slice(0, showAllNiches ? allNiches.length : 6).map(n => (
+                <div className="flex flex-wrap gap-2 mb-3 transition-all animate-editor-fade max-h-48 overflow-y-auto pr-1">
+                  {allNiches.map(n => (
                     <button
                       key={n.id}
                       type="button"
@@ -817,15 +1006,6 @@ export const TemplateLabPage: React.FC<{
                       {n.label || n.id}
                     </button>
                   ))}
-                  {allNiches.length > 6 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllNiches(!showAllNiches)}
-                      className="px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-100 text-blue-600 border border-blue-200 hover:bg-blue-50 transition-all flex items-center gap-1"
-                    >
-                      {showAllNiches ? 'Show Less ▴' : `+${allNiches.length - 6} More ▾`}
-                    </button>
-                  )}
                   <button
                     type="button"
                     onClick={() => { setShowNewCat(!showNewCat); }}
@@ -844,7 +1024,8 @@ export const TemplateLabPage: React.FC<{
                         onKeyDown={async e => {
                           if (e.key === 'Enter' && saveNewCat.trim()) {
                             e.preventDefault();
-                            const created = await addNiche(saveNewCat.trim());
+                            const clean = saveNewCat.trim();
+                            const created = await addNiche(clean);
                             setSelectedSaveNiche(created.id);
                             setSaveNewCat('');
                             setShowNewCat(false);
@@ -859,7 +1040,8 @@ export const TemplateLabPage: React.FC<{
                         type="button"
                         onClick={async () => {
                           if (saveNewCat.trim()) {
-                            const created = await addNiche(saveNewCat.trim());
+                            const clean = saveNewCat.trim();
+                            const created = await addNiche(clean);
                             setSelectedSaveNiche(created.id);
                             setSaveNewCat('');
                             setShowNewCat(false);
@@ -868,7 +1050,7 @@ export const TemplateLabPage: React.FC<{
                         }}
                         className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm"
                       >
-                        Add
+                        Add Niche
                       </button>
                     </div>
                   </div>
@@ -897,19 +1079,57 @@ export const TemplateLabPage: React.FC<{
       )}
 
       {successMsg && (
-        <div className="fixed top-6 right-6 z-[90] animate-editor-rise">
-          <div className="bg-white border border-green-200 rounded-2xl shadow-xl p-4 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600">
-              <Check className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-slate-900">Template "{successMsg.title}" Added</p>
-              <p className="text-xs text-slate-500">To {successMsg.niche} niche</p>
-            </div>
-            <button onClick={() => setSuccessMsg(null)} className="ml-4 text-slate-400 hover:text-slate-600">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-md bg-white border border-green-200 rounded-3xl shadow-2xl p-8 text-center space-y-5 animate-celebrate-in relative">
+            <button
+              onClick={() => setSuccessMsg(null)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-900 transition-all cursor-pointer"
+            >
               <X className="w-4 h-4" />
             </button>
+            <div className="w-16 h-16 rounded-full bg-green-100 border-2 border-green-300 flex items-center justify-center text-green-600 mx-auto shadow-inner animate-bounce">
+              <Check className="w-8 h-8 stroke-[3]" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-xl font-bold font-sans text-slate-900">Template Successfully Published!</h3>
+              <p className="text-sm font-semibold text-slate-700">"{successMsg.title}"</p>
+              <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-green-50 border border-green-200 text-xs font-bold text-green-700">
+                <span>✨ Niche: {successMsg.niche}</span>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Now live across the Templates Gallery and Outreach Campaigns manager.
+            </p>
+            <button
+              onClick={() => setSuccessMsg(null)}
+              className="w-full py-3 rounded-2xl bg-green-600 hover:bg-green-700 text-white text-sm font-bold shadow-lg transition-all active:scale-98 cursor-pointer"
+            >
+              Continue Editing
+            </button>
           </div>
+        </div>
+      )}
+
+      {fullScreenPreview && (
+        <div className="fixed inset-0 z-[200] w-screen h-screen bg-white overflow-hidden animate-editor-fade">
+          {/* Zoom Out / Exit Full Screen button at TOP LEFT CORNER */}
+          <div className="absolute top-4 left-4 z-[210]">
+            <button
+              onClick={() => { sfx.close(); setFullScreenPreview(false); }}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/95 hover:bg-white text-slate-800 hover:text-blue-600 border border-slate-200/90 shadow-2xl backdrop-blur-md text-xs font-bold transition-all hover:scale-105 active:scale-95 group cursor-pointer"
+              title="Zoom out and exit full screen"
+            >
+              <Minimize2 className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
+              <span>Zoom Out</span>
+            </button>
+          </div>
+
+          <iframe
+            srcdoc={previewHtml || BLANK_CANVAS}
+            title="Full Screen Preview"
+            className="w-full h-full border-0 bg-white block"
+            style={{ width: '100vw', height: '100vh', border: 0 }}
+          />
         </div>
       )}
 

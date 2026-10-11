@@ -93,15 +93,19 @@ export async function fetchNichesFromBackend(): Promise<NicheItem[]> {
     const data = await res.json();
     if (data.ok && Array.isArray(data.niches)) {
       const map = new Map<string, NicheItem>();
+      // 1. Defaults
       for (const d of DEFAULT_NICHES) map.set(d.id.toLowerCase(), d);
+      // 2. Previously cached custom niches in localStorage
+      for (const l of getLocalNiches()) map.set(l.id.toLowerCase(), l);
+      // 3. Backend niches (can be array of strings or objects)
       for (const n of data.niches) {
-        const id = n.id || n.name;
+        const id = typeof n === 'string' ? n.trim() : String(n.id || n.name || '').trim();
         if (id) {
           map.set(id.toLowerCase(), {
             id,
-            label: n.label || id,
-            emoji: n.emoji || getNicheEmoji(id),
-            color: n.color || '#2563EB',
+            label: typeof n === 'string' ? id : (n.label || id),
+            emoji: typeof n === 'string' ? getNicheEmoji(id) : (n.emoji || getNicheEmoji(id)),
+            color: typeof n === 'string' ? '#2563EB' : (n.color || '#2563EB'),
           });
         }
       }
@@ -119,6 +123,7 @@ export async function fetchNichesFromBackend(): Promise<NicheItem[]> {
 // Save a newly created niche to backend and synchronize
 export async function createAndSyncNiche(name: string, emoji?: string, color = '#2563EB'): Promise<NicheItem> {
   const cleanName = name.trim();
+  if (!cleanName) return { id: 'General', label: 'General', emoji: '✨', color: '#2563EB' };
   const resolvedEmoji = emoji || getNicheEmoji(cleanName);
   const newNiche: NicheItem = {
     id: cleanName,
@@ -146,14 +151,15 @@ export async function createAndSyncNiche(name: string, emoji?: string, color = '
       if (data.ok && Array.isArray(data.niches)) {
         const map = new Map<string, NicheItem>();
         for (const d of DEFAULT_NICHES) map.set(d.id.toLowerCase(), d);
+        for (const u of updated) map.set(u.id.toLowerCase(), u);
         for (const n of data.niches) {
-          const id = n.id || n.name;
+          const id = typeof n === 'string' ? n.trim() : String(n.id || n.name || '').trim();
           if (id) {
             map.set(id.toLowerCase(), {
               id,
-              label: n.label || id,
-              emoji: n.emoji || getNicheEmoji(id),
-              color: n.color || '#2563EB',
+              label: typeof n === 'string' ? id : (n.label || id),
+              emoji: typeof n === 'string' ? getNicheEmoji(id) : (n.emoji || getNicheEmoji(id)),
+              color: typeof n === 'string' ? '#2563EB' : (n.color || '#2563EB'),
             });
           }
         }
@@ -179,11 +185,14 @@ export async function fetchTemplatesFromBackend(): Promise<Template[]> {
       const map = new Map<string, Template>();
       // 1. Initial builtins
       for (const t of initialTemplates) map.set(t.id, t);
-      // 2. Server templates
+      // 2. Previously saved local templates
+      for (const l of getLocalTemplates()) map.set(l.id, l);
+      // 3. Server templates
       for (const t of data.all) {
-        if (t && t.id) {
-          map.set(t.id, {
-            id: t.id,
+        const id = t.id || t.key;
+        if (id) {
+          map.set(id, {
+            id,
             name: t.name || 'Custom Template',
             niche: t.niche || 'General',
             usedCount: t.usedCount || 0,
@@ -226,6 +235,12 @@ export function addAndSyncTemplate(template: { id: string; name: string; niche: 
 
   localStorage.setItem(STORAGE_TEMPLATES, JSON.stringify(updated));
   window.dispatchEvent(new CustomEvent('lunao:templates-sync', { detail: updated }));
+
+  // Ensure niche is created and synced across the whole platform
+  if (template.niche && template.niche !== 'All' && template.niche !== 'General') {
+    createAndSyncNiche(template.niche);
+  }
+
   return newTpl;
 }
 
