@@ -1,4 +1,5 @@
 import express from 'express';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -11,6 +12,14 @@ const { app, startBackgroundServices } = await import('./server/index.js');
 
 const PORT = 3000;
 const isDev = process.env.NODE_ENV !== 'production';
+
+const PWA_DIST = path.resolve(__dirname, 'lunaoownerpwa', 'dist');
+if (fs.existsSync(PWA_DIST)) {
+  app.use('/owner', express.static(PWA_DIST));
+  app.get('/owner*', (_req, res) => {
+    res.sendFile(path.resolve(PWA_DIST, 'index.html'));
+  });
+}
 
 if (isDev) {
   const vite = await createViteServer({

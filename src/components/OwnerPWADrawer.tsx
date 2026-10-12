@@ -140,7 +140,7 @@ export const OwnerPWADrawer: React.FC<OwnerPWADrawerProps> = ({
   const handleOpenPWA = () => {
     if (!displayCode) return;
     sfx.tap();
-    window.open(`${OWNER_PWA_URL}/?code=${displayCode}`, '_blank', 'noopener,noreferrer');
+    window.open(`/owner/?code=${encodeURIComponent(displayCode)}`, '_blank', 'noopener,noreferrer');
   };
 
   // Derive

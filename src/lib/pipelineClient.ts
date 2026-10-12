@@ -487,6 +487,31 @@ export async function updateBookingStatus(id: number, status: BookingStatus): Pr
   return data.booking as Booking;
 }
 
+export async function createBooking(data: {
+  slug: string;
+  businessName?: string;
+  customerName: string;
+  phone?: string;
+  email?: string;
+  service?: string;
+  date?: string;
+  time?: string;
+  notes?: string;
+  source?: string;
+}): Promise<Booking> {
+  const res = await fetch(`${API_BASE}/api/bookings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || `Failed to create booking (${res.status})`);
+  }
+  const d = await res.json();
+  return d.booking as Booking;
+}
+
 export interface AiChatMessage {
   role: 'user' | 'assistant';
   content: string;

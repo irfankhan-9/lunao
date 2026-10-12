@@ -1154,6 +1154,28 @@ const SiteDeployBody: React.FC<{
     window.setTimeout(() => onCopyUrl(), 1400);
     playConfirmSuccess();
   };
+
+  const handleDownloadCsv = () => {
+    playConfirmSuccess();
+    const headers = ['Business Name', 'City', 'Slug', 'Live Site URL', 'Status'];
+    const rows = liveSites.map(s => [
+      `"${(s.name || '').replace(/"/g, '""')}"`,
+      `"${(s.city || '').replace(/"/g, '""')}"`,
+      `"${s.slug || ''}"`,
+      `"${s.url || ''}"`,
+      `"${s.status || 'live'}"`
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `quick-deploy-campaign-results.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (liveSites.length === 0) {
     return (
       <div className="px-6 py-8 text-center text-ink-secondary">
@@ -1165,9 +1187,20 @@ const SiteDeployBody: React.FC<{
   }
   return (
     <div className="px-6 py-4 space-y-3">
-      <div className="flex items-center gap-2 mb-1">
-        <Globe className="w-4 h-4 text-accent" />
-        <h4 className="text-sm font-bold text-ink">Deployed Sites</h4>
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <Globe className="w-4 h-4 text-accent" />
+          <h4 className="text-sm font-bold text-ink">Deployed Sites & Lead Details ({liveSites.length})</h4>
+        </div>
+        <button
+          type="button"
+          onClick={handleDownloadCsv}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/10 hover:bg-accent/20 text-accent text-xs font-bold transition-all cursor-pointer"
+          title="Download all deployment details and live URLs as CSV"
+        >
+          <FileText className="w-3.5 h-3.5" />
+          Download CSV
+        </button>
       </div>
       <div className="space-y-2">
         {liveSites.map((s, idx) => (
@@ -1201,6 +1234,7 @@ const SiteDeployBody: React.FC<{
                   onClick={() => handleCopy(s.url)}
                   aria-label="Copy URL"
                   className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-tertiary hover:text-accent hover:bg-accent-soft transition-colors"
+                  title="Copy URL"
                 >
                   {copiedUrl ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
                 </button>
@@ -1210,6 +1244,7 @@ const SiteDeployBody: React.FC<{
                   rel="noopener noreferrer"
                   aria-label="Open in new tab"
                   className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-tertiary hover:text-accent hover:bg-accent-soft transition-colors"
+                  title="Open live site"
                 >
                   <ExternalLink className="w-3 h-3" />
                 </a>

@@ -276,7 +276,7 @@ export const OwnerAuthModal: React.FC = () => {
                     ref={inputRef}
                     id="owner-code"
                     type="text"
-                    placeholder="LUNAO-XXXX-XXXX"
+                    placeholder="LUNAO-XXXX-XXXX or website-name"
                     value={inputCode}
                     onChange={handleInputChange}
                     disabled={isVerifying}

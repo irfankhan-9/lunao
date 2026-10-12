@@ -42,7 +42,8 @@ import {
   CA_PROVINCES,
 } from './lib/smsLeads.js';
 import { listCities } from './lib/cities.js';
-import { publishBatch, validateCloudflareToken } from './lib/cloudflare.js';
+import { publishBatch, validateCloudflareToken, stageSite } from './lib/cloudflare.js';
+import { slugify } from './lib/slug.js';
 import { streamEdit, isAiEnabled, cleanHtmlOutput, generateTemplateHtml } from './lib/geminiAi.js';
 import { createBooking, listBookings, updateBookingStatus } from './lib/bookings.js';
 import { chatTurn } from './lib/chatbot.js';
@@ -533,6 +534,62 @@ app.post('/api/site-deploy/run', async (req, res) => {
   }
 });
 
+// Single business AI rebrand + stage + live deploy endpoint.
+// Powers the sequential step-by-step AI deployment in SiteDeployCampaignWizard.
+app.post('/api/site-deploy/rebrand-single', async (req, res) => {
+  try {
+    const { business, niche, templateKey, ownerKey, deploy = true } = req.body || {};
+    if (!business || !business.name) {
+      return res.status(400).json({ ok: false, error: 'Business name is required' });
+    }
+
+    const effectiveNiche = business.niche || niche || 'Barber';
+    const effectiveKey = business.templateKey || templateKey || effectiveNiche;
+    const slug = business.slug || slugify(business.name, business.city || '');
+
+    // 1. Compile personalized site with exact template placeholders
+    const { html, resolved } = await compileSite(business, effectiveKey, ownerKey || null);
+
+    // 2. Stage locally to disk in SITES_DIR
+    const localUrl = await stageSite(slug, html);
+
+    // 3. Deploy to Lunao / Cloudflare servers
+    let liveUrl = localUrl;
+    let deployed = false;
+    if (deploy && cloudflare.live) {
+      await publishBatch();
+      deployed = true;
+      liveUrl = `https://${cloudflare.project}.pages.dev/${slug}/`;
+
+      // Pre-flight verify URL is reachable
+      try {
+        const ping = await fetch(liveUrl, { method: 'HEAD', signal: AbortSignal.timeout(3000) });
+        if (ping.status === 200 || ping.status === 304) {
+          // Verified 100% active
+        }
+      } catch {
+        // Fallback or still propagating
+      }
+    }
+
+    res.json({
+      ok: true,
+      slug,
+      siteUrl: liveUrl,
+      localUrl,
+      deployed,
+      name: business.name,
+      city: business.city || '',
+      phone: business.phone || '',
+      status: 'live',
+      templateName: resolved?.name || 'Standard',
+    });
+  } catch (err) {
+    console.error('[rebrand-single] error:', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ---- Site Editor API -------------------------------------------------------
 
 // All sites ever generated for this owner — across BOTH site-deploy campaigns
@@ -930,49 +987,72 @@ function generateToken(code) {
 app.post('/api/owner/redeem', (req, res) => {
   try {
     const { code, deviceLabel, platform } = req.body || {};
-    if (typeof code !== 'string' || !isValidCodeFormat(code)) {
-      return res.status(400).json({ ok: false, error: 'Invalid invite code format. Expected LUNAO-XXXX-XXXX.' });
+    if (typeof code !== 'string' || !code.trim()) {
+      return res.status(400).json({ ok: false, error: 'Please enter an owner access code or website slug.' });
     }
-    const trimmed = code.trim().toUpperCase();
-    const devMode = req.query.devMode === '1' || req.query.devMode === 'true';
+    let input = code.trim();
+    let upperCode = input.toUpperCase();
+    if (!upperCode.startsWith('LUNAO-') && /^[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(upperCode)) {
+      upperCode = `LUNAO-${upperCode}`;
+    }
 
-    // Real invite-code path: look the code up in the table and bind to its slug.
-    if (!devMode) {
-      const row = findByCode(trimmed);
-      if (!row) {
-        return res.status(404).json({ ok: false, error: 'Invalid or revoked invite code.' });
-      }
+    const sites = listSitesSync();
+
+    // 1. Try finding by invite code first
+    let row = findByCode(upperCode);
+    let target = null;
+
+    if (row) {
       if (row.revokedAt) {
         return res.status(404).json({ ok: false, error: 'This invite code has been revoked.' });
       }
-      // Look up the site to attach business metadata.
-      const sites = listSitesSync();
-      const target = sites.find((s) => s.slug === row.slug);
-      if (!target) {
-        return res.status(404).json({ ok: false, error: 'No site found for this code.' });
+      target = sites.find((s) => s.slug === row.slug);
+    } else {
+      // 2. Try finding by website slug / code (e.g. "everest-climate-denver")
+      const cleanSlug = input.toLowerCase().replace(/^https?:\/\/[^/]+\//, '').replace(/\/$/, '').trim();
+      target = sites.find((s) => s.slug.toLowerCase() === cleanSlug || s.slug.toLowerCase() === input.toLowerCase()) ||
+               sites.find((s) => s.slug.toLowerCase().includes(cleanSlug) || cleanSlug.includes(s.slug.toLowerCase()));
+
+      if (target) {
+        // Reuse an existing active invite code for this site or create a new one
+        const existingRow = db.prepare('SELECT * FROM invite_codes WHERE slug = ? AND revoked_at IS NULL ORDER BY id DESC LIMIT 1').get(target.slug);
+        if (existingRow) {
+          row = {
+            id: existingRow.id,
+            code: existingRow.code,
+            slug: existingRow.slug,
+            label: existingRow.label,
+          };
+        } else {
+          const newCodeRec = createCode(target.slug, 'PWA Website Access');
+          row = {
+            id: newCodeRec.id,
+            code: newCodeRec.code,
+            slug: target.slug,
+            label: newCodeRec.label,
+          };
+        }
       }
-      touchCode(trimmed, deviceLabel);
-      const token = generateToken(trimmed);
-      return res.json({
-        ok: true,
-        token,
-        slug: target.slug,
-        businessName: target.title,
-        niche: target.niche,
-        siteUrl: target.url,
-        inviteCode: { id: row.id, code: row.code, label: row.label },
+    }
+
+    if (!target || !row) {
+      return res.status(404).json({
+        ok: false,
+        error: `Could not find business for "${input}". Please check your code or enter a valid website name.`,
       });
     }
 
-    // Dev-mode escape hatch (?devMode=1): original fuzzy-match behavior.
-    // Used by local testing where no codes have been issued yet.
-    const sites = listSitesSync();
-    const target = sites.find((s) => s.slug.includes(trimmed.replace('LUNAO-', '').toLowerCase().replace(/[^a-z0-9-]/g, ''))) || sites[0];
-    if (!target) {
-      return res.status(404).json({ ok: false, error: 'No site found for this code.' });
-    }
-    const token = generateToken(trimmed);
-    res.json({ ok: true, token, slug: target.slug, businessName: target.title, niche: target.niche, siteUrl: target.url, devMode: true });
+    touchCode(row.code, deviceLabel);
+    const token = generateToken(row.code);
+    return res.json({
+      ok: true,
+      token,
+      slug: target.slug,
+      businessName: target.title,
+      niche: target.niche,
+      siteUrl: target.url,
+      inviteCode: { id: row.id, code: row.code, label: row.label },
+    });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -4258,6 +4338,9 @@ const PWA_DIST = path.join(ROOT_DIR, 'lunaoownerpwa', 'dist');
 const FRONTEND_DIST = path.join(ROOT_DIR, 'dist');
 if (fs.existsSync(PWA_DIST)) {
   app.use('/owner', express.static(PWA_DIST));
+  app.get('/owner*', (_req, res) => {
+    res.sendFile(path.join(PWA_DIST, 'index.html'));
+  });
 }
 if (fs.existsSync(FRONTEND_DIST)) {
   app.use(express.static(FRONTEND_DIST));

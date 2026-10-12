@@ -175,23 +175,22 @@ export const tenantAuthService = {
    * {token, slug, business} in localStorage and return it.
    */
   async authenticateCode(inputCode: string): Promise<AuthResult> {
-    const normalized = String(inputCode || '').trim().toUpperCase();
-    if (!normalized) {
-      return { success: false, errorMessage: 'Please enter your unique owner access code.' };
+    const rawInput = String(inputCode || '').trim();
+    if (!rawInput) {
+      return { success: false, errorMessage: 'Please enter your unique owner access code or website name.' };
     }
-    if (!/^LUNAO-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(normalized)) {
-      return {
-        success: false,
-        errorMessage: 'Invalid code format. Codes look like LUNAO-XXXX-XXXX.',
-      };
+    let normalized = rawInput.toUpperCase();
+    if (!normalized.startsWith('LUNAO-') && /^[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(normalized)) {
+      normalized = `LUNAO-${normalized}`;
     }
+    const codeToSend = /^LUNAO-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(normalized) ? normalized : rawInput;
 
     let resp;
     try {
       resp = await fetch('/api/owner/redeem', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: normalized, deviceLabel: 'pwa', platform: 'web' }),
+        body: JSON.stringify({ code: codeToSend, deviceLabel: 'pwa', platform: 'web' }),
       });
     } catch (err: any) {
       return {
