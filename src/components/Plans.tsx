@@ -61,7 +61,7 @@ export const Plans: React.FC<PlansProps> = ({
         'SMS campaigns (Canadian businesses only · fully automated)',
         'Website deployment and preview generation',
         'Standard processing speeds',
-        'Basic templates access'
+        'Basic templates access (no Vibe Coding)'
       ]
     },
     {
@@ -80,7 +80,7 @@ export const Plans: React.FC<PlansProps> = ({
         'SMS campaigns (Canadian businesses only · fully automated)',
         'Website deployment and preview generation',
         'Standard processing speeds',
-        'Basic templates access',
+        'Basic templates access (no Vibe Coding)',
         'Single active campaign at any time'
       ]
     },
@@ -97,7 +97,8 @@ export const Plans: React.FC<PlansProps> = ({
       isPopular: true,
       features: [
         'Everything in Starter included',
-        'Bring your own Telnyx API Key & Phone',
+        'AI Vibe Coding Studio (100 Vibe Credits included)',
+        'Connect Telnyx account via 1-click Telnyx Auth',
         'Target up to 3 cities per campaign',
         'Send SMS globally to any country/city',
         'Higher overall campaign dispatch volume',
@@ -121,7 +122,8 @@ export const Plans: React.FC<PlansProps> = ({
         label: 'Limited intake: 600 users allowed'
       },
       features: [
-        'Bring your own Telnyx API Key & Phone',
+        'AI Vibe Coding Studio (350 Vibe Credits included)',
+        'Connect Telnyx account via 1-click Telnyx Auth',
         'Target unlimited cities per campaign',
         'Send SMS globally to any country/city',
         'Multi-campaign concurrent support (Unlimited)',
@@ -145,7 +147,8 @@ export const Plans: React.FC<PlansProps> = ({
         label: 'Strict beta limit: 250 users max'
       },
       features: [
-        'Bring your own Telnyx API Key & Phone',
+        'AI Vibe Coding Studio (1,000 Vibe Credits included)',
+        'Connect Telnyx account via 1-click Telnyx Auth',
         'Target unlimited cities per campaign',
         'Send SMS globally to any country/city',
         'Full scheduling and outbound automation system',
@@ -154,6 +157,24 @@ export const Plans: React.FC<PlansProps> = ({
       ]
     }
   ];
+
+  const planNormalized = (userPlan || '').toLowerCase();
+  const isVibeCodingEligible = ['growth', 'pro', 'agency'].some(tier => planNormalized.includes(tier));
+  
+  const getVibeCodingCredits = (plan: string): number => {
+    const p = (plan || '').toLowerCase();
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('lunao_vibe_credits') : null;
+    if (stored) {
+      const parsed = parseInt(stored, 10);
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    if (p.includes('agency')) return 1000;
+    if (p.includes('pro')) return 350;
+    if (p.includes('growth')) return 100;
+    return 0;
+  };
+
+  const vibeCodingCredits = getVibeCodingCredits(userPlan);
 
   return (
     <div id="plans-tab-root-container" className="space-y-8 animate-fade-in font-sans text-left pb-16">
@@ -165,6 +186,7 @@ export const Plans: React.FC<PlansProps> = ({
           <p className="text-sm text-ink-secondary">Select the plan tier that fits your outreach goals. Upgrade or switch instantly to adjust credits.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 select-none">
+          {/* Current Live Balance Card */}
           <div className="bg-success-soft/30 border border-success/15 rounded-xl px-4 py-2.5 flex items-center gap-2.5 text-left shadow-2xs">
             <span className="w-2.5 h-2.5 rounded-full bg-success animate-pulse shrink-0"></span>
             <div>
@@ -172,6 +194,18 @@ export const Plans: React.FC<PlansProps> = ({
               <div className="text-lg font-bold font-sans text-ink">{userCredits.toLocaleString()} Credits</div>
             </div>
           </div>
+
+          {/* Vibe Coding Credits Card - 1000% brand-consistent, matching Current Live Balance (Only for Growth, Pro, Agency) */}
+          {isVibeCodingEligible && (
+            <div className="bg-accent-soft/30 border border-accent/20 rounded-xl px-4 py-2.5 flex items-center gap-2.5 text-left shadow-2xs">
+              <span className="w-2.5 h-2.5 rounded-full bg-accent animate-pulse shrink-0"></span>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider font-extrabold text-ink-secondary">Vibe Coding Balance</div>
+                <div className="text-lg font-bold font-sans text-ink">{vibeCodingCredits.toLocaleString()} Credits</div>
+              </div>
+            </div>
+          )}
+
           <button
             onClick={() => {
               playSoftTap();

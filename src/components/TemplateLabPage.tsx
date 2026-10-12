@@ -241,8 +241,16 @@ export const TemplateLabPage: React.FC<{
     }, 100);
   };
 
+  // Plan check: Free and Starter cannot vibe code templates
+  const currentPlan = (typeof window !== 'undefined' ? localStorage.getItem('lunao_user_plan') : '') || 'Free';
+  const isPlanEligible = ['growth', 'pro', 'agency'].some(p => currentPlan.toLowerCase().includes(p));
+
   // Start vibe coding with Gemini 2.5 Flash
   const handleStartVibeCode = async (promptText: string, customTitle: string) => {
+    if (!isPlanEligible) {
+      flashError('Vibe Coding is exclusive to Growth, Pro, and Agency plans. Please upgrade in Subscription Plans.');
+      return;
+    }
     if (!promptText.trim() || streaming) return;
     sfx.magic();
     setTitle(customTitle);
@@ -358,6 +366,14 @@ export const TemplateLabPage: React.FC<{
     setMode('active');
     setMessages([{ role: 'assistant', content: 'Loaded "' + (entry.snapshotLabel || entry.title) + '". Preview on the right.' }]);
     setShowPromptInput(false);
+    // Persist turnedTemplateNiche if this is a template
+    if (entry.isTemplate) {
+      setTurnedTemplateId(entry.templateId);
+      setTurnedTemplateNiche(entry.niche);
+    } else {
+      setTurnedTemplateId(null);
+      setTurnedTemplateNiche(null);
+    }
   };
 
   const openSave = async () => {
@@ -748,18 +764,33 @@ export const TemplateLabPage: React.FC<{
                         ))}
                       </div>
 
+                      {!isPlanEligible && (
+                        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-3 text-xs text-amber-800">
+                          <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>Vibe Coding requires <strong>Growth, Pro, or Agency</strong> plan. Free and Starter users have access to pre-built templates.</span>
+                        </div>
+                      )}
+
                       <button
                         onClick={() => {
+                          if (!isPlanEligible) {
+                            flashError('Vibe Coding is exclusive to Growth, Pro, and Agency plans. Please upgrade in Subscription Plans.');
+                            return;
+                          }
                           const ta = document.getElementById('custom-vibe-textarea') as HTMLTextAreaElement;
                           const val = ta?.value?.trim();
                           if (!val) { flashError('Please enter a description for your website.'); return; }
                           handleStartVibeCode(val, val.slice(0, 30) + ' Site');
                         }}
                         disabled={streaming}
-                        className="w-full inline-flex items-center justify-center gap-2 py-4 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-base font-bold shadow-md shadow-blue-600/20 active:scale-[0.99] transition-all mt-2"
+                        className={`w-full inline-flex items-center justify-center gap-2 py-4 rounded-2xl text-base font-bold shadow-md active:scale-[0.99] transition-all mt-2 cursor-pointer ${
+                          !isPlanEligible
+                            ? 'bg-slate-800 hover:bg-slate-900 text-white'
+                            : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20'
+                        }`}
                       >
-                        {streaming ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
-                        Generate Bespoke Website
+                        {streaming ? <Loader2 className="w-5 h-5 animate-spin" /> : !isPlanEligible ? <Lock className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
+                        {!isPlanEligible ? 'Growth Plan Required to Vibe Code' : 'Generate Bespoke Website'}
                       </button>
                     </div>
 
@@ -1079,32 +1110,32 @@ export const TemplateLabPage: React.FC<{
       )}
 
       {successMsg && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-md animate-fade-in">
-          <div className="w-full max-w-md bg-white border border-green-200 rounded-3xl shadow-2xl p-8 text-center space-y-5 animate-celebrate-in relative">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg bg-white border border-green-100 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] p-10 text-center space-y-6 animate-celebrate-in relative">
             <button
               onClick={() => setSuccessMsg(null)}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-900 transition-all cursor-pointer"
+              className="absolute top-5 right-5 w-9 h-9 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-800 transition-all cursor-pointer"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
-            <div className="w-16 h-16 rounded-full bg-green-100 border-2 border-green-300 flex items-center justify-center text-green-600 mx-auto shadow-inner animate-bounce">
-              <Check className="w-8 h-8 stroke-[3]" />
+            <div className="w-20 h-20 rounded-full bg-green-50 border-4 border-green-100 flex items-center justify-center text-green-500 mx-auto animate-bounce">
+              <Check className="w-10 h-10 stroke-[3]" />
             </div>
-            <div className="space-y-2">
-              <h3 className="text-xl font-bold font-sans text-slate-900">Template Successfully Published!</h3>
-              <p className="text-sm font-semibold text-slate-700">"{successMsg.title}"</p>
-              <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-green-50 border border-green-200 text-xs font-bold text-green-700">
+            <div className="space-y-3">
+              <h3 className="text-2xl font-extrabold font-sans text-slate-900">Template Published!</h3>
+              <p className="text-sm font-semibold text-slate-600">"{successMsg.title}"</p>
+              <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-green-50 border border-green-100 text-sm font-bold text-green-700">
                 <span>✨ Niche: {successMsg.niche}</span>
               </div>
             </div>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Now live across the Templates Gallery and Outreach Campaigns manager.
+            <p className="text-sm text-slate-500 leading-relaxed max-w-sm mx-auto">
+              Now live and synced across your Templates Gallery, Outreach Campaigns, and Site Deploy manager.
             </p>
             <button
               onClick={() => setSuccessMsg(null)}
-              className="w-full py-3 rounded-2xl bg-green-600 hover:bg-green-700 text-white text-sm font-bold shadow-lg transition-all active:scale-98 cursor-pointer"
+              className="w-full py-4 rounded-2xl bg-green-600 hover:bg-green-700 text-white text-base font-bold shadow-lg shadow-green-500/20 transition-all active:scale-95 cursor-pointer"
             >
-              Continue Editing
+              Continue Vibe Coding
             </button>
           </div>
         </div>

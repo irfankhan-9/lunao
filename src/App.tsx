@@ -532,7 +532,7 @@ function DashboardApp() {
             <Editor active={activeTab === 'editor'} />
           </div>
           <div className={activeTab === 'messaging' ? 'block animate-fade-in' : 'hidden'}>
-            <MessagingLayout />
+            <MessagingLayout userPlan={userPlan} />
           </div>
           <div className={activeTab === 'settings' ? 'block animate-fade-in' : 'hidden'}>
             <Settings userName={userName} setUserName={setUserName} userEmail={userEmail} setUserEmail={setUserEmail} userPlan={userPlan} setUserPlan={handleSetUserPlan} userCredits={userCredits} telnyxKey={telnyxKey} setTelnyxKey={setTelnyxKey} telnyxPhone={telnyxPhone} setTelnyxPhone={setTelnyxPhone} setActiveTab={setActiveTab} />

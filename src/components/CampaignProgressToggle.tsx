@@ -16,7 +16,7 @@ import { getCampaign as getCampaignApi, getEmailCampaign } from '../lib/pipeline
 // ---------------------------------------------------------------------------
 export interface CampaignProgressData {
   id: string;
-  kind: 'email' | 'site-deploy';
+  kind: 'email' | 'site-deploy' | 'sms';
   name: string;
   status: 'starting' | 'running' | 'cancelling' | 'cancelled' | 'completed';
   total: number;

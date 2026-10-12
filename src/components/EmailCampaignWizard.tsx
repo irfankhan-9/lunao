@@ -263,6 +263,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   
   const [campaignName, setCampaignName] = useState<string>(`${selectedNiche} Email Campaign`);
   const stepContentRef = useRef<HTMLDivElement>(null);
+  const isFirstMountRef = useRef<boolean>(true);
 
   // Template list for preview navigation
   const nicheTemplates = templates.filter(t => t.niche === selectedNiche);
@@ -270,18 +271,12 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   const allTemplates = [...nicheTemplates, ...nicheCustom];
   
   useEffect(() => {
-    // Scroll to show step indicator (in Campaigns.tsx) after step change
-    const timer = setTimeout(() => {
-      const stepTrack = document.getElementById('wizard-steps-horizontal-track');
-      if (stepTrack) {
-        stepTrack.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      } else {
-        stepContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    }, 100);
-    playGentleChime(activeStep);
     onStepChange?.(activeStep);
-    return () => clearTimeout(timer);
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      return;
+    }
+    playGentleChime(activeStep);
   }, [activeStep]);
   
   useEffect(() => {
@@ -1934,6 +1929,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       // We don't block, but we'd give the same nudge at launch time.
     }
     setActiveStep((prev) => prev + 1);
+    stepContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStep, leadSource, dorkCity, dorkCityConfirmed, csvLeads.length, dorkSelected.size]);
 
@@ -3433,7 +3429,11 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         <button
           type="button"
           disabled={activeStep === 1}
-          onClick={() => { playGentleChime(); setActiveStep(prev => prev - 1); }}
+          onClick={() => {
+            playGentleChime();
+            setActiveStep(prev => prev - 1);
+            stepContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
           className={`text-xs font-semibold px-4 py-2 border border-border-main rounded-lg bg-white text-ink leading-none transition-all ${
             activeStep === 1 ? 'opacity-0 pointer-events-none' : 'hover:bg-off-white'
           }`}

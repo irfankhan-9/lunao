@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Sparkles, LogOut, CheckCircle, Smartphone, AlertCircle, Shield, CreditCard, User, Edit3, X 
+  Sparkles, LogOut, CheckCircle, AlertCircle, Shield, CreditCard, User, Edit3, X 
 } from 'lucide-react';
 import { playDialogPop, playConfirmSuccess, playCancelTone, playTiktokLike, playSoftTap } from '../utils/audio';
 
@@ -36,13 +36,6 @@ export const Settings: React.FC<SettingsProps> = ({
   const [copied, setCopied] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
   const [globalKeysSaved, setGlobalKeysSaved] = useState(false);
-  // Send Test SMS state
-  const [testPhone, setTestPhone] = useState<string>('');
-  const [testSending, setTestSending] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; message: string; simulated?: boolean; telnyxId?: string | null } | null>(null);
-  const [smsLive, setSmsLive] = useState<{ enabled: boolean; live: boolean; from: string | null; hasMessagingProfile: boolean } | null>(null);
-  
-  const isUpgraded = userPlan === 'Pro Plan' || userPlan === 'Agency Plan';
   
   // Confirmation Modal State
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -52,55 +45,6 @@ export const Settings: React.FC<SettingsProps> = ({
   useEffect(() => {
     setTempName(userName);
   }, [userName]);
-
-  // Pull the server's view of the SMS pipeline. Shows "LIVE" or "COMING SOON"
-  // based on the SMS_ENABLED env var on the backend (the dashboard can never
-  // claim live status on its own).
-  useEffect(() => {
-    (async () => {
-      try {
-        const { getSmsStatus } = await import('../lib/pipelineClient');
-        const status = await getSmsStatus();
-        setSmsLive(status);
-      } catch {
-        setSmsLive({ enabled: false, live: false, from: null, hasMessagingProfile: false });
-      }
-    })();
-  }, [telnyxKey, telnyxPhone]);
-
-  const handleSendTestSms = async () => {
-    const phone = testPhone.trim();
-    if (!phone) {
-      setTestResult({ ok: false, message: 'Enter a destination phone number to send a test.' });
-      return;
-    }
-    setTestSending(true);
-    setTestResult(null);
-    try {
-      const { sendTestSms } = await import('../lib/pipelineClient');
-      const ownerKey = localStorage.getItem('lunao_owner_key') || `dash-${userPlan.replace(/\s+/g, '-')}`;
-      const res = await sendTestSms(phone, undefined, ownerKey);
-      if (res.ok) {
-        setTestResult({
-          ok: true,
-          message: res.simulated
-            ? `Simulated send to ${res.to}. Set SMS_ENABLED=true on the backend to send real messages.`
-            : `Sent to ${res.to} (Telnyx id: ${res.id || 'n/a'})`,
-          simulated: res.simulated,
-          telnyxId: res.id,
-        });
-        playTiktokLike();
-      } else {
-        setTestResult({ ok: false, message: res.error || 'Send failed' });
-        playCancelTone();
-      }
-    } catch (err: any) {
-      setTestResult({ ok: false, message: err?.message || 'Network error' });
-      playCancelTone();
-    } finally {
-      setTestSending(false);
-    }
-  };
 
   // Derive initials for avatar
   const getInitials = (name: string) => {
@@ -192,7 +136,7 @@ export const Settings: React.FC<SettingsProps> = ({
               </div>
             </div>
 
-<div className="space-y-1.5">
+                    <div className="space-y-1.5">
                       <label className="block text-[11px] font-bold text-ink-secondary uppercase tracking-widest">Username / Email address</label>
                       <input
                         type="email"
@@ -203,124 +147,6 @@ export const Settings: React.FC<SettingsProps> = ({
                         required
                       />
                     </div>
-
-            {isUpgraded && (
-              <>
-                <div className="pt-4 border-t border-border-light space-y-4">
-                  <div className="bg-purple-50/50 border border-purple-200 rounded-xl p-4 flex flex-col gap-4">
-                    <div className="flex items-center gap-2">
-                      <Shield className="w-4 h-4 text-purple-600" />
-                      <span className="text-[11px] font-bold text-purple-700 uppercase tracking-widest">Global Outreach Setup</span>
-                    </div>
-                    
-                    <div className="space-y-1.5">
-                      <label className="block text-[11px] font-bold text-ink-secondary uppercase tracking-widest">Telnyx API Key</label>
-                      <input
-                        type="password"
-                        value={telnyxKey}
-                        onChange={(e) => {
-                          setTelnyxKey(e.target.value);
-                          setGlobalKeysSaved(false);
-                        }}
-                        placeholder="KEY0..."
-                        className="w-full px-3 py-2 bg-white border border-border-main rounded text-xs font-mono text-ink focus:ring-1 focus:ring-accent focus:outline-none"
-                      />
-                    </div>
-                    
-                    <div className="space-y-1.5">
-                      <label className="block text-[11px] font-bold text-ink-secondary uppercase tracking-widest">Sender Phone Number</label>
-                      <input
-                        type="text"
-                        value={telnyxPhone}
-                        onChange={(e) => {
-                          setTelnyxPhone(e.target.value);
-                          setGlobalKeysSaved(false);
-                        }}
-                        placeholder="Paste your Telnyx DID here"
-                        className="w-full px-3 py-2 bg-white border border-border-main rounded text-xs font-mono text-ink focus:ring-1 focus:ring-accent focus:outline-none"
-                      />
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        localStorage.setItem('lunao_telnyx_key', telnyxKey);
-                        localStorage.setItem('lunao_telnyx_phone', telnyxPhone);
-                        setGlobalKeysSaved(true);
-                        setTimeout(() => setGlobalKeysSaved(false), 3000);
-                        playSoftTap();
-                      }}
-                      className="mt-2 flex items-center justify-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold uppercase tracking-wider rounded transition-transform active:scale-95 shadow-sm cursor-pointer ml-auto"
-                    >
-                      {globalKeysSaved ? (
-                        <>
-                          <CheckCircle className="w-4 h-4 text-white" />
-                          <span>Keys Saved!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Edit3 className="w-3.5 h-3.5" />
-                          <span>Save API Configuration</span>
-                        </>
-                      )}
-                    </button>
-
-                    {/* Server-authoritative SMS pipeline status */}
-                    <div className="mt-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest">
-                      <span className="text-ink-secondary">Backend SMS:</span>
-                      {smsLive === null ? (
-                        <span className="text-ink-secondary">checking…</span>
-                      ) : smsLive.live ? (
-                        <span className="inline-flex items-center gap-1.5 text-success">
-                          <span className="w-1.5 h-1.5 rounded-full bg-success" />
-                          LIVE
-                        </span>
-                      ) : smsLive.enabled ? (
-                        <span className="inline-flex items-center gap-1.5 text-warning">
-                          <span className="w-1.5 h-1.5 rounded-full bg-warning" />
-                          DRY-RUN (keys present, simulated)
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 text-ink-secondary">
-                          <span className="w-1.5 h-1.5 rounded-full bg-ink-secondary" />
-                          COMING SOON (set SMS_ENABLED=true on the server)
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Send Test SMS */}
-                    <div className="mt-3 p-3 bg-bg-page border border-border-light rounded-lg space-y-2">
-                      <div className="flex items-center gap-1.5">
-                        <Smartphone className="w-3.5 h-3.5 text-accent" />
-                        <span className="text-[11px] font-bold uppercase tracking-widest text-ink">Send a test SMS</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="tel"
-                          value={testPhone}
-                          onChange={(e) => setTestPhone(e.target.value)}
-                          placeholder="Recipient phone (E.164)"
-                          className="flex-1 px-3 py-2 bg-white border border-border-main rounded text-xs font-mono text-ink focus:ring-1 focus:ring-accent focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          disabled={testSending || !testPhone.trim()}
-                          onClick={handleSendTestSms}
-                          className="px-3 py-2 bg-accent hover:bg-accent-hover disabled:opacity-40 text-white text-xs font-bold uppercase tracking-wider rounded transition-transform active:scale-95 shadow-sm cursor-pointer"
-                        >
-                          {testSending ? 'Sending…' : 'Send test'}
-                        </button>
-                      </div>
-                      {testResult && (
-                        <div className={`text-[11px] leading-relaxed ${testResult.ok ? 'text-success' : 'text-danger'}`}>
-                          {testResult.message}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
 
             <div className="flex items-center justify-between pt-4 border-t border-border-light">
               <button

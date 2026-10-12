@@ -13,6 +13,7 @@ import { TemplateSimPreview } from './TemplateSimPreview';
 import { UnifiedRecentCampaigns } from './UnifiedRecentCampaigns';
 import { EmailCampaignWizard } from './EmailCampaignWizard';
 import { SmsCampaignWizard } from './SmsCampaignWizard';
+import { SiteDeployCampaignWizard } from './SiteDeployCampaignWizard';
 import { validateCsvFile, runCampaign, runSiteDeployCampaign, PipelineLead, PipelineResultRow, CsvValidation, listCustomTemplates, CustomTemplate, listEmailAccounts, createEmailCampaign, probeAllEmailAccounts, runEmailCampaign, cancelCampaign, cancelEmailCampaign, EmailCampaignEvent, getEmailCampaign as fetchEmailCampaign } from '../lib/pipelineClient';
 import { ActiveCampaignRun } from '../App';
 
@@ -591,30 +592,6 @@ export const Campaigns: React.FC<CampaignsProps> = ({
     });
   };
 
-  // Auto scroll horizontally to the current active step in the wizard progress bar
-  React.useEffect(() => {
-    const activeElem = stepRefs.current[activeStep];
-    const trackElem = document.getElementById('wizard-steps-horizontal-track');
-    if (activeElem && trackElem) {
-      const trackRect = trackElem.getBoundingClientRect();
-      const elemRect = activeElem.getBoundingClientRect();
-      const offset = (elemRect.left - trackRect.left) + trackElem.scrollLeft - (trackRect.width / 2) + (elemRect.width / 2);
-      trackElem.scrollTo({ left: offset, behavior: 'smooth' });
-    }
-
-    // Scroll the campaign card block into view precisely on step changes,
-    // ensuring the user keeps the wizard container aligned rather than resetting back to the very top.
-    const wizardCard = document.getElementById('campaigns-generator-wizard-card');
-    if (wizardCard) {
-      wizardCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } else {
-      const container = document.getElementById('main-content-flow');
-      if (container) {
-        container.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-    }
-  }, [activeStep, isLaunching, campaignCreated]);
-
   // Auto-scroll horizontally to the current Site Deploy wizard step indicator
   const sdStepRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
 
@@ -628,9 +605,45 @@ export const Campaigns: React.FC<CampaignsProps> = ({
 
   // (Per-campaign detail modal state now lives inside the unified
   // Recent Campaigns component — no need to hoist it here.)
-  const [activeCampaignType, setActiveCampaignType] = useState<'sms' | 'email' | 'site-deploy'>('site-deploy');
+  const [activeCampaignType, setActiveCampaignType] = useState<'sms' | 'email' | 'site-deploy'>('email');
   const [sdActiveStep, setSdActiveStep] = useState<number>(1);
   const [emailActiveStep, setEmailActiveStep] = useState<number>(1);
+
+  // Auto scroll horizontally to the current active step in the wizard progress bar
+  const prevStepRef = useRef<{ type: string; step: number }>({ type: 'email', step: 1 });
+  React.useEffect(() => {
+    const currentStep = activeCampaignType === 'email'
+      ? emailActiveStep
+      : activeCampaignType === 'sms'
+        ? activeStep
+        : sdActiveStep;
+    const currentRefs = activeCampaignType === 'email'
+      ? emailStepRefs
+      : activeCampaignType === 'sms'
+        ? stepRefs
+        : sdStepRefs;
+    const activeElem = currentRefs.current[currentStep];
+    const trackElem = document.getElementById('wizard-steps-horizontal-track');
+    if (activeElem && trackElem) {
+      const trackRect = trackElem.getBoundingClientRect();
+      const elemRect = activeElem.getBoundingClientRect();
+      const offset = (elemRect.left - trackRect.left) + trackElem.scrollLeft - (trackRect.width / 2) + (elemRect.width / 2);
+      trackElem.scrollTo({ left: Math.max(0, offset), behavior: 'smooth' });
+    }
+
+    // Only scroll the campaign card block into view when advancing/navigating steps within a campaign,
+    // NEVER when switching between campaign types (Email / SMS / Site Deploy).
+    const typeChanged = prevStepRef.current.type !== activeCampaignType;
+    const stepChanged = prevStepRef.current.step !== currentStep;
+    prevStepRef.current = { type: activeCampaignType, step: currentStep };
+
+    if (!typeChanged && stepChanged) {
+      const wizardCard = document.getElementById('campaigns-generator-wizard-card');
+      if (wizardCard) {
+        wizardCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+  }, [activeCampaignType, activeStep, sdActiveStep, emailActiveStep]);
   const [emailCsvFileName, setEmailCsvFileName] = useState<string | null>(null);
   const [emailCsvLeads, setEmailCsvLeads] = useState<PipelineLead[]>([]);
   const [emailCsvError, setEmailCsvError] = useState<string | null>(null);
@@ -1132,39 +1145,6 @@ The Lunao Team`);
   const [sdSiteDeployResults, setSdSiteDeployResults] = useState<PipelineResultRow[]>([]);
   const [sdCampaignId, setSdCampaignId] = useState<string | null>(null);
   const [sdCampaignName, setSdCampaignName] = useState<string>('Site Deploy Campaign');
-
-  // Auto-scroll horizontally to the current Site Deploy wizard step indicator + scroll wizard into view
-  React.useEffect(() => {
-    const activeElem = sdStepRefs.current[sdActiveStep];
-    const trackElem = document.getElementById('wizard-steps-horizontal-track');
-    if (activeElem && trackElem) {
-      const trackRect = trackElem.getBoundingClientRect();
-      const elemRect = activeElem.getBoundingClientRect();
-      const offset = (elemRect.left - trackRect.left) + trackElem.scrollLeft - (trackRect.width / 2) + (elemRect.width / 2);
-      trackElem.scrollTo({ left: offset, behavior: 'smooth' });
-    }
-    const wizardCard = document.getElementById('campaigns-generator-wizard-card');
-    if (wizardCard) {
-      wizardCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } else {
-      const container = document.getElementById('main-content-flow');
-      if (container) container.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  }, [sdActiveStep]);
-
-  // Auto-scroll the email stepper track so the active step is centered in view.
-  // scroll-padding-left:1.5rem on the track ensures step 1 is never clipped.
-  // Manually scrolling is always possible — this only applies when steps change.
-  React.useEffect(() => {
-    if (activeCampaignType !== 'email') return;
-    const activeElem = emailStepRefs.current[emailActiveStep];
-    const trackElem = document.getElementById('wizard-steps-horizontal-track');
-    if (!activeElem || !trackElem) return;
-    const trackRect = trackElem.getBoundingClientRect();
-    const elemRect = activeElem.getBoundingClientRect();
-    const offset = (elemRect.left - trackRect.left) + trackElem.scrollLeft - (trackRect.width / 2) + (elemRect.width / 2);
-    trackElem.scrollTo({ left: Math.max(0, offset), behavior: 'smooth' });
-  }, [emailActiveStep, activeCampaignType]);
 
   // Persist Site Deploy results to localStorage keyed by campaign id
   React.useEffect(() => {
@@ -1893,40 +1873,62 @@ The Lunao Team`);
             : 'max-h-[300px] opacity-100 border-b border-border-main'
         }`}>
           {/* Campaign type tab selector */}
-          <div className="p-5 pb-0 bg-off-white overflow-hidden border-b border-border-light">
-            <div className="flex items-center gap-3 pb-4">
-              <span className="text-xs font-semibold text-ink-secondary">Campaign Type:</span>
-              <div className="flex items-center gap-1 p-1 bg-white border border-border-main rounded-xl">
-                {/* Site Deploy — active/selected */}
-                <button onClick={() => { playSoftBubble(); setActiveCampaignType('site-deploy'); }}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold font-sans transition-all ${
-                    activeCampaignType === 'site-deploy' ? 'bg-accent-soft text-accent shadow-sm border border-accent/20' : 'text-ink-secondary hover:text-ink hover:bg-off-white'
-                  }`}>
-                  <Globe className="w-3.5 h-3.5" /> Site Deploy
-                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
-                    activeCampaignType === 'site-deploy' ? 'bg-accent/15 text-accent' : 'bg-surface text-ink-tertiary'
-                  }`}>1 credit/lead</span>
-                </button>
-                {/* Email Campaign */}
-                <button onClick={() => { playSoftBubble(); setActiveCampaignType('email'); emailStepTrackRef.current?.scrollTo({ left: 0, behavior: 'instant' }); }}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold font-sans transition-all ${
-                    activeCampaignType === 'email' ? 'bg-accent-soft text-accent shadow-sm border border-accent/20' : 'text-ink-secondary hover:text-ink hover:bg-off-white'
-                  }`}>
-                  <Mail className="w-3.5 h-3.5" /> Email
-                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
-                    activeCampaignType === 'email' ? 'bg-accent/15 text-accent' : 'bg-surface text-ink-tertiary'
-                  }`}>2 credits/lead</span>
-                </button>
-                {/* SMS Campaign */}
-                <button onClick={() => { playSoftBubble(); setActiveCampaignType('sms'); }}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold font-sans transition-all ${
-                    activeCampaignType === 'sms' ? 'bg-accent-soft text-accent shadow-sm border border-accent/20' : 'text-ink-secondary hover:text-ink hover:bg-off-white'
-                  }`}>
-                  <MessageSquare className="w-3.5 h-3.5" /> SMS Campaign
-                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
-                    activeCampaignType === 'sms' ? 'bg-accent/15 text-accent' : 'bg-surface text-ink-tertiary'
-                  }`}>3 credits/lead</span>
-                </button>
+          <div className="p-5 pb-0 bg-gradient-to-b from-white to-off-white overflow-hidden border-b border-border-light">
+            <div className="flex flex-wrap items-center justify-between gap-4 pb-4">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-ink-secondary">Campaign Engine:</span>
+                <div className="flex items-center gap-1.5 p-1 bg-surface/80 border border-border-main rounded-2xl shadow-inner backdrop-blur-sm">
+                  {/* 1. Email Campaign (First) */}
+                  <button
+                    type="button"
+                    onClick={() => { playSoftBubble(); setActiveCampaignType('email'); }}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold font-sans transition-all duration-200 cursor-pointer ${
+                      activeCampaignType === 'email'
+                        ? 'bg-white text-accent shadow-sm border border-accent/20 ring-1 ring-accent/10 font-bold'
+                        : 'text-ink-secondary hover:text-ink hover:bg-white/60'
+                    }`}
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    <span>Email Outreach</span>
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                      activeCampaignType === 'email' ? 'bg-accent/15 text-accent' : 'bg-surface text-ink-tertiary'
+                    }`}>2 credits/lead</span>
+                  </button>
+
+                  {/* 2. SMS Campaign (Second) */}
+                  <button
+                    type="button"
+                    onClick={() => { playSoftBubble(); setActiveCampaignType('sms'); }}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold font-sans transition-all duration-200 cursor-pointer ${
+                      activeCampaignType === 'sms'
+                        ? 'bg-white text-accent shadow-sm border border-accent/20 ring-1 ring-accent/10 font-bold'
+                        : 'text-ink-secondary hover:text-ink hover:bg-white/60'
+                    }`}
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>SMS Campaign</span>
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                      activeCampaignType === 'sms' ? 'bg-accent/15 text-accent' : 'bg-surface text-ink-tertiary'
+                    }`}>3 credits/lead</span>
+                  </button>
+
+                  {/* 3. Site Deploy (Third) */}
+                  <button
+                    type="button"
+                    onClick={() => { playSoftBubble(); setActiveCampaignType('site-deploy'); }}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold font-sans transition-all duration-200 cursor-pointer ${
+                      activeCampaignType === 'site-deploy'
+                        ? 'bg-white text-accent shadow-sm border border-accent/20 ring-1 ring-accent/10 font-bold'
+                        : 'text-ink-secondary hover:text-ink hover:bg-white/60'
+                    }`}
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>Site Deploy</span>
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                      activeCampaignType === 'site-deploy' ? 'bg-accent/15 text-accent' : 'bg-surface text-ink-tertiary'
+                    }`}>1 credit/lead</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1936,43 +1938,8 @@ The Lunao Team`);
               truncated; `scroll-smooth` + `snap-x` makes the auto-scroll
               land cleanly on the active step. */}
           <div id="wizard-steps-horizontal-track" ref={emailStepTrackRef} className="pl-6 pr-6 py-5 bg-white flex flex-nowrap items-stretch overflow-x-auto scrollbar-thin gap-3 md:gap-4 snap-x snap-mandatory scroll-smooth [scroll-padding-left:1.5rem]">
-            {activeCampaignType === 'site-deploy' ? (
-              [ { step: 1, name: 'Select Niche' }, { step: 2, name: 'Input Businesses' }, { step: 3, name: 'Choose Template' }, { step: 4, name: 'Deploy Preview' } ].map((item) => (
-                <React.Fragment key={item.step}>
-                  <div ref={el => { sdStepRefs.current[item.step] = el; }} className="flex items-center gap-3 shrink-0 snap-start min-w-[140px]">
-                    <div className="relative">
-                      {sdActiveStep === item.step && (
-                        <span className="absolute inset-0 rounded-full border-2 border-accent/40 animate-[step-ring_2s_ease-in-out_infinite]" />
-                      )}
-                      <div className={`
-                        relative w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm
-                        transition-all duration-300 ease-out
-                        ${sdActiveStep === item.step
-                          ? 'bg-accent text-white shadow-[0_0_0_3px_rgba(99,102,241,0.15)] scale-105'
-                          : sdActiveStep > item.step
-                            ? 'bg-success text-white animate-[step-pop_0.4s_ease-out_forwards]'
-                            : 'bg-surface text-ink-secondary border border-border-main'
-                        }
-                      `}>
-                        {sdActiveStep > item.step ? <Check className="w-4 h-4" /> : item.step}
-                      </div>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className={`text-[11px] uppercase tracking-wider font-semibold transition-colors duration-300 ${sdActiveStep === item.step ? 'text-accent' : 'text-ink-secondary'}`}>Step 0{item.step}</span>
-                      <span className={`text-xs font-medium leading-tight whitespace-nowrap transition-colors duration-300 ${sdActiveStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
-                    </div>
-                  </div>
-                  {item.step < 4 && (
-                    <div className={`
-                      hidden md:block h-[1px] flex-1 min-w-[20px] mx-2 self-center
-                      transition-all duration-500 ease-out origin-left
-                      ${sdActiveStep > item.step ? 'bg-success scale-x-100' : 'bg-border-light'}
-                    `} />
-                  )}
-                </React.Fragment>
-              ))
-            ) : activeCampaignType === 'email' ? (
-              [ { step: 1, name: 'Select Niche' }, { step: 2, name: 'Upload Leads' }, { step: 3, name: 'Choose Template' }, { step: 4, name: 'Email Content' }, { step: 5, name: 'Review & Launch' } ].map((item) => (
+            {activeCampaignType === 'email' ? (
+              [ { step: 1, name: 'Select Niche' }, { step: 2, name: 'Choose Leads' }, { step: 3, name: 'Choose Template' }, { step: 4, name: 'Connected Accounts' }, { step: 5, name: 'Review & Launch' } ].map((item) => (
                 <React.Fragment key={item.step}>
                   <div ref={el => { emailStepRefs.current[item.step] = el; }} className="flex items-center gap-3 shrink-0 snap-start min-w-[140px]">
                     {/* Circle wrapper for breathing ring + transition */}
@@ -2012,10 +1979,10 @@ The Lunao Team`);
                   )}
                 </React.Fragment>
               ))
-            ) : (
-              [ { step: 1, name: 'Select Niche' }, { step: 2, name: 'Input Businesses' }, { step: 3, name: 'Choose Template' }, { step: 4, name: 'SMS Messaging' }, { step: 5, name: 'Launch Outreach' } ].map((item) => (
+            ) : activeCampaignType === 'sms' ? (
+              [ { step: 1, name: 'Select Niche' }, { step: 2, name: 'Choose Leads' }, { step: 3, name: 'Choose Template' }, { step: 4, name: 'Sender Phone' }, { step: 5, name: 'Review & Launch' } ].map((item) => (
                 <React.Fragment key={item.step}>
-                  <div className="flex items-center gap-3 shrink-0 snap-start min-w-[140px]">
+                  <div ref={el => { stepRefs.current[item.step] = el; }} className="flex items-center gap-3 shrink-0 snap-start min-w-[140px]">
                     <div className="relative">
                       {activeStep === item.step && (
                         <span className="absolute inset-0 rounded-full border-2 border-accent/40 animate-[step-ring_2s_ease-in-out_infinite]" />
@@ -2047,374 +2014,48 @@ The Lunao Team`);
                   )}
                 </React.Fragment>
               ))
+            ) : (
+              [ { step: 1, name: 'Select Niche' }, { step: 2, name: 'Choose Leads' }, { step: 3, name: 'Choose Template' }, { step: 4, name: 'Edge Setup' }, { step: 5, name: 'Review & Deploy' } ].map((item) => (
+                <React.Fragment key={item.step}>
+                  <div ref={el => { sdStepRefs.current[item.step] = el; }} className="flex items-center gap-3 shrink-0 snap-start min-w-[140px]">
+                    <div className="relative">
+                      {sdActiveStep === item.step && (
+                        <span className="absolute inset-0 rounded-full border-2 border-accent/40 animate-[step-ring_2s_ease-in-out_infinite]" />
+                      )}
+                      <div className={`
+                        relative w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm
+                        transition-all duration-300 ease-out
+                        ${sdActiveStep === item.step
+                          ? 'bg-accent text-white shadow-[0_0_0_3px_rgba(99,102,241,0.15)] scale-105'
+                          : sdActiveStep > item.step
+                            ? 'bg-success text-white animate-[step-pop_0.4s_ease-out_forwards]'
+                            : 'bg-surface text-ink-secondary border border-border-main'
+                        }
+                      `}>
+                        {sdActiveStep > item.step ? <Check className="w-4 h-4" /> : item.step}
+                      </div>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className={`text-[11px] uppercase tracking-wider font-semibold transition-colors duration-300 ${sdActiveStep === item.step ? 'text-accent' : 'text-ink-secondary'}`}>Step 0{item.step}</span>
+                      <span className={`text-xs font-medium leading-tight whitespace-nowrap transition-colors duration-300 ${sdActiveStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
+                    </div>
+                  </div>
+                  {item.step < 5 && (
+                    <div className={`
+                      hidden md:block h-[1px] flex-1 min-w-[16px] mx-2 self-center
+                      transition-all duration-500 ease-out origin-left
+                      ${sdActiveStep > item.step ? 'bg-success scale-x-100' : 'bg-border-light'}
+                    `} />
+                  )}
+                </React.Fragment>
+              ))
             )}
           </div>
         </div>
 
         {/* STEP WORK AREA */}
-        <div id="wizard-step-contents-wrapper" className="p-6 md:p-8 min-h-[300px] relative">
-          {activeCampaignType === 'site-deploy' ? (
-            <>
-              {sdCampaignCreated ? (
-                <div className="text-center py-8 space-y-6 animate-fade-in">
-                  <CelebrationEffect />
-                  <div className="w-16 h-16 bg-accent-soft text-accent rounded-full flex items-center justify-center mx-auto border border-accent/20">
-                    <Globe className="w-8 h-8" />
-                  </div>
-                  <div className="space-y-2">
-                    <h3 className="font-serif text-2xl text-ink">Sites Deployed!</h3>
-                    <p className="text-sm text-ink-secondary">Your {sdCsvLeads.length} personalized site{sdCsvLeads.length === 1 ? '' : 's'} {sdCsvLeads.length === 1 ? 'is' : 'are'} live on Cloudflare.</p>
-                  </div>
-                  {sdSiteDeployResults.length > 0 && (
-                    <div className="space-y-2 max-h-[300px] overflow-y-auto text-left bg-off-white/50 border border-border-main rounded-xl p-4">
-                      <p className="text-[10px] font-bold text-ink-secondary uppercase tracking-widest mb-3">Deployed Sites</p>
-                      {sdSiteDeployResults.map((r) => (
-                        <div key={r.index} className="flex items-center gap-3 p-3 bg-white border border-border-main rounded-lg">
-                          <div className="w-6 h-6 rounded-full flex items-center justify-center bg-accent-soft text-accent text-xs font-bold shrink-0">{r.index + 1}</div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-ink">{sdCsvLeads[r.index]?.business_name || `Business ${r.index + 1}`}</p>
-                            <p className="text-[10px] text-ink-secondary truncate">{sdCsvLeads[r.index]?.city}</p>
-                          </div>
-                          {r.siteUrl ? (
-                            <a href={r.siteUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-accent font-semibold shrink-0 hover:underline truncate max-w-[160px]">{r.siteUrl.replace('https://', '')}</a>
-                          ) : (
-                            <span className="text-[10px] text-danger font-semibold shrink-0">Failed</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <button onClick={handleResetSdWizard} className="px-5 py-2.5 bg-accent hover:bg-accent-hover text-white text-xs font-semibold rounded-md shadow-sm">Launch Another Campaign</button>
-                </div>
-              ) : sdIsLaunching ? (
-                <div className="text-center py-10 space-y-6 max-w-sm mx-auto animate-fade-in">
-                  <div className="relative w-16 h-16 mx-auto">
-                    <div className="absolute inset-0 rounded-full border-4 border-accent-soft"></div>
-                    <div className="absolute inset-0 rounded-full border-4 border-accent border-t-transparent animate-spin"></div>
-                  </div>
-                  <div className="space-y-2">
-                    <h4 className="font-serif text-xl text-ink font-medium">Deploying Sites</h4>
-                    <p className="text-xs text-ink-secondary animate-pulse">{sdLaunchMessage}</p>
-                  </div>
-                  <div className="w-full bg-border-light rounded-full h-1.5 overflow-hidden">
-                    <div className="bg-accent h-1.5 rounded-full transition-all duration-300" style={{ width: `${sdLaunchProgress}%` }}></div>
-                  </div>
-                  <div className="flex justify-between items-center text-[10px] font-mono font-medium text-ink-tertiary">
-                    <span>CLOUDFLARE DEPLOY</span><span>{sdLaunchProgress}%</span>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {sdActiveStep === 1 && (
-                    <div className="space-y-5 animate-fade-in">
-                      <div className="space-y-1">
-                        <h3 className="font-serif text-2xl text-ink">What industry are you targeting?</h3>
-                        <p className="text-sm text-ink-secondary">Choose the niche for your site deployment campaign.</p>
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                        {allNiches.map((niche) => (
-                          <button key={niche.id} onClick={() => { playSoftTap(); setSelectedNiche(niche.id); setSdActiveStep(2); playGentleChime(2); }}
-                            className={`px-4 py-3 rounded-xl border text-xs font-semibold text-left transition-all ${selectedNiche === niche.id ? 'bg-accent-soft text-accent border-accent/30 shadow-sm' : 'bg-white text-ink border-border-light hover:border-accent/40 hover:bg-accent-soft/30'}`}>
-                            {niche.emoji} {niche.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {sdActiveStep === 2 && (
-                    <div className="space-y-5 animate-fade-in">
-                      <div className="space-y-1">
-                        <h3 className="font-serif text-2xl text-ink">Upload your business list</h3>
-                        <p className="text-sm text-ink-secondary">Upload a CSV with business_name, city, phone_number columns.</p>
-                      </div>
-                      <div className="border-2 border-dashed border-border-light rounded-xl p-8 text-center hover:border-accent/50 transition-colors cursor-pointer"
-                        onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-accent', 'bg-accent-soft/20'); }}
-                        onDragLeave={(e) => { e.currentTarget.classList.remove('border-accent', 'bg-accent-soft/20'); }}
-                        onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-accent', 'bg-accent-soft/20'); const f = e.dataTransfer.files[0]; if (f) handleSdCsvFile(f); }}
-                        onClick={() => { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.csv'; inp.onchange = (ev) => { const f = (ev.target as HTMLInputElement).files?.[0]; if (f) handleSdCsvFile(f); }; inp.click(); }}>
-                        {sdIsCsvParsing ? (
-                          <div className="space-y-3"><Loader2 className="w-10 h-10 text-accent mx-auto animate-spin" /><p className="text-sm text-ink-secondary">Validating your CSV...</p></div>
-                        ) : sdCsvValidation?.ok && sdCsvParsedCount > 0 ? (
-                          <div className="space-y-3"><div className="w-12 h-12 bg-success-soft text-success rounded-full flex items-center justify-center mx-auto border border-success/20"><CheckCircle className="w-6 h-6" /></div><p className="font-semibold text-ink">{sdCsvParsedCount} businesses ready</p><p className="text-xs text-ink-secondary">{sdCsvFileName}</p></div>
-                        ) : (
-                          <div className="space-y-3"><Upload className="w-10 h-10 text-ink-tertiary mx-auto" /><p className="text-sm font-semibold text-ink">Drop your CSV here or click to upload</p><p className="text-xs text-ink-secondary">business_name, city, phone_number columns</p></div>
-                        )}
-                      </div>
-                      {sdCsvError && <p className="text-xs text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2">{sdCsvError}</p>}
-                      {sdCsvValidation && !sdCsvValidation.ok && (
-                        <div className="bg-danger/5 border border-danger/20 rounded-xl p-4 space-y-3">
-                          <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 bg-danger/10 rounded-full flex items-center justify-center shrink-0 mt-0.5">
-                              <X className="w-4 h-4 text-danger" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-bold text-danger uppercase tracking-wide">CSV validation failed</p>
-                              <p className="text-xs text-danger/80 mt-1 leading-relaxed">{sdCsvValidation.message}</p>
-                            </div>
-                          </div>
-                          {sdCsvValidation.missingColumns.length > 0 && (
-                            <div className="bg-white/60 rounded-lg p-3 space-y-1.5">
-                              <p className="text-[10px] font-bold text-ink-secondary uppercase tracking-wide">Missing required columns</p>
-                              <div className="flex flex-wrap gap-1.5">
-                                {sdCsvValidation.missingColumns.map((col) => (
-                                  <span key={col} className="inline-flex items-center px-2 py-0.5 bg-danger/10 text-danger text-[10px] font-semibold rounded border border-danger/15">
-                                    {col}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {sdCsvValidation.detectedColumns.length > 0 && (
-                            <div className="bg-white/60 rounded-lg p-3 space-y-1.5">
-                              <p className="text-[10px] font-bold text-ink-secondary uppercase tracking-wide">Detected columns</p>
-                              <div className="flex flex-wrap gap-1.5">
-                                {sdCsvValidation.detectedColumns.map((col) => (
-                                  <span key={col} className="inline-flex items-center px-2 py-0.5 bg-surface text-ink text-[10px] font-medium rounded border border-border-main">
-                                    {col}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          <p className="text-[10px] text-danger/70 font-medium">Your CSV header must include: <span className="font-semibold">business_name</span>, <span className="font-semibold">city</span>, <span className="font-semibold">phone_number</span></p>
-                        </div>
-                      )}
-                      {sdCsvValidation?.ok && sdCsvParsedCount > 0 && (
-                        <div className="bg-success-soft/50 border border-success/20 rounded-xl p-4">
-                          <p className="text-xs font-semibold text-success mb-2">{sdCsvParsedCount} businesses validated</p>
-                          <div className="space-y-1 max-h-[120px] overflow-y-auto">
-                            {sdCsvLeads.slice(0, 5).map((l) => <p key={l.index} className="text-[11px] text-ink-secondary">{l.business_name} &mdash; {l.city}</p>)}
-                            {sdCsvLeads.length > 5 && <p className="text-[10px] text-ink-tertiary">+{sdCsvLeads.length - 5} more</p>}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {sdActiveStep === 3 && (() => {
-                    const nicheTemplates = templates.filter((t) => t.niche === selectedNiche);
-                    const nicheCustom = customTemplates.filter((t) => t.niche === selectedNiche);
-                    const selectedTpl = [...templates, ...customTemplates].find((t) => t.id === sdSelectedTemplateId);
-                    const templateMeta = selectedTpl ? getTemplateMetaForNiche(selectedTpl.niche, selectedTpl.id) : null;
-                    const templateDesc = selectedTpl ? (() => {
-                      const isClassic = selectedTpl.id === 't1' || selectedTpl.id === 't3' || selectedTpl.id === 't5' || selectedTpl.id === 't7';
-                      const content = getTemplateContent(selectedTpl.id, 'Preview', selectedNiche);
-                      return content.heroSubTitle;
-                    })() : null;
-                    const templatePreviewUrl = (id: string) => {
-                      if (id === 't2') return '/barber-template-02.html';
-                      if (id === 't3') return '/salon-template-01.html';
-                      if (id === 't4') return '/dentist-template-01.html';
-                      if (id === 't5') return '/roofing-template-01.html';
-                      if (id === 't6') return '/hvac-template-01.html';
-                      if (id === 't7') return '/gym-template-01.html';
-                      if (id === 't8') return '/realestate-template-01.html';
-                      return '/barber-template.html';
-                    };
-                    return (
-                      <div className="space-y-5 animate-fade-in">
-                        <div className="space-y-1">
-                          <h3 className="font-serif text-2xl text-ink">Choose your template</h3>
-                          <p className="text-sm text-ink-secondary">Pick a template that matches the {selectedNiche} industry.</p>
-                        </div>
-
-                        {/* Selected template detail panel */}
-                        {selectedTpl && (
-                          <div className="flex items-center gap-4 p-4 bg-off-white border border-border-main rounded-xl">
-                            <div className="w-20 h-14 rounded-lg overflow-hidden shrink-0 border border-border-light bg-white">
-                              <img src={selectedTpl.preview} alt={selectedTpl.name} className="w-full h-full object-cover" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <p className="text-sm font-bold text-ink">{selectedTpl.name}</p>
-                                {templateMeta?.logoEmoji && <span className="text-base">{templateMeta.logoEmoji}</span>}
-                              </div>
-                              {templateDesc && <p className="text-xs text-ink-secondary line-clamp-1">{templateDesc}</p>}
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <button
-                                onClick={() => { setSelectedTemplateForPreview(selectedTpl); }}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-border-main text-xs font-semibold text-ink rounded-lg hover:bg-accent-soft hover:border-accent/40 transition-all shadow-2xs cursor-pointer"
-                              >
-                                <Eye className="w-3.5 h-3.5" /> Preview
-                              </button>
-                              <a
-                                href={templatePreviewUrl(selectedTpl.id)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-border-main text-xs font-semibold text-accent rounded-lg hover:bg-accent-soft hover:border-accent/40 transition-all shadow-2xs"
-                              >
-                                <ExternalLink className="w-3.5 h-3.5" /> Full Page
-                              </a>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Template grid — rich dual-device previews, same as Templates page */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {nicheTemplates.map((tpl) => (
-                            <TemplateSimPreview
-                              key={tpl.id}
-                              id={tpl.id}
-                              name={tpl.name}
-                              niche={tpl.niche}
-                              selected={sdSelectedTemplateId === tpl.id}
-                              onClick={() => { playSoftTap(); setSdSelectedTemplateId(tpl.id); }}
-                              onPreview={() => { setSelectedTemplateForPreview(tpl); }}
-                              showActions
-                            />
-                          ))}
-                          {nicheCustom.map((tpl) => (
-                            <TemplateSimPreview
-                              key={tpl.id}
-                              id={tpl.id}
-                              name={tpl.name}
-                              niche={tpl.niche}
-                              subLabel="Custom Template"
-                              selected={sdSelectedTemplateId === tpl.id}
-                              onClick={() => { playSoftTap(); setSdSelectedTemplateId(tpl.id); }}
-                              onPreview={() => { setSelectedTemplateForPreview(tpl as any); }}
-                              showActions
-                            />
-                          ))}
-                        </div>
-
-                        {nicheTemplates.length === 0 && nicheCustom.length === 0 && (
-                          <div className="text-center py-12 text-ink-secondary">
-                            <Layout className="w-10 h-10 mx-auto mb-3 opacity-40" />
-                            <p className="text-sm">No templates found for this niche.</p>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-
-                  {sdActiveStep === 4 && (
-                    <div className="space-y-5 animate-fade-in">
-                      <div className="space-y-1">
-                        <h3 className="font-serif text-2xl text-ink">Ready to deploy!</h3>
-                        <p className="text-sm text-ink-secondary">Review your campaign summary before launching.</p>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="bg-off-white border border-border-main rounded-xl p-4 space-y-1">
-                          <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Industry</p>
-                          <p className="text-sm font-semibold text-ink">{selectedNiche}</p>
-                        </div>
-                        <div className="bg-off-white border border-border-main rounded-xl p-4 space-y-1">
-                          <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Businesses</p>
-                          <p className="text-sm font-semibold text-ink">{sdCsvParsedCount}</p>
-                        </div>
-                        <div className="bg-off-white border border-border-main rounded-xl p-4 space-y-1">
-                          <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold">Cost</p>
-                          <p className="text-sm font-semibold text-accent">{sdCsvParsedCount} credits</p>
-                          <p className="text-[10px] text-ink-secondary">1 credit per business site</p>
-                        </div>
-                      </div>
-                      <div className="bg-off-white border border-border-main rounded-xl p-4">
-                        <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold mb-2">Template</p>
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-9 bg-gradient-to-br from-accent/20 to-accent/10 rounded flex items-center justify-center shrink-0">
-                            <Globe className="w-5 h-5 text-accent" />
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold text-ink">{(() => { const tpl = [...templates, ...customTemplates.map(t => ({ ...t, preview: '' }))].find(t => t.id === sdSelectedTemplateId); return tpl?.name || 'Template'; })()}</p>
-                            <p className="text-[10px] text-ink-secondary capitalize">{selectedNiche}</p>
-                          </div>
-                        </div>
-                      </div>
-                      {sdCsvLeads.length > 0 && (
-                        <div className="bg-off-white border border-border-main rounded-xl p-4">
-                          <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-semibold mb-2">Sample Businesses</p>
-                          <div className="space-y-1">
-                            {sdCsvLeads.slice(0, 3).map((l) => <p key={l.index} className="text-xs text-ink-secondary">{l.business_name} &mdash; {l.city}</p>)}
-                            {sdCsvLeads.length > 3 && <p className="text-[10px] text-ink-tertiary">+{sdCsvLeads.length - 3} more</p>}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="mt-8 pt-6 border-t border-border-light flex flex-wrap items-center justify-between gap-3">
-                    <button disabled={sdActiveStep === 1} onClick={() => { playGentleChime(sdActiveStep - 1); setSdActiveStep(prev => prev - 1); }}
-                      className={`text-xs font-semibold px-4 py-2 border border-border-main rounded shadow-xs bg-white text-ink leading-none ${sdActiveStep === 1 ? 'opacity-0 pointer-events-none' : 'hover:bg-off-white'}`}>Back</button>
-                    {sdActiveStep === 2 && (
-                      <button
-                        onClick={() => {
-                          if (!sdCsvValidation?.ok || sdCsvParsedCount === 0) { playElegantError(); return; }
-                          playGentleChime(3); setSdActiveStep(3);
-                        }}
-                        className={`text-xs font-semibold px-5 py-2.5 rounded shadow-sm flex items-center gap-1.5 cursor-pointer transition-all ${sdCsvValidation?.ok && sdCsvParsedCount > 0 ? 'bg-accent hover:bg-accent-hover text-white' : 'bg-surface text-ink-tertiary cursor-not-allowed'}`}
-                      >
-                        <span>Next Step</span><ChevronRight className="w-4 h-4" />
-                      </button>
-                    )}
-                    {sdActiveStep === 3 && (
-                      <button
-                        onClick={() => { playGentleChime(4); setSdActiveStep(4); }}
-                        className={`text-xs font-semibold px-5 py-2.5 rounded shadow-sm flex items-center gap-1.5 cursor-pointer transition-all ${sdSelectedTemplateId ? 'bg-accent hover:bg-accent-hover text-white' : 'bg-surface text-ink-tertiary cursor-not-allowed'}`}
-                      >
-                        <span>Next Step</span><ChevronRight className="w-4 h-4" />
-                      </button>
-                    )}
-                    {sdActiveStep === 4 && (
-                      <button onClick={runSiteDeployCsvPipeline}
-                        className="px-6 py-2.5 bg-accent hover:bg-accent-hover active:scale-95 text-white text-xs font-bold rounded-lg tracking-wider uppercase transition-all duration-200 cursor-pointer flex items-center gap-2 shadow-sm">
-                        <Globe className="w-3.5 h-3.5 text-white" /> Deploy Sites Now
-                      </button>
-                    )}
-                  </div>
-                  {/* Inline success banner — fires the moment the server accepts the run. */}
-                  {sdLaunchSuccess && !sdLaunchError && (
-                    <div className="mt-4 p-4 bg-success-soft border border-success/30 rounded-xl flex items-start gap-3 animate-fade-in">
-                      <CheckCircle2 className="w-5 h-5 text-success shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <p className="text-sm font-bold text-success">Site deploy launched successfully!</p>
-                        <p className="text-xs text-ink-secondary mt-0.5">{sdLaunchSuccess}</p>
-                      </div>
-                      <button type="button" aria-label="Dismiss" onClick={() => setSdLaunchSuccess(null)} className="text-ink-tertiary hover:text-ink transition-colors cursor-pointer">
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
-                  {sdLaunchError && (
-                    <div className="mt-4 p-4 bg-danger/5 border border-danger/30 rounded-xl flex items-start gap-3 animate-fade-in">
-                      <AlertCircle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <p className="text-sm font-bold text-danger">Site deploy failed to launch</p>
-                        <p className="text-xs text-ink-secondary mt-0.5">{sdLaunchError}</p>
-                      </div>
-                      <button type="button" aria-label="Dismiss" onClick={() => setSdLaunchError(null)} className="text-ink-tertiary hover:text-ink transition-colors cursor-pointer">
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
-                  {/* Active Campaigns progress card — sits below the wizard buttons
-                      so the user can stop a run mid-flight without leaving the wizard. */}
-                  <ActiveCampaignsCard
-                    runs={activeCampaignRuns}
-                    onStop={async (id, kind) => {
-                      try {
-                        updateActiveRun?.(id, { status: 'cancelling' });
-                        if (kind === 'email') {
-                          await cancelEmailCampaign(id);
-                        } else {
-                          await cancelCampaign(id);
-                        }
-                        playCancelTone();
-                      } catch (e: any) {
-                        // Couldn't reach the cancel endpoint — flip back so the
-                        // user can retry. The stream will keep ticking.
-                        updateActiveRun?.(id, { status: 'running' });
-                        playElegantError();
-                        console.error('[campaigns] cancel failed:', e);
-                      }
-                    }}
-                  />
-                </>
-              )}
-            </>
-          ) : activeCampaignType === 'email' ? (
+        <div id="wizard-step-contents-wrapper" className="min-h-[300px] relative">
+          {activeCampaignType === 'email' ? (
             <EmailCampaignWizard
               templates={templates}
               userPlan={userPlan}
@@ -2440,11 +2081,9 @@ The Lunao Team`);
               ownerKey={localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan'}
               onCreditsChange={(credits) => setUserCredits(credits)}
               onLaunch={() => {
-                // Refresh campaigns list on launch
                 setUserCredits(userCredits);
               }}
               onCampaignCreated={(campaign) => {
-                // Add to campaigns list
                 const newCampaign: Campaign = {
                   id: campaign.id,
                   name: campaign.name,
@@ -2463,19 +2102,29 @@ The Lunao Team`);
               onViewDetails={(campaignId) => {
                 setScrollTarget?.(campaignId);
               }}
-              onStepChange={(step) => {
-                // Track SMS wizard step (for future analytics)
-              }}
+              onStepChange={(step) => setActiveStep(step)}
             />
-          ) : (
-            <div className="text-center py-16 space-y-4">
-              <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto border border-amber-200">
-                <MessageSquare className="w-8 h-8" />
-              </div>
-              <h3 className="font-serif text-2xl text-ink">SMS Campaigns Coming Soon</h3>
-              <p className="text-sm text-ink-secondary max-w-sm mx-auto">Our SMS outreach system is being upgraded with new automation features. Stay tuned!</p>
-            </div>
-          )}
+          ) : activeCampaignType === 'site-deploy' ? (
+            <SiteDeployCampaignWizard
+              templates={templates}
+              customTemplates={customTemplates}
+              userPlan={userPlan}
+              userCredits={userCredits}
+              onCreditsChange={(credits) => setUserCredits(credits)}
+              onLaunch={() => {}}
+              onCampaignCreated={(newCampaign) => {
+                setCampaigns(prev => [newCampaign, ...prev]);
+              }}
+              onViewDetails={(campaignId) => {
+                setScrollTarget?.(campaignId);
+              }}
+              onStepChange={(step) => setSdActiveStep(step)}
+              activeCampaignRuns={activeCampaignRuns}
+              upsertActiveRun={upsertActiveRun}
+              updateActiveRun={updateActiveRun}
+              removeActiveRun={removeActiveRun}
+            />
+          ) : null}
         </div>
       </section>
 

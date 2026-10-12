@@ -7,15 +7,15 @@ import { Business, SidebarTab } from '../types';
 import { useOwnerSmsPolling, OwnerSmsRow } from '../lib/useOwnerSmsPolling';
 
 interface MessagesProps {
-  businesses: Business[];
-  setBusinesses: React.Dispatch<React.SetStateAction<Business[]>>;
-  setActiveTab: (tab: SidebarTab) => void;
+  businesses?: Business[];
+  setBusinesses?: React.Dispatch<React.SetStateAction<Business[]>>;
+  setActiveTab?: (tab: SidebarTab) => void;
 }
 
 const TERMINAL = new Set(['delivered', 'failed', 'simulated']);
 
 export const Messages: React.FC<MessagesProps> = ({
-  businesses,
+  businesses = [],
   setBusinesses: _setBusinesses, // kept for prop compatibility but unused
   setActiveTab: _setActiveTab,
 }) => {
