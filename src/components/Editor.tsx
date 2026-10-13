@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { Component, useState, useEffect, useRef, useCallback } from 'react';
 import {
   Code2, ArrowLeft, Save, UploadCloud, Image as ImageIcon,
   Monitor, Smartphone, Wand2, Loader2, ExternalLink, X,
@@ -81,6 +81,64 @@ const sfx = {
   error: playElegantError,
   close: playCancelTone,
 };
+
+interface StudioErrorBoundaryProps {
+  onClose: () => void;
+  children: React.ReactNode;
+}
+interface StudioErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class StudioErrorBoundary extends (Component as unknown as {
+  new (props: StudioErrorBoundaryProps): {
+    props: StudioErrorBoundaryProps;
+    state: StudioErrorBoundaryState;
+    setState: (s: Partial<StudioErrorBoundaryState>) => void;
+  };
+}) {
+  constructor(props: StudioErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error): StudioErrorBoundaryState {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, errorInfo: any) {
+    console.error('[AI Web Studio Error]', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-full min-h-[450px] bg-white rounded-2xl border border-slate-200 p-8 flex flex-col items-center justify-center text-center shadow-sm">
+          <div className="w-12 h-12 rounded-xl bg-red-50 text-red-600 flex items-center justify-center mb-4 border border-red-200">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-900 mb-2 font-sans">AI Web Studio Encountered an Issue</h3>
+          <p className="text-xs text-slate-500 max-w-md mb-6 leading-relaxed">
+            {this.state.error?.message || 'A temporary rendering issue occurred. You can return to the editor or reload the studio session.'}
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => this.setState({ hasError: false, error: null })}
+              className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-all shadow-sm cursor-pointer"
+            >
+              Retry Studio
+            </button>
+            <button
+              onClick={this.props.onClose}
+              className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200 transition-all border border-slate-200 cursor-pointer"
+            >
+              Back to Editor
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export const Editor: React.FC<EditorProps> = ({ active }) => {
   const [view, setView] = useState<'list' | 'edit' | 'lab'>('list');
@@ -396,15 +454,17 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
 
   if (view === 'lab') {
     return (
-      <div key="editor-lab" className="w-full min-h-[calc(100vh-100px)] flex flex-col animate-editor-rise -mt-2 -mx-4 sm:-mx-6 lg:-mx-8">
+      <div key="editor-lab" className="w-full min-h-[750px] flex-1 flex flex-col animate-editor-rise -mt-2 -mx-4 sm:-mx-6 lg:-mx-8">
         {toast && <ToastBanner toast={toast} onClose={() => setToast(null)} />}
-        <TemplateLabPage
-          aiEnabled={aiEnabled}
-          embedded={true}
-          onClose={() => { sfx.close(); setView('list'); }}
-          onBrowseTemplates={() => { sfx.open(); setBrowseOpen(true); }}
-          flashToast={flashToast}
-        />
+        <StudioErrorBoundary onClose={() => { sfx.close(); setView('list'); }}>
+          <TemplateLabPage
+            aiEnabled={aiEnabled}
+            embedded={true}
+            onClose={() => { sfx.close(); setView('list'); }}
+            onBrowseTemplates={() => { sfx.open(); setBrowseOpen(true); }}
+            flashToast={flashToast}
+          />
+        </StudioErrorBoundary>
         <BrowseTemplatesSheet
           open={browseOpen}
           onClose={() => { sfx.close(); setBrowseOpen(false); }}

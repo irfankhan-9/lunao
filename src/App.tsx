@@ -531,7 +531,7 @@ function DashboardApp() {
           <div className={activeTab === 'editor' ? 'block animate-fade-in' : 'hidden'}>
             <Editor active={activeTab === 'editor'} />
           </div>
-          <div className={activeTab === 'messaging' ? 'block animate-fade-in' : 'hidden'}>
+          <div className={activeTab === 'messaging' || (activeTab as any) === 'messages' ? 'block animate-fade-in' : 'hidden'}>
             <MessagingLayout userPlan={userPlan} />
           </div>
           <div className={activeTab === 'settings' ? 'block animate-fade-in' : 'hidden'}>

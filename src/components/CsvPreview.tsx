@@ -93,8 +93,7 @@ export const CsvPreview: React.FC<CsvPreviewProps> = ({
               </div>
               <div className="flex items-center gap-3 mt-1">
                 <span className="inline-flex items-center gap-1 text-[11px] text-ink-secondary">
-                  <Sparkles className="w-3 h-3 text-accent" />
-                  <span className="font-bold text-accent">{totalCount.toLocaleString()}</span> leads parsed
+                  <span className="font-bold text-ink">{totalCount.toLocaleString()}</span> leads parsed
                 </span>
                 {hasMore && (
                   <span className="text-[10px] text-ink-tertiary">

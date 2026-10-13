@@ -20,6 +20,7 @@ export const Messages: React.FC<MessagesProps> = ({
   setActiveTab: _setActiveTab,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'delivered' | 'queued' | 'failed'>('all');
   const [selectedBiz, setSelectedBiz] = useState<Business | null>(null);
   const [newMessageText, setNewMessageText] = useState('');
   const [sending, setSending] = useState(false);
@@ -72,15 +73,25 @@ export const Messages: React.FC<MessagesProps> = ({
   }, [threads, businesses]);
 
   const filteredThreadCards = useMemo(() => {
+    let list = threadCards;
     const term = searchQuery.toLowerCase().trim();
-    if (!term) return threadCards;
-    return threadCards.filter(t =>
-      t.name.toLowerCase().includes(term) ||
-      t.phone.includes(term) ||
-      t.niche.toLowerCase().includes(term) ||
-      (t.biz?.owner || '').toLowerCase().includes(term),
-    );
-  }, [threadCards, searchQuery]);
+    if (term) {
+      list = list.filter(t =>
+        t.name.toLowerCase().includes(term) ||
+        t.phone.includes(term) ||
+        t.niche.toLowerCase().includes(term) ||
+        (t.biz?.owner || '').toLowerCase().includes(term),
+      );
+    }
+    if (statusFilter === 'delivered') {
+      list = list.filter(t => t.last?.status === 'delivered');
+    } else if (statusFilter === 'queued') {
+      list = list.filter(t => !TERMINAL.has(t.last?.status || ''));
+    } else if (statusFilter === 'failed') {
+      list = list.filter(t => t.last?.status === 'failed');
+    }
+    return list;
+  }, [threadCards, searchQuery, statusFilter]);
 
   // Auto-select first thread on desktop.
   useEffect(() => {
@@ -232,6 +243,23 @@ export const Messages: React.FC<MessagesProps> = ({
             <div className="text-[11px] text-ink-secondary font-medium shrink-0">
               <span className="font-bold text-ink">{filteredThreadCards.length}</span> thread{filteredThreadCards.length === 1 ? '' : 's'}
             </div>
+          </div>
+
+          {/* Status Filter Tabs */}
+          <div className="flex items-center gap-1.5 bg-white p-2 border border-border-main rounded-lg shadow-2xs">
+            {(['all', 'delivered', 'queued', 'failed'] as const).map((st) => (
+              <button
+                key={st}
+                onClick={() => setStatusFilter(st)}
+                className={`px-3.5 py-1.5 rounded-md text-xs font-semibold capitalize transition-all cursor-pointer ${
+                  statusFilter === st
+                    ? 'bg-accent text-white shadow-xs'
+                    : 'text-ink-secondary hover:text-ink hover:bg-off-white'
+                }`}
+              >
+                {st}
+              </button>
+            ))}
           </div>
 
           <div className="bg-white border border-border-main rounded-xl overflow-hidden shadow-sm">
@@ -406,6 +434,17 @@ export const Messages: React.FC<MessagesProps> = ({
                     : <Send className="w-4 h-4 ml-0.5" />}
                 </button>
               </form>
+              {newMessageText.length > 160 && (
+                <div className="mt-2.5 text-[11px] text-amber-800 bg-amber-500/10 border border-amber-500/20 px-3 py-2 rounded-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-medium">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>
+                      <strong>{newMessageText.length <= 306 ? '2-Segment SMS' : newMessageText.length <= 459 ? '3-Segment SMS' : newMessageText.length <= 612 ? '4-Segment SMS' : 'Multi-Segment SMS'}</strong> ({newMessageText.length} chars / ~{newMessageText.length <= 306 ? '306' : newMessageText.length <= 459 ? '459' : newMessageText.length <= 612 ? '612' : 'max'} limit)
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-amber-800/80 shrink-0">Telnyx billing: {newMessageText.length <= 306 ? '2 msgs' : newMessageText.length <= 459 ? '3 msgs' : newMessageText.length <= 612 ? '4 msgs' : 'multiple msgs'}</span>
+                </div>
+              )}
               <div className="text-[10px] text-ink-tertiary text-center mt-3 flex items-center justify-center gap-1.5 font-medium">
                 <Lock className="w-3 h-3" />
                 <span>Sends cost 3 credits · Delivery confirmed by Telnyx webhook</span>

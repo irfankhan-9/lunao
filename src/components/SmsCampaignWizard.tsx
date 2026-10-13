@@ -29,6 +29,7 @@ import { Template } from '../types';
 import { TemplateSimPreview } from './TemplateSimPreview';
 import { CsvPreview } from './CsvPreview';
 import { TemplatePreviewModal } from './TemplatePreviewModal';
+import { CampaignTemplateStep } from './CampaignTemplateStep';
 import { SmsAccountStep } from './SmsAccountStep';
 import { SmsLeadFinder } from './SmsLeadFinder';
 import { CanadaOnlyErrorCard } from './CanadaOnlyErrorCard';
@@ -794,7 +795,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                 </p>
               </div>
               <div className="px-4 py-2 rounded-xl bg-surface border border-border-main text-right shadow-xs">
-                <p className="text-[10px] uppercase font-bold text-ink-tertiary">SMS Dispatched</p>
+                <p className="text-[10px] uppercase font-bold text-ink-tertiary">SMS Sent</p>
                 <p className="text-lg font-bold font-mono text-accent">
                   {dispatchedSmsList.length} / {csvLeads.length}
                 </p>
@@ -828,14 +829,14 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
             <div>
               <p className="text-[10px] uppercase font-bold text-ink-tertiary">Active Task</p>
               <p className="text-sm font-bold text-emerald-600">
-                Rebranding & Dispatching Proposal
+                Personalizing & Delivering Proposal
               </p>
               <p className="text-xs text-ink-secondary">Generating live URL & personalized hook</p>
             </div>
             <div>
               <p className="text-[10px] uppercase font-bold text-ink-tertiary">Outreach Status</p>
               <p className="text-sm font-bold font-mono text-ink">
-                {dispatchedSmsList.length} Proposals Dispatched
+                {dispatchedSmsList.length} Messages Delivered
               </p>
               <p className="text-xs text-emerald-600">Carrier Route 10DLC active</p>
             </div>
@@ -847,9 +848,9 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs text-ink-secondary">
                 <span className="font-mono flex items-center gap-1.5 font-bold">
-                  <Terminal className="w-3.5 h-3.5 text-accent" /> Live AI & SMS Console
+                  <Terminal className="w-3.5 h-3.5 text-accent" /> Live Delivery Console
                 </span>
-                <span className="text-[10px] text-ink-tertiary font-mono">Real-Time Autonomous Stream</span>
+                <span className="text-[10px] text-ink-tertiary font-mono">Real-Time Outreach Stream</span>
               </div>
               <div
                 ref={terminalBoxRef}
@@ -871,13 +872,13 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs text-ink-secondary">
                 <span className="font-mono flex items-center gap-1.5 font-bold">
-                  <Globe className="w-3.5 h-3.5 text-accent" /> Live Sites & Dispatched Proposals ({completedSitesList.length})
+                  <Globe className="w-3.5 h-3.5 text-accent" /> Live Sites & Proposals Delivered ({completedSitesList.length})
                 </span>
               </div>
               <div className="h-64 rounded-2xl bg-surface border border-border-main p-2 overflow-y-auto space-y-2 scrollbar-thin shadow-inner">
                 {completedSitesList.length === 0 ? (
                   <div className="h-full flex items-center justify-center text-ink-tertiary text-xs italic">
-                    Waiting for first landing page & SMS dispatch...
+                    Waiting for first landing page & message delivery...
                   </div>
                 ) : (
                   completedSitesList.map((s, idx) => (
@@ -926,7 +927,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
 
               <div className="space-y-2">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-success-soft border border-success/20 text-xs font-bold text-success uppercase tracking-wider">
-                  <Sparkles className="w-3.5 h-3.5" /> SMS Outreach Dispatched
+                  Active SMS Campaign Stream
                 </span>
                 <h2 className="text-3xl md:text-4xl font-serif font-bold text-ink">
                   Campaign Successfully Live!
@@ -1187,9 +1188,6 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                           <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-accent to-accent-hover flex items-center justify-center shadow-xl shadow-accent/30 group-hover:scale-110 transition-transform duration-300">
                             <FileSpreadsheet className="w-10 h-10 text-white" />
                           </div>
-                          <div className="absolute -top-2 -right-2 w-6 h-6 bg-white rounded-full shadow-lg flex items-center justify-center animate-bounce-subtle">
-                            <Sparkles className="w-3 h-3 text-accent" />
-                          </div>
                         </div>
 
                         <p className="text-lg font-bold text-ink mb-2">Drop your CSV file here</p>
@@ -1303,134 +1301,16 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
         )}
 
         {/* ===================================================================
-            STEP 3: CHOOSE TEMPLATE (100% Copy-Paste Gold Standard from Email)
+            STEP 3: CHOOSE TEMPLATE
         =================================================================== */}
         {activeStep === 3 && (
-          <div className="space-y-6 animate-fade-in">
-            {/* Hero Header Card */}
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-accent/5 via-white to-accent/10 border border-accent/20 shadow-lg shadow-accent/10">
-              <div className="absolute -top-16 -right-16 w-56 h-56 bg-accent/10 rounded-full blur-3xl" />
-              <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-accent/8 rounded-full blur-3xl" />
-
-              <div className="relative p-6 md:p-8">
-                <div className="flex items-start gap-4">
-                  <div className="relative">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-accent to-accent-hover flex items-center justify-center shadow-xl shadow-accent/30">
-                      <Layout className="w-7 h-7 text-white" />
-                    </div>
-                    <div className="absolute inset-0 rounded-2xl border-2 border-accent/40 animate-ping" />
-                  </div>
-
-                  <div className="flex-1">
-                    <h3 className="font-serif text-2xl md:text-3xl text-ink leading-tight">Pick your template</h3>
-                    <p className="text-sm md:text-base text-ink-secondary mt-2 leading-relaxed">
-                      This template generates the personalized site link (`{`{{site_url}}`}`) automatically included in your SMS.
-                    </p>
-                    {allTemplates.length > 0 && (
-                      <div className="flex items-center gap-4 mt-4 flex-wrap">
-                        <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl shadow-sm border border-border-light">
-                          <Check className="w-4 h-4 text-success" />
-                          <span className="text-sm font-semibold text-ink">{allTemplates.length}</span>
-                          <span className="text-xs text-ink-secondary">templates available</span>
-                        </div>
-                        <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl shadow-sm border border-border-light">
-                          <span className="text-sm font-semibold text-accent">{selectedNiche}</span>
-                          <span className="text-xs text-ink-secondary">niche selected</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Template Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-8">
-              {allTemplates.map((tpl, index) => {
-                const isSelected = selectedTemplateId === tpl.id;
-                return (
-                  <button
-                    key={tpl.id}
-                    type="button"
-                    onClick={() => {
-                      if (isSelected) {
-                        openPreviewModal(tpl.id, index);
-                      } else {
-                        playElegantBell();
-                        setSelectedTemplateId(tpl.id);
-                      }
-                    }}
-                    className={`group relative bg-white rounded-2xl overflow-hidden border-2 transition-all duration-300 text-left cursor-pointer ${
-                      isSelected
-                        ? 'border-accent shadow-2xl shadow-accent/20 ring-4 ring-accent/10 scale-[1.02]'
-                        : 'border-border-light hover:border-accent/40 hover:shadow-xl hover:shadow-accent/10 hover:-translate-y-2'
-                    }`}
-                  >
-                    {isSelected && (
-                      <div className="absolute inset-0 bg-gradient-to-br from-accent/10 via-transparent to-accent/5 pointer-events-none animate-pulse" />
-                    )}
-
-                    <div
-                      className="relative aspect-[16/11] bg-gradient-to-br from-surface via-off-white to-surface overflow-hidden cursor-pointer"
-                      onClick={() => openPreviewModal(tpl.id, index)}
-                    >
-                      <TemplateSimPreview
-                        id={tpl.id}
-                        name={tpl.name}
-                        niche={tpl.niche}
-                        badge={tpl.tag || ''}
-                        isMostUsed={tpl.isMostUsed}
-                        selected={isSelected}
-                      />
-
-                      <div className="absolute inset-0 bg-ink/0 group-hover:bg-ink/40 transition-all duration-300 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100">
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          onClick={(e) => { e.stopPropagation(); openPreviewModal(tpl.id, index); }}
-                          onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); openPreviewModal(tpl.id, index); } }}
-                          className="flex items-center gap-2 px-5 py-3 bg-white text-ink font-bold rounded-xl shadow-xl hover:bg-accent hover:text-white transition-all transform hover:scale-105 cursor-pointer"
-                        >
-                          <Eye className="w-5 h-5" />
-                          Preview
-                        </div>
-                      </div>
-
-                      <div className={`absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${
-                        isSelected
-                          ? 'bg-accent text-white scale-100 ring-4 ring-white/60'
-                          : 'bg-white/90 backdrop-blur-sm text-transparent group-hover:text-ink-secondary scale-90 group-hover:scale-100'
-                      }`}>
-                        <Check className="w-5 h-5" strokeWidth={3} />
-                      </div>
-
-                      <div className="absolute top-4 left-4 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-white/95 backdrop-blur-sm text-ink shadow-lg border border-border-light">
-                        {tpl.niche}
-                      </div>
-
-                      {tpl.isMostUsed && (
-                        <div className="absolute bottom-4 left-4 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-400 text-white text-[10px] font-bold uppercase tracking-wider rounded-full shadow-lg flex items-center gap-1.5">
-                          <span className="text-sm">★</span>
-                          Most Popular
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="p-5 border-t border-border-light space-y-2">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-bold text-base text-ink group-hover:text-accent transition-colors truncate">
-                          {tpl.name}
-                        </h4>
-                      </div>
-                      <p className="text-xs text-ink-secondary line-clamp-2 leading-relaxed">
-                        {tpl.description || `Optimized high-converting design for ${tpl.niche} conversions.`}
-                      </p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <CampaignTemplateStep
+            allTemplates={allTemplates}
+            selectedTemplateId={selectedTemplateId}
+            onSelectTemplate={(tplId) => setSelectedTemplateId(tplId)}
+            selectedNiche={selectedNiche}
+            campaignType="sms"
+          />
         )}
 
         {/* ===================================================================
@@ -1651,7 +1531,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                     <div className="p-4 rounded-xl bg-amber-50/50 border border-amber-200 space-y-3 animate-fade-in">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                          <Sliders className="w-3.5 h-3.5 text-amber-600" />
                           Shorter Template for 2-Segment Messages Alone
                         </span>
                         <span className="text-[11px] font-mono text-emerald-700 font-bold bg-white px-2 py-0.5 rounded border border-emerald-200">
@@ -2482,7 +2362,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                   </span>
                   <span>•</span>
                   <span className="flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5 text-accent" />
+                    <MessageSquare className="w-3.5 h-3.5 text-accent" />
                     <span>Automated prospect responses</span>
                   </span>
                 </div>

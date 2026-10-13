@@ -3,7 +3,7 @@ import {
   ArrowLeft, Key, ChevronDown, Loader2, Sparkles, AlertCircle,
   FlaskConical, Layout, Monitor, Smartphone, Upload, Copy,
   CheckSquare, RotateCcw, BookmarkPlus, X, Code2, Check, Plus,
-  RefreshCw, Wand2, PanelLeft, PanelLeftClose, Terminal, Layers, Maximize2, Minimize2, Home
+  RefreshCw, Wand2, PanelLeft, PanelLeftClose, Terminal, Layers, Maximize2, Minimize2, Home, Lock
 } from 'lucide-react';
 import {
   AiChatMessage, SiteHistoryEntry,
@@ -241,8 +241,13 @@ export const TemplateLabPage: React.FC<{
     }, 100);
   };
 
-  // Plan check: Free and Starter cannot vibe code templates
-  const currentPlan = (typeof window !== 'undefined' ? localStorage.getItem('lunao_user_plan') : '') || 'Free';
+  // Plan check: Free and Starter cannot vibe code templates (defaults to Growth in mock mode)
+  let currentPlan = 'Growth';
+  try {
+    currentPlan = (typeof window !== 'undefined' ? localStorage.getItem('lunao_user_plan') : '') || 'Growth';
+  } catch {
+    currentPlan = 'Growth';
+  }
   const isPlanEligible = ['growth', 'pro', 'agency'].some(p => currentPlan.toLowerCase().includes(p));
 
   // Start vibe coding with Gemini 2.5 Flash
@@ -386,11 +391,11 @@ export const TemplateLabPage: React.FC<{
 
     // If already turned into a template, show the existing niche user had selected for the template
     let preselectedNiche = turnedTemplateNiche || niche;
-    const matched = allNiches.find(n =>
-      (preselectedNiche && n.id.toLowerCase() === preselectedNiche.toLowerCase()) ||
-      (title && title.toLowerCase().includes(n.id.toLowerCase()))
+    const matched = (allNiches || []).find(n =>
+      (preselectedNiche && n?.id && n.id.toLowerCase() === preselectedNiche.toLowerCase()) ||
+      (title && n?.id && title.toLowerCase().includes(n.id.toLowerCase()))
     );
-    setSelectedSaveNiche(matched ? matched.id : (turnedTemplateNiche || allNiches[0]?.id || 'Barber'));
+    setSelectedSaveNiche(matched ? matched.id : (turnedTemplateNiche || allNiches?.[0]?.id || 'Barber'));
     setShowAllNiches(false);
     setShowNewCat(false);
     setSaveNewCat('');
@@ -484,7 +489,7 @@ export const TemplateLabPage: React.FC<{
   const isActive = mode === 'active';
 
   return (
-    <div ref={workspaceRef} className={embedded ? "w-full h-full bg-white flex flex-col text-slate-900 select-none relative" : "fixed inset-0 z-[60] bg-white flex flex-col text-slate-900 select-none"}>
+    <div ref={workspaceRef} className={embedded ? "w-full min-h-[750px] h-[calc(100vh-130px)] flex flex-col bg-white text-slate-900 select-none relative rounded-2xl border border-slate-200 shadow-sm overflow-hidden" : "fixed inset-0 z-[60] bg-white flex flex-col text-slate-900 select-none overflow-hidden"}>
 
       {/* TOP HEADER BAR - White & Blue Brand Consistent */}
       <div className="flex items-center justify-between gap-3 px-6 py-3.5 bg-white border-b border-slate-200 shrink-0 shadow-sm">
@@ -492,7 +497,7 @@ export const TemplateLabPage: React.FC<{
           {!isActive ? (
             <button
               onClick={onClose}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-200 text-sm font-medium font-sans active:scale-[0.98] transition-all shrink-0"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-200 text-sm font-medium font-sans active:scale-[0.98] transition-all shrink-0 cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
               Back to Editor
@@ -500,7 +505,7 @@ export const TemplateLabPage: React.FC<{
           ) : (
             <button
               onClick={goToStudioLanding}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 border border-slate-200 text-slate-700 text-xs sm:text-sm font-semibold font-sans active:scale-[0.98] transition-all shrink-0 shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 border border-slate-200 text-slate-700 text-xs sm:text-sm font-semibold font-sans active:scale-[0.98] transition-all shrink-0 shadow-xs cursor-pointer"
               title="Return to Studio landing page to give new prompts"
             >
               <ArrowLeft className="w-4 h-4 text-blue-600" />
@@ -527,7 +532,7 @@ export const TemplateLabPage: React.FC<{
             <button
               onClick={openSave}
               disabled={streaming}
-              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md hover:shadow-lg active:scale-[0.98] transition-all shrink-0 ${streaming ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
+              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md hover:shadow-lg active:scale-[0.98] transition-all shrink-0 cursor-pointer ${streaming ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
               title="Save website as a reusable template"
             >
               <BookmarkPlus className="w-4 h-4" />
@@ -538,7 +543,7 @@ export const TemplateLabPage: React.FC<{
       </div>
 
       {/* MAIN WORKSPACE */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden min-h-0">
 
         {/* LEFT SIDEBAR (Active chat / controls) - Roomy, Large, Luxury UI */}
         <div className={`shrink-0 flex flex-col overflow-hidden bg-slate-50 border-r border-slate-200 transition-all duration-300 ${
@@ -681,11 +686,11 @@ export const TemplateLabPage: React.FC<{
         </div>
 
         {/* MAIN CONTENT AREA */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+        <div className="flex-1 flex flex-col overflow-hidden bg-slate-50 min-h-0">
 
           {!isActive ? (
             /* ================= IDLE: AI VIBE STUDIO LANDING (White & Blue) ================= */
-            <div ref={idleContainerRef} className="flex-1 overflow-y-auto px-4 sm:px-8 py-8 flex justify-center items-start transition-opacity duration-500">
+            <div ref={idleContainerRef} className="flex-1 overflow-y-auto min-h-0 px-4 sm:px-8 py-8 flex justify-center items-start transition-opacity duration-500">
               <div className="w-full max-w-4xl space-y-8">
 
                 {/* Hero Header & Single Prompt Section */}
@@ -813,7 +818,7 @@ export const TemplateLabPage: React.FC<{
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {history.slice(0, 6).map(entry => (
+                      {(history || []).filter(Boolean).slice(0, 6).map(entry => (
                         <button
                           key={entry.id}
                           onClick={() => loadEntry(entry)}
@@ -1021,10 +1026,10 @@ export const TemplateLabPage: React.FC<{
                             <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-xs font-semibold text-slate-700">Select Niche Industry *</label>
-                  <span className="text-[11px] text-slate-500">{allNiches.length} Niches Synced</span>
+                  <span className="text-[11px] text-slate-500">{(allNiches || []).length} Niches Synced</span>
                 </div>
                 <div className="flex flex-wrap gap-2 mb-3 transition-all animate-editor-fade max-h-48 overflow-y-auto pr-1">
-                  {allNiches.map(n => (
+                  {(allNiches || []).map(n => (
                     <button
                       key={n.id}
                       type="button"

@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
+    "dev": "PORT=3000 tsx server.ts",
     "server": "node server/index.js",
     "dev:all": "concurrently -n web,api -c cyan,magenta \"npm:dev\" \"npm:server\"",
     "owner:dev": "npm run dev --prefix lunaoownerpwa",
