@@ -257,7 +257,7 @@ export const Templates: React.FC<TemplatesProps> = ({
       case 'Gym': return '💪';
       case 'Roofing': return '🏠';
       case 'Real Estate': return '🏡';
-      default: return '✨';
+      default: return '';
     }
   };
 

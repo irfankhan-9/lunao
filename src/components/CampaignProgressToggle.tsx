@@ -6,7 +6,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Globe, Mail, CheckCircle2, XCircle, Users,
   ChevronDown, ChevronUp, Loader2, Sparkles,
-  Trophy, Star, PartyPopper, X, ExternalLink
+  Trophy, Star, PartyPopper, X, ExternalLink,
+  AlertCircle
 } from 'lucide-react';
 import { playVictoryCelebration } from '../utils/audio';
 import { getCampaign as getCampaignApi, getEmailCampaign } from '../lib/pipelineClient';
@@ -218,29 +219,13 @@ const VictoryAnimation: React.FC<{ onComplete: () => void }> = ({ onComplete }) 
               <div className="w-24 h-24 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg animate-bounce-slow">
                 <Trophy className="w-14 h-14 text-white" />
               </div>
-              <div className="absolute -top-3 -right-3 animate-pulse">
-                <Sparkles className="w-8 h-8 text-yellow-400 drop-shadow-lg" />
-              </div>
-              <div className="absolute -bottom-2 -left-4 animate-spin-slow">
-                <Star className="w-7 h-7 text-yellow-300 drop-shadow-lg" />
-              </div>
-              <div className="absolute -top-2 left-1/2 transform -translate-x-1/2">
-                <div className="text-3xl animate-bounce" style={{ animationDelay: '0.2s' }}>✨</div>
-              </div>
             </div>
             <h3 className="font-serif text-3xl sm:text-4xl font-bold bg-gradient-to-r from-amber-600 via-orange-500 to-amber-600 bg-clip-text text-transparent">
-              Campaign Complete!
+              Campaign Complete
             </h3>
-            <p className="text-amber-700 text-base">
-              Your outreach campaign has finished successfully. Amazing work! 🚀
+            <p className="text-amber-800 text-base font-medium">
+              Your outreach campaign has completed successfully.
             </p>
-            <div className="flex justify-center gap-3 text-4xl">
-              <span className="animate-bounce" style={{ animationDelay: '0s' }}>🌟</span>
-              <span className="animate-bounce" style={{ animationDelay: '0.15s' }}>🎉</span>
-              <span className="animate-bounce" style={{ animationDelay: '0.3s' }}>💪</span>
-              <span className="animate-bounce" style={{ animationDelay: '0.45s' }}>🏆</span>
-              <span className="animate-bounce" style={{ animationDelay: '0.6s' }}>🚀</span>
-            </div>
           </div>
         </div>
       </div>
@@ -265,29 +250,13 @@ const VictoryAnimation: React.FC<{ onComplete: () => void }> = ({ onComplete }) 
             <div className="w-24 h-24 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg animate-bounce-slow">
               <Trophy className="w-14 h-14 text-white" />
             </div>
-            <div className="absolute -top-3 -right-3 animate-pulse">
-              <Sparkles className="w-8 h-8 text-yellow-400 drop-shadow-lg" />
-            </div>
-            <div className="absolute -bottom-2 -left-4 animate-spin-slow">
-              <Star className="w-7 h-7 text-yellow-300 drop-shadow-lg" />
-            </div>
-            <div className="absolute -top-2 left-1/2 transform -translate-x-1/2">
-              <div className="text-3xl animate-bounce" style={{ animationDelay: '0.2s' }}>✨</div>
-            </div>
           </div>
           <h3 className="font-serif text-3xl sm:text-4xl font-bold bg-gradient-to-r from-amber-600 via-orange-500 to-amber-600 bg-clip-text text-transparent">
-            Campaign Complete!
+            Campaign Complete
           </h3>
-          <p className="text-amber-700 text-base">
-            Your outreach campaign has finished successfully. Amazing work! 🚀
+          <p className="text-amber-800 text-base font-medium">
+            Your outreach campaign has completed successfully.
           </p>
-          <div className="flex justify-center gap-3 text-4xl">
-            <span className="animate-bounce" style={{ animationDelay: '0s' }}>🌟</span>
-            <span className="animate-bounce" style={{ animationDelay: '0.15s' }}>🎉</span>
-            <span className="animate-bounce" style={{ animationDelay: '0.3s' }}>💪</span>
-            <span className="animate-bounce" style={{ animationDelay: '0.45s' }}>🏆</span>
-            <span className="animate-bounce" style={{ animationDelay: '0.6s' }}>🚀</span>
-          </div>
         </div>
       </div>
     </div>
@@ -400,35 +369,35 @@ const isDorkRun = (campaign.leadsTarget !== undefined && campaign.leadsTarget !=
               <div className="relative">
                 {getStatusIcon()}
                 {campaign.status === 'running' && (
-                  <span className="absolute -top-1 -right-1 text-xs animate-pulse">⚡</span>
+                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                 )}
               </div>
               <div className="text-left min-w-0">
                 <p className="text-sm font-bold truncate">{displayData.name || 'Campaign'}</p>
                 <p className="text-xs opacity-90">
-                  {campaign.status === 'completed' ? '✨ Complete!' :
-                   campaign.status === 'running' ? `⚙️ ${pct}% done` :
-                   campaign.status === 'cancelling' ? '⏳ Stopping...' :
-                   campaign.status === 'cancelled' ? '❌ Cancelled' : '🚀 Starting...'}
+                  {campaign.status === 'completed' ? 'Complete' :
+                   campaign.status === 'running' ? `${pct}% done` :
+                   campaign.status === 'cancelling' ? 'Stopping...' :
+                   campaign.status === 'cancelled' ? 'Cancelled' : 'Starting...'}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {/* Quick emoji stats */}
+              {/* Quick stats pills */}
               <div className="hidden sm:flex items-center gap-1.5 text-xs">
                 {isDorkRun && (displayData.leadsFound !== undefined && displayData.leadsFound > 0) && (
                   <span className="bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full flex items-center gap-1 font-semibold">
-                    👤 {displayData.leadsFound}
+                    <Users className="w-3 h-3" /> {displayData.leadsFound}
                   </span>
                 )}
                 {(displayData.sitesGenerated !== undefined && displayData.sitesGenerated > 0) && (
                   <span className="bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full flex items-center gap-1 font-semibold">
-                    🌐 {displayData.sitesGenerated}
+                    <Globe className="w-3 h-3" /> {displayData.sitesGenerated}
                   </span>
                 )}
                 {(displayData.emailsSent !== undefined && displayData.emailsSent > 0) && (
                   <span className="bg-white/25 backdrop-blur-sm px-2 py-0.5 rounded-full flex items-center gap-1 font-semibold">
-                    ✉️ {displayData.emailsSent}
+                    <Mail className="w-3 h-3" /> {displayData.emailsSent}
                   </span>
                 )}
               </div>
@@ -440,7 +409,7 @@ const isDorkRun = (campaign.leadsTarget !== undefined && campaign.leadsTarget !=
             </div>
           </button>
 
-          {/* Expanded content - Always visible with beautiful stats */}
+          {/* Expanded content - Always visible with stats */}
           <div className="p-4 space-y-4 bg-gradient-to-b from-violet-50/50 to-white">
             {/* Progress bar with gradient */}
             <div className="space-y-2">
@@ -457,29 +426,20 @@ const isDorkRun = (campaign.leadsTarget !== undefined && campaign.leadsTarget !=
               </div>
               <div className="flex justify-between text-xs">
                 {isDorkRun ? (
-                  <span className="font-semibold text-blue-700">👤 {displayData.leadsFound ?? 0} / {displayData.leadsTarget ?? '—'} leads</span>
+                  <span className="font-semibold text-blue-700">{displayData.leadsFound ?? 0} / {displayData.leadsTarget ?? '—'} leads</span>
                 ) : (
-                  <span className="font-semibold text-violet-700">📊 {displayData.done} / {displayData.total} leads</span>
+                  <span className="font-semibold text-violet-700">{displayData.done} / {displayData.total} leads</span>
                 )}
                 <span className="font-bold text-violet-600">{pct}%</span>
               </div>
             </div>
 
-            {/* Beautiful Stats Grid with Emojis */}
-            {/*
-              Dork runs surface an additional full-width "Leads" tile
-              (leadsFound / leadsTarget) above the standard 2x2 grid.
-              CSV runs never set leadsFound, so this tile is hidden.
-              Gated on isDorkRun (derived from leadsTarget or leadSource),
-              NOT on leadsFound !== undefined — otherwise the tile flashes
-              away for a frame after the campaign completes and before the
-              polling hook picks up the final API value.
-            */}
+            {/* Stats Grid */}
             {isDorkRun && (
               <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 rounded-xl p-3 border border-blue-200 shadow-sm">
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-xl">👤</span>
+                    <Users className="w-4 h-4 text-blue-600" />
                     <span className="text-xs font-bold text-blue-700 uppercase tracking-wide">Leads</span>
                   </div>
                   <span className="text-[10px] font-bold text-blue-600/70 uppercase tracking-widest">selected</span>
@@ -496,7 +456,7 @@ const isDorkRun = (campaign.leadsTarget !== undefined && campaign.leadsTarget !=
               {/* Sites generated */}
               <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 rounded-xl p-3 border border-blue-200 shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xl">🌐</span>
+                  <Globe className="w-4 h-4 text-blue-600" />
                   <span className="text-xs font-bold text-blue-700 uppercase tracking-wide">Sites</span>
                 </div>
                 <p className="text-2xl font-black text-blue-800">
@@ -508,7 +468,7 @@ const isDorkRun = (campaign.leadsTarget !== undefined && campaign.leadsTarget !=
               {/* Emails sent */}
               <div className="bg-gradient-to-br from-emerald-50 via-green-50 to-emerald-100 rounded-xl p-3 border border-emerald-200 shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xl">✉️</span>
+                  <Mail className="w-4 h-4 text-emerald-600" />
                   <span className="text-xs font-bold text-emerald-700 uppercase tracking-wide">Sent</span>
                 </div>
                 <p className="text-2xl font-black text-emerald-800">
@@ -520,7 +480,7 @@ const isDorkRun = (campaign.leadsTarget !== undefined && campaign.leadsTarget !=
               {/* Emails failed */}
               <div className="bg-gradient-to-br from-red-50 via-rose-50 to-red-100 rounded-xl p-3 border border-red-200 shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xl">❌</span>
+                  <XCircle className="w-4 h-4 text-red-600" />
                   <span className="text-xs font-bold text-red-700 uppercase tracking-wide">Failed</span>
                 </div>
                 <p className="text-2xl font-black text-red-800">
@@ -532,7 +492,7 @@ const isDorkRun = (campaign.leadsTarget !== undefined && campaign.leadsTarget !=
               {/* Accounts used */}
               <div className="bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 rounded-xl p-3 border border-amber-200 shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xl">👤</span>
+                  <Users className="w-4 h-4 text-amber-600" />
                   <span className="text-xs font-bold text-amber-700 uppercase tracking-wide">Accounts</span>
                 </div>
                 <p className="text-2xl font-black text-amber-800">
@@ -546,8 +506,8 @@ const isDorkRun = (campaign.leadsTarget !== undefined && campaign.leadsTarget !=
             {displayData.deployedSites && displayData.deployedSites.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold text-violet-600 uppercase tracking-widest">
-                    🔗 Live Deployed Sites ({displayData.deployedSites.length})
+                  <span className="text-[10px] font-bold text-violet-600 uppercase tracking-widest flex items-center gap-1.5">
+                    <Globe className="w-3 h-3 text-violet-600" /> Live Deployed Sites ({displayData.deployedSites.length})
                   </span>
                   <div className="flex-1 h-px bg-violet-200" />
                 </div>
@@ -582,18 +542,16 @@ const isDorkRun = (campaign.leadsTarget !== undefined && campaign.leadsTarget !=
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500"></span>
                   </span>
-                  <span className="font-semibold">🔄 Live updating...</span>
+                  <span className="font-semibold">Live updating...</span>
                 </div>
               ) : campaign.status === 'completed' ? (
-                <div className="flex items-center gap-2 text-xs text-emerald-600">
-                  <span className="text-lg">✅</span>
-                  <span className="font-semibold">Finished successfully!</span>
+                <div className="flex items-center gap-1.5 text-xs text-emerald-600">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span className="font-semibold">Completed successfully</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 text-xs text-gray-500">
-                  <span className="text-lg">
-                    {campaign.status === 'cancelled' ? '🚫' : '⏳'}
-                  </span>
+                <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                  <AlertCircle className="w-4 h-4 text-gray-400" />
                   <span className="font-semibold capitalize">{campaign.status}</span>
                 </div>
               )}

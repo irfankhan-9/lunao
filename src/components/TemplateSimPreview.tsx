@@ -68,7 +68,7 @@ const getNicheEmoji = (niche: string) => {
     case 'Gym': return '💪';
     case 'Roofing': return '🏠';
     case 'Real Estate': return '🏡';
-    default: return '✨';
+    default: return '';
   }
 };
 

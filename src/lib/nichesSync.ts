@@ -29,13 +29,13 @@ export function getNicheEmoji(niche: string): string {
   if (n.includes('roof')) return '🏠';
   if (n.includes('real') || n.includes('estate') || n.includes('realt') || n.includes('broker')) return '🏡';
   if (n.includes('plumb')) return '🔧';
-  if (n.includes('clean')) return '✨';
+  if (n.includes('clean')) return '🧹';
   if (n.includes('auto') || n.includes('car')) return '🚗';
   if (n.includes('pet') || n.includes('dog') || n.includes('cat') || n.includes('vet')) return '🐾';
   if (n.includes('rest') || n.includes('cafe') || n.includes('food')) return '🍽️';
   if (n.includes('law') || n.includes('legal')) return '⚖️';
   if (n.includes('acc') || n.includes('tax') || n.includes('cpa')) return '📊';
-  return '✨';
+  return '';
 }
 
 const STORAGE_NICHES = 'lunao_synced_niches';
@@ -123,8 +123,9 @@ export async function fetchNichesFromBackend(): Promise<NicheItem[]> {
 // Save a newly created niche to backend and synchronize
 export async function createAndSyncNiche(name: string, emoji?: string, color = '#2563EB'): Promise<NicheItem> {
   const cleanName = name.trim();
-  if (!cleanName) return { id: 'General', label: 'General', emoji: '✨', color: '#2563EB' };
-  const resolvedEmoji = emoji || getNicheEmoji(cleanName);
+  if (!cleanName) return { id: 'General', label: 'General', emoji: '', color: '#2563EB' };
+  // Default to empty string (no magic emoji or artificial decorations)
+  const resolvedEmoji = emoji !== undefined ? emoji : '';
   const newNiche: NicheItem = {
     id: cleanName,
     label: cleanName,
@@ -158,7 +159,7 @@ export async function createAndSyncNiche(name: string, emoji?: string, color = '
             map.set(id.toLowerCase(), {
               id,
               label: typeof n === 'string' ? id : (n.label || id),
-              emoji: typeof n === 'string' ? getNicheEmoji(id) : (n.emoji || getNicheEmoji(id)),
+              emoji: typeof n === 'string' ? '' : (n.emoji || ''),
               color: typeof n === 'string' ? '#2563EB' : (n.color || '#2563EB'),
             });
           }
@@ -197,7 +198,7 @@ export async function fetchTemplatesFromBackend(): Promise<Template[]> {
             niche: t.niche || 'General',
             usedCount: t.usedCount || 0,
             rating: t.rating || 4.9,
-            tag: t.tag || (t.source === 'custom' ? 'AI Custom Template' : 'Featured'),
+            tag: t.tag || 'Custom Template',
             isMostUsed: Boolean(t.isMostUsed),
             emoji: t.emoji || getNicheEmoji(t.niche),
             description: t.description || `Custom website template designed for ${t.niche}.`,
@@ -215,7 +216,7 @@ export async function fetchTemplatesFromBackend(): Promise<Template[]> {
   return getLocalTemplates();
 }
 
-// Add a newly converted or generated template and synchronize
+// Add or update a template and synchronize across all tabs
 export function addAndSyncTemplate(template: { id: string; name: string; niche: string; tag?: string; description?: string }): Template {
   const newTpl: Template = {
     id: template.id,
@@ -223,14 +224,14 @@ export function addAndSyncTemplate(template: { id: string; name: string; niche: 
     niche: template.niche,
     usedCount: 1,
     rating: 4.9,
-    tag: template.tag || 'AI Custom Template',
+    tag: template.tag || 'Custom Template',
     isMostUsed: false,
     emoji: getNicheEmoji(template.niche),
     description: template.description || `High-converting modern website template for ${template.niche}.`,
   };
 
   const current = getLocalTemplates();
-  const exists = current.findIndex((t) => t.id === newTpl.id);
+  const exists = current.findIndex((t) => t.id === newTpl.id || t.name.toLowerCase() === newTpl.name.toLowerCase());
   const updated = exists >= 0 ? current.map((t, idx) => (idx === exists ? newTpl : t)) : [newTpl, ...current];
 
   localStorage.setItem(STORAGE_TEMPLATES, JSON.stringify(updated));
@@ -239,6 +240,34 @@ export function addAndSyncTemplate(template: { id: string; name: string; niche: 
   // Ensure niche is created and synced across the whole platform
   if (template.niche && template.niche !== 'All' && template.niche !== 'General') {
     createAndSyncNiche(template.niche);
+  }
+
+  return newTpl;
+}
+
+// Reassign / move a template from one niche to another
+export function moveAndSyncTemplate(template: { id: string; name: string; fromNiche: string; toNiche: string; description?: string; tag?: string }): Template {
+  const newTpl: Template = {
+    id: template.id,
+    name: template.name,
+    niche: template.toNiche,
+    usedCount: 1,
+    rating: 4.9,
+    tag: template.tag || 'Custom Template',
+    isMostUsed: false,
+    emoji: getNicheEmoji(template.toNiche),
+    description: template.description || `High-converting modern website template for ${template.toNiche}.`,
+  };
+
+  const current = getLocalTemplates();
+  const exists = current.findIndex((t) => t.id === newTpl.id || t.name.toLowerCase() === newTpl.name.toLowerCase());
+  const updated = exists >= 0 ? current.map((t, idx) => (idx === exists ? newTpl : t)) : [newTpl, ...current];
+
+  localStorage.setItem(STORAGE_TEMPLATES, JSON.stringify(updated));
+  window.dispatchEvent(new CustomEvent('lunao:templates-sync', { detail: updated }));
+
+  if (template.toNiche && template.toNiche !== 'All' && template.toNiche !== 'General') {
+    createAndSyncNiche(template.toNiche);
   }
 
   return newTpl;

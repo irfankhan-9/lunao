@@ -3882,17 +3882,13 @@ app.delete('/api/site-history/:id', authenticate, (req, res) => {
 // Upload and process a raw HTML file — inject {{PLACEHOLDERS}} via AI.
 app.post('/api/upload-template/process', authenticate, async (req, res) => {
   try {
-    const { html, niche = 'Local Business', anthropicApiKey } = req.body || {};
+    const { html, niche = 'Local Business', anthropicApiKey, apiKey, geminiApiKey } = req.body || {};
     if (!html || typeof html !== 'string' || html.trim().length < 100) {
       return res.status(400).json({ ok: false, error: 'A valid HTML file (min 100 chars) is required.' });
     }
 
-    const hasUserKey = typeof anthropicApiKey === 'string' && anthropicApiKey.trim().length > 0;
-    const { generateTemplateHtml, isAiEnabled } = await import('./lib/anthropic.js');
-
-    if (!hasUserKey && !isAiEnabled()) {
-      return res.status(422).json({ ok: false, error: 'AI editor not configured. Add ANTHROPIC_API_KEY to server env or provide your own key.' });
-    }
+    const { getGeminiClient, cleanHtmlOutput } = await import('./lib/geminiAi.js');
+    const client = getGeminiClient(geminiApiKey || apiKey || anthropicApiKey);
 
     // Build an injection prompt: scan the HTML and rewrite to use placeholders
     const injectionSystem = `You are an elite front-end engineer. A user has uploaded a raw HTML website for a local business. Your job is to rewrite it so it uses placeholder tokens for personalization.
@@ -3910,29 +3906,19 @@ CRITICAL RULES:
 10. For Instagram/Facebook links: if a handle or URL is present, replace with {{INSTAGRAM_HANDLE}} / {{FACEBOOK_URL}} if possible, otherwise leave as-is.
 11. NEVER invent values — only replace what you can clearly identify.`;
 
-    const Anthropic = (await import('@anthropic-ai/sdk')).default;
-    const { anthropic: anthropicCfg } = await import('./lib/config.js');
-    const client = hasUserKey
-      ? new Anthropic({ apiKey: anthropicApiKey.trim() })
-      : new Anthropic({ apiKey: anthropicCfg.apiKey });
-
     const trimmed = html.trim();
-    // First 2000 chars as context so the AI knows the site's style
-    const context = trimmed.length > 2000 ? trimmed.substring(0, 2000) + '\n... (truncated) ...' : trimmed;
+    const context = trimmed.length > 4000 ? trimmed.substring(0, 4000) + '\n... (truncated) ...' : trimmed;
 
-    const stream = await client.messages.stream({
-      model: anthropicCfg.model,
-      max_tokens: 24000,
-      system: injectionSystem,
-      messages: [{
-        role: 'user',
-        content: `Here is a raw HTML website. Rewrite it to use {{BUSINESS_NAME}}, {{CITY}}, {{PHONE_DISPLAY}}, {{PHONE_RAW}} placeholders as described in your instructions. Keep everything else identical.\n\nHTML:\n${context}`,
-      }],
+    const resAi = await client.models.generateContent({
+      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+      contents: `Here is a raw HTML website. Rewrite it to use {{BUSINESS_NAME}}, {{CITY}}, {{PHONE_DISPLAY}}, {{PHONE_RAW}} placeholders as described in your instructions. Keep everything else identical.\n\nHTML:\n${context}`,
+      config: {
+        systemInstruction: injectionSystem,
+        temperature: 0.3,
+      },
     });
 
-    let rawHtml = '';
-    stream.on('text', (delta) => { rawHtml += delta; });
-    await stream.finalMessage();
+    let rawHtml = cleanHtmlOutput(resAi.text || '');
 
     // Strip accidental markdown fences
     rawHtml = (rawHtml || '').trim();
@@ -4183,7 +4169,7 @@ app.get('/api/custom-templates/:id/preview', authenticate, (req, res) => {
 app.post('/api/custom-templates/generate', authenticate, async (req, res) => {
   try {
     const ownerKey = req.userId ? `user_${req.userId}` : String(req.body?.ownerKey || req.query?.ownerKey || '').trim();
-    const { prompt, niche = 'Local Business', categoryId = null, name, anthropicApiKey } = req.body || {};
+    const { prompt, niche = 'Local Business', categoryId = null, name, anthropicApiKey, apiKey, geminiApiKey } = req.body || {};
 
     // Input validation
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length < 20) {
@@ -4204,7 +4190,7 @@ app.post('/api/custom-templates/generate', authenticate, async (req, res) => {
 
     let rawHtml, previewHtml;
     try {
-      ({ rawHtml, previewHtml } = await generateTemplateHtml(prompt.trim(), niche, anthropicApiKey));
+      ({ rawHtml, previewHtml } = await generateTemplateHtml(prompt.trim(), niche, geminiApiKey || apiKey || anthropicApiKey));
       if (niche && niche !== 'Local Business') {
         try {
           await createNiche(niche, '', '#2563EB', ownerKey);
