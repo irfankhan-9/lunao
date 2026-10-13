@@ -26,3 +26,5 @@ scripts-bootstrap/
 
 # Vite entry point (unignored so Railway can build)
 !index.html
+
+lunao.zip
