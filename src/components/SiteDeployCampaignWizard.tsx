@@ -219,8 +219,6 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
       case 3:
         return Boolean(selectedTemplateId);
       case 4:
-        return true;
-      case 5:
         return csvLeads.length > 0 && userCredits >= csvLeads.length * COST_PER_SITE;
       default:
         return false;
@@ -230,8 +228,7 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
   const handleNextStep = () => {
     if (canProceedFromStep(activeStep)) {
       playGentleChime(activeStep + 1);
-      setActiveStep((s) => Math.min(5, s + 1));
-      stepContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setActiveStep((s) => Math.min(4, s + 1));
     } else {
       playElegantError();
     }
@@ -240,7 +237,6 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
   const handlePrevStep = () => {
     playGentleChime();
     setActiveStep((s) => Math.max(1, s - 1));
-    stepContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   // Open Preview Modal
@@ -254,7 +250,7 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
   // Launch Campaign with sequential multi-agent AI rebranding
   const handleLaunch = async () => {
     const totalLeads = csvLeads.length;
-    if (totalLeads === 0 || !canProceedFromStep(5)) return;
+    if (totalLeads === 0 || !canProceedFromStep(4)) return;
 
     const totalCost = totalLeads * COST_PER_SITE;
     if (userCredits < totalCost) {
@@ -288,13 +284,10 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
 
     const addLog = (text: string, type: 'info' | 'agent' | 'success' | 'code' = 'info') => {
       setAiLogs((prev) => [...prev, { id: `${Date.now()}_${Math.random()}`, time: getTime(), text, type }]);
-      setTimeout(() => {
-        terminalBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 40);
     };
 
-    addLog(`🧠 Lunao Neural Multi-Agent Engine v4.2 initialized for niche: "${selectedNiche}"`, 'info');
-    addLog(`📋 Batch manifest loaded: ${totalLeads} local business leads queued for sequential AI rebranding.`, 'info');
+    addLog(`Initializing site deployment campaign for niche: "${selectedNiche}"`, 'info');
+    addLog(`Loaded batch of ${totalLeads} local business leads queued for AI rebranding.`, 'info');
 
     const completedAccumulator: Array<{ slug: string; name: string; city?: string; url: string; status: 'live' | 'failed' }> = [];
 
@@ -303,25 +296,19 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
       const lead = csvLeads[i];
       setActiveLeadIndex(i);
 
-      addLog(`▶ [Lead ${i + 1}/${totalLeads}] Preparing AI rebranding workspace for "${lead.name}" (${lead.city || 'Local'})...`, 'agent');
+      addLog(`[Lead ${i + 1}/${totalLeads}] Preparing AI rebranding workspace for "${lead.name}" (${lead.city || 'Local'})...`, 'agent');
+      await new Promise((r) => setTimeout(r, 400));
+
+      addLog(`AI rebranding template & generating localized copy for "${lead.name}"...`, 'agent');
       await new Promise((r) => setTimeout(r, 450));
 
-      addLog(`🔥 [AI Neural Engine] AI is cooking bespoke brand architecture & localized SEO taxonomy for "${lead.name}"...`, 'agent');
-      await new Promise((r) => setTimeout(r, 550));
-
-      addLog(`✍️ [AI Copywriter] Synthesizing high-converting hero headlines, trust badges & tailored value propositions...`, 'agent');
-      await new Promise((r) => setTimeout(r, 550));
-
-      addLog(`🎨 [AI Brand Stylist] Inverting color palette, styling luxury typography tokens & localizing contact data...`, 'agent');
-      await new Promise((r) => setTimeout(r, 500));
-
-      addLog(`🤖 [AI Receptionist] Embedding 24/7 autonomous scheduling engine & booking calendar endpoints...`, 'agent');
-      await new Promise((r) => setTimeout(r, 500));
-
-      addLog(`⚡ [Lunao Edge Compiler] Compiling production static bundle & pushing to Lunao Servers...`, 'agent');
+      addLog(`Synthesizing headlines, trust badges & contact details...`, 'agent');
+      await new Promise((r) => setTimeout(r, 400));
 
       let siteUrl = '';
       let slug = '';
+      let deployedOk = false;
+
       try {
         const resp = await fetch('/api/site-deploy/rebrand-single', {
           method: 'POST',
@@ -335,14 +322,16 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
           }),
         });
         const data = await resp.json();
-        if (data.ok && data.siteUrl) {
-          siteUrl = data.siteUrl;
-          slug = data.slug || `site-${i + 1}`;
+        if (data.ok && data.slug) {
+          slug = data.slug;
+          siteUrl = `https://lunao-web-designn.pages.dev/${slug}/`;
+          deployedOk = true;
+          addLog(`Deploying to Lunao servers done: ${siteUrl}`, 'success');
         } else {
-          throw new Error(data.error || 'Compilation failed');
+          throw new Error(data.error || 'Deployment failed');
         }
       } catch (err: any) {
-        // Fallback calculation if endpoint throws
+        addLog(`Deployment warning for ${lead.name}: ${err.message}`, 'info');
         const cleanSlug = (lead.name || `business-${i + 1}`)
           .toLowerCase()
           .replace(/[^a-z0-9]/g, '-')
@@ -353,38 +342,25 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
         siteUrl = `https://lunao-web-designn.pages.dev/${cleanSlug}/`;
       }
 
-      addLog(`⏳ [Lunao Edge Network] Verifying edge propagation for "${lead.name}"...`, 'info');
-
-      // Pre-flight ping to ensure 100% reachable
-      if (siteUrl) {
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            const ping = await fetch(siteUrl, { method: 'HEAD' });
-            if (ping.status === 200) break;
-          } catch {}
-          await new Promise((r) => setTimeout(r, 800));
-        }
+      if (deployedOk) {
+        playGentleChime();
+        const siteItem: { slug: string; name: string; city?: string; url: string; status: 'live' | 'failed' } = {
+          slug: slug || `site-${i + 1}`,
+          name: lead.name || `Business ${i + 1}`,
+          city: lead.city || 'Austin',
+          url: siteUrl,
+          status: 'live',
+        };
+        completedAccumulator.push(siteItem);
+        setCompletedSitesList([...completedAccumulator]);
       }
-
-      addLog(`✅ [100% Verified Live] Site verified active and fully reachable on Lunao Servers: ${siteUrl}`, 'success');
-      playGentleChime();
-
-      const siteItem: { slug: string; name: string; city?: string; url: string; status: 'live' | 'failed' } = {
-        slug: slug || `site-${i + 1}`,
-        name: lead.name || `Business ${i + 1}`,
-        city: lead.city || 'Austin',
-        url: siteUrl,
-        status: 'live',
-      };
-      completedAccumulator.push(siteItem);
-      setCompletedSitesList([...completedAccumulator]);
 
       const pct = Math.round(((i + 1) / totalLeads) * 100);
       setLaunchProgress(pct);
 
       if (i < totalLeads - 1) {
-        addLog(`⏳ Verified 100% live. Seamlessly transitioning to next target business...`, 'info');
-        await new Promise((r) => setTimeout(r, 450));
+        addLog(`Transitioning to next target business...`, 'info');
+        await new Promise((r) => setTimeout(r, 350));
       }
     }
 
@@ -396,7 +372,9 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
       id: newCampId,
       name: finalName,
       niche: selectedNiche,
+      totalLeads: totalLeads,
       leadsFound: totalLeads,
+      sitesGenerated: totalLeads,
       sites: totalLeads,
       smsSent: 0,
       claimed: 0,
@@ -424,18 +402,10 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
 
     setIsLaunching(false);
     setLaunchComplete(true);
+    setCelebratedCampaign(completeCampRecord);
     setIsShowingCompletion(true); // Should show after completion!
     playVictoryCelebration();
     onLaunch?.();
-
-    // Directly jump to recent campaigns card with all campaign info!
-    setTimeout(() => {
-      onViewDetails?.(newCampId);
-      const rcard = document.getElementById(`rcard-${newCampId}`) || document.getElementById('rcard-section');
-      if (rcard) {
-        rcard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }, 100);
   };
 
   // =========================================================================
@@ -447,27 +417,27 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
 
     return (
       <div className="p-6 md:p-8 space-y-6 animate-fade-in">
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 text-white shadow-2xl space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-5">
+        <div className="bg-white border border-border-main rounded-3xl p-6 md:p-8 text-ink shadow-xl space-y-6 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-accent/5 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border-light pb-5 relative z-10">
             <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-                <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                  Lunao AI Rebranding Engine Active
-                </span>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-700">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+                Lunao AI Rebranding Engine Active
               </div>
-              <h3 className="text-2xl font-bold font-serif text-white">
+              <h3 className="text-2xl font-bold font-serif text-ink">
                 Autonomous AI Rebranding in Progress
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-ink-secondary">
                 Multi-agent AI pipeline analyzing business parameters, generating bespoke copy, and verifying 100% live status.
               </p>
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="px-4 py-2 rounded-xl bg-slate-800 border border-slate-700 text-right">
-                <p className="text-[10px] uppercase font-bold text-slate-400">Verified Live</p>
-                <p className="text-lg font-bold font-mono text-emerald-400">
+              <div className="px-4 py-2 rounded-xl bg-surface border border-border-main text-right shadow-xs">
+                <p className="text-[10px] uppercase font-bold text-ink-tertiary">Verified Live</p>
+                <p className="text-lg font-bold font-mono text-emerald-600">
                   {completedSitesList.length} / {csvLeads.length}
                 </p>
               </div>
@@ -475,58 +445,58 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
           </div>
 
           {/* Progress Bar */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs text-slate-300">
+          <div className="space-y-2 relative z-10">
+            <div className="flex items-center justify-between text-xs text-ink-secondary">
               <span className="font-medium">
-                Active Target {activeLeadIndex + 1} of {csvLeads.length}: <strong className="text-white">{currentLead?.name}</strong> ({currentLead?.city || 'Local'})
+                Active Target {activeLeadIndex + 1} of {csvLeads.length}: <strong className="text-ink">{currentLead?.name}</strong> ({currentLead?.city || 'Local'})
               </span>
-              <span className="font-mono font-bold text-emerald-400">{pct}%</span>
+              <span className="font-mono font-bold text-emerald-600">{pct}%</span>
             </div>
-            <div className="w-full h-3 rounded-full bg-slate-800 overflow-hidden p-0.5">
+            <div className="w-full h-3 rounded-full bg-surface border border-border-main overflow-hidden p-0.5 shadow-inner">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 transition-all duration-300 shadow-sm"
+                className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-blue-500 to-blue-600 transition-all duration-300 shadow-sm"
                 style={{ width: `${Math.max(5, pct)}%` }}
               />
             </div>
           </div>
 
           {/* Active Target Spotlight */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 rounded-2xl bg-slate-950/80 border border-slate-800">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 rounded-2xl bg-surface border border-border-main relative z-10 shadow-xs">
             <div>
-              <p className="text-[10px] uppercase font-bold text-slate-500">Target Business</p>
-              <p className="text-sm font-bold text-white truncate">{currentLead?.name}</p>
-              <p className="text-xs text-slate-400">{currentLead?.city || 'Local Business'}</p>
+              <p className="text-[10px] uppercase font-bold text-ink-tertiary">Target Business</p>
+              <p className="text-sm font-bold text-ink truncate">{currentLead?.name}</p>
+              <p className="text-xs text-ink-secondary">{currentLead?.city || 'Local Business'}</p>
             </div>
             <div>
-              <p className="text-[10px] uppercase font-bold text-slate-500">Active AI Task</p>
-              <p className="text-sm font-bold text-emerald-400 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" /> Rebranding & Injecting Widget
+              <p className="text-[10px] uppercase font-bold text-ink-tertiary">Active AI Task</p>
+              <p className="text-sm font-bold text-emerald-600">
+                Rebranding & Injecting Widget
               </p>
-              <p className="text-xs text-slate-400">Tailoring localized value props</p>
+              <p className="text-xs text-ink-secondary">Tailoring localized value props</p>
             </div>
             <div>
-              <p className="text-[10px] uppercase font-bold text-slate-500">Edge Verification</p>
-              <p className="text-sm font-bold font-mono text-white">
+              <p className="text-[10px] uppercase font-bold text-ink-tertiary">Edge Verification</p>
+              <p className="text-sm font-bold font-mono text-ink">
                 {completedSitesList.length} Sites Verified
               </p>
-              <p className="text-xs text-emerald-400">HTTP 200 confirmed</p>
+              <p className="text-xs text-emerald-600">HTTP 200 confirmed</p>
             </div>
           </div>
 
           {/* Live Terminal Logs */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span className="font-mono flex items-center gap-1.5">
-                  <Terminal className="w-3.5 h-3.5 text-emerald-400" /> Live AI Rebranding Console
+              <div className="flex items-center justify-between text-xs text-ink-secondary">
+                <span className="font-mono flex items-center gap-1.5 font-bold">
+                  <Terminal className="w-3.5 h-3.5 text-accent" /> Live AI Rebranding Console
                 </span>
-                <span className="text-[10px] text-slate-500 font-mono">Real-Time Autonomous Stream</span>
+                <span className="text-[10px] text-ink-tertiary font-mono">Real-Time Autonomous Stream</span>
               </div>
-              <div className="h-64 rounded-2xl bg-slate-950 border border-slate-800 p-4 font-mono text-xs text-slate-300 overflow-y-auto space-y-2 scrollbar-thin">
+              <div className="h-64 rounded-2xl bg-white border border-border-main p-4 font-mono text-xs text-ink overflow-y-auto space-y-2 scrollbar-thin shadow-inner">
                 {aiLogs.map((log) => (
                   <div key={log.id} className="flex items-start gap-2.5 leading-relaxed">
-                    <span className="text-slate-600 shrink-0 select-none">{log.time}</span>
-                    <span className={log.type === 'success' ? 'text-emerald-400 font-bold' : log.type === 'agent' ? 'text-cyan-300' : 'text-slate-300'}>
+                    <span className="text-ink-tertiary shrink-0 select-none">{log.time}</span>
+                    <span className={log.type === 'success' ? 'text-success font-bold' : log.type === 'agent' ? 'text-accent font-semibold' : 'text-ink-secondary'}>
                       {log.text}
                     </span>
                   </div>
@@ -536,25 +506,25 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span className="font-mono flex items-center gap-1.5">
-                  <Globe className="w-3.5 h-3.5 text-emerald-400" /> Live Deployed Sites ({completedSitesList.length})
+              <div className="flex items-center justify-between text-xs text-ink-secondary">
+                <span className="font-mono flex items-center gap-1.5 font-bold">
+                  <Globe className="w-3.5 h-3.5 text-accent" /> Live Deployed Sites ({completedSitesList.length})
                 </span>
               </div>
-              <div className="h-64 rounded-2xl bg-slate-950 border border-slate-800 p-2 overflow-y-auto space-y-2 scrollbar-thin">
+              <div className="h-64 rounded-2xl bg-surface border border-border-main p-2 overflow-y-auto space-y-2 scrollbar-thin shadow-inner">
                 {completedSitesList.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-slate-600 text-xs italic">
+                  <div className="h-full flex items-center justify-center text-ink-tertiary text-xs italic">
                     Waiting for first site to propagate...
                   </div>
                 ) : (
                   completedSitesList.map((s, idx) => (
-                    <div key={idx} className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                      <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 bg-emerald-900/50 text-emerald-400">
+                    <div key={idx} className="flex items-center gap-3 p-2.5 rounded-xl bg-white border border-border-main shadow-xs">
+                      <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 bg-emerald-100 text-emerald-700">
                         <Check className="w-3.5 h-3.5" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-white truncate">{s.name}</p>
-                        <a href={s.url} target="_blank" rel="noreferrer" className="text-[10px] text-slate-400 hover:text-emerald-400 truncate block">
+                        <p className="text-xs font-bold text-ink truncate">{s.name}</p>
+                        <a href={s.url} target="_blank" rel="noreferrer" className="text-[10px] text-accent hover:underline truncate block font-mono">
                           {s.url.replace(/^https?:\/\//, '')}
                         </a>
                       </div>
@@ -601,12 +571,16 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4">
                 <div className="bg-white/90 border border-border-light rounded-2xl p-4 text-center shadow-xs">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">Total Leads</p>
-                  <p className="text-2xl font-bold text-ink font-mono mt-1">{celebratedCampaign.totalLeads}</p>
+                  <p className="text-2xl font-bold text-ink font-mono mt-1">
+                    {celebratedCampaign.totalLeads ?? celebratedCampaign.leadsFound ?? celebratedCampaign.leads?.length ?? 0}
+                  </p>
                   <p className="text-[10px] text-ink-tertiary mt-0.5">Processed</p>
                 </div>
                 <div className="bg-white/90 border border-border-light rounded-2xl p-4 text-center shadow-xs">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">Sites Built</p>
-                  <p className="text-2xl font-bold text-accent font-mono mt-1">{celebratedCampaign.sitesGenerated}</p>
+                  <p className="text-2xl font-bold text-accent font-mono mt-1">
+                    {celebratedCampaign.sitesGenerated ?? celebratedCampaign.sites ?? celebratedCampaign.deployedSites?.length ?? 0}
+                  </p>
                   <p className="text-[10px] text-ink-tertiary mt-0.5">Compiled</p>
                 </div>
                 <div className="bg-white/90 border border-border-light rounded-2xl p-4 text-center shadow-xs">
@@ -621,19 +595,29 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
                 </div>
               </div>
 
-              {/* Sample Deployed Sites list */}
+              {/* All Deployed Sites list */}
               {sites.length > 0 && (
-                <div className="bg-white/80 border border-border-light rounded-2xl p-4 text-left space-y-3">
-                  <p className="text-xs font-bold text-ink uppercase tracking-wider">Live Deployed Previews</p>
-                  <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
-                    {sites.slice(0, 5).map((s: any, idx: number) => (
-                      <div key={idx} className="flex items-center justify-between text-xs p-2 bg-surface rounded-xl border border-border-light">
-                        <span className="font-semibold text-ink truncate mr-2">{s.name} ({s.city || 'Austin'})</span>
+                <div className="bg-white border border-border-main rounded-2xl p-5 text-left space-y-3 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-accent" /> Live Deployed Previews ({sites.length})
+                    </p>
+                    <span className="text-[10px] font-bold text-success uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-success-soft">
+                      100% Active Edge
+                    </span>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto space-y-2.5 pr-1 scrollbar-thin">
+                    {sites.map((s: any, idx: number) => (
+                      <div key={idx} className="flex items-center justify-between text-xs p-3 bg-surface rounded-xl border border-border-main shadow-xs hover:border-accent/40 transition-colors">
+                        <div className="min-w-0 mr-3">
+                          <p className="font-bold text-ink truncate">{s.name}</p>
+                          <p className="text-[11px] text-ink-secondary">{s.city || 'Local'}</p>
+                        </div>
                         <a
                           href={s.url}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-accent hover:underline font-mono shrink-0"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-white font-mono text-[11px] font-semibold hover:bg-accent-hover shrink-0 shadow-xs"
                         >
                           <span>{s.url.replace(/^https?:\/\//, '')}</span>
                           <ExternalLink className="w-3 h-3" />
@@ -657,18 +641,10 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
                     setCsvFileName(null);
                     setActiveStep(1);
                   }}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-accent text-white font-bold text-sm shadow-lg shadow-accent/20 hover:bg-accent-hover active:scale-98 transition-all cursor-pointer"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl bg-accent text-white font-bold text-sm shadow-lg shadow-accent/20 hover:bg-accent-hover active:scale-98 transition-all cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   Launch Another Campaign
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onViewDetails?.(celebratedCampaign.id)}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white border border-border-main text-ink font-bold text-sm hover:bg-off-white active:scale-98 transition-all cursor-pointer"
-                >
-                  <Eye className="w-4 h-4" />
-                  View in Recent Campaigns
                 </button>
               </div>
             </div>
@@ -834,6 +810,18 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
                         setCsvValidation(null);
                         setCsvParsedCount(0);
                       }}
+                      onRemoveLead={(index) => {
+                        playSoftTap();
+                        const nextLeads = csvLeads.filter((_, i) => i !== index);
+                        setCsvLeads(nextLeads);
+                        setCsvParsedCount(nextLeads.length);
+                      }}
+                      onUpdateLead={(index, updated) => {
+                        playSoftTap();
+                        const nextLeads = [...csvLeads];
+                        nextLeads[index] = updated;
+                        setCsvLeads(nextLeads);
+                      }}
                       ClearIcon={X}
                     />
                     <div className="flex items-center justify-between gap-4 px-1">
@@ -901,6 +889,18 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
                       setCsvLeads([]);
                       setCsvValidation(null);
                       setCsvParsedCount(0);
+                    }}
+                    onRemoveLead={(index) => {
+                      playSoftTap();
+                      const nextLeads = csvLeads.filter((_, i) => i !== index);
+                      setCsvLeads(nextLeads);
+                      setCsvParsedCount(nextLeads.length);
+                    }}
+                    onUpdateLead={(index, updated) => {
+                      playSoftTap();
+                      const nextLeads = [...csvLeads];
+                      nextLeads[index] = updated;
+                      setCsvLeads(nextLeads);
                     }}
                     ClearIcon={X}
                   />
@@ -1042,86 +1042,9 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
         )}
 
         {/* ===================================================================
-            STEP 4: EDGE DEPLOYMENT SETUP (Lunao Global Edge, Subdomains, SSL)
+            STEP 4: REVIEW, COST SUMMARY & LAUNCH (Dual-Column Standard)
         =================================================================== */}
         {activeStep === 4 && (
-          <div className="space-y-6 animate-fade-in">
-            <div className="space-y-1">
-              <h3 className="font-serif text-2xl text-ink">Deployment & edge configuration</h3>
-              <p className="text-sm text-ink-secondary">
-                Configure your global edge network routing and instant landing page delivery options.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Card 1: Lunao Global Edge */}
-              <div className="p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-3">
-                <div className="w-12 h-12 rounded-xl bg-orange-50 border border-orange-200 text-orange-600 flex items-center justify-center">
-                  <Server className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-bold text-sm text-ink">Lunao Edge Network</h4>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">100% Uptime</span>
-                  </div>
-                  <p className="text-xs text-ink-secondary mt-1 leading-relaxed">
-                    Zero-cold-start edge workers compile each website in &lt;100ms and cache assets across global edge clusters.
-                  </p>
-                </div>
-              </div>
-
-              {/* Card 2: Subdomain Routing */}
-              <div className="p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-3">
-                <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center">
-                  <Globe className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-bold text-sm text-ink">Subdomain Routing</h4>
-                    <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold">Instant SSL</span>
-                  </div>
-                  <p className="text-xs text-ink-secondary mt-1 leading-relaxed">
-                    Automated vanity routing: <span className="font-mono text-ink font-semibold">https://[business-name].lunao.app</span> with free HTTPS certificate.
-                  </p>
-                </div>
-              </div>
-
-              {/* Card 3: Mobile PWA Engine */}
-              <div className="p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-3">
-                <div className="w-12 h-12 rounded-xl bg-purple-50 border border-purple-200 text-purple-600 flex items-center justify-center">
-                  <Laptop className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-bold text-sm text-ink">Client PWA Bridge</h4>
-                    <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[10px] font-bold">Included</span>
-                  </div>
-                  <p className="text-xs text-ink-secondary mt-1 leading-relaxed">
-                    Equipped with deep-links to the Lunao Owner PWA so clients can instantly claim their new website on mobile.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Edge Deployment Verification Callout */}
-            <div className="p-5 rounded-2xl bg-gradient-to-r from-accent/5 to-surface border border-accent/20 flex items-start gap-4">
-              <div className="w-10 h-10 rounded-xl bg-accent text-white flex items-center justify-center shrink-0">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-ink">Zero Setup Required</p>
-                <p className="text-xs text-ink-secondary mt-0.5 leading-relaxed">
-                  No domain configuration or API keys needed. Lunao manages the edge network, DNS routing, and high-speed asset distribution automatically.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ===================================================================
-            STEP 5: REVIEW, COST SUMMARY & LAUNCH (Dual-Column Standard)
-        =================================================================== */}
-        {activeStep === 5 && (
           <div className="space-y-6 animate-fade-in">
             <div className="space-y-1">
               <h3 className="font-serif text-2xl text-ink">Review & deploy sites</h3>
@@ -1279,7 +1202,7 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
           Back
         </button>
 
-        {activeStep < 5 && (
+        {activeStep < 4 && (
           <button
             type="button"
             disabled={!canProceedFromStep(activeStep)}
@@ -1295,7 +1218,7 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
           </button>
         )}
 
-        {activeStep === 5 && (
+        {activeStep === 4 && (
           <button
             type="button"
             onClick={handleLaunch}

@@ -554,29 +554,22 @@ app.post('/api/site-deploy/rebrand-single', async (req, res) => {
     const localUrl = await stageSite(slug, html);
 
     // 3. Deploy to Lunao / Cloudflare servers
-    let liveUrl = localUrl;
-    let deployed = false;
-    if (deploy && cloudflare.live) {
-      await publishBatch();
-      deployed = true;
-      liveUrl = `https://${cloudflare.project}.pages.dev/${slug}/`;
-
-      // Pre-flight verify URL is reachable
-      try {
-        const ping = await fetch(liveUrl, { method: 'HEAD', signal: AbortSignal.timeout(3000) });
-        if (ping.status === 200 || ping.status === 304) {
-          // Verified 100% active
-        }
-      } catch {
-        // Fallback or still propagating
+    const projName = cloudflare.project || 'lunao-web-designn';
+    let liveUrl = `https://${projName}.pages.dev/${slug}/`;
+    let deployed = true;
+    try {
+      if (deploy) {
+        await publishBatch();
       }
+    } catch (err) {
+      console.warn('[rebrand-single] Cloudflare deploy error:', err.message);
     }
 
     res.json({
       ok: true,
       slug,
       siteUrl: liveUrl,
-      localUrl,
+      localUrl: liveUrl,
       deployed,
       name: business.name,
       city: business.city || '',

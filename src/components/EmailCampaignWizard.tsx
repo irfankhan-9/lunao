@@ -701,9 +701,9 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
 
     // Auto-scroll to step indicator when launching
     setTimeout(() => {
-      const stepTrack = document.getElementById('wizard-steps-horizontal-track');
-      if (stepTrack) {
-        stepTrack.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const progressContainer = document.getElementById('campaign-progress-container');
+      if (progressContainer) {
+        progressContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     }, 100);
 

@@ -46,6 +46,25 @@ export interface Campaign {
   // Email campaign subject and body — shown in recent campaign card details
   emailSubject?: string;
   emailBody?: string;
+  // SMS campaign details
+  smsLeads?: CampaignSmsLead[];
+  smsPhoneUsed?: string;
+  smsMessage?: string;
+  totalLeads?: number;
+  leads?: Array<{ name: string; city?: string; phone?: string; email?: string }>;
+}
+
+export interface CampaignSmsLead {
+  leadId?: string | number;
+  name: string;
+  businessName?: string;
+  phone: string;
+  city?: string;
+  siteUrl?: string;
+  status: 'delivered' | 'sent' | 'queued' | 'failed';
+  smsText?: string;
+  sentAt?: string;
+  reason?: string;
 }
 
 export interface CampaignEmailLead {

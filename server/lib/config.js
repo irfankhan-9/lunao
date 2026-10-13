@@ -41,8 +41,8 @@ export const telnyx = {
 
 export const cloudflare = {
   apiToken: env.CLOUDFLARE_API_TOKEN || '',
-  accountId: env.CLOUDFLARE_ACCOUNT_ID || '',
-  project: env.CLOUDFLARE_PAGES_PROJECT || '',
+  accountId: env.CLOUDFLARE_ACCOUNT_ID || 'b54f65c6943dc9caa73a9e0815150063',
+  project: env.CLOUDFLARE_PAGES_PROJECT || 'lunao-web-designn',
   branch: env.CLOUDFLARE_PAGES_BRANCH || 'main',
   get live() {
     return Boolean(this.apiToken && this.accountId && this.project);

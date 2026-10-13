@@ -1,10 +1,10 @@
 /**
- * CsvPreview — Beautiful scrollable CSV data viewer for Email Campaign Wizard
- * Shows parsed lead data with smooth scrolling and elegant design
+ * CsvPreview — Beautiful scrollable CSV data viewer for Email Campaign Wizard & Site Deploy
+ * Shows parsed lead data with smooth scrolling, inline editing, and deletion.
  */
 
 import React, { useRef, useState } from 'react';
-import { X, Upload, FileSpreadsheet, ChevronDown, ChevronUp, Table2, Sparkles, CheckCircle2 } from 'lucide-react';
+import { X, Upload, FileSpreadsheet, ChevronDown, ChevronUp, Table2, Sparkles, CheckCircle2, Pencil, Check } from 'lucide-react';
 import { PipelineLead } from '../lib/pipelineClient';
 
 interface CsvPreviewProps {
@@ -12,6 +12,8 @@ interface CsvPreviewProps {
   leads: PipelineLead[];
   totalCount: number;
   onClear: () => void;
+  onRemoveLead?: (index: number) => void;
+  onUpdateLead?: (index: number, updatedLead: PipelineLead) => void;
   ClearIcon?: React.ElementType;
 }
 
@@ -20,11 +22,17 @@ export const CsvPreview: React.FC<CsvPreviewProps> = ({
   leads,
   totalCount,
   onClear,
+  onRemoveLead,
+  onUpdateLead,
   ClearIcon = X,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isAutoScroll, setIsAutoScroll] = useState(false);
   const [showAll, setShowAll] = useState(false);
+
+  // Inline editing state
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<PipelineLead | null>(null);
 
   // Show max 50 leads initially, then expand
   const displayedLeads = showAll ? leads : leads.slice(0, 50);
@@ -35,6 +43,24 @@ export const CsvPreview: React.FC<CsvPreviewProps> = ({
 
   // Get column headers from sample lead
   const columns = sampleLead ? Object.keys(sampleLead).filter(k => k !== 'id') : [];
+
+  const handleStartEdit = (idx: number, lead: PipelineLead) => {
+    setEditingIndex(idx);
+    setEditForm({ ...lead });
+  };
+
+  const handleSaveEdit = (idx: number) => {
+    if (editForm && onUpdateLead) {
+      onUpdateLead(idx, editForm);
+    }
+    setEditingIndex(null);
+    setEditForm(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingIndex(null);
+    setEditForm(null);
+  };
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-accent/20 bg-gradient-to-br from-white via-accent-soft/5 to-white shadow-lg shadow-accent/10 animate-fade-in">
@@ -62,7 +88,7 @@ export const CsvPreview: React.FC<CsvPreviewProps> = ({
               <div className="flex items-center gap-2">
                 <h4 className="text-sm font-bold text-ink">{fileName}</h4>
                 <span className="px-2 py-0.5 bg-success/15 text-success text-[10px] font-bold rounded-full">
-                  Validated
+                  Validated & Editable
                 </span>
               </div>
               <div className="flex items-center gap-3 mt-1">
@@ -83,8 +109,8 @@ export const CsvPreview: React.FC<CsvPreviewProps> = ({
           <button
             type="button"
             onClick={onClear}
-            className="group p-2 rounded-lg hover:bg-danger/10 transition-all"
-            title="Remove CSV"
+            className="group p-2 rounded-lg hover:bg-danger/10 transition-all cursor-pointer"
+            title="Remove all leads"
           >
             <ClearIcon className="w-4 h-4 text-ink-tertiary group-hover:text-danger transition-colors" />
           </button>
@@ -97,14 +123,14 @@ export const CsvPreview: React.FC<CsvPreviewProps> = ({
         <div className="px-5 py-2.5 flex items-center justify-between bg-gradient-to-r from-surface/80 to-transparent border-b border-border-light/50">
           <div className="flex items-center gap-2">
             <Table2 className="w-4 h-4 text-ink-secondary" />
-            <span className="text-[11px] font-semibold text-ink-secondary">Lead Data Preview</span>
+            <span className="text-[11px] font-semibold text-ink-secondary">Lead Data Preview (Click Edit to modify details)</span>
           </div>
           <div className="flex items-center gap-2">
             {/* Auto-scroll toggle */}
             <button
               type="button"
               onClick={() => setIsAutoScroll(!isAutoScroll)}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all cursor-pointer ${
                 isAutoScroll
                   ? 'bg-accent text-white shadow-sm'
                   : 'bg-surface text-ink-secondary hover:bg-accent-soft hover:text-accent'
@@ -144,34 +170,109 @@ export const CsvPreview: React.FC<CsvPreviewProps> = ({
                     +{columns.length - 6} more
                   </th>
                 )}
+                {(onRemoveLead || onUpdateLead) && (
+                  <th className="px-3 py-2.5 text-right text-[10px] uppercase tracking-wider font-bold text-ink-secondary bg-surface">
+                    Actions
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-border-light/50">
-              {displayedLeads.map((lead, idx) => (
-                <tr
-                  key={lead.id || idx}
-                  className="hover:bg-accent-soft/30 transition-colors group"
-                >
-                  <td className="px-4 py-2.5 text-[11px] text-ink-tertiary font-mono">
-                    {idx + 1}
-                  </td>
-                  {columns.slice(0, 6).map((col) => (
-                    <td
-                      key={col}
-                      className="px-4 py-2.5 text-ink group-hover:text-ink-secondary transition-colors"
-                    >
-                      <span className="inline-block max-w-[180px] truncate">
-                        {String((lead as any)[col] ?? '—')}
-                      </span>
+              {displayedLeads.map((lead, idx) => {
+                const isEditing = editingIndex === idx;
+                return (
+                  <tr
+                    key={lead.id || idx}
+                    className={`transition-colors group ${isEditing ? 'bg-accent-soft/40 ring-1 ring-accent/30' : 'hover:bg-accent-soft/30'}`}
+                  >
+                    <td className="px-4 py-2.5 text-[11px] text-ink-tertiary font-mono align-middle">
+                      {idx + 1}
                     </td>
-                  ))}
-                  {columns.length > 6 && (
-                    <td className="px-4 py-2.5 text-ink-tertiary text-[10px]">
-                      ···
-                    </td>
-                  )}
-                </tr>
-              ))}
+                    {columns.slice(0, 6).map((col) => (
+                      <td
+                        key={col}
+                        className="px-4 py-2.5 text-ink group-hover:text-ink-secondary transition-colors align-middle"
+                      >
+                        {isEditing && editForm ? (
+                          <input
+                            type="text"
+                            value={editForm[col] ?? ''}
+                            onChange={(e) => {
+                              const updated = { ...editForm, [col]: e.target.value };
+                              setEditForm(updated);
+                              if (onUpdateLead) {
+                                onUpdateLead(idx, updated);
+                              }
+                            }}
+                            className="w-full px-2.5 py-1 text-xs rounded-lg border border-accent bg-white text-ink shadow-xs focus:outline-none focus:ring-2 focus:ring-accent/30"
+                          />
+                        ) : (
+                          <span className="inline-block max-w-[180px] truncate">
+                            {String((lead as any)[col] ?? '—')}
+                          </span>
+                        )}
+                      </td>
+                    ))}
+                    {columns.length > 6 && (
+                      <td className="px-4 py-2.5 text-ink-tertiary text-[10px] align-middle">
+                        ···
+                      </td>
+                    )}
+                    {(onRemoveLead || onUpdateLead) && (
+                      <td className="px-3 py-2.5 text-right align-middle">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {isEditing ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleSaveEdit(idx)}
+                                className="p-1.5 rounded-lg bg-success text-white hover:bg-success/90 transition-colors cursor-pointer shadow-xs"
+                                title="Save changes"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleCancelEdit}
+                                className="p-1.5 rounded-lg bg-surface text-ink-secondary hover:bg-border-main transition-colors cursor-pointer"
+                                title="Cancel"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              {onUpdateLead && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEdit(idx, lead)}
+                                  className="p-1.5 rounded-lg text-ink-tertiary hover:text-accent hover:bg-accent-soft transition-colors opacity-75 group-hover:opacity-100 cursor-pointer"
+                                  title="Edit lead info"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {onRemoveLead && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onRemoveLead(idx);
+                                  }}
+                                  className="p-1.5 rounded-lg text-ink-tertiary hover:text-danger hover:bg-danger/10 transition-colors opacity-75 group-hover:opacity-100 cursor-pointer"
+                                  title="Remove this lead"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
 
@@ -181,7 +282,7 @@ export const CsvPreview: React.FC<CsvPreviewProps> = ({
               <button
                 type="button"
                 onClick={() => setShowAll(!showAll)}
-                className="w-full py-2.5 rounded-xl bg-accent-soft/80 border border-accent/20 text-[11px] font-bold text-accent hover:bg-accent hover:text-white transition-all flex items-center justify-center gap-2"
+                className="w-full py-2.5 rounded-xl bg-accent-soft/80 border border-accent/20 text-[11px] font-bold text-accent hover:bg-accent hover:text-white transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 {showAll ? (
                   <>
@@ -209,12 +310,12 @@ export const CsvPreview: React.FC<CsvPreviewProps> = ({
             </span>
             <span className="w-1 h-1 rounded-full bg-border-main" />
             <span className="text-[10px] text-ink-tertiary">
-              <span className="font-bold text-ink">{totalCount.toLocaleString()}</span> valid leads
+              <span className="font-bold text-ink">{leads.length.toLocaleString()}</span> active leads
             </span>
           </div>
           <span className="text-[10px] text-success font-semibold flex items-center gap-1">
             <CheckCircle2 className="w-3 h-3" />
-            Ready to use
+            Ready for Site Deploy
           </span>
         </div>
       </div>

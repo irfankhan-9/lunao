@@ -1980,7 +1980,14 @@ The Lunao Team`);
                 </React.Fragment>
               ))
             ) : activeCampaignType === 'sms' ? (
-              [ { step: 1, name: 'Select Niche' }, { step: 2, name: 'Choose Leads' }, { step: 3, name: 'Choose Template' }, { step: 4, name: 'Sender Phone' }, { step: 5, name: 'Review & Launch' } ].map((item) => (
+              [
+                { step: 1, name: 'Select Niche' },
+                { step: 2, name: 'Choose Leads' },
+                { step: 3, name: 'Choose Template' },
+                { step: 4, name: 'Sender Phone' },
+                { step: 5, name: 'SMS Message' },
+                { step: 6, name: 'Review & Launch' },
+              ].map((item) => (
                 <React.Fragment key={item.step}>
                   <div ref={el => { stepRefs.current[item.step] = el; }} className="flex items-center gap-3 shrink-0 snap-start min-w-[140px]">
                     <div className="relative">
@@ -2005,7 +2012,7 @@ The Lunao Team`);
                       <span className={`text-xs font-medium leading-tight whitespace-nowrap transition-colors duration-300 ${activeStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
                     </div>
                   </div>
-                  {item.step < 5 && (
+                  {item.step < 6 && (
                     <div className={`
                       hidden md:block h-[1px] flex-1 min-w-[20px] mx-2 self-center
                       transition-all duration-500 ease-out origin-left
@@ -2015,7 +2022,7 @@ The Lunao Team`);
                 </React.Fragment>
               ))
             ) : (
-              [ { step: 1, name: 'Select Niche' }, { step: 2, name: 'Choose Leads' }, { step: 3, name: 'Choose Template' }, { step: 4, name: 'Edge Setup' }, { step: 5, name: 'Review & Deploy' } ].map((item) => (
+              [ { step: 1, name: 'Select Niche' }, { step: 2, name: 'Choose Leads' }, { step: 3, name: 'Choose Template' }, { step: 4, name: 'Review & Deploy' } ].map((item) => (
                 <React.Fragment key={item.step}>
                   <div ref={el => { sdStepRefs.current[item.step] = el; }} className="flex items-center gap-3 shrink-0 snap-start min-w-[140px]">
                     <div className="relative">
@@ -2040,7 +2047,7 @@ The Lunao Team`);
                       <span className={`text-xs font-medium leading-tight whitespace-nowrap transition-colors duration-300 ${sdActiveStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
                     </div>
                   </div>
-                  {item.step < 5 && (
+                  {item.step < 4 && (
                     <div className={`
                       hidden md:block h-[1px] flex-1 min-w-[16px] mx-2 self-center
                       transition-all duration-500 ease-out origin-left
@@ -2083,21 +2090,8 @@ The Lunao Team`);
               onLaunch={() => {
                 setUserCredits(userCredits);
               }}
-              onCampaignCreated={(campaign) => {
-                const newCampaign: Campaign = {
-                  id: campaign.id,
-                  name: campaign.name,
-                  niche: 'SMS',
-                  leadsFound: campaign.totalLeads || 0,
-                  sites: 0,
-                  smsSent: campaign.smsSent || 0,
-                  claimed: 0,
-                  status: 'Active',
-                  createdAt: new Date().toISOString(),
-                  templateId: '',
-                  type: 'sms',
-                };
-                setCampaigns(prev => [newCampaign, ...prev]);
+              onCampaignCreated={(newCampaign) => {
+                setCampaigns(prev => [newCampaign, ...prev.filter(c => c.id !== newCampaign.id)]);
               }}
               onViewDetails={(campaignId) => {
                 setScrollTarget?.(campaignId);

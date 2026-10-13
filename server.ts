@@ -10,7 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 process.env.NO_SERVER_LISTEN = 'true';
 const { app, startBackgroundServices } = await import('./server/index.js');
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const isDev = process.env.NODE_ENV !== 'production';
 
 const PWA_DIST = path.resolve(__dirname, 'lunaoownerpwa', 'dist');
@@ -23,7 +23,7 @@ if (fs.existsSync(PWA_DIST)) {
 
 if (isDev) {
   const vite = await createViteServer({
-    server: { middlewareMode: true },
+    server: { middlewareMode: true, hmr: false },
     appType: 'spa',
   });
   app.use(vite.middlewares);
