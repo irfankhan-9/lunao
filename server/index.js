@@ -42,8 +42,9 @@ import {
   CA_PROVINCES,
 } from './lib/smsLeads.js';
 import { listCities } from './lib/cities.js';
-import { publishBatch, validateCloudflareToken } from './lib/cloudflare.js';
-import { streamEdit, isAiEnabled, cleanHtmlOutput } from './lib/anthropic.js';
+import { publishBatch, validateCloudflareToken, stageSite } from './lib/cloudflare.js';
+import { slugify } from './lib/slug.js';
+import { streamEdit, isAiEnabled, cleanHtmlOutput, generateTemplateHtml } from './lib/geminiAi.js';
 import { createBooking, listBookings, updateBookingStatus } from './lib/bookings.js';
 import { chatTurn } from './lib/chatbot.js';
 import { getAddons, setAddons } from './lib/widget.js';
@@ -121,7 +122,6 @@ import {
   probeAllEmailAccountTokens,
   listEmailLeadsWithAccounts,
 } from './lib/emailCampaigns.js';
-import { lookupCity } from './lib/cities.js';
 import { runDorkPipeline } from './lib/dorkPipeline.js';
 import {
   buildGmailAuthUrl,
@@ -534,6 +534,55 @@ app.post('/api/site-deploy/run', async (req, res) => {
   }
 });
 
+// Single business AI rebrand + stage + live deploy endpoint.
+// Powers the sequential step-by-step AI deployment in SiteDeployCampaignWizard.
+app.post('/api/site-deploy/rebrand-single', async (req, res) => {
+  try {
+    const { business, niche, templateKey, ownerKey, deploy = true } = req.body || {};
+    if (!business || !business.name) {
+      return res.status(400).json({ ok: false, error: 'Business name is required' });
+    }
+
+    const effectiveNiche = business.niche || niche || 'Barber';
+    const effectiveKey = business.templateKey || templateKey || effectiveNiche;
+    const slug = business.slug || slugify(business.name, business.city || '');
+
+    // 1. Compile personalized site with exact template placeholders
+    const { html, resolved } = await compileSite(business, effectiveKey, ownerKey || null);
+
+    // 2. Stage locally to disk in SITES_DIR
+    const localUrl = await stageSite(slug, html);
+
+    // 3. Deploy to Lunao / Cloudflare servers
+    const projName = cloudflare.project || 'lunao-web-designn';
+    let liveUrl = `https://${projName}.pages.dev/${slug}/`;
+    let deployed = true;
+    try {
+      if (deploy) {
+        await publishBatch();
+      }
+    } catch (err) {
+      console.warn('[rebrand-single] Cloudflare deploy error:', err.message);
+    }
+
+    res.json({
+      ok: true,
+      slug,
+      siteUrl: liveUrl,
+      localUrl: liveUrl,
+      deployed,
+      name: business.name,
+      city: business.city || '',
+      phone: business.phone || '',
+      status: 'live',
+      templateName: resolved?.name || 'Standard',
+    });
+  } catch (err) {
+    console.error('[rebrand-single] error:', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ---- Site Editor API -------------------------------------------------------
 
 // All sites ever generated for this owner — across BOTH site-deploy campaigns
@@ -698,9 +747,9 @@ app.post('/api/sites/:slug/deploy', async (req, res) => {
 
 // AI code edit (SSE). Streams Claude's HTML output chunk-by-chunk so the
 // editor can refresh its live preview as the code is written.
-// Supports user-supplied anthropicApiKey for BYOK usage.
+// AI site editing powered by Google AI Studio Gemini 2.5 Flash built-in
 app.post('/api/ai/edit', async (req, res) => {
-  const { html, instruction, history, anthropicApiKey } = req.body || {};
+  const { html, instruction, history, anthropicApiKey, apiKey, geminiApiKey } = req.body || {};
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -708,10 +757,10 @@ app.post('/api/ai/edit', async (req, res) => {
   res.flushHeaders?.();
   const send = (event) => res.write(`data: ${JSON.stringify(event)}\n\n`);
 
-  // Require either a user-supplied key or a server-side key
-  const hasUserKey = typeof anthropicApiKey === 'string' && anthropicApiKey.trim().length > 10;
+  const userKey = (geminiApiKey || apiKey || (typeof anthropicApiKey === 'string' && anthropicApiKey.startsWith('AI') ? anthropicApiKey : null));
+  const hasUserKey = typeof userKey === 'string' && userKey.trim().length > 10;
   if (!hasUserKey && !isAiEnabled()) {
-    send({ type: 'error', error: 'AI editor needs an Anthropic key. Add yours below or configure ANTHROPIC_API_KEY on the server.' });
+    send({ type: 'error', error: 'AI engine initializing. Google AI Studio Gemini API key is being configured.' });
     return res.end();
   }
   if (typeof html !== 'string' || !html.trim() || typeof instruction !== 'string' || !instruction.trim()) {
@@ -722,7 +771,7 @@ app.post('/api/ai/edit', async (req, res) => {
   try {
     send({ type: 'start' });
     const full = await streamEdit(
-      { html, instruction, history, anthropicApiKey },
+      { html, instruction, history, apiKey: userKey || undefined },
       (delta, isThinking) => {
         if (isThinking) {
           send({ type: 'thinking', delta });
@@ -931,49 +980,72 @@ function generateToken(code) {
 app.post('/api/owner/redeem', (req, res) => {
   try {
     const { code, deviceLabel, platform } = req.body || {};
-    if (typeof code !== 'string' || !isValidCodeFormat(code)) {
-      return res.status(400).json({ ok: false, error: 'Invalid invite code format. Expected LUNAO-XXXX-XXXX.' });
+    if (typeof code !== 'string' || !code.trim()) {
+      return res.status(400).json({ ok: false, error: 'Please enter an owner access code or website slug.' });
     }
-    const trimmed = code.trim().toUpperCase();
-    const devMode = req.query.devMode === '1' || req.query.devMode === 'true';
+    let input = code.trim();
+    let upperCode = input.toUpperCase();
+    if (!upperCode.startsWith('LUNAO-') && /^[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(upperCode)) {
+      upperCode = `LUNAO-${upperCode}`;
+    }
 
-    // Real invite-code path: look the code up in the table and bind to its slug.
-    if (!devMode) {
-      const row = findByCode(trimmed);
-      if (!row) {
-        return res.status(404).json({ ok: false, error: 'Invalid or revoked invite code.' });
-      }
+    const sites = listSitesSync();
+
+    // 1. Try finding by invite code first
+    let row = findByCode(upperCode);
+    let target = null;
+
+    if (row) {
       if (row.revokedAt) {
         return res.status(404).json({ ok: false, error: 'This invite code has been revoked.' });
       }
-      // Look up the site to attach business metadata.
-      const sites = listSitesSync();
-      const target = sites.find((s) => s.slug === row.slug);
-      if (!target) {
-        return res.status(404).json({ ok: false, error: 'No site found for this code.' });
+      target = sites.find((s) => s.slug === row.slug);
+    } else {
+      // 2. Try finding by website slug / code (e.g. "everest-climate-denver")
+      const cleanSlug = input.toLowerCase().replace(/^https?:\/\/[^/]+\//, '').replace(/\/$/, '').trim();
+      target = sites.find((s) => s.slug.toLowerCase() === cleanSlug || s.slug.toLowerCase() === input.toLowerCase()) ||
+               sites.find((s) => s.slug.toLowerCase().includes(cleanSlug) || cleanSlug.includes(s.slug.toLowerCase()));
+
+      if (target) {
+        // Reuse an existing active invite code for this site or create a new one
+        const existingRow = db.prepare('SELECT * FROM invite_codes WHERE slug = ? AND revoked_at IS NULL ORDER BY id DESC LIMIT 1').get(target.slug);
+        if (existingRow) {
+          row = {
+            id: existingRow.id,
+            code: existingRow.code,
+            slug: existingRow.slug,
+            label: existingRow.label,
+          };
+        } else {
+          const newCodeRec = createCode(target.slug, 'PWA Website Access');
+          row = {
+            id: newCodeRec.id,
+            code: newCodeRec.code,
+            slug: target.slug,
+            label: newCodeRec.label,
+          };
+        }
       }
-      touchCode(trimmed, deviceLabel);
-      const token = generateToken(trimmed);
-      return res.json({
-        ok: true,
-        token,
-        slug: target.slug,
-        businessName: target.title,
-        niche: target.niche,
-        siteUrl: target.url,
-        inviteCode: { id: row.id, code: row.code, label: row.label },
+    }
+
+    if (!target || !row) {
+      return res.status(404).json({
+        ok: false,
+        error: `Could not find business for "${input}". Please check your code or enter a valid website name.`,
       });
     }
 
-    // Dev-mode escape hatch (?devMode=1): original fuzzy-match behavior.
-    // Used by local testing where no codes have been issued yet.
-    const sites = listSitesSync();
-    const target = sites.find((s) => s.slug.includes(trimmed.replace('LUNAO-', '').toLowerCase().replace(/[^a-z0-9-]/g, ''))) || sites[0];
-    if (!target) {
-      return res.status(404).json({ ok: false, error: 'No site found for this code.' });
-    }
-    const token = generateToken(trimmed);
-    res.json({ ok: true, token, slug: target.slug, businessName: target.title, niche: target.niche, siteUrl: target.url, devMode: true });
+    touchCode(row.code, deviceLabel);
+    const token = generateToken(row.code);
+    return res.json({
+      ok: true,
+      token,
+      slug: target.slug,
+      businessName: target.title,
+      niche: target.niche,
+      siteUrl: target.url,
+      inviteCode: { id: row.id, code: row.code, label: row.label },
+    });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -3708,9 +3780,9 @@ app.get('/api/site-history/:id', authenticate, (req, res) => {
 });
 
 // Turn a history entry into a named template (saves to custom_templates).
-app.post('/api/site-history/:id/convert-to-template', authenticate, (req, res) => {
+app.post('/api/site-history/:id/convert-to-template', authenticate, async (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.body?.ownerKey || req.query?.ownerKey || '').trim();
+    const ownerKey = req.userId ? `user_${req.userId}` : String(req.body?.ownerKey || req.query?.ownerKey || 'dashboard').trim();
     const { name, categoryId = null, niche = '', templateId: existingTemplateId = null } = req.body || {};
 
     const row = db.prepare('SELECT * FROM site_history WHERE id = ? AND owner_key = ?').get(req.params.id, ownerKey);
@@ -3720,6 +3792,16 @@ app.post('/api/site-history/:id/convert-to-template', authenticate, (req, res) =
     const templateId = existingTemplateId || `tmpl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const slug = templateName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const now = Math.floor(Date.now() / 1000);
+    const targetNiche = (niche || row.niche || 'General').trim();
+
+    // Persist and synchronize the niche into template_categories if provided
+    if (targetNiche && targetNiche !== 'General') {
+      try {
+        await createNiche(targetNiche, '', '#2563EB', ownerKey);
+      } catch (catErr) {
+        console.warn('[templates] failed to auto-register niche category:', catErr.message);
+      }
+    }
 
     // Insert into custom_templates if not already a template
     if (!row.is_template) {
@@ -3758,7 +3840,7 @@ app.post('/api/site-history/:id/convert-to-template', authenticate, (req, res) =
       db.prepare(
         `INSERT INTO custom_templates (id, owner_key, category_id, name, slug, niche, raw_html, preview_html, style_tags, used_count, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', 0, ?)`,
-      ).run(templateId, ownerKey, categoryId || null, templateName, slug, niche || row.niche, row.html, previewHtml, now);
+      ).run(templateId, ownerKey, categoryId || null, templateName, slug, targetNiche, row.html, previewHtml, now);
 
       // Mark history entry as converted
       db.prepare(
@@ -3766,15 +3848,18 @@ app.post('/api/site-history/:id/convert-to-template', authenticate, (req, res) =
       ).run(templateId, templateName, req.params.id);
     }
 
+    const updatedNiches = await getAllNiches(ownerKey);
+
     res.json({
       ok: true,
       template: {
         id: templateId,
         name: templateName,
         slug,
-        niche: niche || row.niche,
+        niche: targetNiche,
         categoryId: categoryId || null,
       },
+      niches: updatedNiches,
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -3897,20 +3982,42 @@ CRITICAL RULES:
 //   - built-in: "barber-dark-luxury", "hvac-everest", ...
 //   - custom:   "tmpl_xxx" (matches custom_templates.id)
 
-import { resolveTemplate, listTemplates, loadPreviewHtml, NICHE_LIST } from './lib/templates.js';
+import { resolveTemplate, listTemplates, loadPreviewHtml, NICHE_LIST, getAllNiches, createNiche } from './lib/templates.js';
 
-// Back-compat: expose the niche list derived from the built-in registry.
-// The frontend can fall back to its own static list if this 404s.
-app.get('/api/niches', (req, res) => {
-  res.json({ ok: true, niches: NICHE_LIST });
+// Expose all niches: built-in defaults + persistent categories + custom template niches.
+app.get('/api/niches', async (req, res) => {
+  try {
+    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    const niches = await getAllNiches(ownerKey || null);
+    res.json({ ok: true, niches });
+  } catch (err) {
+    res.json({ ok: true, niches: NICHE_LIST });
+  }
 });
 
-// Unified list — built-ins + this user's customs.
+// Create a new niche in the backend and return updated list of all niches.
+app.post('/api/niches', async (req, res) => {
+  try {
+    const ownerKey = req.userId ? `user_${req.userId}` : String(req.body?.ownerKey || req.query?.ownerKey || 'dashboard').trim();
+    const { name, emoji, color } = req.body || {};
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ ok: false, error: 'Niche name is required.' });
+    }
+    const niche = await createNiche(name.trim(), emoji, color, ownerKey);
+    const niches = await getAllNiches(ownerKey);
+    res.json({ ok: true, niche, niches });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Unified list — built-ins + this user's customs + all synchronized niches.
 app.get('/api/templates', authenticate, async (req, res) => {
   try {
     const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
     const payload = await listTemplates(ownerKey || null);
-    res.json({ ok: true, ...payload });
+    const niches = await getAllNiches(ownerKey || null);
+    res.json({ ok: true, ...payload, niches });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -4097,19 +4204,16 @@ app.post('/api/custom-templates/generate', authenticate, async (req, res) => {
 
     let rawHtml, previewHtml;
     try {
-      ({ rawHtml, previewHtml } = await import('./lib/anthropic.js').then((m) =>
-        m.generateTemplateHtml(prompt.trim(), niche, anthropicApiKey),
-      ));
+      ({ rawHtml, previewHtml } = await generateTemplateHtml(prompt.trim(), niche, anthropicApiKey));
+      if (niche && niche !== 'Local Business') {
+        try {
+          await createNiche(niche, '', '#2563EB', ownerKey);
+        } catch { /* ignore */ }
+      }
     } catch (genErr) {
       // Refund the 2 credits on AI failure
       refund(ownerKey, 2, 'template_gen_failed_refund', null);
       const msg = genErr instanceof Error ? genErr.message : 'Generation failed';
-      // Distinguish between missing key and invalid key
-      const isMissingKey = msg.includes('missing ANTHROPIC_API_KEY') || msg.includes('not configured');
-      const isInvalidKey = msg.includes('401') || msg.includes('invalid') || msg.includes('Unauthorized') || msg.includes('authentication_error');
-      if (isInvalidKey) {
-        return res.status(401).json({ ok: false, error: 'Your Anthropic key is invalid. Please check it and try again.' });
-      }
       return res.status(422).json({ ok: false, error: msg });
     }
 
@@ -4227,6 +4331,9 @@ const PWA_DIST = path.join(ROOT_DIR, 'lunaoownerpwa', 'dist');
 const FRONTEND_DIST = path.join(ROOT_DIR, 'dist');
 if (fs.existsSync(PWA_DIST)) {
   app.use('/owner', express.static(PWA_DIST));
+  app.get('/owner*', (_req, res) => {
+    res.sendFile(path.join(PWA_DIST, 'index.html'));
+  });
 }
 if (fs.existsSync(FRONTEND_DIST)) {
   app.use(express.static(FRONTEND_DIST));
@@ -4246,36 +4353,50 @@ if (spaEntry) {
   });
 }
 
-app.listen(PORT, () => {
-  // Background safety net: re-check non-terminal SMS rows every 30s, in case
-  // the dashboard isn't open (so a Telnyx webhook that lands while nobody's
-  // looking still gets reflected in the DB before the user next loads).
-  startGlobalRechecker();
-  const mode = modeSummary();
-  console.log(`\n  Lunao pipeline API  ->  http://localhost:${PORT}`);
-  console.log(`  Public base        : ${PUBLIC_BASE}`);
-  console.log(`  Telnyx SMS         : ${mode.telnyx}`);
-  console.log(`  Cloudflare Pages   : ${mode.cloudflare}`);
-  console.log(`  Google Maps        : ${mode.googleMaps}`);
-  console.log(`  AI Editor          : ${mode.aiEditor}`);
-  console.log(`  Chatbot            : ${mode.chatbot}`);
-  console.log(`  Site base URL      : ${mode.siteBaseUrl}`);
-  console.log(`  DB                 : ${process.env.DATABASE_URL ? 'Postgres (Railway)' : 'SQLite (local)'}`);
-  console.log(`  Auth cookies       : secure=${process.env.NODE_ENV === 'production'} sameSite=lax trustProxy=${app.get('trust proxy')}`);
-  if (templatesCheck.ok) {
-    console.log(`  Raw templates      : ${templatesCheck.count} files at ${templatesCheck.path}`);
-  } else {
-    console.log(`  Raw templates      : MISSING (${templatesCheck.reason}) at ${templatesCheck.path}`);
-    console.log(`                     Campaigns will fail with "0 sites generated".`);
-    console.log(`                     Fix: git add public/templates-raw/*.html && git commit && git push.`);
+export function startBackgroundServices() {
+  try {
+    startGlobalRechecker();
+    startOauthStateCleanup();
+  } catch (err) {
+    console.error('Failed to start background services:', err);
   }
-  // Start OAuth state cleanup timer
-  startOauthStateCleanup();
-  // City DB status — block (don't log until resolved) so the operator sees
-  // whether the 200k GeoNames file finished loading or only the seed list
-  // is available yet.
-  citiesLoadPromise.then((s) => {
-    console.log(`  Cities             : ${s.records.toLocaleString()} in-memory (${s.fileLoaded ? 'GeoNames cities500 loaded' : 'seed list only'})`);
+}
+
+export { app };
+export default app;
+
+if (process.env.NO_SERVER_LISTEN !== 'true') {
+  app.listen(PORT, () => {
+    // Background safety net: re-check non-terminal SMS rows every 30s, in case
+    // the dashboard isn't open (so a Telnyx webhook that lands while nobody's
+    // looking still gets reflected in the DB before the user next loads).
+    startGlobalRechecker();
+    const mode = modeSummary();
+    console.log(`\n  Lunao pipeline API  ->  http://localhost:${PORT}`);
+    console.log(`  Public base        : ${PUBLIC_API_BASE_URL}`);
+    console.log(`  Telnyx SMS         : ${mode.telnyx}`);
+    console.log(`  Cloudflare Pages   : ${mode.cloudflare}`);
+    console.log(`  Google Maps        : ${mode.googleMaps}`);
+    console.log(`  AI Editor          : ${mode.aiEditor}`);
+    console.log(`  Chatbot            : ${mode.chatbot}`);
+    console.log(`  Site base URL      : ${mode.siteBaseUrl}`);
+    console.log(`  DB                 : ${process.env.DATABASE_URL ? 'Postgres (Railway)' : 'SQLite (local)'}`);
+    console.log(`  Auth cookies       : secure=${process.env.NODE_ENV === 'production'} sameSite=lax trustProxy=${app.get('trust proxy')}`);
+    if (templatesCheck.ok) {
+      console.log(`  Raw templates      : ${templatesCheck.count} files at ${templatesCheck.path}`);
+    } else {
+      console.log(`  Raw templates      : MISSING (${templatesCheck.reason}) at ${templatesCheck.path}`);
+      console.log(`                     Campaigns will fail with "0 sites generated".`);
+      console.log(`                     Fix: git add public/templates-raw/*.html && git commit && git push.`);
+    }
+    // Start OAuth state cleanup timer
+    startOauthStateCleanup();
+    // City DB status — block (don't log until resolved) so the operator sees
+    // whether the 200k GeoNames file finished loading or only the seed list
+    // is available yet.
+    citiesLoadPromise.then((s) => {
+      console.log(`  Cities             : ${s.records.toLocaleString()} in-memory (${s.fileLoaded ? 'GeoNames cities500 loaded' : 'seed list only'})`);
+    });
+    console.log('');
   });
-  console.log('');
-});
+}

@@ -46,11 +46,31 @@ export interface Campaign {
   // Email campaign subject and body — shown in recent campaign card details
   emailSubject?: string;
   emailBody?: string;
+  // SMS campaign details
+  smsLeads?: CampaignSmsLead[];
+  smsPhoneUsed?: string;
+  smsMessage?: string;
+  totalLeads?: number;
+  leads?: Array<{ name: string; city?: string; phone?: string; email?: string }>;
+}
+
+export interface CampaignSmsLead {
+  leadId?: string | number;
+  name: string;
+  businessName?: string;
+  phone: string;
+  city?: string;
+  siteUrl?: string;
+  status: 'delivered' | 'sent' | 'queued' | 'failed';
+  smsText?: string;
+  sentAt?: string;
+  reason?: string;
 }
 
 export interface CampaignEmailLead {
   leadId?: string | number;
   name: string;
+  businessName?: string;
   email?: string;
   accountEmail?: string;
   siteUrl?: string;
@@ -80,6 +100,8 @@ export interface Template {
   rating: number;
   tag?: string;
   isMostUsed?: boolean;
+  emoji?: string;
+  description?: string;
   // The raw HTML file under /public/templates-raw/ that the server should
   // compile when this template is selected. Without this, every selection
   // silently falls back to the default barber template.

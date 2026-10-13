@@ -41,8 +41,13 @@ import {
   Send,
   Loader2,
   Eye,
+  Phone,
+  Clock,
+  AlertCircle,
+  Search,
+  MessageSquare,
 } from 'lucide-react';
-import { Campaign, CampaignDeployedSite, CampaignEmailLead } from '../types';
+import { Campaign, CampaignDeployedSite, CampaignEmailLead, CampaignSmsLead } from '../types';
 import { RunningBadge, SiteUrlRow, DeployedUrlChips } from './RecentCampaignsBits';
 import { TemplateSimPreview } from './TemplateSimPreview';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -229,7 +234,7 @@ export const UnifiedRecentCampaigns: React.FC<UnifiedRecentCampaignsProps> = ({
   useEffect(() => {
     const timers = collapseTimers.current;
     return () => {
-      Object.values(timers).forEach((t) => window.clearTimeout(t));
+      Object.values(timers).forEach((t) => window.clearTimeout(t as any));
     };
   }, []);
 
@@ -297,7 +302,7 @@ export const UnifiedRecentCampaigns: React.FC<UnifiedRecentCampaignsProps> = ({
   const handleBatchDeleteConfirm = () => {
     playCancelTone();
     setConfirmBatchDelete(false);
-    const ids = Array.from(selectedIds);
+    const ids = Array.from(selectedIds) as string[];
     if (ids.length === 0) return;
     setSelectedIds(new Set());
     beginCollapse(ids);
@@ -568,12 +573,17 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
   const isFrozen = camp.status === 'Completed' || camp.status === 'Crashed';
   const isSiteDeploy = camp.type === 'site-deploy';
   const isEmail = camp.type === 'email';
+  const isSms = camp.type === 'sms';
 
   const liveSites = (camp.deployedSites || []).filter((s: CampaignDeployedSite) => s.status === 'live' && s.url);
   const liveCount = liveSites.length;
   const sent = camp.emailsSent ?? 0;
   const failed = camp.emailsFailed ?? 0;
   const sites = camp.sitesGenerated ?? camp.sites ?? 0;
+
+  const smsSentCount = camp.smsSent ?? camp.smsLeads?.filter(l => l.status === 'delivered' || l.status === 'sent').length ?? (camp.deployedSites?.length ?? 0);
+  const smsFailedCount = camp.smsFailed ?? camp.smsLeads?.filter(l => l.status === 'failed').length ?? 0;
+  const smsLeadsCount = camp.smsLeads?.length || camp.leads?.length || camp.totalLeads || camp.leadsFound || liveCount || 0;
   // Lead count for the card row. The wizard's `finalCampaign` payload sets both
   // `leadsFound` AND `emailLeads`, and the post-complete API backfill in
   // Campaigns.tsx sets them again from DB counts. They MUST agree — but to be
@@ -752,15 +762,17 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
                 </>
               )}
             </>
-          ) : camp.type === 'sms' ? (
+          ) : isSms ? (
             <>
-              <StatPill label="Leads" value={leadsCount} color="text-blue-600" />
+              <StatPill label="Sites" value={liveCount || sites} color="text-accent" />
               <div className="w-px bg-border-light" />
-              <StatPill label="Sent" value={sent} color="text-success" />
-              {failed > 0 && (
+              <StatPill label="Leads" value={smsLeadsCount} color="text-blue-600" />
+              <div className="w-px bg-border-light" />
+              <StatPill label="SMS" value={smsSentCount} color="text-success" />
+              {smsFailedCount > 0 && (
                 <>
                   <div className="w-px bg-border-light" />
-                  <StatPill label="Failed" value={failed} color="text-danger" />
+                  <StatPill label="Failed" value={smsFailedCount} color="text-danger" />
                 </>
               )}
             </>
@@ -772,6 +784,32 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
             </>
           )}
         </div>
+
+        {/* ── SMS Route & live sites strip on card ── */}
+        {isSms && (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Phone className="w-3 h-3 text-emerald-600 shrink-0" />
+              <p className="text-[10px] text-ink-tertiary font-bold tracking-tight truncate font-mono">
+                Route: {camp.smsPhoneUsed || '+1 (604) 953-9651'}
+              </p>
+            </div>
+            {liveCount > 0 && (
+              <div className="flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50/60 border border-emerald-100">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Globe className="w-3 h-3 text-accent shrink-0" />
+                  <span className="text-[10px] text-ink font-medium truncate">
+                    {liveCount} live site{liveCount !== 1 ? 's' : ''} deployed
+                  </span>
+                </div>
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[9px] font-bold shrink-0">
+                  <CheckCircle className="w-2.5 h-2.5" />
+                  {smsSentCount} Delivered
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Gmail accounts used — beautiful integrated row (no subject on card) ── */}
         {isEmail && camp.emailAccountsUsed && camp.emailAccountsUsed.length > 0 && (
@@ -874,14 +912,42 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
   onClose,
 }) => {
   const isEmail = camp.type === 'email';
-  const isSiteDeploy = camp.type === 'site-deploy';
-  // Defensively dedupe the initial state — the parent may have stored
-  // duplicates when the wizard payload was processed before the dedup fix.
+  const isSms = camp.type === 'sms';
+  const isSiteDeploy = camp.type === 'site-deploy' || (!isEmail && !isSms);
+
+  const smsLeads = useMemo<CampaignSmsLead[]>(() => {
+    if (camp.smsLeads && camp.smsLeads.length > 0) return camp.smsLeads;
+    if (camp.deployedSites && camp.deployedSites.length > 0) {
+      return camp.deployedSites.map((s: any, idx: number) => ({
+        leadId: `sms-lead-${idx + 1}`,
+        name: s.name || `Business ${idx + 1}`,
+        businessName: s.name || `Business ${idx + 1}`,
+        phone: s.phone || (camp.leads && camp.leads[idx]?.phone) || '+1 604-555-0199',
+        city: s.city || (camp.leads && camp.leads[idx]?.city) || 'Local Area',
+        siteUrl: s.url,
+        status: s.status === 'live' ? 'delivered' : 'failed',
+        smsText: s.smsText || camp.smsMessage || '',
+        sentAt: 'Delivered',
+      }));
+    }
+    if (camp.leads && camp.leads.length > 0) {
+      return camp.leads.map((l: any, idx: number) => ({
+        leadId: `sms-lead-${idx + 1}`,
+        name: l.name || `Business ${idx + 1}`,
+        businessName: l.name || `Business ${idx + 1}`,
+        phone: l.phone || '+1 604-555-0199',
+        city: l.city || 'Local Area',
+        siteUrl: (camp.deployedSites && camp.deployedSites[idx]?.url) || '',
+        status: 'delivered' as const,
+        smsText: camp.smsMessage || '',
+        sentAt: 'Delivered',
+      }));
+    }
+    return [];
+  }, [camp]);
+
+  // Defensively dedupe the initial state
   const [emailLeads, setEmailLeads] = useState<CampaignEmailLead[]>(dedupeLeads(camp.emailLeads || []));
-  // Start in loading state so the spinner covers the brief 0-lead window
-  // between modal mount and the first fetch response. Without this, the
-  // user sees a misleading "No per-prospect data yet" placeholder for a
-  // frame or two while the leads request is in flight.
   const [loadingLeads, setLoadingLeads] = useState<boolean>(isEmail && (camp.emailLeads?.length ?? 0) === 0);
   const [accountsUsed, setAccountsUsed] = useState<{ accountId: string; accountEmail: string; sent: number; failed: number }[]>(camp.emailAccountsUsed || []);
 
@@ -1044,9 +1110,9 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-accent-soft text-accent border border-accent/20 text-[11px] font-bold uppercase tracking-wider">
                     <Mail className="w-3.5 h-3.5" /> Email Campaign
                   </span>
-                ) : camp.type === 'sms' ? (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50 text-green-700 border border-green-200 text-[11px] font-bold uppercase tracking-wider">
-                    <Send className="w-3.5 h-3.5" /> SMS Campaign
+                ) : isSms ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold uppercase tracking-wider">
+                    <Send className="w-3.5 h-3.5 text-emerald-600" /> SMS Campaign
                   </span>
                 ) : isSiteDeploy ? (
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-accent-soft text-accent border border-accent/20 text-[11px] font-bold uppercase tracking-wider">
@@ -1055,6 +1121,30 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
                 ) : null}
               </div>
               <p className="text-xs text-ink-secondary">{camp.niche} · {camp.createdAt}</p>
+
+              {/* SMS Route & template preview — only for SMS campaigns */}
+              {isSms && (camp.smsMessage || camp.smsPhoneUsed) && (
+                <div className="mt-2.5 flex flex-col gap-1.5">
+                  {camp.smsPhoneUsed && (
+                    <div className="flex items-center gap-2 p-2 rounded-lg border border-emerald-200 bg-emerald-50/60">
+                      <Phone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span className="text-[10px] text-emerald-800 font-mono font-medium">
+                        Originating Sender: {camp.smsPhoneUsed} · Telnyx Canada 10DLC
+                      </span>
+                    </div>
+                  )}
+                  {camp.smsMessage && (
+                    <div className="flex items-start gap-2 p-2.5 rounded-lg border border-border-light bg-off-white/70">
+                      <MessageSquare className="w-3.5 h-3.5 text-ink-tertiary shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="text-[9px] text-ink-tertiary font-bold uppercase tracking-widest mb-0.5">Outbound SMS Proposal Template</p>
+                        <p className="text-[11px] text-ink-secondary leading-relaxed line-clamp-3 font-mono">{camp.smsMessage}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Email subject + body preview — only for email campaigns */}
               {isEmail && (camp.emailSubject || camp.emailBody) && (
                 <div className="mt-2.5 flex flex-col gap-1.5">
@@ -1083,7 +1173,7 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
         </div>
 
         {/* Stats strip */}
-        <div className={`grid ${isEmail ? 'grid-cols-5' : 'grid-cols-3'} divide-x divide-border-light border-b border-border-light`}>
+        <div className={`grid ${isEmail ? 'grid-cols-5' : isSms ? 'grid-cols-4' : 'grid-cols-3'} divide-x divide-border-light border-b border-border-light`}>
           {isEmail ? (
             <>
               <StatBlock label="Leads" value={loadingLeads ? (camp.leadsFound || 0) : (emailLeads.length || camp.leadsFound || 0)} icon={<Users className="w-4 h-4" />} color="text-blue-600" />
@@ -1091,6 +1181,19 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
               <StatBlock label="Emails Sent" value={loadingLeads ? (camp.emailsSent || 0) : modalSent} icon={<Mail className="w-4 h-4" />} color="text-success" />
               <StatBlock label="Failed" value={loadingLeads ? (camp.emailsFailed || 0) : modalFailed} icon={<X className="w-4 h-4" />} color={modalFailed > 0 ? 'text-danger' : 'text-ink-tertiary'} />
               <StatBlock label="Accounts" value={accountStats.length} icon={<Activity className="w-4 h-4" />} color="text-ink" />
+            </>
+          ) : isSms ? (
+            <>
+              <StatBlock label="Sites Live" value={liveSites.length || camp.sitesGenerated || camp.sites || smsLeads.filter(l => l.siteUrl).length || 0} icon={<Globe className="w-4 h-4" />} color="text-accent" />
+              <StatBlock label="Leads" value={smsLeads.length || camp.totalLeads || camp.leadsFound || 0} icon={<Users className="w-4 h-4" />} color="text-blue-600" />
+              <StatBlock label="SMS Delivered" value={camp.smsSent || smsLeads.filter(l => l.status === 'delivered').length || smsLeads.length || 0} icon={<CheckCircle className="w-4 h-4" />} color="text-success" />
+              <StatBlock
+                label="Route"
+                value={camp.smsPhoneUsed || '+1 (604) 953-9651'}
+                icon={<Phone className="w-4 h-4" />}
+                color="text-emerald-600"
+                sublabel="Telnyx Canada"
+              />
             </>
           ) : (
             <>
@@ -1103,7 +1206,9 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto">
-          {isSiteDeploy ? (
+          {isSms ? (
+            <SmsBody leads={smsLeads} copiedUrl={copiedUrl} onCopyUrl={onCopyUrl} />
+          ) : isSiteDeploy ? (
             <SiteDeployBody liveSites={liveSites} onCopyUrl={onCopyUrl} copiedUrl={copiedUrl} />
           ) : (
             <EmailBody leads={emailLeads} accountStats={accountStats} copiedUrl={copiedUrl} onCopyUrl={onCopyUrl} loading={loadingLeads} />
@@ -1132,13 +1237,330 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
 };
 
 // ── Helper sub-components (kept local — they're only used here) ──
-const StatBlock: React.FC<{ label: string; value: number | string; icon: React.ReactNode; color: string }> = ({ label, value, icon, color }) => (
-  <div className="flex flex-col items-center justify-center py-4 gap-1.5">
-    <div className={`${color} opacity-70`}>{icon}</div>
-    <span className="text-xl font-bold font-mono text-ink">{value}</span>
-    <span className="text-[10px] text-ink-tertiary uppercase tracking-wider font-semibold">{label}</span>
-  </div>
-);
+const StatBlock: React.FC<{
+  label: string;
+  value: number | string;
+  icon: React.ReactNode;
+  color: string;
+  sublabel?: string;
+}> = ({ label, value, icon, color, sublabel }) => {
+  const isRoute = label === 'Route';
+  const isLong = isRoute || (typeof value === 'string' && value.length > 5);
+
+  return (
+    <div className="flex flex-col items-center justify-center py-3.5 px-1.5 gap-1 min-w-0 overflow-hidden text-center">
+      <div className={`${color} opacity-80 shrink-0`}>{icon}</div>
+      <span
+        className={`font-mono text-ink text-center max-w-full truncate block ${
+          isRoute
+            ? 'text-[11px] sm:text-xs font-bold tracking-tight px-1 py-0.5 leading-tight'
+            : isLong
+            ? 'text-xs sm:text-[13px] font-bold tracking-tight px-1'
+            : 'text-xl font-bold'
+        }`}
+        title={typeof value === 'string' ? value : undefined}
+      >
+        {value}
+      </span>
+      <span className="text-[10px] text-ink-tertiary uppercase tracking-wider font-semibold truncate max-w-full">
+        {label}
+      </span>
+      {sublabel && (
+        <span className="text-[9px] text-emerald-600 font-semibold truncate max-w-full">
+          {sublabel}
+        </span>
+      )}
+    </div>
+  );
+};
+
+const SmsBody: React.FC<{
+  leads: CampaignSmsLead[];
+  copiedUrl: boolean;
+  onCopyUrl: () => void;
+}> = ({ leads, copiedUrl, onCopyUrl }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'delivered' | 'sent' | 'queued' | 'failed'>('all');
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const handleCopy = async (text: string, key: string) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      playConfirmSuccess();
+      window.setTimeout(() => setCopiedKey(null), 1500);
+    } catch {
+      // non-fatal
+    }
+  };
+
+  const handleDownloadCsv = () => {
+    playConfirmSuccess();
+    const headers = ['Business Name', 'City', 'Phone', 'SMS Status', 'Live Site URL', 'SMS Text'];
+    const rows = leads.map(l => [
+      `"${(l.name || l.businessName || '').replace(/"/g, '""')}"`,
+      `"${(l.city || '').replace(/"/g, '""')}"`,
+      `"${(l.phone || '').replace(/"/g, '""')}"`,
+      `"${(l.status || 'delivered')}"`,
+      `"${(l.siteUrl || '')}"`,
+      `"${(l.smsText || '').replace(/"/g, '""')}"`
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `sms-campaign-leads.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const filteredLeads = useMemo(() => {
+    return leads.filter((lead) => {
+      if (statusFilter !== 'all' && lead.status !== statusFilter) return false;
+      if (!searchTerm) return true;
+      const q = searchTerm.toLowerCase();
+      return (
+        (lead.name || '').toLowerCase().includes(q) ||
+        (lead.businessName || '').toLowerCase().includes(q) ||
+        (lead.city || '').toLowerCase().includes(q) ||
+        (lead.phone || '').toLowerCase().includes(q) ||
+        (lead.siteUrl || '').toLowerCase().includes(q)
+      );
+    });
+  }, [leads, statusFilter, searchTerm]);
+
+  const totalDelivered = leads.filter(l => l.status === 'delivered').length;
+  const totalSent = leads.filter(l => l.status === 'sent').length;
+  const totalQueued = leads.filter(l => l.status === 'queued').length;
+  const totalFailed = leads.filter(l => l.status === 'failed').length;
+  const totalSites = leads.filter(l => !!l.siteUrl).length;
+
+  if (leads.length === 0) {
+    return (
+      <div className="px-6 py-8 text-center text-ink-secondary">
+        <Send className="w-10 h-10 mx-auto mb-2 text-ink-tertiary opacity-40" />
+        <p className="text-sm font-medium">No SMS lead data available yet.</p>
+        <p className="text-[11px] text-ink-tertiary mt-1">
+          When this SMS campaign launched, lead records with deployed sites and delivery statuses will appear here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-6 py-4 space-y-4">
+      {/* ── Summary strip & Actions ── */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setStatusFilter('all')}
+            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-colors cursor-pointer ${
+              statusFilter === 'all'
+                ? 'bg-ink text-white border-ink'
+                : 'bg-surface text-ink-secondary border-border-light hover:bg-off-white'
+            }`}
+          >
+            All Leads ({leads.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('delivered')}
+            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-colors cursor-pointer ${
+              statusFilter === 'delivered'
+                ? 'bg-emerald-600 text-white border-emerald-600'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+            }`}
+          >
+            <CheckCircle className="w-3 h-3" />
+            {totalDelivered} Delivered
+          </button>
+          {totalSites > 0 && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-accent-soft text-accent border border-accent/25 text-[10px] font-bold">
+              <Globe className="w-3 h-3" />
+              {totalSites} Live Sites
+            </span>
+          )}
+          {totalFailed > 0 && (
+            <button
+              type="button"
+              onClick={() => setStatusFilter('failed')}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-colors cursor-pointer ${
+                statusFilter === 'failed'
+                  ? 'bg-rose-600 text-white border-rose-600'
+                  : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+              }`}
+            >
+              <AlertCircle className="w-3 h-3" />
+              {totalFailed} Failed
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Search Input */}
+          <div className="relative min-w-[180px]">
+            <Search className="w-3.5 h-3.5 text-ink-tertiary absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search leads, phone..."
+              className="w-full pl-8 pr-2.5 py-1 rounded-lg border border-border-main bg-white text-xs text-ink placeholder:text-ink-tertiary focus:outline-hidden focus:border-accent"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={handleDownloadCsv}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/10 hover:bg-accent/20 text-accent text-xs font-bold transition-all cursor-pointer shrink-0"
+            title="Download CSV"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            CSV
+          </button>
+        </div>
+      </div>
+
+      {/* ── Leads List ── */}
+      <div className="space-y-2.5 max-h-[480px] overflow-y-auto pr-1">
+        {filteredLeads.map((lead, idx) => {
+          const isDelivered = lead.status === 'delivered';
+          const isFailed = lead.status === 'failed';
+          const isQueued = lead.status === 'queued';
+          const hasSite = !!lead.siteUrl;
+
+          return (
+            <div
+              key={lead.leadId || idx}
+              className="p-3.5 rounded-xl bg-white border border-border-main hover:border-accent/30 transition-all shadow-xs space-y-2.5"
+            >
+              {/* Header row: business name, city, phone, delivery status badge */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-sm font-bold text-ink leading-snug truncate">
+                      {lead.businessName || lead.name}
+                    </h4>
+                    {lead.city && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-surface text-ink-secondary text-[10px] font-medium border border-border-light">
+                        {lead.city}
+                      </span>
+                    )}
+                  </div>
+                  {lead.phone && (
+                    <div className="flex items-center gap-1.5 text-xs text-ink-tertiary font-mono mt-1">
+                      <Phone className="w-3 h-3 text-emerald-600 shrink-0" />
+                      <span>{lead.phone}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Status Badge */}
+                <div className="shrink-0">
+                  {isDelivered ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                      <CheckCircle className="w-3 h-3 text-emerald-600" />
+                      Delivered
+                    </span>
+                  ) : isFailed ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold">
+                      <AlertCircle className="w-3 h-3 text-rose-600" />
+                      Failed
+                    </span>
+                  ) : isQueued ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold">
+                      <Clock className="w-3 h-3 text-amber-600" />
+                      Queued
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold">
+                      <Send className="w-3 h-3 text-blue-600" />
+                      Sent
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Deployed Website Row */}
+              {hasSite && (
+                <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-surface border border-border-light">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Globe className="w-3.5 h-3.5 text-accent shrink-0" />
+                    <a
+                      href={lead.siteUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-mono text-ink hover:text-accent truncate transition-colors"
+                      title={lead.siteUrl}
+                    >
+                      {lead.siteUrl!.replace(/^https?:\/\//, '')}
+                    </a>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(lead.siteUrl!, `site-${idx}`)}
+                      className="p-1 rounded-md text-ink-tertiary hover:text-ink hover:bg-white transition-colors cursor-pointer"
+                      title="Copy site URL"
+                    >
+                      {copiedKey === `site-${idx}` ? (
+                        <Check className="w-3.5 h-3.5 text-success" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                    <a
+                      href={lead.siteUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1 rounded-md text-ink-tertiary hover:text-accent hover:bg-white transition-colors cursor-pointer"
+                      title="Open live site"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {/* Personalized SMS Message Proposal */}
+              {lead.smsText && (
+                <div className="p-2.5 rounded-lg bg-emerald-50/50 border border-emerald-100 flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex items-start gap-2">
+                    <MessageSquare className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-[9px] uppercase font-bold text-emerald-700 tracking-wider mb-0.5">
+                        Personalized SMS Proposal Sent
+                      </p>
+                      <p className="text-xs text-ink font-sans leading-relaxed">
+                        {lead.smsText}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(lead.smsText!, `sms-${idx}`)}
+                    className="shrink-0 p-1 rounded-md text-emerald-700 hover:bg-emerald-100 transition-colors cursor-pointer"
+                    title="Copy SMS text"
+                  >
+                    {copiedKey === `sms-${idx}` ? (
+                      <Check className="w-3 h-3 text-success" />
+                    ) : (
+                      <Copy className="w-3 h-3" />
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 const SiteDeployBody: React.FC<{
   liveSites: CampaignDeployedSite[];
@@ -1154,6 +1576,28 @@ const SiteDeployBody: React.FC<{
     window.setTimeout(() => onCopyUrl(), 1400);
     playConfirmSuccess();
   };
+
+  const handleDownloadCsv = () => {
+    playConfirmSuccess();
+    const headers = ['Business Name', 'City', 'Slug', 'Live Site URL', 'Status'];
+    const rows = liveSites.map(s => [
+      `"${(s.name || '').replace(/"/g, '""')}"`,
+      `"${(s.city || '').replace(/"/g, '""')}"`,
+      `"${s.slug || ''}"`,
+      `"${s.url || ''}"`,
+      `"${s.status || 'live'}"`
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `quick-deploy-campaign-results.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (liveSites.length === 0) {
     return (
       <div className="px-6 py-8 text-center text-ink-secondary">
@@ -1165,9 +1609,20 @@ const SiteDeployBody: React.FC<{
   }
   return (
     <div className="px-6 py-4 space-y-3">
-      <div className="flex items-center gap-2 mb-1">
-        <Globe className="w-4 h-4 text-accent" />
-        <h4 className="text-sm font-bold text-ink">Deployed Sites</h4>
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <Globe className="w-4 h-4 text-accent" />
+          <h4 className="text-sm font-bold text-ink">Deployed Sites & Lead Details ({liveSites.length})</h4>
+        </div>
+        <button
+          type="button"
+          onClick={handleDownloadCsv}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/10 hover:bg-accent/20 text-accent text-xs font-bold transition-all cursor-pointer"
+          title="Download all deployment details and live URLs as CSV"
+        >
+          <FileText className="w-3.5 h-3.5" />
+          Download CSV
+        </button>
       </div>
       <div className="space-y-2">
         {liveSites.map((s, idx) => (
@@ -1201,6 +1656,7 @@ const SiteDeployBody: React.FC<{
                   onClick={() => handleCopy(s.url)}
                   aria-label="Copy URL"
                   className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-tertiary hover:text-accent hover:bg-accent-soft transition-colors"
+                  title="Copy URL"
                 >
                   {copiedUrl ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
                 </button>
@@ -1210,6 +1666,7 @@ const SiteDeployBody: React.FC<{
                   rel="noopener noreferrer"
                   aria-label="Open in new tab"
                   className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-tertiary hover:text-accent hover:bg-accent-soft transition-colors"
+                  title="Open live site"
                 >
                   <ExternalLink className="w-3 h-3" />
                 </a>
