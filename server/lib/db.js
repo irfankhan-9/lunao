@@ -220,6 +220,8 @@ const SCHEMA_SQL = `
     style_tags   TEXT    NOT NULL DEFAULT '',
     used_count   INTEGER NOT NULL DEFAULT 0,
     created_at   INTEGER NOT NULL,
+    readiness_score INTEGER NOT NULL DEFAULT 0,
+    readiness_json TEXT,
     FOREIGN KEY (category_id) REFERENCES template_categories(id)
   );
 

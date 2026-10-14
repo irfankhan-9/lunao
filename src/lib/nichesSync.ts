@@ -202,6 +202,10 @@ export async function fetchTemplatesFromBackend(): Promise<Template[]> {
             isMostUsed: Boolean(t.isMostUsed),
             emoji: t.emoji || getNicheEmoji(t.niche),
             description: t.description || `Custom website template designed for ${t.niche}.`,
+            templateFile: t.templateFile,
+            rawHtml: t.rawHtml,
+            previewHtml: t.previewHtml,
+            previewPath: t.previewPath,
           });
         }
       }
@@ -217,7 +221,17 @@ export async function fetchTemplatesFromBackend(): Promise<Template[]> {
 }
 
 // Add or update a template and synchronize across all tabs
-export function addAndSyncTemplate(template: { id: string; name: string; niche: string; tag?: string; description?: string }): Template {
+export function addAndSyncTemplate(template: {
+  id: string;
+  name: string;
+  niche: string;
+  tag?: string;
+  description?: string;
+  templateFile?: string;
+  rawHtml?: string;
+  previewHtml?: string;
+  previewPath?: string;
+}): Template {
   const newTpl: Template = {
     id: template.id,
     name: template.name,
@@ -228,6 +242,10 @@ export function addAndSyncTemplate(template: { id: string; name: string; niche: 
     isMostUsed: false,
     emoji: getNicheEmoji(template.niche),
     description: template.description || `High-converting modern website template for ${template.niche}.`,
+    templateFile: template.templateFile,
+    rawHtml: template.rawHtml,
+    previewHtml: template.previewHtml,
+    previewPath: template.previewPath,
   };
 
   const current = getLocalTemplates();
@@ -246,7 +264,18 @@ export function addAndSyncTemplate(template: { id: string; name: string; niche: 
 }
 
 // Reassign / move a template from one niche to another
-export function moveAndSyncTemplate(template: { id: string; name: string; fromNiche: string; toNiche: string; description?: string; tag?: string }): Template {
+export function moveAndSyncTemplate(template: {
+  id: string;
+  name: string;
+  fromNiche: string;
+  toNiche: string;
+  description?: string;
+  tag?: string;
+  templateFile?: string;
+  rawHtml?: string;
+  previewHtml?: string;
+  previewPath?: string;
+}): Template {
   const newTpl: Template = {
     id: template.id,
     name: template.name,
@@ -257,6 +286,10 @@ export function moveAndSyncTemplate(template: { id: string; name: string; fromNi
     isMostUsed: false,
     emoji: getNicheEmoji(template.toNiche),
     description: template.description || `High-converting modern website template for ${template.toNiche}.`,
+    templateFile: template.templateFile,
+    rawHtml: template.rawHtml,
+    previewHtml: template.previewHtml,
+    previewPath: template.previewPath,
   };
 
   const current = getLocalTemplates();

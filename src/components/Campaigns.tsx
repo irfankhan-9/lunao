@@ -2212,7 +2212,19 @@ The Lunao Team`);
                   }}
                 >
                   <iframe
-                    src={selectedTemplateForPreview.id === 't2' ? "/barber-template-02.html" : selectedTemplateForPreview.id === 't3' ? "/salon-template-01.html" : selectedTemplateForPreview.id === 't4' ? "/dentist-template-01.html" : selectedTemplateForPreview.id === 't5' ? "/roofing-template-01.html" : selectedTemplateForPreview.id === 't6' ? "/hvac-template-01.html" : selectedTemplateForPreview.id === 't7' ? "/gym-template-01.html" : selectedTemplateForPreview.id === 't8' ? "/realestate-template-01.html" : "/barber-template.html"}
+                    src={!selectedTemplateForPreview.previewHtml ? (
+                      selectedTemplateForPreview.templateFile ? `/${selectedTemplateForPreview.templateFile}` :
+                      selectedTemplateForPreview.id === 't1' || selectedTemplateForPreview.id === 'barber-dark-luxury' ? '/barber-template.html' :
+                      selectedTemplateForPreview.id === 't2' || selectedTemplateForPreview.id === 'barber-editorial-02' ? '/barber-template-02.html' :
+                      selectedTemplateForPreview.id === 't3' || selectedTemplateForPreview.id === 'salon-atelier-01' ? '/salon-template-01.html' :
+                      selectedTemplateForPreview.id === 't4' || selectedTemplateForPreview.id === 'dentist-clinical-01' ? '/dentist-template-01.html' :
+                      selectedTemplateForPreview.id === 't5' || selectedTemplateForPreview.id === 'roofing-shield-01' ? '/roofing-template-01.html' :
+                      selectedTemplateForPreview.id === 't6' || selectedTemplateForPreview.id === 'hvac-everest-01' ? '/hvac-template-01.html' :
+                      selectedTemplateForPreview.id === 't7' || selectedTemplateForPreview.id === 'gym-steel-01' ? '/gym-template-01.html' :
+                      selectedTemplateForPreview.id === 't8' || selectedTemplateForPreview.id === 'realestate-apex-01' ? '/realestate-template-01.html' :
+                      `/api/templates/${encodeURIComponent(selectedTemplateForPreview.id)}/preview`
+                    ) : undefined}
+                    srcDoc={selectedTemplateForPreview.previewHtml || undefined}
                     className="w-full h-full border-0 flex-1"
                     title="Live Template Preview"
                     referrerPolicy="no-referrer"
@@ -2238,7 +2250,17 @@ The Lunao Team`);
                   <button
                     type="button"
                     onClick={() => {
-                      window.open(selectedTemplateForPreview.id === 't2' ? '/barber-template-02.html' : selectedTemplateForPreview.id === 't3' ? '/salon-template-01.html' : selectedTemplateForPreview.id === 't4' ? '/dentist-template-01.html' : selectedTemplateForPreview.id === 't5' ? '/roofing-template-01.html' : selectedTemplateForPreview.id === 't6' ? '/hvac-template-01.html' : selectedTemplateForPreview.id === 't7' ? '/gym-template-01.html' : selectedTemplateForPreview.id === 't8' ? '/realestate-template-01.html' : '/barber-template.html', '_blank');
+                      const url = selectedTemplateForPreview.templateFile ? `/${selectedTemplateForPreview.templateFile}` :
+                        selectedTemplateForPreview.id === 't2' ? '/barber-template-02.html' :
+                        selectedTemplateForPreview.id === 't3' ? '/salon-template-01.html' :
+                        selectedTemplateForPreview.id === 't4' ? '/dentist-template-01.html' :
+                        selectedTemplateForPreview.id === 't5' ? '/roofing-template-01.html' :
+                        selectedTemplateForPreview.id === 't6' ? '/hvac-template-01.html' :
+                        selectedTemplateForPreview.id === 't7' ? '/gym-template-01.html' :
+                        selectedTemplateForPreview.id === 't8' ? '/realestate-template-01.html' :
+                        selectedTemplateForPreview.id === 't1' ? '/barber-template.html' :
+                        `/api/templates/${encodeURIComponent(selectedTemplateForPreview.id)}/preview`;
+                      window.open(url, '_blank');
                     }}
                     className="flex px-4 py-2.5 border border-border-main text-ink text-xs font-semibold bg-white uppercase tracking-wider rounded hover:bg-off-white transition-all shadow-2xs cursor-pointer items-center gap-1.5"
                   >

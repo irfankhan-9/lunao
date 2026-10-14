@@ -769,6 +769,7 @@ export async function streamAiEdit(
   params: { html: string; instruction: string; history?: AiChatMessage[]; anthropicApiKey?: string },
   onChunk: (fullHtmlSoFar: string, delta: string) => void,
   onThinking?: (text: string) => void,
+  onStart?: () => void,
 ): Promise<string> {
   const res = await fetch(`${API_BASE}/api/ai/edit`, {
     method: 'POST',
@@ -776,6 +777,14 @@ export async function streamAiEdit(
     body: JSON.stringify(params),
   });
   if (!res.ok || !res.body) throw new Error(`AI request failed (${res.status})`);
+
+  let startFired = false;
+  const triggerStart = () => {
+    if (!startFired && onStart) {
+      startFired = true;
+      try { onStart(); } catch {}
+    }
+  };
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -796,10 +805,14 @@ export async function streamAiEdit(
       if (!json) continue;
       try {
         const event = JSON.parse(json);
-        if (event.type === 'chunk') {
+        if (event.type === 'start') {
+          triggerStart();
+        } else if (event.type === 'chunk') {
+          triggerStart();
           acc += event.delta || '';
           onChunk(acc, event.delta || '');
         } else if (event.type === 'thinking') {
+          triggerStart();
           if (onThinking) onThinking(event.delta || '');
         } else if (event.type === 'done') {
           finalHtml = event.html || acc;
@@ -1128,6 +1141,8 @@ export async function convertHistoryToTemplate(params: {
   name: string;
   categoryId?: string | null;
   niche?: string;
+  rawHtml?: string;
+  templateId?: string;
 }): Promise<ConvertToTemplateResult> {
   const res = await fetch(`${API_BASE}/api/site-history/${encodeURIComponent(params.historyId)}/convert-to-template`, {
     method: 'POST',
@@ -1136,6 +1151,8 @@ export async function convertHistoryToTemplate(params: {
       name: params.name,
       categoryId: params.categoryId ?? null,
       niche: params.niche ?? '',
+      rawHtml: params.rawHtml,
+      templateId: params.templateId,
     }),
   });
   if (!res.ok) {
@@ -2599,3 +2616,88 @@ export async function saveDorkLeads(
   }
   return await res.json() as { ok: true; inserted: number };
 }
+
+// ---------------------------------------------------------------------------
+// Template Readiness & Rebranding Suite (Strict 4 Placeholders)
+// ---------------------------------------------------------------------------
+
+export interface TemplateCheckItem {
+  id: string;
+  label: string;
+  explanation: string;
+}
+
+export interface TemplateScanResult {
+  score: number;
+  passed: TemplateCheckItem[];
+  failed: TemplateCheckItem[];
+  isReady: boolean;
+  foundPlaceholders: string[];
+  illegalPlaceholders: string[];
+}
+
+export interface RebrandTestResult {
+  testNumber: number;
+  business: {
+    name: string;
+    phone: string;
+    city: string;
+    address: string;
+  };
+  passed: boolean;
+  issues: string[];
+  rebrandedHtml: string;
+}
+
+export interface RebrandingSuiteReport {
+  allPassed: boolean;
+  tests: RebrandTestResult[];
+}
+
+export async function scanTemplateReadinessClient(html: string): Promise<TemplateScanResult> {
+  const res = await fetch(`${API_BASE}/api/templates/scan-readiness`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ html }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Scan failed (${res.status})`);
+  }
+  const data = await res.json();
+  return data.scan as TemplateScanResult;
+}
+
+export async function makeTemplateReadyClient(
+  html: string,
+  apiKey?: string
+): Promise<{ html: string; scan: TemplateScanResult; changed: boolean }> {
+  const res = await fetch(`${API_BASE}/api/templates/make-ready`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ html, apiKey }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Make template-ready failed (${res.status})`);
+  }
+  return await res.json();
+}
+
+export async function testRebrandClient(
+  html: string,
+  biz1?: any,
+  biz2?: any
+): Promise<{ scan: TemplateScanResult; rebrandResults: RebrandingSuiteReport }> {
+  const res = await fetch(`${API_BASE}/api/templates/test-rebrand`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ html, biz1, biz2 }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Rebranding tests failed (${res.status})`);
+  }
+  return await res.json();
+}
+

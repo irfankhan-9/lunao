@@ -109,7 +109,10 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
 
   if (!isOpen || !template) return null;
 
-  const getTemplateUrl = (id: string, niche?: string) => {
+  const getTemplateUrl = (id: string, niche?: string, templateFile?: string) => {
+    if (templateFile && templateFile.endsWith('.html')) {
+      return `/${templateFile}`;
+    }
     const urls: Record<string, string> = {
       t1: '/barber-template.html',
       t2: '/barber-template-02.html',
@@ -120,32 +123,28 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
       t7: '/gym-template-01.html',
       t8: '/realestate-template-01.html',
       'barber-dark-luxury': '/barber-template.html',
+      'barber-editorial-02': '/barber-template-02.html',
       'barber-editorial': '/barber-template-02.html',
+      'salon-atelier-01': '/salon-template-01.html',
       'salon-maison': '/salon-template-01.html',
+      'dentist-clinical-01': '/dentist-template-01.html',
       'dentist-clarity': '/dentist-template-01.html',
+      'roofing-shield-01': '/roofing-template-01.html',
       'roofing-ironclad': '/roofing-template-01.html',
+      'hvac-everest-01': '/hvac-template-01.html',
       'hvac-everest': '/hvac-template-01.html',
+      'gym-steel-01': '/gym-template-01.html',
       'gym-iron-grit': '/gym-template-01.html',
+      'realestate-apex-01': '/realestate-template-01.html',
       'realestate-glass': '/realestate-template-01.html',
     };
     if (urls[id]) return urls[id];
 
-    const cleanId = (id || '').toLowerCase();
-    const cleanNiche = (niche || '').toLowerCase();
-
-    if (cleanId.includes('02') || cleanId.includes('editorial')) return '/barber-template-02.html';
-    if (cleanId.includes('barber') || cleanNiche.includes('barber')) return '/barber-template.html';
-    if (cleanId.includes('salon') || cleanNiche.includes('salon')) return '/salon-template-01.html';
-    if (cleanId.includes('dentist') || cleanNiche.includes('dentist')) return '/dentist-template-01.html';
-    if (cleanId.includes('hvac') || cleanNiche.includes('hvac')) return '/hvac-template-01.html';
-    if (cleanId.includes('roof') || cleanNiche.includes('roof')) return '/roofing-template-01.html';
-    if (cleanId.includes('gym') || cleanNiche.includes('gym')) return '/gym-template-01.html';
-    if (cleanId.includes('realestate') || cleanId.includes('estate') || cleanNiche.includes('real')) return '/realestate-template-01.html';
-
-    return '/barber-template.html';
+    // Check custom template by ID or route to unified backend preview
+    return `/api/templates/${encodeURIComponent(id)}/preview`;
   };
 
-  const templateUrl = getTemplateUrl(template.id, template.niche);
+  const templateUrl = getTemplateUrl(template.id, template.niche, template.templateFile);
 
   return (
     <div
@@ -339,7 +338,8 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
               <iframe
                 key={`desktop-${iframeKey}-${templateUrl}`}
                 ref={iframeRef}
-                src={templateUrl}
+                src={!template.previewHtml ? templateUrl : undefined}
+                srcDoc={template.previewHtml || undefined}
                 className="w-full h-full border-0"
                 onLoad={() => setIsLoading(false)}
                 title={`Desktop Preview — ${template.name}`}
@@ -375,7 +375,8 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
                     <div className="flex-1 w-full h-full overflow-hidden bg-white relative">
                       <iframe
                         key={`mobile-${iframeKey}-${templateUrl}`}
-                        src={templateUrl}
+                        src={!template.previewHtml ? templateUrl : undefined}
+                        srcDoc={template.previewHtml || undefined}
                         className="w-full h-full border-0"
                         onLoad={() => setIsLoading(false)}
                         title={`Mobile Preview — ${template.name}`}

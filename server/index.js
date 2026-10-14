@@ -177,6 +177,7 @@ import {
   parseSessionCookie,
   verifySessionToken,
 } from './lib/_archive_auth.js';
+import { scanTemplateReadiness, fixHtmlToTemplateReady, runRebrandingTests } from './lib/readiness.js';
 
 const app = express();
 // Trust the first proxy hop (Railway / Cloudflare) so `req.secure`,
@@ -3780,19 +3781,21 @@ app.get('/api/site-history/:id', authenticate, (req, res) => {
 });
 
 // Turn a history entry into a named template (saves to custom_templates).
+// Turn a history entry into a named template (saves to custom_templates).
 app.post('/api/site-history/:id/convert-to-template', authenticate, async (req, res) => {
   try {
     const ownerKey = req.userId ? `user_${req.userId}` : String(req.body?.ownerKey || req.query?.ownerKey || 'dashboard').trim();
-    const { name, categoryId = null, niche = '', templateId: existingTemplateId = null } = req.body || {};
+    const { name, categoryId = null, niche = '', templateId: existingTemplateId = null, rawHtml = null } = req.body || {};
 
-    const row = db.prepare('SELECT * FROM site_history WHERE id = ? AND owner_key = ?').get(req.params.id, ownerKey);
-    if (!row) return res.status(404).json({ ok: false, error: 'History entry not found' });
+    let row = db.prepare('SELECT * FROM site_history WHERE id = ?').get(req.params.id);
+    const htmlToSave = rawHtml || row?.html;
+    if (!htmlToSave) return res.status(400).json({ ok: false, error: 'HTML content is required to save template' });
 
     const templateName = name?.trim() || `Template ${new Date().toLocaleDateString()}`;
-    const templateId = existingTemplateId || `tmpl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const slug = templateName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const templateId = existingTemplateId || (row?.template_id) || `tmpl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const slug = templateName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `template-${Date.now()}`;
     const now = Math.floor(Date.now() / 1000);
-    const targetNiche = (niche || row.niche || 'General').trim();
+    const targetNiche = (niche || row?.niche || 'General').trim();
 
     // Persist and synchronize the niche into template_categories if provided
     if (targetNiche && targetNiche !== 'General') {
@@ -3803,46 +3806,24 @@ app.post('/api/site-history/:id/convert-to-template', authenticate, async (req, 
       }
     }
 
-    // Insert into custom_templates if not already a template
-    if (!row.is_template) {
-      // Save raw version (with {{PLACEHOLDERS}}) — extract placeholders from the HTML
-      const PLACEHOLDER_RE = /\{\{(\w+)\}\}/g;
-      const placeholdersUsed = [...new Set([...row.html.matchAll(PLACEHOLDER_RE)].map((m) => m[1]))];
-      const CORE = ['BUSINESS_NAME', 'CITY', 'PHONE_DISPLAY'];
-      const extras = placeholdersUsed.filter((p) => !CORE.includes(p));
-      const allPlaceholders = [...CORE, ...extras];
+    // Compile preview HTML with demo values
+    const previewHtml = compilePreviewHtml(htmlToSave, templateName);
 
-      const DEMO_VALUES = {
-        BUSINESS_NAME: row.title || 'My Business',
-        CITY: 'Austin, TX',
-        PHONE_DISPLAY: '(512) 555-0000',
-        PHONE_RAW: '5125550000',
-        STATE: 'TX',
-        YEARS_IN_BUSINESS: '2012',
-        EMAIL: 'hello@example.com',
-        ADDRESS: '123 Main St',
-        GOOGLE_RATING: '4.8',
-        GOOGLE_REVIEW_COUNT: '120',
-        INSTAGRAM_HANDLE: 'mybiz',
-        FACEBOOK_URL: 'https://facebook.com/mybiz',
-        SITE_URL: 'https://example.com',
-        DOCTOR_NAME: 'Dr. Smith',
-        AVERAGE_RATING: '4.8',
-        MEMBERS_COUNT: '1,200',
-        TRAINERS_COUNT: '8',
-      };
+    // Save or update custom_templates
+    db.prepare(
+      `INSERT INTO custom_templates (id, owner_key, category_id, name, slug, niche, raw_html, preview_html, style_tags, used_count, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', 0, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         slug = excluded.slug,
+         niche = excluded.niche,
+         category_id = COALESCE(excluded.category_id, custom_templates.category_id),
+         raw_html = excluded.raw_html,
+         preview_html = excluded.preview_html`,
+    ).run(templateId, ownerKey, categoryId || null, templateName, slug, targetNiche, htmlToSave, previewHtml, now);
 
-      const previewHtml = allPlaceholders.reduce(
-        (html, key) => html.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), DEMO_VALUES[key] || key),
-        row.html,
-      );
-
-      db.prepare(
-        `INSERT INTO custom_templates (id, owner_key, category_id, name, slug, niche, raw_html, preview_html, style_tags, used_count, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', 0, ?)`,
-      ).run(templateId, ownerKey, categoryId || null, templateName, slug, targetNiche, row.html, previewHtml, now);
-
-      // Mark history entry as converted
+    // Mark history entry as converted if present
+    if (row) {
       db.prepare(
         'UPDATE site_history SET is_template = 1, template_id = ?, template_name = ? WHERE id = ?',
       ).run(templateId, templateName, req.params.id);
@@ -3858,6 +3839,7 @@ app.post('/api/site-history/:id/convert-to-template', authenticate, async (req, 
         slug,
         niche: targetNiche,
         categoryId: categoryId || null,
+        previewHtml,
       },
       niches: updatedNiches,
     });
@@ -4011,15 +3993,13 @@ app.get('/api/templates', authenticate, async (req, res) => {
 
 // Built-in preview iframe source. Always public — the demo data has no
 // PII. Custom templates are previewed through the auth-gated
-// /api/custom-templates/:id/preview route instead, so we never accidentally
-// serve someone else's uploaded HTML to a different user.
+// Unified preview iframe source. Serves HTML for both built-in templates
+// and custom user templates.
 app.get('/api/templates/:key/preview', async (req, res) => {
   try {
-    const resolved = await resolveTemplate(req.params.key, null);
-    if (resolved.source !== 'builtin') {
-      return res.status(404).json({ ok: false, error: 'Custom templates must be previewed through /api/custom-templates/:id/preview' });
-    }
-    const html = await loadPreviewHtml(resolved);
+    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    const resolved = await resolveTemplate(req.params.key, ownerKey || null);
+    const html = await loadPreviewHtml(resolved, ownerKey || null);
     res.set('Content-Type', 'text/html; charset=utf-8');
     res.set('X-Frame-Options', 'SAMEORIGIN');
     res.send(html);
@@ -4036,6 +4016,121 @@ app.get('/api/templates/:key', authenticate, async (req, res) => {
     res.json({ ok: true, template: resolved });
   } catch (err) {
     res.status(404).json({ ok: false, error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Template Readiness, Auto-Fix & Rebranding Test Suite (Strict 4 Placeholders)
+// ---------------------------------------------------------------------------
+
+// Scan HTML template for readiness
+app.post('/api/templates/scan-readiness', (req, res) => {
+  try {
+    const { html } = req.body || {};
+    if (!html || typeof html !== 'string') {
+      return res.status(400).json({ ok: false, error: 'HTML is required' });
+    }
+    const scan = scanTemplateReadiness(html);
+    res.json({ ok: true, scan });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Make Template Ready: analyze, repair violations, return complete corrected file, and validate
+app.post('/api/templates/make-ready', async (req, res) => {
+  try {
+    const { html, geminiApiKey, apiKey } = req.body || {};
+    if (!html || typeof html !== 'string' || !html.trim()) {
+      return res.status(400).json({ ok: false, error: 'HTML is required' });
+    }
+
+    const initialScan = scanTemplateReadiness(html);
+    if (initialScan.isReady) {
+      return res.json({
+        ok: true,
+        html,
+        scan: initialScan,
+        changed: false,
+      });
+    }
+
+    // Step 1: Run deterministic auto-fixer first (guarantees zero design loss while mapping placeholders)
+    let repairedHtml = fixHtmlToTemplateReady(html);
+    let postScan = scanTemplateReadiness(repairedHtml);
+
+    // Step 2: If any checks still fail, invoke Gemini with strict repair instructions
+    if (!postScan.isReady && isAiEnabled()) {
+      try {
+        const repairInstruction = `STRICT REPAIR: The HTML template must satisfy strict template-readiness:
+1. Every website must be one complete HTML file with embedded CSS and JavaScript. Start at <!DOCTYPE html> and end at </html>.
+2. Use ONLY these 4 placeholders: {{BUSINESS_NAME}}, {{PHONE}}, {{CITY}}, {{ADDRESS}}.
+3. Use {{BUSINESS_NAME}} everywhere the business name appears, including in email and social media identity text (e.g. contact@{{BUSINESS_NAME}}, https://instagram.com/{{BUSINESS_NAME}}). Never create separate email or social media placeholders. Do not invent email addresses or social handles.
+4. Replace all hardcoded business names, phone numbers, cities, addresses, fake reviews, ratings, and unsupported business claims.
+5. Preserve the original design, styling, colors, typography, responsiveness, and functionality 100%.`;
+
+        const { repairTemplateHtml } = await import('./lib/geminiAi.js');
+        const aiRepaired = await repairTemplateHtml({
+          html: repairedHtml,
+          instruction: repairInstruction,
+          apiKey: geminiApiKey || apiKey,
+        });
+
+        if (aiRepaired && aiRepaired.includes('<!DOCTYPE html>')) {
+          const aiScan = scanTemplateReadiness(aiRepaired);
+          // Only adopt AI output if it improved readiness and did not destroy the document
+          if (aiScan.score >= postScan.score) {
+            repairedHtml = aiRepaired;
+            postScan = aiScan;
+          }
+        }
+      } catch (aiErr) {
+        console.warn('[make-ready] AI repair attempt failed, falling back to deterministic repair:', aiErr.message);
+      }
+    }
+
+    // Ensure final pass is scanned
+    postScan = scanTemplateReadiness(repairedHtml);
+
+    // If processing completely fails, preserve original html
+    if (!repairedHtml || repairedHtml.length < 50) {
+      return res.status(422).json({
+        ok: false,
+        error: 'Failed to repair template. Original HTML preserved.',
+        html,
+        scan: initialScan,
+      });
+    }
+
+    res.json({
+      ok: true,
+      html: repairedHtml,
+      scan: postScan,
+      changed: repairedHtml !== html,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message, html: req.body?.html });
+  }
+});
+
+// Run automated rebranding tests on 2 fictional businesses
+app.post('/api/templates/test-rebrand', (req, res) => {
+  try {
+    const { html, biz1, biz2 } = req.body || {};
+    if (!html || typeof html !== 'string') {
+      return res.status(400).json({ ok: false, error: 'HTML is required' });
+    }
+
+    const scan = scanTemplateReadiness(html);
+    const rebrandResults = runRebrandingTests(html, biz1, biz2);
+
+    res.json({
+      ok: true,
+      scan,
+      rebrandResults,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 

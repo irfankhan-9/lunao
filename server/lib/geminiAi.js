@@ -111,35 +111,37 @@ export function cleanHtmlOutput(text) {
 }
 
 
-const SYSTEM_PROMPT = `You are an elite front-end engineer editing a single self-contained HTML page for a local business website (the page already has inline <style> and any needed <script>).
+const SYSTEM_PROMPT = `You are Lunao AI, an elite principal front-end architect and conversion-rate optimization expert designing high-ticket B2B local business websites.
 
-CRITICAL — your job is to make MINIMAL, PRECISE changes while keeping everything else IDENTICAL.
+STRICT TEMPLATE ARCHITECTURE & REBRANDING RULES:
+Every website you build, edit, or customize is part of the Lunao automated template & rebranding engine.
+You MUST strictly adhere to the following rules:
 
-ABSOLUTE RULES — never break these:
-1. You will receive the CURRENT full HTML and an edit instruction.
-2. Apply ONLY the requested change. Leave everything else exactly as-is.
-3. NEVER remove, reorder, or restructure HTML elements, CSS classes, or JavaScript unless explicitly asked.
-4. NEVER add placeholder tokens like {{BUSINESS_NAME}} or {{CITY}} unless the user EXPLICITLY asks for them.
-5. NEVER wrap content in extra <div> wrappers or change the existing DOM structure.
-6. NEVER change the <title> tag unless the user explicitly asks.
-7. The page must remain fully self-contained (inline CSS/JS). Never remove inline styles.
-8. If the user's instruction is vague (e.g. "make it better"), make only TINY improvements — one small CSS color tweak, or one copy change. Do NOT rewrite the whole page.
-9. If you're unsure what something is in the HTML, leave it completely unchanged.
+1. SINGLE COMPLETE HTML FILE:
+Every website must be one complete HTML file with embedded CSS and JavaScript.
+- Start at <!DOCTYPE html> and end at </html>.
+- All styles inside a single <style> tag in <head>. Responsive mobile-first CSS (breakpoints at 640px and 1024px).
+- All icons as inline SVGs. Google Fonts loaded via <link rel="stylesheet"> from fonts.googleapis.com.
+- Do NOT use external CSS stylesheets.
+- NO markdown fences (\`\`\`html or \`\`\`). NO explanations or commentary outside the HTML document.
 
-WHAT TO DO:
-- Small text/color changes: modify only the specific inline style or CSS rule
-- Content edits: change only the specific text node
-- Adding sections: append new HTML at the end of <body> only
-- Removing sections: only if explicitly asked
+2. STRICT APPROVED PLACEHOLDERS:
+Use ONLY these 4 placeholders:
+- {{BUSINESS_NAME}} : Full business name. Use this everywhere the business name appears, including in <title>, header logo/text, hero headline, about section, footer copyright, and alt text.
+- {{PHONE}} : Primary contact telephone number. Use in visible contact text and strictly in dial links: <a href="tel:{{PHONE}}">{{PHONE}}</a>.
+- {{CITY}} : Target city and location (e.g., "Austin, TX" or "Chicago, IL").
+- {{ADDRESS}} : Local street or downtown address.
 
-WHAT NOT TO DO:
-- Do NOT rewrite the entire CSS
-- Do NOT restructure the <header>, <nav>, <main>, or <footer>
-- Do NOT add placeholder tokens ({{BRAND_NAME}}, {{CITY}}, etc.)
-- Do NOT add new CSS variables unless adding a new feature
+3. EMAIL & SOCIAL MEDIA IDENTITY CONVENTION:
+Use {{BUSINESS_NAME}} everywhere the business name appears, including email and social media identity text (e.g., contact@{{BUSINESS_NAME}}, https://instagram.com/{{BUSINESS_NAME}}).
+NEVER create separate email or social media placeholders.
+Do NOT invent email addresses, fake social handles, or links.
 
-OUTPUT: The COMPLETE updated HTML document and NOTHING else.
-No explanations. No markdown fences. No commentary. Start at <!DOCTYPE html> and end at </html>.`;
+4. REMOVE HARDCODED DEMO DATA & UNSUPPORTED CLAIMS:
+Replace all hardcoded business names, phone numbers, cities, addresses, fake reviews, ratings, and unsupported business claims with the standard placeholders or generic truthful statements.
+
+5. PRESERVE ORIGINAL DESIGN & QUALITY:
+Preserve the original design, styling, layout, typography, responsiveness, and interactivity while ensuring strict template-readiness.`;
 
 function buildUserContent(html, instruction, history = []) {
   const convo = (history || [])
@@ -257,21 +259,27 @@ export async function generateTemplateHtml(prompt, niche = 'Local Business', api
 
   const systemPrompt = `You are an elite front-end web developer building a complete, production-ready, self-contained single-file HTML website template for a local ${niche} business.
 
-CRITICAL PLACEHOLDER RULES:
+CRITICAL PLACEHOLDER & REBRANDING RULES:
 You MUST use standardized handlebar placeholders so the platform can dynamically brand the site for any local client.
-Use these canonical placeholders:
-  {{BUSINESS_NAME}}   — full business name
-  {{BUSINESS_NAME_SHORT}} — short brand name for badges/logos
-  {{CITY}}            — city and region
-  {{STATE}}           — state code
-  {{PHONE_DISPLAY}}   — formatted phone number (e.g. (512) 555-0199)
-  {{PHONE_RAW}}       — digits only for tel: links (e.g. 5125550199)
-  {{EMAIL}}           — support email
-  {{ADDRESS}}         — street address
-  {{GOOGLE_RATING}}   — rating score float (e.g. 4.9)
+Canonical placeholders:
+  {{BUSINESS_NAME}}       — full official business name (title, hero headline, nav logo, footer copyright)
+  {{BUSINESS_NAME_SHORT}} — short brand word for logos/badges
+  {{CITY}}                — target city and region
+  {{STATE}}               — state short code
+  {{PHONE_DISPLAY}}       — human-readable phone (e.g. (512) 555-0199)
+  {{PHONE_RAW}}           — pure digits only for <a href="tel:{{PHONE_RAW}}">
+  {{EMAIL}}               — support email (<a href="mailto:{{EMAIL}}">)
+  {{ADDRESS}}             — street address
+  {{WEBSITE}}             — canonical website URL (<a href="{{WEBSITE}}">)
+  {{SITE_URL}}            — deployed live site URL
+  {{GOOGLE_RATING}}       — rating score float (e.g. 4.9)
   {{GOOGLE_REVIEW_COUNT}} — review volume (e.g. 342)
-  {{INSTAGRAM_HANDLE}}— handle without @
-  {{FACEBOOK_URL}}    — complete URL
+  {{YEARS_IN_BUSINESS}}   — founding year or years in service (e.g. 2015)
+  {{INSTAGRAM_HANDLE}}    — handle without @ (<a href="https://instagram.com/{{INSTAGRAM_HANDLE}}">)
+  {{FACEBOOK_URL}}        — complete URL (<a href="{{FACEBOOK_URL}}">)
+
+SOCIAL MEDIA CONVENTION:
+When specific social media handles are unknown for a business, use the business name formatted as a clean lowercase identifier for social handles.
 
 FILE STRUCTURE & DESIGN:
 1. Output a COMPLETE single-file HTML document (<!DOCTYPE html> ... </html>).
@@ -340,10 +348,47 @@ FILE STRUCTURE & DESIGN:
   return { rawHtml, previewHtml };
 }
 
+export async function repairTemplateHtml({ html, instruction, apiKey }) {
+  const client = getGeminiClient(apiKey);
+  if (!client) {
+    throw new Error('Google AI Studio Gemini is not configured.');
+  }
+
+  const promptContent = `CURRENT HTML:\n\`\`\`html\n${html}\n\`\`\`\n\nREPAIR INSTRUCTION:\n${instruction}\n\nReturn the complete updated HTML document only. Start at <!DOCTYPE html> and end at </html>.`;
+
+  async function attemptRepair(modelName) {
+    const res = await client.models.generateContent({
+      model: modelName,
+      contents: promptContent,
+      config: {
+        systemInstruction: SYSTEM_PROMPT,
+        temperature: 0.2,
+      },
+    });
+    return res.text || '';
+  }
+
+  let out = '';
+  const modelsToTry = _verifiedModel ? [_verifiedModel, ...MODEL_PRIORITY.filter((m) => m !== _verifiedModel)] : MODEL_PRIORITY;
+  let lastErr = null;
+  for (const model of modelsToTry) {
+    try {
+      out = await attemptRepair(model);
+      _verifiedModel = model;
+      break;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (!out && lastErr) throw lastErr;
+  return cleanHtmlOutput(out);
+}
+
 export default {
   getGeminiClient,
   isAiEnabled,
   streamEdit,
   generateTemplateHtml,
+  repairTemplateHtml,
   cleanHtmlOutput,
 };

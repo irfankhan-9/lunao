@@ -11,6 +11,8 @@ import {
   listSiteHistory, createSiteHistory, convertHistoryToTemplate,
   streamAiEdit, processUploadedHtml,
   listTemplateCategories, createTemplateCategory,
+  TemplateScanResult, RebrandingSuiteReport,
+  scanTemplateReadinessClient, testRebrandClient,
 } from '../lib/pipelineClient';
 import { useSyncNiches, addAndSyncTemplate, moveAndSyncTemplate, getLocalTemplates, getNicheEmoji } from '../lib/nichesSync';
 import {
@@ -27,36 +29,35 @@ const BLANK_CANVAS = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta nam
 
 const VIBE_CODE_PROMPT = `You are an expert front-end web developer powered by Google AI Studio Gemini 2.5 Flash. Build a complete, production-ready single-file HTML website for a local service business based on the user's prompt.
 
-OUTPUT FORMAT — STRICT:
-- Return ONLY the HTML document.
-- Start with <!DOCTYPE html> and end with </html>.
-- Do NOT wrap output in markdown code fences (\`\`\`html or \`\`\`).
-- Do NOT include any commentary, explanations, or notes.
+STRICT TEMPLATE ARCHITECTURE & REBRANDING RULES:
+Every website you build, edit, or customize is part of the Lunao automated template & rebranding engine.
+You MUST strictly adhere to the following rules:
 
-PLACEHOLDER SYNTAX (CRITICAL):
-You MUST use standardized handlebar placeholders so the platform can dynamically brand the site for any local client. Use exactly these tags:
-- {{BUSINESS_NAME}} (e.g. Radiant Smiles Dental)
-- {{BUSINESS_NAME_SHORT}} (e.g. Radiant)
-- {{CITY}} (e.g. Austin, TX)
-- {{STATE}} (e.g. TX)
-- {{PHONE_DISPLAY}} (e.g. (512) 555-0199)
-- {{PHONE_RAW}} (e.g. 5125550199)
-- {{EMAIL}} (e.g. contact@example.com)
-- {{ADDRESS}} (e.g. 3801 Capital of Texas Hwy, Austin, TX)
-- {{GOOGLE_RATING}} (e.g. 4.9)
-- {{GOOGLE_REVIEW_COUNT}} (e.g. 342)
-- {{INSTAGRAM_HANDLE}} (e.g. local_business)
-- {{FACEBOOK_URL}} (e.g. https://facebook.com/localbusiness)
+1. SINGLE COMPLETE HTML FILE:
+Every website must be one complete HTML file with embedded CSS and JavaScript.
+- Start at <!DOCTYPE html> and end at </html>.
+- All styles inside a single <style> tag in <head>. Responsive mobile-first CSS (breakpoints at 640px and 1024px).
+- All icons as inline SVGs. Google Fonts loaded via <link rel="stylesheet"> from fonts.googleapis.com.
+- Do NOT use external CSS stylesheets.
+- NO markdown fences (\`\`\`html or \`\`\`). NO explanations or commentary outside the HTML document.
 
-FILE STRUCTURE & DESIGN:
-- Single .html file with everything inline.
-- All CSS inside one <style> tag in <head>. No external stylesheets.
-- Google Fonts loaded from fonts.googleapis.com.
-- Icons via inline SVG only.
-- Responsive mobile-first design with breakpoints at 640px and 1024px.
-- Clean white and blue brand consistent color palette (crisp white backgrounds, professional blue accents like #2563EB, slate text).
-- Sections: Sticky top nav with CTA, Hero with headline & dual buttons, Services grid, Why Choose Us stats, Testimonials, Contact banner, Footer.
-- Real Unsplash image URLs for hero backgrounds and service photos.`;
+2. STRICT APPROVED PLACEHOLDERS:
+Use ONLY these 4 placeholders:
+- {{BUSINESS_NAME}} : Full business name. Use this everywhere the business name appears, including in <title>, header logo/text, hero headline, about section, footer copyright, and alt text.
+- {{PHONE}} : Primary contact telephone number. Use in visible contact text and strictly in dial links: <a href="tel:{{PHONE}}">{{PHONE}}</a>.
+- {{CITY}} : Target city and location (e.g. Austin, TX or Chicago, IL).
+- {{ADDRESS}} : Local street or downtown address.
+
+3. EMAIL & SOCIAL MEDIA IDENTITY CONVENTION:
+Use {{BUSINESS_NAME}} everywhere the business name appears, including email and social media identity text (e.g., contact@{{BUSINESS_NAME}}, https://instagram.com/{{BUSINESS_NAME}}).
+NEVER create separate email or social media placeholders.
+Do NOT invent email addresses, fake social handles, or links.
+
+4. REMOVE HARDCODED DEMO DATA & UNSUPPORTED CLAIMS:
+Replace all hardcoded business names, phone numbers, cities, addresses, fake reviews, ratings, and unsupported business claims with the standard placeholders or generic truthful statements.
+
+5. PRESERVE ORIGINAL DESIGN & QUALITY:
+Preserve the original design, styling, layout, typography, responsiveness, and interactivity while ensuring strict template-readiness.`;
 
 const sfx = {
   tap: playSoftTap,
@@ -76,19 +77,22 @@ const sfx = {
 
 const PLACEHOLDER_MAP: Record<string, string> = {
   BUSINESS_NAME: 'Radiant Smiles Dental',
-  BUSINESS_NAME_SHORT: 'Radiant',
+  PHONE: '(512) 555-0199',
   CITY: 'Austin, TX',
-  STATE: 'TX',
+  ADDRESS: '3801 Capital of Texas Hwy, Austin, TX',
+  // Backward compatibility aliases during preview compile
+  BUSINESS_NAME_SHORT: 'Radiant Smiles',
   PHONE_DISPLAY: '(512) 555-0199',
   PHONE_RAW: '5125550199',
-  EMAIL: 'hello@example.com',
-  ADDRESS: '3801 Capital of Texas Hwy, Austin, TX',
+  EMAIL: 'contact@radiantsmiles.com',
+  STATE: 'TX',
   GOOGLE_RATING: '4.9',
   GOOGLE_REVIEW_COUNT: '342',
-  INSTAGRAM_HANDLE: 'radiant_smiles',
+  INSTAGRAM_HANDLE: 'radiantsmiles',
   FACEBOOK_URL: 'https://facebook.com/radiantsmiles',
-  YEARS_IN_BUSINESS: '2012',
-  SITE_URL: 'https://example.com',
+  WEBSITE: 'https://radiantsmiles.com',
+  SITE_URL: 'https://radiantsmiles.com',
+  YEARS_IN_BUSINESS: '2015',
 };
 
 // Cleanse any internal placeholders, file types, or template sauce from user-facing text
@@ -96,10 +100,26 @@ function sanitizeUserFacingText(text: string): string {
   if (!text || typeof text !== 'string') return '';
   let cleaned = text;
 
+  // Filter out any internal rules or prompt snippets if any leak into response
+  const internalPhrases = [
+    /we gave only one html file/gi,
+    /we use placeholders/gi,
+    /placeholders strictly/gi,
+    /single self-contained html page/gi,
+    /output format — strict/gi,
+    /return only the html document/gi,
+    /do not wrap output in markdown/gi,
+    /system_prompt/gi,
+  ];
+  internalPhrases.forEach(re => {
+    cleaned = cleaned.replace(re, '');
+  });
+
   // 1. Replace all {{PLACEHOLDERS}} with realistic friendly preview values
-  cleaned = cleaned.replace(/\{\{(\w+)\}\}/g, (_, key) =>
-    key in PLACEHOLDER_MAP ? PLACEHOLDER_MAP[key] : 'Business'
-  );
+  cleaned = cleaned.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, rawKey) => {
+    const key = rawKey.toUpperCase();
+    return key in PLACEHOLDER_MAP ? PLACEHOLDER_MAP[key] : 'Business';
+  });
 
   // 2. Remove any references to HTML/CSS/CSV files or backend sauce
   cleaned = cleaned
@@ -116,9 +136,10 @@ function sanitizeUserFacingText(text: string): string {
 
 function compilePreview(rawHtml: string): string {
   if (!rawHtml || typeof rawHtml !== 'string') return rawHtml || '';
-  return rawHtml.replace(/\{\{(\w+)\}\}/g, (_, key) =>
-    key in PLACEHOLDER_MAP ? PLACEHOLDER_MAP[key] : `{{${key}}}`,
-  );
+  return rawHtml.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, rawKey) => {
+    const key = rawKey.toUpperCase();
+    return key in PLACEHOLDER_MAP ? PLACEHOLDER_MAP[key] : `{{${rawKey}}}`;
+  });
 }
 
 function summarizeHtml(rawHtml: string, promptInstruction?: string): string {
@@ -177,48 +198,110 @@ export const TemplateLabPage: React.FC<{
   const [hasLoadedPreviousTemplate, setHasLoadedPreviousTemplate] = useState(false);
   const [hasGivenAiPrompt, setHasGivenAiPrompt] = useState(false);
 
-  // Save Modal States
+  // Template Readiness & Rebranding Suite States
+  const [readinessScan, setReadinessScan] = useState<TemplateScanResult | null>(null);
+  const [isTestingRebrand, setIsTestingRebrand] = useState(false);
+  const [rebrandSuite, setRebrandSuite] = useState<RebrandingSuiteReport | null>(null);
+  const [isTemplateValidated, setIsTemplateValidated] = useState(false);
+  const [showRebrandModal, setShowRebrandModal] = useState(false);
+  const [activeRebrandTab, setActiveRebrandTab] = useState<'biz1' | 'biz2'>('biz1');
+  const [showReadinessDetails, setShowReadinessDetails] = useState(false);
+  const [testRebrandMobileView, setTestRebrandMobileView] = useState(false);
+
+  // Editable test business details
+  const [testBiz1, setTestBiz1] = useState({
+    name: 'Iron Forge Fitness Club',
+    phone: '(312) 880-9944',
+    city: 'Chicago, IL',
+    address: '420 N Michigan Ave, Chicago, IL',
+  });
+  const [testBiz2, setTestBiz2] = useState({
+    name: 'Summit Peak Heating & Cooling',
+    phone: '(303) 712-4400',
+    city: 'Denver, CO',
+    address: '1750 16th St Mall, Denver, CO',
+  });
+
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const idleContainerRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Save/Template Dialog States
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [saveDescription, setSaveDescription] = useState('');
-  const [saveCategory, setSaveCategory] = useState<string | null>(null);
   const [saveNewCat, setSaveNewCat] = useState('');
   const [showNewCat, setShowNewCat] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [categories, setCategories] = useState<{ id: string; name: string; color: string }[]>([]);
-
-  // Track previously attached niche to prompt reminder card popup before reassignment
+  const [saveCategory, setSaveCategory] = useState<string | null>(null);
+  const [categories, setCategories] = useState<{id: string, name: string, color: string}[]>([]);
   const [previousAttachedNiche, setPreviousAttachedNiche] = useState<string | null>(null);
   const [hasChangedNicheOnce, setHasChangedNicheOnce] = useState(false);
-  const [pendingNicheMove, setPendingNicheMove] = useState<{
-    fromNiche: string;
-    toNiche: string;
-    saveName: string;
-    saveDescription: string;
-  } | null>(null);
-
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const workspaceRef = useRef<HTMLDivElement>(null);
-  const idleContainerRef = useRef<HTMLDivElement>(null);
-  const [successMsg, setSuccessMsg] = useState<{ title: string; niche: string } | null>(null);
+  const [pendingNicheMove, setPendingNicheMove] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+  const [successMsg, setSuccessMsg] = useState<{title: string, niche: string} | null>(null);
   const [fullScreenPreview, setFullScreenPreview] = useState(false);
 
-  useEffect(() => {
-    if (iframeRef.current && previewHtml) {
-      iframeRef.current.srcdoc = previewHtml;
+  // Action 2: Test Rebrand — Opens interactive card with pre-filled test business details
+  const handleTestRebrand = () => {
+    if (!html || html === BLANK_CANVAS) {
+      flashError('No template code to test.');
+      return;
     }
-  }, [previewHtml]);
+    sfx.open();
+    setShowRebrandModal(true);
+  };
 
-  useEffect(() => {
-    // Auto-scroll disabled per user request
-  }, [messages, thinkingAcc, streaming]);
+  const handleRunRebrandTests = async () => {
+    if (!html || html === BLANK_CANVAS) {
+      flashError('No template code to test.');
+      return;
+    }
+    sfx.engage();
+    setIsTestingRebrand(true);
+    try {
+      const res = await testRebrandClient(html, testBiz1, testBiz2);
+      setReadinessScan(res.scan);
+      setRebrandSuite(res.rebrandResults);
+      setShowRebrandModal(true);
 
-  useEffect(() => {
-    listSiteHistory()
-      .then(h => setHistory(h))
-      .catch(() => setHistory([]));
-  }, []);
+      if (res.rebrandResults.allPassed && res.scan.isReady) {
+        setIsTemplateValidated(true);
+        sfx.deployed();
+        flashToast({ type: 'success', text: 'Rebranding tests passed for both businesses! Template is approved to save.' });
+      } else {
+        setIsTemplateValidated(false);
+        sfx.error();
+        flashToast({ type: 'error', text: 'Rebrand tests or readiness validation failed. Please review issues.' });
+      }
+    } catch (err: any) {
+      sfx.error();
+      const msg = err?.message || '';
+      if (msg.includes('500') || msg.includes('Failed to fetch') || msg.includes('quota') || msg.includes('network') || msg.includes('unavailable')) {
+        flashError('Server Down / AI Unavailable: Could not reach service or API quota exhausted.');
+      } else {
+        flashError(msg || 'Rebranding test run failed.');
+      }
+    } finally {
+      setIsTestingRebrand(false);
+    }
+  };
+
+  // Action 3: Save Template Gate
+  // Only allows saving if validation and both rebrand tests have passed
+  const handleOpenSaveTemplate = () => {
+    if (!isTemplateValidated || !readinessScan?.isReady || !rebrandSuite?.allPassed) {
+      sfx.error();
+      flashToast({
+        type: 'error',
+        text: 'Validation required: You must run "Make Template Ready" and pass "Test Rebrand" before saving to the template library.',
+      });
+      // Automatically open the rebrand / readiness diagnostic modal so user sees what is missing
+      setShowRebrandModal(true);
+      return;
+    }
+    openSave();
+  };
 
   const flashError = (msg: string) => {
     sfx.error();
@@ -267,7 +350,7 @@ export const TemplateLabPage: React.FC<{
   }
   const isPlanEligible = ['growth', 'pro', 'agency'].some(p => currentPlan.toLowerCase().includes(p));
 
-  // Start vibe coding with Gemini 2.5 Flash with loading screen and clean environment reset
+  // Start vibe coding with Gemini 2.5 Flash: show brief loading until AI reaches response, then immediately load workspace
   const handleStartVibeCode = async (promptText: string, customTitle: string) => {
     if (!isPlanEligible) {
       flashError('Vibe Coding is exclusive to Growth, Pro, and Agency plans. Please upgrade in Subscription Plans.');
@@ -276,22 +359,8 @@ export const TemplateLabPage: React.FC<{
     if (!promptText.trim() || streaming || generatingNewSite) return;
     sfx.magic();
     setGeneratingNewSite(true);
-    setGeneratingStepText(`Initializing ${selectedModel} architecture...`);
+    setGeneratingStepText(`Connecting to ${selectedModel}... Synthesizing "${customTitle}"`);
     setLabError(null);
-
-    // Simulate gorgeous loading steps with AI naming & structure synthesis
-    const steps = [
-      `Analyzing brief with ${selectedModel}...`,
-      `Synthesizing custom AI title: "${customTitle}"...`,
-      `Designing bespoke local business layout & color palette...`,
-      `Writing clean responsive HTML & Tailwind CSS...`,
-      `Finalizing production-ready template & launching new environment...`
-    ];
-    
-    for (let i = 0; i < steps.length; i++) {
-      setGeneratingStepText(steps[i]);
-      await new Promise(r => setTimeout(r, 420));
-    }
 
     // Completely reset workspace to pristine new environment
     setHtml(BLANK_CANVAS);
@@ -305,17 +374,35 @@ export const TemplateLabPage: React.FC<{
     setShowPromptInput(false);
     setMessages([{ role: 'user', content: promptText }]);
 
-    // Force scroll strictly to the top on all elements so user never has to scroll up
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    let reachedResponse = false;
+    const loadWorkspaceImmediately = () => {
+      if (!reachedResponse) {
+        reachedResponse = true;
+        setGeneratingNewSite(false);
+        setMode('active');
+        sfx.open();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    };
 
     try {
       const fullPrompt = `${VIBE_CODE_PROMPT}\n\nUSER REQUEST: ${promptText}`;
       const result = await streamAiEdit(
         { html: BLANK_CANVAS, instruction: fullPrompt, history: [], anthropicApiKey: apiKey.trim() || undefined },
-        () => {},
-        (thinkingText) => setThinkingAcc(prev => prev + thinkingText),
+        (fullHtmlSoFar) => {
+          loadWorkspaceImmediately();
+          setHtml(fullHtmlSoFar);
+        },
+        (thinkingText) => {
+          loadWorkspaceImmediately();
+          setThinkingAcc(prev => prev + thinkingText);
+        },
+        () => {
+          loadWorkspaceImmediately();
+        }
       );
 
+      loadWorkspaceImmediately();
       const finalCompiled = compilePreview(result);
       setHtml(result);
       setPreviewHtml(finalCompiled);
@@ -342,13 +429,19 @@ export const TemplateLabPage: React.FC<{
         const entry = await createSiteHistory({ title: customTitle, niche: customTitle, html: result, snapshotLabel: 'Initial Vibe Build' });
         setHistory(prev => [entry as any, ...prev]);
       } catch { /* ignore */ }
-      setMode('active'); // Load workspace with smooth transition upon success
     } catch (err: any) {
       sfx.error();
-      setMode('landing');
-      setLabError(err?.message || 'AI request was not picked up or failed. Please check your prompt and try again.');
+      if (!reachedResponse) {
+        // If it failed before AI reached response, land back on the landing page and show error
+        setGeneratingNewSite(false);
+        setMode('landing');
+        setLabError(err?.message || 'AI request was not picked up or failed. Please check your prompt and try again.');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        // If it failed mid-stream inside the workspace
+        flashError(err?.message || 'AI generation interrupted. Please retry.');
+      }
       setThinkingAcc('');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setStreaming(false);
       setGeneratingNewSite(false);
@@ -561,13 +654,17 @@ export const TemplateLabPage: React.FC<{
         if (entry && entry.id) historyId = entry.id;
       } catch { /* ignore */ }
 
-      let templateId = turnedTemplateId || `tpl_${Date.now()}`;
+      let templateId = turnedTemplateId || `tmpl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      const compiledPreview = compilePreview(html);
+
       try {
         const result = await convertHistoryToTemplate({
           historyId,
           name: saveName.trim(),
           categoryId: catId,
           niche: finalNiche,
+          rawHtml: html,
+          templateId,
         });
         if (result && result.id) {
           templateId = result.id;
@@ -583,6 +680,9 @@ export const TemplateLabPage: React.FC<{
           fromNiche: oldNiche,
           toNiche: finalNiche,
           description: saveDescription.trim() || `High-converting modern website template for ${finalNiche}.`,
+          rawHtml: html,
+          previewHtml: compiledPreview,
+          previewPath: `/api/templates/${templateId}/preview`,
         });
       } else {
         addAndSyncTemplate({
@@ -590,6 +690,9 @@ export const TemplateLabPage: React.FC<{
           name: saveName.trim(),
           niche: finalNiche,
           description: saveDescription.trim() || `High-converting modern website template for ${finalNiche}.`,
+          rawHtml: html,
+          previewHtml: compiledPreview,
+          previewPath: `/api/templates/${templateId}/preview`,
         });
       }
 
@@ -604,7 +707,8 @@ export const TemplateLabPage: React.FC<{
       setSaveOpen(false);
     } catch (err: any) {
       try {
-        const fallbackId = turnedTemplateId || `tpl_${Date.now()}`;
+        const fallbackId = turnedTemplateId || `tmpl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        const compiledPreview = compilePreview(html);
         if (oldNiche && oldNiche.toLowerCase() !== finalNiche.toLowerCase()) {
           moveAndSyncTemplate({
             id: fallbackId,
@@ -612,6 +716,9 @@ export const TemplateLabPage: React.FC<{
             fromNiche: oldNiche,
             toNiche: finalNiche,
             description: saveDescription.trim() || `High-converting modern website template for ${finalNiche}.`,
+            rawHtml: html,
+            previewHtml: compiledPreview,
+            previewPath: `/api/templates/${fallbackId}/preview`,
           });
         } else {
           addAndSyncTemplate({
@@ -619,6 +726,9 @@ export const TemplateLabPage: React.FC<{
             name: saveName.trim(),
             niche: finalNiche,
             description: saveDescription.trim() || `High-converting modern website template for ${finalNiche}.`,
+            rawHtml: html,
+            previewHtml: compiledPreview,
+            previewPath: `/api/templates/${fallbackId}/preview`,
           });
         }
         setTurnedTemplateId(fallbackId);
@@ -679,16 +789,38 @@ export const TemplateLabPage: React.FC<{
           </div>
         </div>
 
-        {/* Turn into Template button prominently in Top Header - Always 100% visible and NEVER hidden */}
+        {/* Top Header Buttons: Test Rebrand and Save Template */}
         {isActive && (
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+
+            {/* Test Rebrand Button */}
             <button
-              onClick={openSave}
-              disabled={streaming}
-              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md hover:shadow-lg active:scale-[0.98] transition-all shrink-0 cursor-pointer ${streaming ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
-              title="Save website as a reusable template"
+              onClick={handleTestRebrand}
+              disabled={streaming || isTestingRebrand}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs active:scale-[0.98] cursor-pointer bg-white text-slate-800 border border-slate-300 hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300 ${
+                (streaming || isTestingRebrand) ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''
+              }`}
+              title="Test rebranding with two fictional businesses and verify placeholder substitutions"
             >
-              <BookmarkPlus className="w-4 h-4" />
+              {isTestingRebrand ? <Loader2 className="w-4 h-4 animate-spin text-purple-600" /> : <Sparkles className="w-4 h-4 text-purple-600" />}
+              <span>{isTestingRebrand ? 'Testing Rebrands…' : 'Test Rebrand'}</span>
+              {isTemplateValidated && (
+                <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
+              )}
+            </button>
+
+            {/* Save Template Button - Gated strictly until validation and both rebrand tests pass */}
+            <button
+              onClick={handleOpenSaveTemplate}
+              disabled={streaming || isTestingRebrand}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold shadow-md hover:shadow-lg active:scale-[0.98] transition-all shrink-0 cursor-pointer ${
+                isTemplateValidated
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                  : 'bg-slate-200 text-slate-500 hover:bg-slate-300 hover:text-slate-700 border border-slate-300'
+              } ${(streaming || isTestingRebrand) ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
+              title={isTemplateValidated ? "Save website as a reusable template" : "Make Template Ready and pass Test Rebrand to unlock saving"}
+            >
+              {!isTemplateValidated ? <Lock className="w-3.5 h-3.5 text-slate-500" /> : <BookmarkPlus className="w-4 h-4" />}
               <span>Turn into Template</span>
             </button>
           </div>
@@ -1101,12 +1233,16 @@ export const TemplateLabPage: React.FC<{
                   </button>
 
                   <button
-                    onClick={openSave}
-                    disabled={streaming}
-                    className={`inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md hover:shadow-lg active:scale-[0.98] transition-all shrink-0 ${streaming ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
-                    title="Turn into reusable template"
+                    onClick={handleOpenSaveTemplate}
+                    disabled={streaming || isTestingRebrand}
+                    className={`inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs font-bold shadow-md hover:shadow-lg active:scale-[0.98] transition-all shrink-0 cursor-pointer ${
+                      isTemplateValidated
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                        : 'bg-slate-200 text-slate-500 hover:bg-slate-300 hover:text-slate-700 border border-slate-300'
+                    } ${(streaming || isTestingRebrand) ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
+                    title={isTemplateValidated ? "Turn into reusable template" : "Make Template Ready and pass Test Rebrand to unlock saving"}
                   >
-                    <BookmarkPlus className="w-4 h-4 shrink-0" />
+                    {!isTemplateValidated ? <Lock className="w-4 h-4 text-slate-500 shrink-0" /> : <BookmarkPlus className="w-4 h-4 shrink-0" />}
                     <span>Turn into Template</span>
                   </button>
                 </div>
@@ -1115,7 +1251,24 @@ export const TemplateLabPage: React.FC<{
               {/* Viewport / Code View Area */}
               <div className="flex-1 w-full h-full min-h-0 overflow-hidden flex flex-col bg-slate-100">
                 {device === 'desktop' ? (
-                  <div className="w-full h-full flex-1 flex flex-col min-h-0 bg-white overflow-hidden">
+                  <div className="w-full h-full flex-1 flex flex-col min-h-0 bg-white overflow-hidden relative">
+                    {streaming && !previewHtml && (
+                      <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-50/95 backdrop-blur-xs p-6 text-center animate-editor-fade">
+                        <div className="w-14 h-14 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center mb-4 shadow-sm">
+                          <Loader2 className="w-7 h-7 text-blue-600 animate-spin" />
+                        </div>
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold mb-2">
+                          <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                          <span>{selectedModel} is coding live</span>
+                        </div>
+                        <h4 className="text-base font-bold text-slate-800 mb-1">
+                          Crafting "{title || 'Bespoke Website'}"
+                        </h4>
+                        <p className="text-xs text-slate-500 max-w-md leading-relaxed">
+                          Generating responsive layout, mobile-ready components, and tailored local styling. The preview will compile immediately once generation is complete.
+                        </p>
+                      </div>
+                    )}
                     <iframe
                       ref={iframeRef}
                       srcdoc={previewHtml || BLANK_CANVAS}
@@ -1125,11 +1278,17 @@ export const TemplateLabPage: React.FC<{
                     />
                   </div>
                 ) : device === 'mobile' ? (
-                  <div className="w-full h-full flex-1 min-h-0 flex items-center justify-center p-4 overflow-hidden">
+                  <div className="w-full h-full flex-1 min-h-0 flex items-center justify-center p-4 overflow-hidden relative">
                     <div className="w-full max-w-[390px] h-full max-h-[820px] bg-white rounded-3xl border-4 border-slate-800 shadow-2xl flex flex-col overflow-hidden relative">
                       <div className="h-6 bg-slate-800 flex items-center justify-center shrink-0">
                         <div className="w-16 h-3 bg-slate-700 rounded-full" />
                       </div>
+                      {streaming && !previewHtml && (
+                        <div className="absolute inset-0 top-6 z-10 flex flex-col items-center justify-center bg-slate-50/95 p-6 text-center">
+                          <Loader2 className="w-6 h-6 text-blue-600 animate-spin mb-3" />
+                          <p className="text-xs font-bold text-slate-800">{selectedModel} is coding live...</p>
+                        </div>
+                      )}
                       <iframe
                         ref={iframeRef}
                         srcdoc={previewHtml || BLANK_CANVAS}
@@ -1145,10 +1304,15 @@ export const TemplateLabPage: React.FC<{
                       <div className="flex items-center gap-2">
                         <Code2 className="w-4 h-4 text-blue-400" />
                         <span className="text-xs font-mono font-bold text-white">Generated Single-File HTML / CSS Source Code</span>
+                        {streaming && (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] font-mono">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping" /> Streaming live
+                          </span>
+                        )}
                       </div>
                       <button
                         onClick={() => {
-                          navigator.clipboard.writeText(previewHtml || BLANK_CANVAS);
+                          navigator.clipboard.writeText(previewHtml || (html !== BLANK_CANVAS ? html : '') || BLANK_CANVAS);
                           flashToast({ type: 'success', text: 'HTML source code copied to clipboard!' });
                         }}
                         className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all"
@@ -1158,7 +1322,7 @@ export const TemplateLabPage: React.FC<{
                     </div>
                     <textarea
                       readOnly
-                      value={previewHtml || BLANK_CANVAS}
+                      value={previewHtml || (html !== BLANK_CANVAS ? html : '') || BLANK_CANVAS}
                       className="w-full flex-1 font-mono text-xs text-emerald-400 bg-slate-950 p-4 rounded-xl border border-slate-800 focus:outline-none resize-none leading-relaxed shadow-inner"
                     />
                   </div>
@@ -1427,6 +1591,375 @@ export const TemplateLabPage: React.FC<{
             <p className="text-[11px] text-slate-500 italic">
               Loading fresh workspace environment & saving previous build to recent history…
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Rebranding Tests & Readiness Inspection Modal */}
+      {showRebrandModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-editor-fade">
+          <div className="w-full max-w-4xl max-h-[92vh] flex flex-col bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden animate-editor-rise">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
+                  isTemplateValidated ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-purple-50 text-purple-600 border border-purple-200'
+                }`}>
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900">Automated Rebranding & Readiness Suite</h3>
+                    {isTemplateValidated ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold">
+                        <Check className="w-3.5 h-3.5 stroke-[3]" /> Approved for Saving
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-bold">
+                        <AlertCircle className="w-3.5 h-3.5" /> Testing Required
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Strict rules: single HTML file, 4 canonical placeholders ({'{{'}BUSINESS_NAME{'}}'}, {'{{'}PHONE{'}}'}, {'{{'}CITY{'}}'}, {'{{'}ADDRESS{'}}'}), zero hardcoded demo data.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowRebrandModal(false);
+                  setRebrandSuite(null);
+                  setReadinessScan(null);
+                  setTestRebrandMobileView(false);
+                }}
+                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-all cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              
+              {/* Readiness Score Card */}
+              {readinessScan && (
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-700">Readiness Score</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                        readinessScan.isReady ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white'
+                      }`}>
+                        {readinessScan.score}%
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setShowReadinessDetails(!showReadinessDetails)}
+                      className="text-xs text-blue-600 hover:underline font-semibold"
+                    >
+                      {showReadinessDetails ? 'Hide Checklist' : 'View Detailed Checklist'}
+                    </button>
+                  </div>
+
+                  {/* Checklist Breakdown */}
+                  {showReadinessDetails && (
+                    <div className="space-y-2 pt-2 border-t border-slate-200">
+                      {readinessScan.failed.length > 0 && (
+                        <div className="space-y-1">
+                          <span className="text-[11px] font-bold text-red-600 uppercase tracking-wider">Failed Checks:</span>
+                          {readinessScan.failed.map((f, i) => (
+                            <div key={i} className="flex items-start gap-2 text-xs text-red-700 bg-red-50 p-2 rounded-lg">
+                              <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-red-600" />
+                              <span><strong>{f.label}:</strong> {f.explanation}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {readinessScan.passed.length > 0 && (
+                        <div className="space-y-1">
+                          <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">Passed Checks:</span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                            {readinessScan.passed.map((p, i) => (
+                              <div key={i} className="flex items-center gap-1.5 text-xs text-emerald-800 bg-emerald-50 px-2.5 py-1.5 rounded-lg">
+                                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <span className="truncate">{p.label}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Editable Test Business Details Form */}
+              <div className="p-5 rounded-2xl bg-purple-50/50 border border-purple-100 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-purple-900">Configurable Test Business Profiles</h4>
+                    <p className="text-[11px] text-slate-500">Edit business info below and click Run Rebrand Test to verify dynamic rebranding.</p>
+                  </div>
+                  <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-purple-200">
+                    <button
+                      onClick={() => setActiveRebrandTab('biz1')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        activeRebrandTab === 'biz1' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
+                      }`}
+                    >
+                      Business 1: {testBiz1.name.slice(0, 15)}...
+                    </button>
+                    <button
+                      onClick={() => setActiveRebrandTab('biz2')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        activeRebrandTab === 'biz2' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
+                      }`}
+                    >
+                      Business 2: {testBiz2.name.slice(0, 15)}...
+                    </button>
+                  </div>
+                </div>
+
+                {activeRebrandTab === 'biz1' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-purple-200 shadow-xs">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Business Name 1</label>
+                      <input
+                        type="text"
+                        value={testBiz1.name}
+                        onChange={e => setTestBiz1({ ...testBiz1, name: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Phone Number</label>
+                      <input
+                        type="text"
+                        value={testBiz1.phone}
+                        onChange={e => setTestBiz1({ ...testBiz1, phone: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">City, State</label>
+                      <input
+                        type="text"
+                        value={testBiz1.city}
+                        onChange={e => setTestBiz1({ ...testBiz1, city: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Street Address</label>
+                      <input
+                        type="text"
+                        value={testBiz1.address}
+                        onChange={e => setTestBiz1({ ...testBiz1, address: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-purple-200 shadow-xs">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Business Name 2</label>
+                      <input
+                        type="text"
+                        value={testBiz2.name}
+                        onChange={e => setTestBiz2({ ...testBiz2, name: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Phone Number</label>
+                      <input
+                        type="text"
+                        value={testBiz2.phone}
+                        onChange={e => setTestBiz2({ ...testBiz2, phone: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">City, State</label>
+                      <input
+                        type="text"
+                        value={testBiz2.city}
+                        onChange={e => setTestBiz2({ ...testBiz2, city: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Street Address</label>
+                      <input
+                        type="text"
+                        value={testBiz2.address}
+                        onChange={e => setTestBiz2({ ...testBiz2, address: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-xs text-slate-500">
+                    {rebrandSuite ? (
+                      <span className="font-bold text-emerald-600">✓ Rebrand tests completed successfully.</span>
+                    ) : (
+                      <span>Ready to test 2 fictional business profiles.</span>
+                    )}
+                  </span>
+                  <button
+                    onClick={handleRunRebrandTests}
+                    disabled={isTestingRebrand}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+                  >
+                    {isTestingRebrand ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    <span>{isTestingRebrand ? 'Running Rebrand Tests…' : 'Run Rebrand Test'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Two Fictional Businesses Rebrand Tests Results */}
+              {rebrandSuite && (
+                <div className="space-y-4 pt-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-bold text-slate-900">Rebranding Verification Results & Local Browser Preview</h4>
+                  </div>
+
+                  {rebrandSuite.tests.map((test) => {
+                    const isCurrent = (activeRebrandTab === 'biz1' && test.testNumber === 1) || (activeRebrandTab === 'biz2' && test.testNumber === 2);
+                    if (!isCurrent) return null;
+
+                    return (
+                      <div key={test.testNumber} className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-xs space-y-4 p-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-bold text-slate-900">{test.business.name}</span>
+                              <span className="text-xs text-slate-500">• {test.business.city}</span>
+                            </div>
+                            <div className="text-xs text-slate-600 font-medium mt-1 flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                              <span>Local Browser HTML Preview (Zero Deployment URL)</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+                              <button
+                                onClick={() => setTestRebrandMobileView(false)}
+                                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                                  !testRebrandMobileView ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                              >
+                                Desktop
+                              </button>
+                              <button
+                                onClick={() => setTestRebrandMobileView(true)}
+                                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                                  testRebrandMobileView ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                              >
+                                📱 Mobile View
+                              </button>
+                            </div>
+                            {test.passed ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold">
+                                <Check className="w-3.5 h-3.5 stroke-[3]" /> Rebrand Verified
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-100 text-red-800 text-xs font-bold">
+                                <AlertCircle className="w-3.5 h-3.5" /> Issues Found ({test.issues.length})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {test.issues.length > 0 && (
+                          <div className="space-y-1">
+                            {test.issues.map((iss, i) => (
+                              <div key={i} className="text-xs text-red-600 bg-red-50 p-2 rounded-lg">
+                                • {iss}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Interactive Rebranded Preview iframe with Mobile / Desktop toggle */}
+                        <div className="space-y-1.5 flex flex-col items-center">
+                          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider self-start">Live Rebranded Output Simulation ({test.business.name}):</span>
+                          <div className={`transition-all duration-300 border border-slate-200 rounded-2xl overflow-hidden bg-slate-50 relative shadow-inner ${
+                            testRebrandMobileView ? 'w-[375px] h-[600px] shadow-2xl border-slate-400 ring-8 ring-slate-900/10 my-2' : 'w-full h-80'
+                          }`}>
+                            {testRebrandMobileView && (
+                              <div className="w-full bg-slate-900 text-white text-[10px] py-1 px-3 flex items-center justify-between font-mono shrink-0">
+                                <span>iPhone 15 Pro</span>
+                                <div className="w-12 h-1.5 bg-slate-700 rounded-full" />
+                                <span>9:41 AM</span>
+                              </div>
+                            )}
+                            <iframe
+                              srcdoc={test.rebrandedHtml}
+                              title={`Rebrand Preview ${test.testNumber}`}
+                              className="w-full h-full border-0"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between px-6 py-4 bg-slate-50 border-t border-slate-200 shrink-0">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleTestRebrand}
+                  disabled={isTestingRebrand}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-50 border border-purple-300 text-purple-700 hover:bg-purple-100 text-xs font-bold transition-all cursor-pointer"
+                >
+                  {isTestingRebrand ? <Loader2 className="w-4 h-4 animate-spin text-purple-600" /> : <RefreshCw className="w-4 h-4 text-purple-600" />}
+                  <span>Re-test Both Businesses</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setShowRebrandModal(false);
+                    setRebrandSuite(null);
+                    setReadinessScan(null);
+                    setTestRebrandMobileView(false);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-300 transition-all cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setShowRebrandModal(false);
+                    setRebrandSuite(null);
+                    setReadinessScan(null);
+                    setTestRebrandMobileView(false);
+                    openSave();
+                  }}
+                  disabled={!isTemplateValidated}
+                  className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer ${
+                    isTemplateValidated
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                      : 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-60'
+                  }`}
+                >
+                  {!isTemplateValidated && <Lock className="w-3.5 h-3.5" />}
+                  <span>Publish to Templates</span>
+                </button>
+              </div>
+            </div>
+
           </div>
         </div>
       )}
