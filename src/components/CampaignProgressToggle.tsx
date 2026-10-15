@@ -144,18 +144,18 @@ function useCampaignPolling(
         // Continue polling while campaign is still running.
         if (status === 'running' || status === 'starting') {
           stoppedAt = null;
-          setTimeout(tick, 2500);
+          setTimeout(tick, 5000);
           return;
         }
         // After completion: keep polling for 60s so the final delivery
         // receipts have time to land in the UI.
         if (stoppedAt === null) stoppedAt = Date.now();
         if (Date.now() - stoppedAt < 60_000) {
-          setTimeout(tick, 2500);
+          setTimeout(tick, 5000);
         }
       } catch (e) {
         // Silent fail — keep ticking.
-        setTimeout(tick, 2500);
+        setTimeout(tick, 5000);
       }
     };
 

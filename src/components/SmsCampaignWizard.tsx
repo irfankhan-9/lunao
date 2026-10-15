@@ -178,8 +178,8 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
   const [celebratedCampaign, setCelebratedCampaign] = useState<any>(null);
   const [activeLeadIndex, setActiveLeadIndex] = useState<number>(0);
   const [aiLogs, setAiLogs] = useState<Array<{ id: string; time: string; text: string; type: 'info' | 'agent' | 'success' | 'code' }>>([]);
-  const [completedSitesList, setCompletedSitesList] = useState<Array<{ slug: string; name: string; city?: string; phone?: string; url: string; smsText?: string; status: 'live' | 'failed' }>>([]);
-  const [dispatchedSmsList, setDispatchedSmsList] = useState<Array<{ name: string; phone?: string; url: string; status: 'sent' | 'delivered' }>>([]);
+  const [completedSitesList, setCompletedSitesList] = useState<Array<{ slug: string; name: string; city?: string; phone?: string; url: string; smsText?: string; status: 'live' | 'failed'; smsStatus?: 'queued' | 'sending' | 'sent' | 'delivered' | 'failed'; smsError?: string | null; telnyxId?: string | null }>>([]);
+  const [dispatchedSmsList, setDispatchedSmsList] = useState<Array<{ name: string; phone?: string; url: string; status: 'queued' | 'sending' | 'sent' | 'delivered' | 'failed'; telnyxId?: string | null; smsError?: string | null }>>([]);
   const terminalBoxRef = useRef<HTMLDivElement>(null);
   const isUserScrolledUpRef = useRef<boolean>(false);
   const progressContainerRef = useRef<HTMLDivElement>(null);
@@ -567,11 +567,46 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
       await new Promise((r) => setTimeout(r, 350));
 
       addLog(`[Carrier Network] Routing outbound SMS to ${recipientPhone} via Telnyx Messaging Profile...`, 'agent');
-      await new Promise((r) => setTimeout(r, 300));
 
-      addLog(`[Carrier Delivered] SMS proposal delivered to ${lead.name} (${recipientPhone}) [Status: Delivered · 200 OK]`, 'success');
+      let smsDeliveryStatus: 'queued' | 'sending' | 'sent' | 'delivered' | 'failed' = 'queued';
+      let telnyxMessageId: string | null = null;
+      let deliveryErrorMessage: string | null = null;
 
-      playGentleChime();
+      try {
+        const smsRes = await fetch('/api/sms/send-single', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: recipientPhone,
+            text: personalizedSms,
+            leadName: lead.name,
+            businessName: lead.name,
+            city: lead.city,
+            siteUrl,
+            campaignId: newCampId,
+            ownerKey: resolvedOwnerKey,
+          }),
+        });
+        const smsData = await smsRes.json().catch(() => ({}));
+        if (smsData.ok && (smsData.id || smsData.telnyxId)) {
+          telnyxMessageId = smsData.id || smsData.telnyxId;
+          smsDeliveryStatus = (smsData.status === 'delivered') ? 'delivered' : 'queued';
+          addLog(`[Telnyx API] SMS queued with carrier. Telnyx ID: ${telnyxMessageId} [Status: Queued]`, 'code');
+        } else if (smsData.status === 'failed' || smsData.error) {
+          smsDeliveryStatus = 'failed';
+          deliveryErrorMessage = smsData.error || 'Carrier rejection';
+          addLog(`[Telnyx Failure] SMS failed for ${lead.name}: ${deliveryErrorMessage} (Code: ${smsData.errorCode || 'E_CARRIER'})`, 'agent');
+        } else {
+          telnyxMessageId = smsData.id || smsData.telnyxId || null;
+          smsDeliveryStatus = smsData.status || 'queued';
+          addLog(`[Telnyx API] Outbound queued: ${smsDeliveryStatus}`, 'info');
+        }
+      } catch (smsErr: any) {
+        smsDeliveryStatus = 'failed';
+        deliveryErrorMessage = smsErr.message || 'Network error';
+        addLog(`[Telnyx Error] SMS dispatch error: ${deliveryErrorMessage}`, 'agent');
+      }
+
       const siteItem = {
         slug: slug || `site-${i + 1}`,
         name: lead.name || `Business ${i + 1}`,
@@ -580,10 +615,173 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
         url: siteUrl,
         smsText: personalizedSms,
         status: 'live' as const,
+        smsStatus: smsDeliveryStatus,
+        smsError: deliveryErrorMessage,
+        telnyxId: telnyxMessageId,
       };
       completedAccumulator.push(siteItem);
       setCompletedSitesList([...completedAccumulator]);
-      setDispatchedSmsList([...completedAccumulator]);
+      setDispatchedSmsList([...completedAccumulator as any]);
+
+      // 1. Instantly dispatch event for Messaging tab & PWA sync
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('lunao_sms_dispatched', {
+            detail: {
+              id: Date.now() + i,
+              campaignId: newCampId,
+              leadId: null,
+              ownerKey: resolvedOwnerKey,
+              toNumber: recipientPhone,
+              fromNumber: selectedPhoneNumber || '+1 (604) 953-9651',
+              body: personalizedSms,
+              status: smsDeliveryStatus,
+              telnyxId: telnyxMessageId,
+              errorCode: null,
+              errorMessage: deliveryErrorMessage,
+              segmentCount: smsSegs,
+              costCredits: 2,
+              refunded: false,
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+              leadName: lead.name,
+              businessName: lead.name,
+              city: lead.city,
+              niche: selectedNiche,
+              siteUrl,
+            },
+          })
+        );
+      }
+
+      // 2. Instantly persist/update business in localStorage so Messaging knows business name & niche
+      try {
+        const rawBiz = localStorage.getItem('lunao_businesses');
+        const bizList = rawBiz ? JSON.parse(rawBiz) : [];
+        const normPhone = recipientPhone.replace(/\D/g, '');
+        const exists = bizList.some((b: any) => (b.phone || '').replace(/\D/g, '') === normPhone);
+        if (!exists) {
+          const newBiz = {
+            id: 'biz-' + Date.now() + '-' + i,
+            name: lead.name,
+            owner: '',
+            phone: recipientPhone,
+            city: lead.city || '',
+            niche: selectedNiche || 'Lead',
+            webStatus: 'Site generated',
+            siteStatus: 'SMS sent',
+            slug: siteItem.slug,
+            siteUrl: siteItem.url,
+            smsHistory: [
+              {
+                text: personalizedSms,
+                timestamp: 'Just now',
+                type: 'outgoing',
+                deliveryStatus: smsDeliveryStatus,
+              },
+            ],
+          };
+          bizList.unshift(newBiz);
+          localStorage.setItem('lunao_businesses', JSON.stringify(bizList));
+        }
+      } catch {
+        // non-fatal
+      }
+
+      // If queued or in-flight, continuously poll every 3 seconds to track delivery / failure reasons from Telnyx
+      if (telnyxMessageId && smsDeliveryStatus !== 'failed' && smsDeliveryStatus !== 'delivered') {
+        const pollId = telnyxMessageId;
+        const targetPhone = recipientPhone;
+        const targetName = lead.name;
+        (async () => {
+          let attempts = 0;
+          const maxAttempts = 30; // Poll every 3s for up to 90 seconds
+          while (attempts < maxAttempts) {
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+            attempts++;
+            try {
+              const checkRes = await fetch(`/api/sms/status-check?id=${encodeURIComponent(pollId)}`);
+              const checkData = await checkRes.json().catch(() => ({}));
+              if (checkData.ok && checkData.status) {
+                const updatedStatus = checkData.status.toLowerCase();
+                if (updatedStatus === 'delivered') {
+                  addLog(`[Telnyx Delivered] Carrier confirmed delivery to ${targetName} (${targetPhone}) [Status: SMS Delivered · 200 OK]`, 'success');
+                  siteItem.smsStatus = 'delivered';
+                  setCompletedSitesList([...completedAccumulator]);
+                  setDispatchedSmsList([...completedAccumulator as any]);
+                  playGentleChime();
+
+                  // Dispatch instant status update event
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(
+                      new CustomEvent('lunao_sms_status_updated', {
+                        detail: { telnyxId: pollId, phone: targetPhone, status: 'delivered' },
+                      })
+                    );
+                    // Update saved campaign in localStorage
+                    try {
+                      const camps = JSON.parse(localStorage.getItem('lunao_campaigns') || '[]');
+                      const targetCamp = camps.find((c: any) => c.id === newCampId);
+                      if (targetCamp && Array.isArray(targetCamp.smsLeads)) {
+                        const targetLead = targetCamp.smsLeads.find((l: any) => l.telnyxId === pollId || l.phone === targetPhone);
+                        if (targetLead) {
+                          targetLead.status = 'delivered';
+                          targetCamp.smsSent = targetCamp.smsLeads.filter((l: any) => l.status === 'delivered' || l.status === 'sent').length;
+                          localStorage.setItem('lunao_campaigns', JSON.stringify(camps));
+                        }
+                      }
+                    } catch {}
+                  }
+                  break;
+                } else if (updatedStatus === 'failed') {
+                  const reason = checkData.errorMessage || checkData.errorCode || 'Carrier rejected message';
+                  addLog(`[Telnyx Alert] SMS failed for ${targetName} (${targetPhone}): ${reason} (Code: ${checkData.errorCode || 'UNKNOWN'})`, 'agent');
+                  siteItem.smsStatus = 'failed';
+                  siteItem.smsError = reason;
+                  setCompletedSitesList([...completedAccumulator]);
+                  setDispatchedSmsList([...completedAccumulator as any]);
+
+                  // Dispatch instant status update event
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(
+                      new CustomEvent('lunao_sms_status_updated', {
+                        detail: { telnyxId: pollId, phone: targetPhone, status: 'failed', errorMessage: reason, errorCode: checkData.errorCode },
+                      })
+                    );
+                    try {
+                      const camps = JSON.parse(localStorage.getItem('lunao_campaigns') || '[]');
+                      const targetCamp = camps.find((c: any) => c.id === newCampId);
+                      if (targetCamp && Array.isArray(targetCamp.smsLeads)) {
+                        const targetLead = targetCamp.smsLeads.find((l: any) => l.telnyxId === pollId || l.phone === targetPhone);
+                        if (targetLead) {
+                          targetLead.status = 'failed';
+                          targetLead.smsError = reason;
+                          targetCamp.smsFailed = (targetCamp.smsFailed || 0) + 1;
+                          localStorage.setItem('lunao_campaigns', JSON.stringify(camps));
+                        }
+                      }
+                    } catch {}
+                  }
+                  break;
+                } else if (updatedStatus === 'sent' || updatedStatus === 'queued') {
+                  siteItem.smsStatus = updatedStatus;
+                  setCompletedSitesList([...completedAccumulator]);
+                  setDispatchedSmsList([...completedAccumulator as any]);
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(
+                      new CustomEvent('lunao_sms_status_updated', {
+                        detail: { telnyxId: pollId, phone: targetPhone, status: updatedStatus },
+                      })
+                    );
+                  }
+                }
+              }
+            } catch (err: any) {
+              console.warn('[Telnyx Poll Error]', err.message);
+            }
+          }
+        })();
+      }
 
       const pct = Math.round(((i + 1) / totalLeads) * 100);
       setLaunchProgress(pct);
@@ -594,10 +792,10 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
       }
     }
 
-    addLog(`All ${totalLeads} websites deployed & SMS proposals successfully delivered!`, 'success');
+    addLog(`All ${totalLeads} websites deployed & SMS proposals processed through carrier!`, 'success');
     await new Promise((r) => setTimeout(r, 600));
 
-    // Construct full campaign record with deployedSites, smsLeads, and leads!
+    // Construct full campaign record with real statuses and Completed status!
     const completeCampRecord = {
       id: newCampId,
       name: finalName,
@@ -606,10 +804,10 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
       leadsFound: totalLeads,
       sitesGenerated: completedAccumulator.filter(s => s.status === 'live').length,
       sites: completedAccumulator.filter(s => s.status === 'live').length,
-      smsSent: completedAccumulator.length,
-      smsFailed: 0,
+      smsSent: completedAccumulator.filter(s => s.smsStatus === 'delivered' || s.smsStatus === 'sent').length,
+      smsFailed: completedAccumulator.filter(s => s.smsStatus === 'failed').length,
       claimed: 0,
-      status: 'Active' as const,
+      status: 'Completed' as const,
       createdAt: new Date().toISOString().split('T')[0],
       templateId: selectedTemplateId,
       type: 'sms' as const,
@@ -627,9 +825,11 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
         phone: s.phone || '',
         city: s.city || '',
         siteUrl: s.url,
-        status: 'delivered' as const,
+        status: (s.smsStatus || 'queued') as any,
         smsText: s.smsText || '',
         sentAt: getTime(),
+        smsError: s.smsError || null,
+        telnyxId: s.telnyxId || null,
       })),
       smsPhoneUsed: selectedPhoneNumber || '+1 (604) 953-9651',
       smsMessage: smsMessage,
@@ -835,10 +1035,24 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
             </div>
             <div>
               <p className="text-[10px] uppercase font-bold text-ink-tertiary">Outreach Status</p>
-              <p className="text-sm font-bold font-mono text-ink">
-                {dispatchedSmsList.length} Messages Delivered
-              </p>
-              <p className="text-xs text-emerald-600">Carrier Route 10DLC active</p>
+              <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                <span className="text-xs font-bold font-mono text-emerald-600">
+                  {completedSitesList.filter(s => s.smsStatus === 'delivered').length} Delivered
+                </span>
+                <span className="text-xs text-ink-tertiary">·</span>
+                <span className="text-xs font-bold font-mono text-amber-600">
+                  {completedSitesList.filter(s => s.smsStatus === 'queued' || (!s.smsStatus && s.smsStatus !== 'failed')).length} Queued
+                </span>
+                {completedSitesList.filter(s => s.smsStatus === 'failed').length > 0 && (
+                  <>
+                    <span className="text-xs text-ink-tertiary">·</span>
+                    <span className="text-xs font-bold font-mono text-rose-600">
+                      {completedSitesList.filter(s => s.smsStatus === 'failed').length} Failed
+                    </span>
+                  </>
+                )}
+              </div>
+              <p className="text-xs text-ink-secondary mt-0.5">Telnyx 10DLC Carrier Network</p>
             </div>
           </div>
 
@@ -870,10 +1084,23 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
 
             {/* Live Sites & SMS Delivery Stream */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs text-ink-secondary">
+              <div className="flex items-center justify-between text-xs text-ink-secondary flex-wrap gap-1">
                 <span className="font-mono flex items-center gap-1.5 font-bold">
-                  <Globe className="w-3.5 h-3.5 text-accent" /> Live Sites & Proposals Delivered ({completedSitesList.length})
+                  <Globe className="w-3.5 h-3.5 text-accent" /> Live Sites & SMS Dispatch ({completedSitesList.length})
                 </span>
+                <div className="flex items-center gap-1.5 text-[10px] font-mono">
+                  <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                    {completedSitesList.filter(s => s.smsStatus === 'delivered').length} Delivered
+                  </span>
+                  <span className="text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                    {completedSitesList.filter(s => s.smsStatus === 'queued' || (!s.smsStatus && s.smsStatus !== 'failed' && s.smsStatus !== 'delivered' && s.smsStatus !== 'sent')).length} Queued
+                  </span>
+                  {completedSitesList.filter(s => s.smsStatus === 'failed').length > 0 && (
+                    <span className="text-rose-700 font-bold bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                      {completedSitesList.filter(s => s.smsStatus === 'failed').length} Failed
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="h-64 rounded-2xl bg-surface border border-border-main p-2 overflow-y-auto space-y-2 scrollbar-thin shadow-inner">
                 {completedSitesList.length === 0 ? (
@@ -881,24 +1108,65 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                     Waiting for first landing page & message delivery...
                   </div>
                 ) : (
-                  completedSitesList.map((s, idx) => (
-                    <div key={idx} className="flex items-center gap-3 p-2.5 rounded-xl bg-white border border-border-main shadow-xs">
-                      <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 bg-emerald-100 text-emerald-700">
-                        <Check className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-1">
-                          <p className="text-xs font-bold text-ink truncate">{s.name}</p>
-                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 shrink-0">
-                            SMS Delivered
-                          </span>
+                  completedSitesList.map((s, idx) => {
+                    const isDelivered = s.smsStatus === 'delivered';
+                    const isFailed = s.smsStatus === 'failed';
+                    const isSent = s.smsStatus === 'sent';
+                    const isQueued = !isDelivered && !isFailed && !isSent;
+                    return (
+                      <div key={idx} className="flex items-center gap-3 p-2.5 rounded-xl bg-white border border-border-main shadow-xs">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                          isDelivered ? 'bg-emerald-100 text-emerald-700' :
+                          isFailed ? 'bg-rose-100 text-rose-700' :
+                          'bg-amber-100 text-amber-700 animate-pulse'
+                        }`}>
+                          {isFailed ? <AlertTriangle className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}
                         </div>
-                        <a href={s.url} target="_blank" rel="noreferrer" className="text-[10px] text-accent hover:underline truncate block font-mono">
-                          {s.url.replace(/^https?:\/\//, '')}
-                        </a>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <p className="text-xs font-bold text-ink truncate">{s.name}</p>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 inline-flex items-center gap-1 ${
+                              isDelivered ? 'text-emerald-700 bg-emerald-50 border-emerald-200' :
+                              isFailed ? 'text-rose-700 bg-rose-50 border-rose-200' :
+                              isSent ? 'text-blue-700 bg-blue-50 border-blue-200' :
+                              'text-amber-700 bg-amber-50 border-amber-200 animate-pulse'
+                            }`} title={s.smsError || undefined}>
+                              {isDelivered ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                  SMS Delivered ✓
+                                </>
+                              ) : isSent ? (
+                                <>
+                                  <Send className="w-3 h-3 text-blue-600" />
+                                  SMS Sent
+                                </>
+                              ) : isQueued ? (
+                                <>
+                                  <Clock className="w-3 h-3 text-amber-600" />
+                                  SMS Queued
+                                </>
+                              ) : (
+                                <>
+                                  <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                  SMS Failed
+                                </>
+                              )}
+                            </span>
+                          </div>
+                          <a href={s.url} target="_blank" rel="noreferrer" className="text-[10px] text-accent hover:underline truncate block font-mono">
+                            {s.url.replace(/^https?:\/\//, '')}
+                          </a>
+                          {s.smsError && (
+                            <p className="text-[10px] text-rose-600 font-mono truncate mt-0.5 flex items-center gap-1" title={s.smsError}>
+                              <AlertCircle className="w-3 h-3 shrink-0" />
+                              Reason: {s.smsError}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -927,13 +1195,13 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
 
               <div className="space-y-2">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-success-soft border border-success/20 text-xs font-bold text-success uppercase tracking-wider">
-                  Active SMS Campaign Stream
+                  SMS Campaign Completed
                 </span>
                 <h2 className="text-3xl md:text-4xl font-serif font-bold text-ink">
-                  Campaign Successfully Live!
+                  Campaign Successfully Completed!
                 </h2>
                 <p className="text-sm md:text-base text-ink-secondary">
-                  "{celebratedCampaign.name}" is actively delivering SMS proposals to {celebratedCampaign.totalLeads} prospects.
+                  "{celebratedCampaign.name}" finished dispatching SMS proposals to {celebratedCampaign.totalLeads} prospects.
                 </p>
               </div>
 
@@ -942,12 +1210,14 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                 <div className="bg-white/90 border border-border-light rounded-2xl p-4 text-center shadow-xs">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">Total Leads</p>
                   <p className="text-2xl font-bold text-ink font-mono mt-1">{celebratedCampaign.totalLeads}</p>
-                  <p className="text-[10px] text-ink-tertiary mt-0.5">Queued</p>
+                  <p className="text-[10px] text-ink-tertiary mt-0.5">Processed</p>
                 </div>
                 <div className="bg-white/90 border border-border-light rounded-2xl p-4 text-center shadow-xs">
-                  <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">SMS Sent</p>
-                  <p className="text-2xl font-bold text-success font-mono mt-1">{celebratedCampaign.smsSent}</p>
-                  <p className="text-[10px] text-ink-tertiary mt-0.5">Delivered</p>
+                  <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">SMS Delivered</p>
+                  <p className="text-2xl font-bold text-success font-mono mt-1">
+                    {celebratedCampaign.smsLeads?.filter((l: any) => l.status === 'delivered').length ?? celebratedCampaign.smsSent}
+                  </p>
+                  <p className="text-[10px] text-ink-tertiary mt-0.5">Carrier Confirmed</p>
                 </div>
                 <div className="bg-white/90 border border-border-light rounded-2xl p-4 text-center shadow-xs">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">Sites Built</p>
@@ -973,27 +1243,45 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                     </span>
                   </div>
                   <div className="space-y-2 max-h-56 overflow-y-auto scrollbar-thin pr-1">
-                    {sites.map((site: any, idx: number) => (
-                      <div key={idx} className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-surface border border-border-light hover:border-accent/40 transition-colors">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-bold text-ink truncate">{site.name}</p>
-                          <a
-                            href={site.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[11px] text-accent hover:underline font-mono truncate flex items-center gap-1 mt-0.5"
-                          >
-                            <span>{site.url.replace(/^https?:\/\//, '')}</span>
-                            <ExternalLink className="w-3 h-3 shrink-0" />
-                          </a>
+                    {sites.map((site: any, idx: number) => {
+                      const matchedLead = celebratedCampaign.smsLeads?.find((l: any, i: number) => i === idx || l.siteUrl === site.url);
+                      const status = matchedLead?.status || 'delivered';
+                      const isDelivered = status === 'delivered';
+                      const isFailed = status === 'failed';
+                      const isSent = status === 'sent';
+
+                      return (
+                        <div key={idx} className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-surface border border-border-light hover:border-accent/40 transition-colors">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-ink truncate">{site.name}</p>
+                            <a
+                              href={site.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[11px] text-accent hover:underline font-mono truncate flex items-center gap-1 mt-0.5"
+                            >
+                              <span>{site.url.replace(/^https?:\/\//, '')}</span>
+                              <ExternalLink className="w-3 h-3 shrink-0" />
+                            </a>
+                          </div>
+                          <div className="text-right shrink-0">
+                            {isDelivered ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <Check className="w-3 h-3" /> SMS Delivered ✓
+                              </span>
+                            ) : isFailed ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200" title={matchedLead?.smsError || undefined}>
+                                <AlertTriangle className="w-3 h-3" /> SMS Failed
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                <Send className="w-3 h-3" /> SMS Sent
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-right shrink-0">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <Check className="w-3 h-3" /> SMS Delivered
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

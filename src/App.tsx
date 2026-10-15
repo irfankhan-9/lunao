@@ -290,6 +290,12 @@ function DashboardApp() {
           return { ...c, status: 'Crashed' as const, errorReason: 'Deploy interrupted (browser closed)' };
         }
       }
+      if (c.type === 'sms' && c.status === 'Active') {
+        // Any SMS campaign with dispatched leads or sites is finished — promote to Completed
+        if (Boolean(c.smsLeads?.length || c.deployedSites?.length || (c.sites && c.sites > 0))) {
+          return { ...c, status: 'Completed' as const };
+        }
+      }
       if (c.type === 'email' && Array.isArray((c as any).deployedSites)) {
         // Migration: dedupe stale deployedSites persisted from before the
         // slug-based dedupe fix landed. Same lead appearing twice (once from

@@ -80,7 +80,7 @@ export function useCampaignPolling(
   campaignId: string | null,
   opts: Options = {}
 ): CampaignPollState {
-  const { enabled = true, tailMs = 120_000, intervalMs = 2500 } = opts;
+  const { enabled = true, tailMs = 120_000, intervalMs = 5000 } = opts;
 
   const [data, setData] = useState<CampaignPollState['data']>(null);
   const [loading, setLoading] = useState(false);

@@ -153,8 +153,10 @@ async function attemptSend({ to, text, accountId, from, authMode = 'apiKey', acc
 
   const id = data?.data?.id || null;
   const segments = data?.data?.parts ?? countSegments(text);
+  const recipient = Array.isArray(data?.data?.to) ? data?.data?.to[0] : null;
+  const rawStatus = (recipient?.status || data?.data?.status || 'queued').toLowerCase();
   return {
-    status: 'sent',
+    status: rawStatus === 'delivered' ? 'delivered' : 'queued',
     simulated: false,
     to: dest,
     id,
@@ -243,7 +245,7 @@ export async function sendSms({ to, text, maxAttempts = 3, accountId, from } = {
   let lastResult = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const result = await attemptSend({ to, text, accountId, from, authMode, accessToken });
-    if (result.status === 'sent' || result.status === 'simulated') return result;
+    if (result.status === 'sent' || result.status === 'queued' || result.status === 'delivered' || result.status === 'simulated') return result;
     if (isPermanentError(result.errorCode)) return result;
     lastResult = result;
     if (attempt < maxAttempts) await sleep(500 * Math.pow(2, attempt - 1));
@@ -252,11 +254,7 @@ export async function sendSms({ to, text, maxAttempts = 3, accountId, from } = {
 }
 
 // fetchMessage: poll Telnyx for the current status of a sent message. Used by
-// the pipeline right after sending to upgrade "sent" -> "delivered" if the
-// webhook hasn't arrived yet. Optional — never throws.
-//
-// `accountId` is optional. When supplied we use the OAuth access token from
-// that connection; otherwise we fall back to the server-level TELNYX_API_KEY.
+// the pipeline right after sending and the live background rechecker.
 export async function fetchMessageStatus(telnyxId, { accountId, accessToken: callerToken } = {}) {
   if (!telnyxId) return null;
   if (!telnyx.enabled && !accountId) return null;
@@ -285,15 +283,43 @@ export async function fetchMessageStatus(telnyxId, { accountId, accessToken: cal
       method: 'GET',
       headers: { Authorization: `Bearer ${bearerToken}` },
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      if (res.status === 404) {
+        // Outbound messages in Telnyx can take several seconds to appear in the /messages/{id} index while in transit
+        return { status: 'queued' };
+      }
+      const errData = await res.json().catch(() => ({}));
+      const errDetail = errData?.errors?.[0]?.detail || `HTTP ${res.status}`;
+      return { status: 'failed', errorCode: `HTTP_${res.status}`, errorMessage: errDetail };
+    }
     const data = await res.json().catch(() => ({}));
     const msg = data?.data || {};
-    // Telnyx "to" responses use completed_at + errors. Best-effort mapping.
-    if (msg.errors && msg.errors.length) {
-      return { status: 'failed', errorCode: String(msg.errors[0].code || 'UNKNOWN'), errorMessage: msg.errors[0].detail };
+
+    const recipient = Array.isArray(msg.to) ? msg.to[0] : null;
+    const recipientStatus = (recipient?.status || msg.status || '').toLowerCase();
+    const recipientErrors = (recipient?.errors && recipient.errors.length) ? recipient.errors : (msg.errors || []);
+
+    if (recipientStatus === 'failed' || recipientErrors.length > 0) {
+      const firstErr = recipientErrors[0] || {};
+      const errorCode = String(firstErr.code || 'E_DELIVERY_FAILED');
+      const errorMessage = firstErr.detail || firstErr.title || 'Message delivery failed via carrier';
+      return { status: 'failed', errorCode, errorMessage };
     }
-    return { status: msg.completed_at ? 'delivered' : 'sent' };
-  } catch {
-    return null;
+
+    if (recipientStatus === 'delivered' || msg.completed_at) {
+      return { status: 'delivered', completedAt: msg.completed_at };
+    }
+
+    if (recipientStatus === 'sent') {
+      return { status: 'sent', sentAt: msg.sent_at };
+    }
+
+    if (recipientStatus === 'sending' || recipientStatus === 'queued') {
+      return { status: recipientStatus };
+    }
+
+    return { status: recipientStatus || 'queued' };
+  } catch (err) {
+    return { status: 'unknown', errorMessage: err.message };
   }
 }

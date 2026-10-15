@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  ArrowLeft, Key, ChevronDown, Loader2, Sparkles, AlertCircle,
+  ArrowLeft, Key, ChevronDown, Loader2, AlertCircle, Play, CheckCircle2, Cpu,
   FlaskConical, Layout, Monitor, Smartphone, Upload, Copy,
   CheckSquare, RotateCcw, BookmarkPlus, X, Code2, Check, Plus,
-  RefreshCw, Wand2, PanelLeft, PanelLeftClose, Terminal, Layers, Maximize2, Minimize2, Home, Lock,
-  ArrowRight, FolderCheck
+  RefreshCw, PanelLeft, PanelLeftClose, Terminal, Layers, Maximize2, Minimize2, Home, Lock,
+  ArrowRight, FolderCheck, Sparkles
 } from 'lucide-react';
 import {
   AiChatMessage, SiteHistoryEntry,
@@ -93,6 +93,19 @@ const PLACEHOLDER_MAP: Record<string, string> = {
   WEBSITE: 'https://radiantsmiles.com',
   SITE_URL: 'https://radiantsmiles.com',
   YEARS_IN_BUSINESS: '2015',
+  // HVAC & Architecture placeholders
+  CITY_NAME: 'Austin, TX',
+  PHONE_NUMBER: '(512) 555-0199',
+  BOOKING_URL: '#booking',
+  BUSINESS_DESCRIPTION: 'Premier residential and commercial HVAC engineering, inverter heat pumps, concealed high-velocity zoning, and hospital-grade indoor air quality purification in Austin, TX.',
+  HERO_IMAGE: 'https://images.unsplash.com/photo-1581094288338-2314dddb7ece?auto=format&fit=crop&w=1920&q=85',
+  LOGO: 'Aeris & Therma',
+  BEFORE_IMAGE_URL: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80',
+  AFTER_IMAGE_URL: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=80',
+  GOOGLE_MAPS_URL: 'https://maps.google.com',
+  INSTAGRAM_URL: 'https://instagram.com/radiantsmiles',
+  TIKTOK_URL: 'https://tiktok.com/@radiantsmiles',
+  YOUTUBE_URL: 'https://youtube.com/@radiantsmiles',
 };
 
 // Cleanse any internal placeholders, file types, or template sauce from user-facing text
@@ -183,7 +196,7 @@ export const TemplateLabPage: React.FC<{
   const [device, setDevice] = useState<'desktop' | 'mobile' | 'code'>('desktop');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [labError, setLabError] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState<'Gemini 2.5 Flash' | 'Gemini 3.8 Flash' | 'Gemini 3.1 Pro'>('Gemini 2.5 Flash');
+  const [selectedModel, setSelectedModel] = useState<'Gemini 2.5 Flash' | 'Gemini 1.5 Flash' | 'Gemini 3.1 Pro'>('Gemini 2.5 Flash');
   const [generatingNewSite, setGeneratingNewSite] = useState(false);
   const [generatingStepText, setGeneratingStepText] = useState('Initializing Gemini 2.5 Flash architecture...');
 
@@ -352,10 +365,6 @@ export const TemplateLabPage: React.FC<{
 
   // Start vibe coding with Gemini 2.5 Flash: show brief loading until AI reaches response, then immediately load workspace
   const handleStartVibeCode = async (promptText: string, customTitle: string) => {
-    if (!isPlanEligible) {
-      flashError('Vibe Coding is exclusive to Growth, Pro, and Agency plans. Please upgrade in Subscription Plans.');
-      return;
-    }
     if (!promptText.trim() || streaming || generatingNewSite) return;
     sfx.magic();
     setGeneratingNewSite(true);
@@ -390,16 +399,15 @@ export const TemplateLabPage: React.FC<{
       const result = await streamAiEdit(
         { html: BLANK_CANVAS, instruction: fullPrompt, history: [], anthropicApiKey: apiKey.trim() || undefined },
         (fullHtmlSoFar) => {
-          loadWorkspaceImmediately();
+          if (fullHtmlSoFar && fullHtmlSoFar.length > 50 && (fullHtmlSoFar.includes('<!DOCTYPE') || fullHtmlSoFar.includes('<html') || fullHtmlSoFar.includes('<section'))) {
+            loadWorkspaceImmediately();
+          }
           setHtml(fullHtmlSoFar);
         },
         (thinkingText) => {
-          loadWorkspaceImmediately();
           setThinkingAcc(prev => prev + thinkingText);
         },
-        () => {
-          loadWorkspaceImmediately();
-        }
+        () => {}
       );
 
       loadWorkspaceImmediately();
@@ -431,16 +439,10 @@ export const TemplateLabPage: React.FC<{
       } catch { /* ignore */ }
     } catch (err: any) {
       sfx.error();
-      if (!reachedResponse) {
-        // If it failed before AI reached response, land back on the landing page and show error
-        setGeneratingNewSite(false);
-        setMode('landing');
-        setLabError(err?.message || 'AI request was not picked up or failed. Please check your prompt and try again.');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      } else {
-        // If it failed mid-stream inside the workspace
-        flashError(err?.message || 'AI generation interrupted. Please retry.');
-      }
+      setGeneratingNewSite(false);
+      setMode('idle');
+      setLabError('AI servers are currently busy or unavailable. Please try again later.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       setThinkingAcc('');
     } finally {
       setStreaming(false);
@@ -469,9 +471,8 @@ export const TemplateLabPage: React.FC<{
           () => {},
           (thinkingText) => setThinkingAcc(prev => prev + thinkingText),
         );
-      } catch (apiErr) {
-        // Fallback local edit if API fails
-        result = applySmartLocalFallback(base, instruction);
+      } catch (err) {
+        throw err;
       }
 
       const finalCompiled = compilePreview(result);
@@ -502,10 +503,7 @@ export const TemplateLabPage: React.FC<{
     } catch (err: any) {
       sfx.error();
       setThinkingAcc('');
-      const fallbackResult = applySmartLocalFallback(html || BLANK_CANVAS, instruction);
-      setHtml(fallbackResult);
-      setPreviewHtml(compilePreview(fallbackResult));
-      setMessages(m => [...m, { role: 'assistant', content: 'Applied requested website update successfully.' }]);
+      setLabError('AI servers are currently busy or unavailable. Please try again later.');
     } finally {
       setStreaming(false);
     }
@@ -797,12 +795,12 @@ export const TemplateLabPage: React.FC<{
             <button
               onClick={handleTestRebrand}
               disabled={streaming || isTestingRebrand}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs active:scale-[0.98] cursor-pointer bg-white text-slate-800 border border-slate-300 hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300 ${
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs active:scale-[0.98] cursor-pointer bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 ${
                 (streaming || isTestingRebrand) ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''
               }`}
               title="Test rebranding with two fictional businesses and verify placeholder substitutions"
             >
-              {isTestingRebrand ? <Loader2 className="w-4 h-4 animate-spin text-purple-600" /> : <Sparkles className="w-4 h-4 text-purple-600" />}
+              {isTestingRebrand ? <Loader2 className="w-4 h-4 animate-spin text-blue-600" /> : <Play className="w-4 h-4 text-blue-600" />}
               <span>{isTestingRebrand ? 'Testing Rebrands…' : 'Test Rebrand'}</span>
               {isTemplateValidated && (
                 <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
@@ -962,7 +960,7 @@ export const TemplateLabPage: React.FC<{
                   disabled={streaming || !input.trim()}
                   className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-600 text-white text-sm font-bold font-sans hover:bg-blue-700 active:scale-[0.98] transition-all shadow-md hover:shadow-lg disabled:opacity-40 disabled:hover:bg-blue-600"
                 >
-                  {streaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                  {streaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Code2 className="w-4 h-4" />}
                   {streaming ? 'Applying AI Edits to Website…' : 'Apply AI Edit to Website'}
                 </button>
               </div>
@@ -1258,7 +1256,7 @@ export const TemplateLabPage: React.FC<{
                           <Loader2 className="w-7 h-7 text-blue-600 animate-spin" />
                         </div>
                         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold mb-2">
-                          <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                          <Cpu className="w-3.5 h-3.5" />
                           <span>{selectedModel} is coding live</span>
                         </div>
                         <h4 className="text-base font-bold text-slate-800 mb-1">
@@ -1569,7 +1567,7 @@ export const TemplateLabPage: React.FC<{
           <div className="w-full max-w-md rounded-3xl bg-white border border-slate-200/90 p-8 shadow-2xl text-center space-y-6 animate-editor-rise">
             <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center mx-auto text-blue-600 relative">
               <div className="absolute inset-0 rounded-2xl bg-blue-500/10 animate-ping" />
-              <Wand2 className="w-8 h-8 text-blue-600 relative z-10 animate-pulse" />
+              <Code2 className="w-8 h-8 text-blue-600 relative z-10" />
             </div>
             
             <div className="space-y-2">
@@ -1696,17 +1694,17 @@ export const TemplateLabPage: React.FC<{
               )}
 
               {/* Editable Test Business Details Form */}
-              <div className="p-5 rounded-2xl bg-purple-50/50 border border-purple-100 space-y-4">
+              <div className="p-5 rounded-2xl bg-blue-50/50 border border-blue-100 space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-purple-900">Configurable Test Business Profiles</h4>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-blue-900">Configurable Test Business Profiles</h4>
                     <p className="text-[11px] text-slate-500">Edit business info below and click Run Rebrand Test to verify dynamic rebranding.</p>
                   </div>
-                  <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-purple-200">
+                  <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-blue-200">
                     <button
                       onClick={() => setActiveRebrandTab('biz1')}
                       className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        activeRebrandTab === 'biz1' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
+                        activeRebrandTab === 'biz1' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
                       }`}
                     >
                       Business 1: {testBiz1.name.slice(0, 15)}...
@@ -1714,7 +1712,7 @@ export const TemplateLabPage: React.FC<{
                     <button
                       onClick={() => setActiveRebrandTab('biz2')}
                       className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        activeRebrandTab === 'biz2' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
+                        activeRebrandTab === 'biz2' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
                       }`}
                     >
                       Business 2: {testBiz2.name.slice(0, 15)}...
@@ -1723,14 +1721,14 @@ export const TemplateLabPage: React.FC<{
                 </div>
 
                 {activeRebrandTab === 'biz1' ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-purple-200 shadow-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-blue-200 shadow-xs">
                     <div>
                       <label className="block text-[11px] font-bold text-slate-700 mb-1">Business Name 1</label>
                       <input
                         type="text"
                         value={testBiz1.name}
                         onChange={e => setTestBiz1({ ...testBiz1, name: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                       />
                     </div>
                     <div>
@@ -1739,7 +1737,7 @@ export const TemplateLabPage: React.FC<{
                         type="text"
                         value={testBiz1.phone}
                         onChange={e => setTestBiz1({ ...testBiz1, phone: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                       />
                     </div>
                     <div>
@@ -1748,7 +1746,7 @@ export const TemplateLabPage: React.FC<{
                         type="text"
                         value={testBiz1.city}
                         onChange={e => setTestBiz1({ ...testBiz1, city: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                       />
                     </div>
                     <div>
@@ -1757,19 +1755,19 @@ export const TemplateLabPage: React.FC<{
                         type="text"
                         value={testBiz1.address}
                         onChange={e => setTestBiz1({ ...testBiz1, address: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                       />
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-purple-200 shadow-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-blue-200 shadow-xs">
                     <div>
                       <label className="block text-[11px] font-bold text-slate-700 mb-1">Business Name 2</label>
                       <input
                         type="text"
                         value={testBiz2.name}
                         onChange={e => setTestBiz2({ ...testBiz2, name: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                       />
                     </div>
                     <div>
@@ -1778,7 +1776,7 @@ export const TemplateLabPage: React.FC<{
                         type="text"
                         value={testBiz2.phone}
                         onChange={e => setTestBiz2({ ...testBiz2, phone: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                       />
                     </div>
                     <div>
@@ -1787,7 +1785,7 @@ export const TemplateLabPage: React.FC<{
                         type="text"
                         value={testBiz2.city}
                         onChange={e => setTestBiz2({ ...testBiz2, city: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                       />
                     </div>
                     <div>
@@ -1796,7 +1794,7 @@ export const TemplateLabPage: React.FC<{
                         type="text"
                         value={testBiz2.address}
                         onChange={e => setTestBiz2({ ...testBiz2, address: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                       />
                     </div>
                   </div>
@@ -1813,7 +1811,7 @@ export const TemplateLabPage: React.FC<{
                   <button
                     onClick={handleRunRebrandTests}
                     disabled={isTestingRebrand}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
                   >
                     {isTestingRebrand ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                     <span>{isTestingRebrand ? 'Running Rebrand Tests…' : 'Run Rebrand Test'}</span>
@@ -1920,9 +1918,9 @@ export const TemplateLabPage: React.FC<{
                 <button
                   onClick={handleTestRebrand}
                   disabled={isTestingRebrand}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-50 border border-purple-300 text-purple-700 hover:bg-purple-100 text-xs font-bold transition-all cursor-pointer"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-50 border border-blue-300 text-blue-700 hover:bg-blue-100 text-xs font-bold transition-all cursor-pointer"
                 >
-                  {isTestingRebrand ? <Loader2 className="w-4 h-4 animate-spin text-purple-600" /> : <RefreshCw className="w-4 h-4 text-purple-600" />}
+                  {isTestingRebrand ? <Loader2 className="w-4 h-4 animate-spin text-blue-600" /> : <RefreshCw className="w-4 h-4 text-blue-600" />}
                   <span>Re-test Both Businesses</span>
                 </button>
               </div>

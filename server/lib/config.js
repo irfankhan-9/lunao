@@ -31,8 +31,6 @@ export const telnyx = {
   apiKey: env.TELNYX_API_KEY || '',
   from: env.TELNYX_PHONE_NUMBER || '',
   messagingProfileId: env.TELNYX_MESSAGING_PROFILE_ID || '',
-  // Master switch: SMS stays "Coming Soon" until SMS_ENABLED=true (set tomorrow
-  // once Telnyx is funded). Keys can be present but sending stays off.
   enabled: String(env.SMS_ENABLED || 'false').toLowerCase() === 'true',
   get live() {
     return Boolean(this.enabled && this.apiKey && this.from);
@@ -41,8 +39,8 @@ export const telnyx = {
 
 export const cloudflare = {
   apiToken: env.CLOUDFLARE_API_TOKEN || '',
-  accountId: env.CLOUDFLARE_ACCOUNT_ID || 'b54f65c6943dc9caa73a9e0815150063',
-  project: env.CLOUDFLARE_PAGES_PROJECT || 'lunao-web-designn',
+  accountId: env.CLOUDFLARE_ACCOUNT_ID || '',
+  project: env.CLOUDFLARE_PAGES_PROJECT || '',
   branch: env.CLOUDFLARE_PAGES_BRANCH || 'main',
   get live() {
     return Boolean(this.apiToken && this.accountId && this.project);
@@ -69,14 +67,14 @@ export const anthropic = {
 // fully functional rule-based booking agent, so the bot always works.
 export const gemini = {
   apiKey: env.GEMINI_API_KEY || '',
-  model: env.GEMINI_MODEL || 'gemini-2.5-flash-lite',
+  model: env.GEMINI_MODEL || 'gemini-1.5-flash',
   get live() {
     return Boolean(this.apiKey);
   },
 };
 
 export const auth = {
-  jwtSecret: env.JWT_SECRET || env.SESSION_SECRET || 'change-me-in-production-use-a-long-random-string',
+  jwtSecret: env.JWT_SECRET || env.SESSION_SECRET || '',
   jwtExpiresIn: '7d',
   cookieName: 'lunao_session',
   cookieMaxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
@@ -127,7 +125,7 @@ export const telnyxOAuth = {
 // AES-256-GCM encryption key for refresh tokens. Falls back to a derived key
 // from JWT secret in dev so we never silently store tokens in plaintext.
 export const emailCrypto = {
-  key: env.EMAIL_TOKEN_ENCRYPTION_KEY || env.JWT_SECRET || env.SESSION_SECRET || 'change-me-use-32-byte-hex',
+  key: env.EMAIL_TOKEN_ENCRYPTION_KEY || env.JWT_SECRET || env.SESSION_SECRET || '',
   get enabled() {
     return Boolean(this.key);
   },

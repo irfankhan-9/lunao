@@ -45,7 +45,7 @@ interface PollingState {
 const API_BASE = '';
 
 export function useOwnerSmsPolling(opts: Options = {}): PollingState {
-  const { ownerKey = 'dashboard', intervalMs = 2500, limit = 200 } = opts;
+  const { ownerKey = 'dashboard', intervalMs = 3000, limit = 200 } = opts;
   const [sms, setSms] = useState<OwnerSmsRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,14 +75,14 @@ export function useOwnerSmsPolling(opts: Options = {}): PollingState {
               toNumber: lead.phone || '+16045550199',
               fromNumber: camp.smsPhoneUsed || '+1 (604) 953-9651',
               body: lead.smsText || 'Automated SMS proposal from Lunao',
-              status: lead.status || 'delivered',
-              telnyxId: 'tx_mock_' + Math.random().toString(36).substring(2, 9),
-              errorCode: null,
-              errorMessage: null,
+              status: lead.status || 'queued',
+              telnyxId: lead.telnyxId || null,
+              errorCode: lead.errorCode || null,
+              errorMessage: lead.smsError || lead.errorMessage || null,
               segmentCount: 1,
               costCredits: 2,
               refunded: false,
-              createdAt: lead.sentAt ? new Date(lead.sentAt).getTime() || Date.now() : Date.now(),
+              createdAt: lead.sentAt ? (new Date(lead.sentAt).getTime() || Date.now()) : Date.now(),
               updatedAt: Date.now(),
             });
           }
@@ -104,7 +104,6 @@ export function useOwnerSmsPolling(opts: Options = {}): PollingState {
       const localRows = getLocalCampaignSmsRows();
 
       if (!r.ok) {
-        // If server endpoint fails, fallback gracefully to local campaign rows!
         setError(null);
         return localRows;
       }
@@ -121,8 +120,7 @@ export function useOwnerSmsPolling(opts: Options = {}): PollingState {
 
       setError(null);
       return Array.from(byKey.values());
-    } catch (e: any) {
-      // Offline / standalone fallback to local campaign rows
+    } catch {
       return getLocalCampaignSmsRows();
     } finally {
       inflightRef.current = false;
@@ -159,14 +157,62 @@ export function useOwnerSmsPolling(opts: Options = {}): PollingState {
       setLoading(false);
       timerRef.current = setTimeout(tick, intervalMs);
     })();
+
+    // Instant listener for real-time dispatched SMS from campaign wizards
+    const handleDispatched = (e: Event) => {
+      const custom = e as CustomEvent<OwnerSmsRow>;
+      if (custom.detail) {
+        setSms((prev) => {
+          const byId = new Map<string, OwnerSmsRow>();
+          byId.set(`${custom.detail.id}_${custom.detail.toNumber}`, custom.detail);
+          for (const r of prev) byId.set(`${r.id}_${r.toNumber}`, r);
+          return Array.from(byId.values()).sort((a, b) => b.createdAt - a.createdAt);
+        });
+        // Immediately trigger background server refresh
+        setTimeout(() => {
+          fetchOnce().then((rows) => {
+            if (rows) reconcile(rows);
+          });
+        }, 600);
+      }
+    };
+
+    // Instant listener for delivery status updates from 3-second polling
+    const handleStatusUpdated = (e: Event) => {
+      const custom = e as CustomEvent<{ telnyxId?: string; phone?: string; status: string; errorMessage?: string; errorCode?: string }>;
+      if (custom.detail) {
+        setSms((prev) =>
+          prev.map((r) => {
+            const matchTelnyx = custom.detail.telnyxId && r.telnyxId === custom.detail.telnyxId;
+            const matchPhone = custom.detail.phone && (r.toNumber.replace(/\D/g, '') === custom.detail.phone.replace(/\D/g, ''));
+            if (matchTelnyx || matchPhone) {
+              return {
+                ...r,
+                status: custom.detail.status as any,
+                errorMessage: custom.detail.errorMessage ?? r.errorMessage,
+                errorCode: custom.detail.errorCode ?? r.errorCode,
+                updatedAt: Date.now(),
+              };
+            }
+            return r;
+          })
+        );
+      }
+    };
+
+    window.addEventListener('lunao_sms_dispatched', handleDispatched);
+    window.addEventListener('lunao_sms_status_updated', handleStatusUpdated);
+
     return () => {
       cancelled = true;
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
       }
+      window.removeEventListener('lunao_sms_dispatched', handleDispatched);
+      window.removeEventListener('lunao_sms_status_updated', handleStatusUpdated);
     };
-  }, [ownerKey, intervalMs]);
+  }, [fetchOnce, reconcile, intervalMs]);
 
   const forceRefresh = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);

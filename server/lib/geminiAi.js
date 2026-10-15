@@ -4,25 +4,20 @@ import { gemini as geminiCfg } from './config.js';
 let _aiClient = null;
 
 export function getGeminiClient(customApiKey = null) {
-  const apiKey = customApiKey || process.env.GEMINI_API_KEY || process.env.API_KEY || process.env.GOOGLE_API_KEY || geminiCfg.apiKey || undefined;
+  const rawKey = customApiKey || process.env.GEMINI_API_KEY || process.env.API_KEY || process.env.GOOGLE_API_KEY || geminiCfg.apiKey;
+  const apiKey = rawKey && rawKey.trim().length > 0 ? rawKey.trim() : undefined;
+
   if (customApiKey) {
     return new GoogleGenAI({
       apiKey: customApiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        },
-      },
+      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
     });
   }
   if (!_aiClient) {
+    const opts = apiKey ? { apiKey } : {};
     _aiClient = new GoogleGenAI({
-      apiKey: apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        },
-      },
+      ...opts,
+      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
     });
   }
   return _aiClient;
@@ -35,9 +30,9 @@ export function isAiEnabled() {
 // Preferred primary model: gemini-2.5-flash as requested.
 // Resilient fallback: gemini-3.8-flash, gemini-3.1-pro-preview if 2.5 is unavailable/retired in this runtime.
 const MODEL_PRIORITY = [
-  process.env.GEMINI_MODEL || 'gemini-2.5-flash',
-  'gemini-3.8-flash',
-  'gemini-3.1-pro-preview',
+  process.env.GEMINI_MODEL || 'gemini-1.5-flash',
+  'gemini-2.5-flash',
+  'gemini-1.5-pro',
 ];
 
 let _verifiedModel = null;
@@ -214,13 +209,7 @@ export async function streamEdit({ html, instruction, history, apiKey }, onChunk
     }
   }
 
-  // Resilient fallback if AI API encounters rate limit or network issue: smart local edit
-  console.warn('[geminiAi] All Gemini models failed. Using intelligent local HTML fallback patch.');
-  const fallbackHtml = applySmartLocalEdit(html, instruction);
-  if (onChunk) {
-    onChunk(fallbackHtml, false);
-  }
-  return fallbackHtml;
+  throw new Error('AI servers are currently busy or unavailable. Please try again later.');
 }
 
 function applySmartLocalEdit(html, instruction) {

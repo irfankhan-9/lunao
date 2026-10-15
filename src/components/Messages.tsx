@@ -32,7 +32,7 @@ export const Messages: React.FC<MessagesProps> = ({
   // so that campaign SMS logs appear here. Falls back to 'dashboard' if unset.
   const ownerKey = localStorage.getItem('lunao_owner_key') || 'dashboard';
   const { sms, loading, error, isPolling, lastPolledAt, forceRefresh, sendOneOff } =
-    useOwnerSmsPolling({ ownerKey, intervalMs: 4000, timeoutMs: 60_000, limit: 200 });
+    useOwnerSmsPolling({ ownerKey, intervalMs: 3000, timeoutMs: 120_000, limit: 200 });
 
   // Group rows by destination phone number so the conversation panel can show
   // a single thread per lead. Newest first inside each thread.
@@ -56,7 +56,16 @@ export const Messages: React.FC<MessagesProps> = ({
   // the business name + niche instead of just the phone number.
   const threadCards = useMemo(() => {
     return threads.map(t => {
-      const biz = businesses.find(b => normalizePhone(b.phone) === normalizePhone(t.phone));
+      let biz = businesses.find(b => normalizePhone(b.phone) === normalizePhone(t.phone));
+      if (!biz && typeof window !== 'undefined') {
+        try {
+          const rawBiz = localStorage.getItem('lunao_businesses');
+          if (rawBiz) {
+            const list = JSON.parse(rawBiz);
+            biz = list.find((b: any) => normalizePhone(b.phone) === normalizePhone(t.phone));
+          }
+        } catch {}
+      }
       const name = biz?.name || formatPhone(t.phone);
       const niche = biz?.niche || 'Lead';
       const last = t.rows[0];
@@ -481,7 +490,7 @@ function ThreadStatusBadge({ status, count }: { status?: string; count: number }
     return (
       <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-700 border border-emerald-500/20">
         <CheckCheck className="w-3 h-3" />
-        Delivered
+        SMS Delivered
       </span>
     );
   }
@@ -489,22 +498,31 @@ function ThreadStatusBadge({ status, count }: { status?: string; count: number }
     return (
       <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold bg-red-500/10 text-red-700 border border-red-500/20">
         <AlertTriangle className="w-3 h-3" />
-        Failed
+        SMS Failed
       </span>
     );
   }
   if (status === 'simulated') {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold bg-violet-500/10 text-violet-700 border border-violet-500/20">
-        Sent (Demo)
+        SMS Sent (Demo)
       </span>
     );
   }
-  // queued / sent
+  if (status === 'sent') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold bg-blue-500/10 text-blue-700 border border-blue-500/20">
+        <Send className="w-3 h-3" />
+        SMS Sent
+        {count > 1 && <span className="ml-1 opacity-60">×{count}</span>}
+      </span>
+    );
+  }
+  // queued / pending
   return (
     <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold bg-amber-500/10 text-amber-800 border border-amber-500/20">
       <Loader2 className="w-3 h-3 animate-spin" />
-      Pending
+      SMS Queued
       {count > 1 && <span className="ml-1 opacity-60">×{count}</span>}
     </span>
   );

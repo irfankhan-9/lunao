@@ -67,6 +67,18 @@ export function buildPlaceholders(biz) {
     LINKEDIN_URL: biz.linkedin_url || biz.linkedin || `https://linkedin.com/company/${defaultSocialSlug}`,
     TIKTOK_HANDLE: biz.tiktok_handle || biz.tiktok || defaultSocialSlug,
     YOUTUBE_URL: biz.youtube_url || biz.youtube || `https://youtube.com/@${defaultSocialSlug}`,
+    // HVAC & Architecture bespoke template placeholders
+    CITY_NAME: city || 'Your City',
+    PHONE_NUMBER: phoneDisplay,
+    BOOKING_URL: biz.booking_url || '#booking',
+    BUSINESS_DESCRIPTION: biz.business_description || biz.description || 'Premier residential and commercial HVAC engineering, inverter heat pumps, concealed high-velocity zoning, and hospital-grade indoor air quality purification.',
+    HERO_IMAGE: biz.hero_image || 'https://images.unsplash.com/photo-1581094288338-2314dddb7ece?auto=format&fit=crop&w=1920&q=85',
+    LOGO: biz.logo || name,
+    BEFORE_IMAGE_URL: biz.before_image_url || 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80',
+    AFTER_IMAGE_URL: biz.after_image_url || 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=80',
+    GOOGLE_MAPS_URL: biz.google_maps_url || (city ? `https://maps.google.com/?q=${encodeURIComponent(name + ' ' + city)}` : 'https://maps.google.com'),
+    INSTAGRAM_URL: biz.instagram_url || (String(igHandle).startsWith('http') ? igHandle : `https://instagram.com/${String(igHandle).replace(/^@/, '')}`),
+    TIKTOK_URL: biz.tiktok_url || (biz.tiktok_handle ? (String(biz.tiktok_handle).startsWith('http') ? biz.tiktok_handle : `https://tiktok.com/@${String(biz.tiktok_handle).replace(/^@/, '')}`) : `https://tiktok.com/@${defaultSocialSlug}`),
     // Niche-specific placeholders found in some templates (dentist/gym/realestate).
     DOCTOR_NAME: biz.doctor_name || biz.owner || `Dr. ${firstWordOf(name)}`,
     AVERAGE_RATING: biz.average_rating || rating,

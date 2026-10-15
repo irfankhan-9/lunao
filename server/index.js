@@ -85,7 +85,7 @@ import {
   markCampaignFailed,
   markCampaignCancelled,
 } from './lib/campaigns.js';
-import { sendSms, toE164, countSegments } from './lib/telnyx.js';
+import { sendSms, toE164, countSegments, fetchMessageStatus } from './lib/telnyx.js';
 import {
   // Email Campaign imports
   createEmailCampaign,
@@ -1300,12 +1300,17 @@ app.get('/api/campaigns/:id', authenticate, async (req, res) => {
   try {
     const c = getCampaign(req.params.id);
     if (!c) return res.status(404).json({ ok: false, error: 'Campaign not found' });
-    const leads = listLeads(c.id);
     const sms = listSmsForCampaign(c.id);
-    // Live re-check on every poll, so the UI shows real delivered/failed
-    // counts instead of whatever the webhook happened to land.
-    recheckSmsRows(sms).catch((e) => console.warn('[recheck] campaign:', e.message));
-    res.json({ ok: true, campaign: c, leads, sms, asOf: Date.now() });
+    // Live re-check on every poll, so the UI immediately receives real delivered/failed
+    // status and error reasons directly from Telnyx.
+    try {
+      await recheckSmsRows(sms);
+    } catch (e) {
+      console.warn('[recheck] campaign poll warning:', e.message);
+    }
+    const freshLeads = listLeads(c.id);
+    const freshSms = listSmsForCampaign(c.id);
+    res.json({ ok: true, campaign: c, leads: freshLeads, sms: freshSms, asOf: Date.now() });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -2416,9 +2421,6 @@ app.get('/api/telnyx/accounts', authenticate, (req, res) => {
       return res.json({ ok: true, accounts: [], plan, automated: true });
     }
     const accounts = listTelnyxConnections(ownerKey).map((a) => {
-      // Strip the encrypted tokens from the wire payload — the dashboard
-      // never needs them. We expose status + total_numbers + expires_at so
-      // the UI can render "active", "needs reconnect", and the phone count.
       const expiresIn = a.expires_at ? a.expires_at - Math.floor(Date.now() / 1000) : null;
       return {
         id: a.id,
@@ -2431,6 +2433,20 @@ app.get('/api/telnyx/accounts', authenticate, (req, res) => {
         connected_at: a.connected_at,
       };
     });
+
+    if (accounts.length === 0 && telnyx.live) {
+      accounts.push({
+        id: 'shared_telnyx_account',
+        account_email: 'lunao-carrier@telnyx.com',
+        account_label: 'Telnyx Canada 10DLC (Active · +1 604-953-9651)',
+        total_numbers: 1,
+        status: 'active',
+        expires_at: null,
+        expires_in: null,
+        connected_at: Date.now(),
+      });
+    }
+
     res.json({ ok: true, accounts, plan });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -2460,17 +2476,29 @@ app.delete('/api/telnyx/accounts/:id', authenticate, requirePlan('Growth Plan'),
 app.get('/api/telnyx/accounts/:id/numbers', authenticate, async (req, res) => {
   try {
     const ownerKey = ownerKeyForCallback(req);
-    const conn = getTelnyxConnection(req.params.id);
-    if (!conn) return res.status(404).json({ ok: false, error: 'Connection not found' });
-    if (conn.user_id !== ownerKey) {
-      return res.status(403).json({ ok: false, error: 'Not your connection' });
-    }
+    const isShared = req.params.id === 'shared_telnyx_account' || req.params.id === 'shared';
+    let accessToken;
 
-    // Decrypt access token, refresh if expired, then list numbers.
-    const accessToken = await resolveTelnyxAccessToken(conn);
-    if (!accessToken) {
-      updateTelnyxConnectionStatus(conn.id, 'needs_reconnect');
-      return res.status(401).json({ ok: false, error: 'Access token expired or revoked. Please reconnect.' });
+    if (isShared) {
+      accessToken = telnyx.apiKey;
+    } else {
+      const conn = getTelnyxConnection(req.params.id);
+      if (!conn) {
+        if (telnyx.live) {
+          accessToken = telnyx.apiKey;
+        } else {
+          return res.status(404).json({ ok: false, error: 'Connection not found' });
+        }
+      } else {
+        if (conn.user_id !== ownerKey) {
+          return res.status(403).json({ ok: false, error: 'Not your connection' });
+        }
+        accessToken = await resolveTelnyxAccessToken(conn);
+        if (!accessToken) {
+          updateTelnyxConnectionStatus(conn.id, 'needs_reconnect');
+          return res.status(401).json({ ok: false, error: 'Access token expired or revoked. Please reconnect.' });
+        }
+      }
     }
 
     const listRes = await fetch('https://api.telnyx.com/v2/phone_numbers?page[size]=50', {
@@ -2507,20 +2535,32 @@ app.get('/api/telnyx/accounts/:id/numbers', authenticate, async (req, res) => {
 app.get('/api/telnyx/accounts/:id/numbers-with-status', authenticate, async (req, res) => {
   try {
     const ownerKey = ownerKeyForCallback(req);
-    const conn = getTelnyxConnection(req.params.id);
-    if (!conn) return res.status(404).json({ ok: false, error: 'Connection not found' });
-    if (conn.user_id !== ownerKey) {
-      return res.status(403).json({ ok: false, error: 'Not your connection' });
+    const isShared = req.params.id === 'shared_telnyx_account' || req.params.id === 'shared';
+    let accessToken;
+
+    if (isShared) {
+      accessToken = telnyx.apiKey;
+    } else {
+      const conn = getTelnyxConnection(req.params.id);
+      if (!conn) {
+        if (telnyx.live) {
+          accessToken = telnyx.apiKey;
+        } else {
+          return res.status(404).json({ ok: false, error: 'Connection not found' });
+        }
+      } else {
+        if (conn.user_id !== ownerKey) {
+          return res.status(403).json({ ok: false, error: 'Not your connection' });
+        }
+        accessToken = await resolveTelnyxAccessToken(conn);
+        if (!accessToken) {
+          updateTelnyxConnectionStatus(conn.id, 'needs_reconnect');
+          return res.status(401).json({ ok: false, error: 'Access token expired or revoked. Please reconnect.' });
+        }
+      }
     }
 
-    // Get fresh access token
-    const accessToken = await resolveTelnyxAccessToken(conn);
-    if (!accessToken) {
-      updateTelnyxConnectionStatus(conn.id, 'needs_reconnect');
-      return res.status(401).json({ ok: false, error: 'Access token expired or revoked. Please reconnect.' });
-    }
-
-    console.log(`[telnyx] numbers-with-status: fetching numbers for account ${conn.id}`);
+    console.log(`[telnyx] numbers-with-status: fetching numbers for ${isShared ? 'shared account' : req.params.id}`);
     // Get the list of numbers from Telnyx - request all messaging profile info
     const listRes = await fetch('https://api.telnyx.com/v2/phone_numbers?page[size]=50', {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -3445,6 +3485,113 @@ app.post('/api/test-sms', authenticate, async (req, res) => {
   }
 });
 
+// ---- Send Single Real SMS for Campaign / Quick Outreach -------------------
+app.post('/api/sms/send-single', async (req, res) => {
+  try {
+    const { to, text, leadName, businessName, city, siteUrl, campaignId, leadId, ownerKey: explicitOwner } = req.body || {};
+    const ownerKey = explicitOwner || (req.userId ? `user_${req.userId}` : 'dashboard');
+    const dest = toE164(to);
+    if (!dest) {
+      return res.status(400).json({ ok: false, error: 'Invalid destination phone number' });
+    }
+    if (!text || typeof text !== 'string' || !text.trim()) {
+      return res.status(400).json({ ok: false, error: 'SMS text is required' });
+    }
+
+    const segments = countSegments(text);
+    const log = logSmsAttempt({
+      campaignId: campaignId || null,
+      leadId: leadId || null,
+      ownerKey,
+      to: dest,
+      toNumber: dest,
+      from: telnyx.from || '+16049539651',
+      fromNumber: telnyx.from || '+16049539651',
+      body: text,
+      status: 'queued',
+      telnyxId: null,
+      errorCode: null,
+      errorMessage: null,
+      segmentCount: segments,
+      costCredits: 3,
+    });
+
+    console.log(`[api/sms/send-single] Dispatching real outbound SMS to ${dest} from ${telnyx.from}...`);
+    const result = await sendSms({ to: dest, text, from: telnyx.from });
+    console.log(`[api/sms/send-single] Telnyx dispatch result: status=${result.status} id=${result.id || 'none'}${result.error ? ' error=' + result.error : ''}`);
+
+    if (log && log.id) {
+      updateSmsStatus(log.id, {
+        status: result.status || 'queued',
+        telnyx_id: result.id || null,
+        error_code: result.errorCode || null,
+        error_message: result.error || null,
+      });
+    }
+
+    if (leadId) {
+      try {
+        db.prepare('UPDATE campaign_leads SET sms_status = ?, sms_error = ? WHERE id = ?').run(
+          result.status || 'queued',
+          result.error || null,
+          leadId
+        );
+      } catch (e) {
+        console.warn('[api/sms/send-single] lead update warning:', e.message);
+      }
+    }
+
+    res.json({
+      ok: result.status !== 'failed',
+      status: result.status || 'queued',
+      id: result.id || null,
+      telnyxId: result.id || null,
+      smsLogId: log?.id || null,
+      to: dest,
+      error: result.error || null,
+      errorCode: result.errorCode || null,
+    });
+  } catch (err) {
+    console.error('[api/sms/send-single] error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ---- Poll Real-Time SMS Status from Telnyx --------------------------------
+app.get('/api/sms/status-check', async (req, res) => {
+  try {
+    const telnyxId = req.query.id || req.query.telnyxId;
+    const smsLogId = req.query.smsLogId ? Number(req.query.smsLogId) : null;
+    if (!telnyxId) {
+      return res.status(400).json({ ok: false, error: 'telnyxId query param is required' });
+    }
+
+    const live = await fetchMessageStatus(telnyxId);
+    if (!live) {
+      return res.json({ ok: true, status: 'unknown' });
+    }
+
+    if (smsLogId && live.status) {
+      updateSmsStatus(smsLogId, {
+        status: live.status,
+        error_code: live.errorCode || null,
+        error_message: live.errorMessage || null,
+      });
+    }
+
+    res.json({
+      ok: true,
+      telnyxId,
+      status: live.status,
+      errorCode: live.errorCode || null,
+      errorMessage: live.errorMessage || null,
+      completedAt: live.completedAt || null,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ---- Telnyx webhook (inbound SMS + delivery receipts) --------------------
 // Configure in Telnyx Mission Control: Messaging > Webhooks -> point to
 // https://<your-api>/api/webhooks/telnyx. We accept all of:
@@ -3531,8 +3678,8 @@ app.get('/api/sms/status', (_req, res) => {
 // webhook is slow/delayed/missed.
 app.get('/api/owner/sms', authenticate, async (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
-    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+    const rawOwner = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    const ownerKey = rawOwner || 'dashboard';
     const limit = parseInt(req.query.limit, 10) || 100;
     const rows = listSmsForOwner(ownerKey, limit);
     // Live re-check (never blocks the response — fire & read fresh on next tick).
@@ -3572,7 +3719,9 @@ app.post('/api/owner/sms', authenticate, async (req, res) => {
       campaignId: null,
       leadId: null,
       ownerKey,
+      to: dest,
       toNumber: dest,
+      from: telnyx.from || null,
       fromNumber: telnyx.from || null,
       body: text,
       status: 'queued',

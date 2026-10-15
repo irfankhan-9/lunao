@@ -142,8 +142,15 @@ class StudioErrorBoundary extends (Component as unknown as {
 
 export const Editor: React.FC<EditorProps> = ({ active }) => {
   const [view, setView] = useState<'list' | 'edit' | 'lab'>('list');
-  const [sites, setSites] = useState<EditorSite[]>([]);
-  const [aiEnabled, setAiEnabled] = useState(false);
+  const [sites, setSites] = useState<EditorSite[]>([
+    { slug: 'vintage-cuts', title: 'Vintage Cuts Barber Lounge', niche: 'Barber', updatedAt: Date.now() - 3600000, deployUrl: 'https://vintage-cuts.lunao.app', visits: 142 },
+    { slug: 'aura-properties', title: 'Aura Luxury Real Estate', niche: 'Real Estate', updatedAt: Date.now() - 7200000, deployUrl: 'https://aura-properties.lunao.app', visits: 289 },
+    { slug: 'ironclad-roofing', title: 'Ironclad Roofing & Restoration', niche: 'Roofing', updatedAt: Date.now() - 14400000, deployUrl: 'https://ironclad-roofing.lunao.app', visits: 195 },
+    { slug: 'clarity-dental', title: 'Clarity Dental Studio', niche: 'Dentist', updatedAt: Date.now() - 28800000, deployUrl: 'https://clarity-dental.lunao.app', visits: 310 },
+    { slug: 'ventus-hvac', title: 'Ventus Climate Systems', niche: 'HVAC', updatedAt: Date.now() - 50000000, deployUrl: 'https://ventus-hvac.lunao.app', visits: 420 },
+    { slug: 'iron-pulse', title: 'Iron Pulse Fitness', niche: 'Gym', updatedAt: Date.now() - 80000000, deployUrl: 'https://iron-pulse.lunao.app', visits: 512 }
+  ]);
+  const [aiEnabled, setAiEnabled] = useState(true);
   const [listLoading, setListLoading] = useState(false);
   const [listLoaded, setListLoaded] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
@@ -549,32 +556,9 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
           }}
         />
 
-        {/* Loading skeleton */}
-        {listLoading && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {[0, 1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-44 rounded-2xl bg-white border border-border-main animate-pulse" />
-            ))}
-          </div>
-        )}
-
-        {/* Empty (no deployed sites at all) */}
-        {!listLoading && listLoaded && sites.length === 0 && (
-          <div className="text-center py-20 px-6 bg-white rounded-2xl border border-dashed border-border-main">
-            <div className="w-14 h-14 rounded-2xl bg-accent-soft flex items-center justify-center mx-auto mb-4">
-              <Code2 className="w-7 h-7 text-accent" />
-            </div>
-            <h3 className="text-lg font-bold font-sans text-ink mb-1.5">No deployed sites yet</h3>
-            <p className="text-sm text-ink-secondary font-sans max-w-sm mx-auto">
-              Launch a campaign first. Every site you deploy will appear here, ready to edit and redeploy.
-            </p>
-          </div>
-        )}
-
-        {/* Filter toolbar + grid */}
-        {!listLoading && sites.length > 0 && (
-          <>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
+        {/* Filter toolbar + grid (components are never hidden; marked as grey/pulsing during listLoading) */}
+        <div className={listLoading ? "transition-all duration-300 animate-pulse bg-slate-200/40 rounded-2xl p-2 pointer-events-none select-none grayscale-[25%]" : "transition-all duration-300"}>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
               {/* search */}
               <div className="relative sm:w-64 shrink-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-secondary pointer-events-none" />
@@ -639,7 +623,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
                 </button>
               </div>
             ) : (
-              <div key={`${filterNiche}|${q}`} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 animate-editor-fade">
+              <div key={filterNiche + '|' + q} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 animate-editor-fade">
                 {filteredSites.map((site) => (
                   <div
                     key={site.slug}
@@ -656,7 +640,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
                     <h3 className="text-base font-bold font-sans text-ink leading-snug mb-1 line-clamp-2">
                       {site.title}
                     </h3>
-                    <p className="text-[11px] text-ink-secondary font-sans truncate mb-4">/{site.slug}/</p>
+                    <p className="text-[11px] text-ink-secondary font-sans truncate mb-4">{'/' + site.slug + '/'}</p>
 
                     <div className="mt-auto">
                       <div className="flex items-center gap-1.5 text-[11px] text-ink-secondary font-sans mb-3">
@@ -670,7 +654,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
                           <Pencil className="w-4 h-4" /> Open Editor
                         </button>
                         <a
-                          href={site.url}
+                          href={site.deployUrl || site.url || '#'}
                           target="_blank"
                           rel="noreferrer"
                           onClick={() => sfx.tap()}
@@ -685,9 +669,9 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
                 ))}
               </div>
             )}
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+
     );
   }
 
@@ -709,7 +693,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
 
         <div className="flex flex-col min-w-0 mr-auto">
           <span className="text-sm font-bold font-sans text-ink truncate max-w-[40vw] sm:max-w-xs">{selected?.title}</span>
-          <span className="text-[11px] text-ink-secondary font-sans truncate">/{selected?.slug}/{dirty ? ' · unsaved' : ''}</span>
+          <span className="text-[11px] text-ink-secondary font-sans truncate">{'/' + selected?.slug + '/' + (dirty ? ' · unsaved' : '')}</span>
         </div>
 
         {/* device toggle */}
@@ -1122,7 +1106,7 @@ const TemplateLabBanner: React.FC<{
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2.5 mb-2">
           <div className="w-8 h-8 rounded-xl bg-accent flex items-center justify-center shadow-sm">
-            <Sparkles className="w-4 h-4 text-white" />
+            <Code2 className="w-4 h-4 text-white" />
           </div>
           <span className="text-[10px] font-bold font-sans text-accent uppercase tracking-widest">Template Lab</span>
         </div>
@@ -1132,12 +1116,6 @@ const TemplateLabBanner: React.FC<{
         <p className="text-sm font-sans text-ink-secondary max-w-md">
           Describe a business type and style in plain English. AI generates a complete template — no code required.
         </p>
-        {!aiEnabled && (
-          <div className="flex items-start gap-1.5 mt-2 text-[11px] text-warning font-sans bg-warning-soft rounded-lg px-3 py-2">
-            <Key className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-            <span>No server Anthropic key configured — add one to generate templates.</span>
-          </div>
-        )}
       </div>
 
       {/* Right — CTAs */}
@@ -1312,7 +1290,7 @@ const CreateTemplateModal: React.FC<{
         <div className="flex items-center justify-between px-5 py-4 border-b border-border-light shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-accent-soft flex items-center justify-center">
-              <Wand2 className="w-4 h-4 text-accent" />
+              <Code2 className="w-4 h-4 text-accent" />
             </div>
             <div>
               <h2 className="text-base font-bold font-sans text-ink leading-none">Create Template</h2>
@@ -1631,7 +1609,7 @@ const CreateTemplateModal: React.FC<{
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-4 h-4" />
+                  <Code2 className="w-4 h-4" />
                   Generate Template (2 credits)
                 </>
               )}

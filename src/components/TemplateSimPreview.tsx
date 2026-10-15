@@ -26,6 +26,9 @@ const KEY_TO_LEGACY_ID = {
   'dentist-clarity': 't4',
   'roofing-ironclad': 't5',
   'hvac-everest': 't6',
+  'hvac-bespoke': 't9',
+  'hvac-template-02': 't9',
+  'hvac-template': 't9',
   'gym-iron-grit': 't7',
   'realestate-glass': 't8',
 };
@@ -83,6 +86,10 @@ const LEGACY_PREVIEW_FILE = {
   'dentist-clarity': '/dentist-template-01.html',
   'roofing-ironclad': '/roofing-template-01.html',
   'hvac-everest': '/hvac-template-01.html',
+  'hvac-bespoke': '/hvac-template-02.html',
+  'hvac-template-02': '/hvac-template-02.html',
+  'hvac-template': '/hvac-template-02.html',
+  t9: '/hvac-template-02.html',
   'gym-iron-grit': '/gym-template-01.html',
   'realestate-glass': '/realestate-template-01.html',
 };
@@ -120,6 +127,7 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
       case 't3': return '/salon_template_cover.png';
       case 't5': return '/roofing_cover.png';
       case 't6': return '/hvac_cover.png';
+      case 't9': return '/hvac_bespoke_cover.png';
       case 't7': return '/gym_cover.png';
       case 't8': return '/realestate_cover.png';
       default: return getNicheBgImage(niche);
@@ -235,6 +243,26 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
                     <div key={i} className="flex-1 border border-[#222220] bg-[#1E1E1B] p-0.5 rounded-sm flex items-center justify-between">
                       <span className="text-[4px] font-bold text-[#B8B5AC] truncate">{s.n}</span>
                       <span className="text-[#E8760A] font-bold">{s.p}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : legacy === 't9' ? (
+              <div className="h-full p-2 flex flex-col gap-1 bg-[#FAF8F5] text-[#2A2118] text-[5px] font-sans">
+                <div className="bg-[#B8860B] text-white px-1 py-0.5 text-center font-bold text-[3px] rounded-xs uppercase tracking-widest leading-none font-serif">✦ BESPOKE CLIMATE ATELIER ✦</div>
+                <div className="border-b border-[#EFE8DC] pb-0.5 flex justify-between items-center bg-[#FAF8F5] px-0.5">
+                  <span className="text-[5.5px] font-bold text-[#3D2B1F] font-serif">AERIS &amp; THERMA</span>
+                  <span className="text-[3px] bg-[#3D2B1F] text-[#FAF8F5] px-1 rounded font-bold uppercase scale-90">CONSULT</span>
+                </div>
+                <div className="py-0.5 border border-[#EFE8DC] bg-white px-0.5 rounded shadow-xs mt-0.5 text-center">
+                  <p className="text-[6px] font-bold font-serif text-[#2A2118]">Architectural HVAC Atelier</p>
+                  <p className="text-[3.5px] text-[#B8860B]">Concealed Diffusers · Purity</p>
+                </div>
+                <div className="flex gap-0.5 mt-auto">
+                  {[{ n: 'INVERTER VRF', p: 'QUIET' }, { n: 'AIR PURITY', p: 'A++' }].map((s, i) => (
+                    <div key={i} className="flex-1 border border-[#EFE8DC] bg-white p-0.5 rounded-sm flex items-center justify-between">
+                      <span className="text-[4px] font-bold text-[#59493B] truncate">{s.n}</span>
+                      <span className="text-[#B8860B] font-bold">{s.p}</span>
                     </div>
                   ))}
                 </div>
@@ -384,6 +412,18 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
                   <p className="text-[3px] text-[#E8760A]">GAF Master</p>
                 </div>
                 <div className="mt-auto bg-[#E8760A] text-black text-center py-0.5 rounded-sm"><span className="text-[3px] font-bold uppercase">CALL</span></div>
+              </div>
+            ) : legacy === 't9' ? (
+              <div className="h-full p-1 pt-3 flex flex-col gap-1 bg-[#FAF8F5] text-[#2A2118] text-[4.5px] font-sans">
+                <div className="flex justify-between items-center border-b border-[#EFE8DC] pb-0.5 bg-[#FAF8F5] px-0.5">
+                  <span className="font-bold text-[4px] text-[#3D2B1F] font-serif">✦ AERIS</span>
+                  <span className="text-[3px] bg-[#B8860B] text-white px-0.5 rounded font-bold uppercase scale-90">LUXE</span>
+                </div>
+                <div className="text-center py-0.5 bg-white border border-[#EFE8DC] rounded-sm my-0.5">
+                  <p className="text-[5px] font-bold font-serif text-[#2A2118]">Aeris &amp; Therma</p>
+                  <p className="text-[3px] text-[#B8860B]">Precision HVAC</p>
+                </div>
+                <div className="mt-auto bg-[#3D2B1F] text-[#FAF8F5] text-center py-0.5 rounded-sm"><span className="text-[3px] font-bold uppercase">CALL</span></div>
               </div>
             ) : legacy === 't6' ? (
               <div className="h-full p-1 pt-3 flex flex-col gap-1 bg-[#0F172A] text-[#F1F5F9] text-[4.5px] font-sans">

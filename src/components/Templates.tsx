@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Template } from '../types';
-import { Star, Eye, Edit, Copy, Search, ChevronDown, Check, X, ShieldAlert, Zap } from 'lucide-react';
+import { Star, Eye, Edit, Copy, Search, ChevronDown, Check, X, ShieldAlert, Zap, Monitor, Smartphone, ExternalLink } from 'lucide-react';
 import { useSyncNiches } from '../lib/nichesSync';
 
 // Helper to retrieve gorgeous, realistic, personalized real-world content for each of the 14 niche templates
@@ -176,6 +176,9 @@ const BUILTIN_PREVIEW_FILE = {
   'dentist-clarity': '/dentist-template-01.html',
   'roofing-ironclad': '/roofing-template-01.html',
   'hvac-everest': '/hvac-template-01.html',
+  'hvac-bespoke': '/hvac-template-02.html',
+  'hvac-template-02': '/hvac-template-02.html',
+  'hvac-template': '/hvac-template-02.html',
   'gym-iron-grit': '/gym-template-01.html',
   'realestate-glass': '/realestate-template-01.html',
 };
@@ -249,16 +252,7 @@ export const Templates: React.FC<TemplatesProps> = ({
 
   // Get dynamic emoji matching the niche
   const getNicheEmoji = (niche: string) => {
-    switch (niche) {
-      case 'Barber': return '💈';
-      case 'Salon': return '💅';
-      case 'Dentist': return '🦷';
-      case 'HVAC': return '❄️';
-      case 'Gym': return '💪';
-      case 'Roofing': return '🏠';
-      case 'Real Estate': return '🏡';
-      default: return '';
-    }
+    return '';
   };
 
   // Get gradient based on index / niche for diversity
@@ -346,15 +340,15 @@ export const Templates: React.FC<TemplatesProps> = ({
             >
               {/* Template simulation banner with premium realistic dual-device mockups */}
               <div 
-                className="h-48 relative overflow-hidden flex flex-col justify-between shrink-0 select-none group-hover:scale-[1.01] transition-all duration-300 border-b border-border-light bg-cover bg-center"
-                style={{ backgroundImage: `url(${temp.id === 'salon-maison' ? '/salon_template_cover.png' : temp.id === 'roofing-ironclad' ? '/roofing_cover.png' : temp.id === 'hvac-everest' ? '/hvac_cover.png' : temp.id === 'gym-iron-grit' ? '/gym_cover.png' : temp.id === 'realestate-glass' ? '/realestate_cover.png' : getNicheBgImage(temp.niche)})` }}
+                className="h-72 relative overflow-hidden flex flex-col justify-between shrink-0 select-none group-hover:scale-[1.01] transition-all duration-300 border-b border-border-light bg-cover bg-center"
+                style={{ backgroundImage: `url(${temp.id === 'salon-maison' ? '/salon_template_cover.png' : temp.id === 'roofing-ironclad' ? '/roofing_cover.png' : temp.id === 'hvac-bespoke' || temp.id === 'hvac-template-02' ? '/hvac_bespoke_cover.png' : temp.id === 'hvac-everest' ? '/hvac_cover.png' : temp.id === 'gym-iron-grit' ? '/gym_cover.png' : temp.id === 'realestate-glass' ? '/realestate_cover.png' : getNicheBgImage(temp.niche)})` }}
               >
                 {/* Visual dark backdrop gradient */}
                 <div className="absolute inset-0 bg-ink/50 backdrop-blur-[0.5px] group-hover:bg-ink/40 transition-all duration-300 z-[1]" />
 
                 {/* Simulated Desktop Browser Frame */}
                 <div 
-                  className="absolute left-4 right-14 top-4 h-36 bg-ink/90 border border-white/10 rounded-md shadow-lg flex flex-col overflow-hidden z-[2] transform group-hover:-translate-y-1 transition-all duration-300"
+                  className="absolute left-4 right-16 top-4 h-58 bg-ink/90 border border-white/10 rounded-lg shadow-xl flex flex-col overflow-hidden z-[2] transform group-hover:-translate-y-1 transition-all duration-300"
                 >
                   {/* Browser Window Bar */}
                   <div className="bg-black/40 px-2 py-1 flex items-center gap-1 border-b border-white/5 shrink-0 z-10 relative">
@@ -488,6 +482,34 @@ export const Templates: React.FC<TemplatesProps> = ({
                           <span>📞 (512) 555-0199</span>
                         </div>
                       </div>
+                    ) : temp.id === 'hvac-bespoke' || temp.id === 'hvac-template-02' ? (
+                      <div className="h-full p-2.5 flex flex-col gap-1 bg-[#FAF8F5] text-[#2A2118] text-[4.5px]">
+                        <div className="bg-[#B8860B] text-white px-1 py-0.5 text-center font-bold text-[3.5px] rounded-xs uppercase tracking-widest leading-none select-none font-serif">
+                          ✦ BESPOKE CLIMATE ENGINEERING &amp; INDOOR PURITY ✦
+                        </div>
+                        <div className="border-b border-[#EFE8DC] pb-0.5 flex justify-between items-center bg-[#FAF8F5] px-1">
+                          <span className="text-[5.5px] font-bold tracking-wider text-[#3D2B1F] font-serif">AERIS &amp; THERMA</span>
+                          <span className="text-[3.8px] bg-[#3D2B1F] text-[#FAF8F5] px-1.5 py-0.5 rounded font-bold uppercase scale-[0.85] leading-none">CONSULT</span>
+                        </div>
+                        <div className="py-1 border border-[#EFE8DC] bg-white p-2 rounded shadow-xs text-center">
+                          <h4 className="text-[8px] font-serif font-bold text-[#2A2118] tracking-tight leading-none">Architectural HVAC Atelier</h4>
+                          <p className="text-[4px] text-[#B8860B] font-mono mt-0.5 uppercase tracking-wide">Concealed Slot Diffusers • Hospital-Grade Purity</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1 mt-0.5">
+                          <div className="border border-[#EFE8DC] bg-white p-1 flex items-center justify-between text-[4.5px] font-mono rounded-sm shadow-2xs">
+                            <span className="text-[#59493B] font-bold truncate">INVERTER VRF</span>
+                            <span className="text-[#B8860B] font-bold">WHISPER-QUIET</span>
+                          </div>
+                          <div className="border border-[#EFE8DC] bg-white p-1 flex items-center justify-between text-[4.5px] font-mono rounded-sm shadow-2xs">
+                            <span className="text-[#59493B] font-bold truncate">AIR PURITY</span>
+                            <span className="text-[#059669] font-bold">HOSPITAL-GRADE</span>
+                          </div>
+                        </div>
+                        <div className="mt-auto pt-1 border-t border-[#EFE8DC] flex justify-between items-center text-[3.5px] text-[#8C7766]">
+                          <span>📍 Austin, TX</span>
+                          <span>📞 (512) 555-0199</span>
+                        </div>
+                      </div>
                     ) : temp.id === 'hvac-everest' ? (
                       <div className="h-full p-2.5 flex flex-col gap-1 bg-[#0F172A] text-[#F1F5F9] text-[4.5px]">
                         <div className="bg-[#F97316] text-[#0F172A] px-1 py-0.5 text-center font-bold text-[3.5px] rounded-xs uppercase tracking-wide leading-none select-none">
@@ -604,7 +626,7 @@ export const Templates: React.FC<TemplatesProps> = ({
 
                 {/* Simulated Overlapping Smartphone mockup */}
                 <div 
-                  className="absolute right-3 top-8 w-24 h-40 bg-zinc-950 border-2 border-zinc-805 rounded-xl shadow-2xl flex flex-col overflow-hidden z-[3] transform translate-y-1 group-hover:translate-y-0 transition-all duration-300"
+                  className="absolute right-3 top-6 w-32 h-62 bg-zinc-950 border-2 border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden z-[3] transform translate-y-1 group-hover:translate-y-0 transition-all duration-300"
                 >
                   {/* Phone notch */}
                   <div className="w-8 h-1.5 bg-zinc-950 rounded-b-sm mx-auto absolute top-0 left-1/2 transform -translate-x-1/2 z-10 flex items-center justify-center">
@@ -708,6 +730,26 @@ export const Templates: React.FC<TemplatesProps> = ({
                           </div>
                         </div>
                         <div className="mt-auto bg-[#E8760A] text-black text-center py-0.5 rounded-sm">
+                           <span className="text-[3px] font-bold tracking-widest uppercase">CALL (512) 555-0199</span>
+                        </div>
+                      </div>
+                    ) : temp.id === 'hvac-bespoke' || temp.id === 'hvac-template-02' ? (
+                      <div className="h-full p-1.5 pt-3.5 flex flex-col gap-1 bg-[#FAF8F5] text-[#2A2118] text-[5px] select-none font-sans">
+                        <div className="flex justify-between items-center border-b border-[#EFE8DC] pb-0.5 bg-[#FAF8F5]">
+                          <span className="font-bold text-[4.5px] tracking-wider text-[#3D2B1F] font-serif">✦ AERIS ATELIER</span>
+                          <span className="text-[3.5px] bg-[#B8860B] text-white px-1 py-0.5 rounded-sm font-bold uppercase scale-90 leading-none">LUXE</span>
+                        </div>
+                        <div className="text-center py-1 bg-white border border-[#EFE8DC] rounded-sm shadow-xs my-0.5">
+                          <h5 className="text-[5.5px] font-serif font-bold text-[#2A2118] tracking-tight leading-tight">Aeris &amp; Therma</h5>
+                          <span className="text-[3px] text-[#B8860B] font-mono">Precision Climate Engineering</span>
+                        </div>
+                        <div className="flex flex-col gap-0.5 mt-0.5">
+                          <div className="bg-white rounded-sm border border-[#EFE8DC] px-1 py-0.5 flex items-center justify-between scale-[0.95] shadow-2xs">
+                            <span className="truncate text-[#59493B] max-w-[50%] font-bold text-[4px]">VRF INVERTER</span>
+                            <span className="text-[#059669] font-bold font-mono">A++ PURITY</span>
+                          </div>
+                        </div>
+                        <div className="mt-auto bg-[#3D2B1F] text-[#FAF8F5] text-center py-0.5 rounded-sm font-serif">
                            <span className="text-[3px] font-bold tracking-widest uppercase">CALL (512) 555-0199</span>
                         </div>
                       </div>
@@ -856,49 +898,70 @@ export const Templates: React.FC<TemplatesProps> = ({
       {selectedTemplateForPreview && (() => {
         const modalContent = getTemplateContent(selectedTemplateForPreview.id, selectedTemplateForPreview.name, selectedTemplateForPreview.niche);
         return (
-          <div className="fixed inset-0 bg-ink/40 flex items-center justify-center z-50 p-4 backdrop-blur-xs animate-fade-in">
-            <div className="bg-white border border-border-main rounded-xl max-w-4xl w-full flex flex-col overflow-hidden max-h-[90vh] shadow-xl animate-scale-up">
+          <div className="fixed inset-0 bg-ink/75 flex items-center justify-center z-50 p-4 md:p-8 backdrop-blur-md animate-fade-in">
+            <div className="bg-white border border-border-main rounded-2xl max-w-7xl w-[95vw] flex flex-col overflow-hidden h-[88vh] shadow-2xl animate-scale-up">
               
               {/* Modal header */}
-              <div className="p-5 border-b border-border-light bg-off-white flex items-center justify-between shrink-0">
-                <div className="space-y-0.5 max-w-[60%]">
-                  <h3 className="text-xl font-serif text-ink tracking-tight font-normal truncate">{selectedTemplateForPreview.name} Live Framework</h3>
-                  <p className="text-xs text-ink-secondary uppercase tracking-wider font-semibold font-sans truncate">Industry Target: {selectedTemplateForPreview.niche} • Real-Time Native</p>
+              <div className="p-6 border-b border-border-light bg-off-white flex items-center justify-between shrink-0">
+                <div className="space-y-1 max-w-[60%]">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-2xl font-serif text-ink tracking-tight font-normal truncate">{selectedTemplateForPreview.name} Live Framework</h3>
+                    <span className="px-2 py-0.5 bg-accent/10 text-accent text-xs font-sans font-bold rounded uppercase tracking-wider">
+                      {selectedTemplateForPreview.niche}
+                    </span>
+                  </div>
+                  <p className="text-xs text-ink-secondary uppercase tracking-wider font-semibold font-sans truncate">High-Conversion Production Framework • Real-Time Native Preview</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  {/* DEVICE SWITCHER BUTTONS - Hidden on Mobile Viewports to keep header clean */}
-                  <div className="hidden sm:flex bg-surface rounded-md p-1 border border-border-light text-[11px] font-bold">
+                  {/* DEVICE SWITCHER BUTTONS */}
+                  <div className="flex bg-surface rounded-lg p-1.5 border border-border-light text-xs font-bold shadow-xs">
                     <button
                       onClick={() => setPreviewDevice('desktop')}
-                      className={`px-3 py-1.5 rounded transition-all cursor-pointer ${previewDevice === 'desktop' ? 'bg-white shadow-2xs text-accent font-bold' : 'text-ink-secondary hover:text-ink'}`}
+                      className={`px-4 py-2 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${previewDevice === 'desktop' ? 'bg-white shadow-xs text-accent font-bold' : 'text-ink-secondary hover:text-ink'}`}
                     >
-                      Desktop
+                      <Monitor className="w-4 h-4" />
+                      <span>Desktop View</span>
                     </button>
                     <button
                       onClick={() => setPreviewDevice('mobile')}
-                      className={`px-3 py-1.5 rounded transition-all cursor-pointer ${previewDevice === 'mobile' ? 'bg-white shadow-2xs text-accent font-bold' : 'text-ink-secondary hover:text-ink'}`}
+                      className={`px-4 py-2 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${previewDevice === 'mobile' ? 'bg-white shadow-xs text-accent font-bold' : 'text-ink-secondary hover:text-ink'}`}
                     >
-                      Mobile
+                      <Smartphone className="w-4 h-4" />
+                      <span>Mobile View</span>
                     </button>
                   </div>
                   <button
                     onClick={handleCloseModal}
-                    className="p-1 rounded-md hover:bg-border-light text-ink-secondary hover:text-ink transition-all"
+                    className="p-2 rounded-lg hover:bg-border-light text-ink-secondary hover:text-ink transition-all cursor-pointer"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-6 h-6" />
                   </button>
                 </div>
               </div>
 
               {/* Modal content - Live Interactive Frame View */}
-              <div className="flex-1 bg-surface/30 p-3 md:p-6 flex justify-center items-center overflow-hidden min-h-[300px] h-[440px] md:h-[500px] max-h-[55vh]">
+              <div className="flex-1 bg-surface/50 p-4 md:p-8 flex justify-center items-center overflow-hidden">
                 <div
-                  className="transition-all duration-350 border border-border-main rounded-lg overflow-hidden bg-white shadow-lg relative flex flex-col w-full h-full"
+                  className="transition-all duration-350 border border-border-main rounded-xl overflow-hidden bg-white shadow-2xl relative flex flex-col w-full h-full"
                   style={{
-                    width: previewDevice === 'mobile' ? '375px' : '100%',
+                    width: previewDevice === 'mobile' ? '390px' : '100%',
                     maxWidth: '100%',
                   }}
                 >
+                  {/* Simulated Browser URL bar on top of iframe */}
+                  <div className="bg-zinc-900 text-zinc-300 px-4 py-2.5 flex items-center gap-3 border-b border-zinc-800 shrink-0 text-xs font-mono">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3 h-3 rounded-full bg-red-500 inline-block" />
+                      <span className="w-3 h-3 rounded-full bg-yellow-500 inline-block" />
+                      <span className="w-3 h-3 rounded-full bg-green-500 inline-block" />
+                    </div>
+                    <div className="flex-1 bg-zinc-800/80 px-3 py-1 rounded text-zinc-300 text-center truncate border border-zinc-700/50">
+                      https://{selectedTemplateForPreview.id}.lunao.app
+                    </div>
+                    <div className="text-[10px] text-emerald-400 bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-800/50">
+                      SSL Secure
+                    </div>
+                  </div>
                   <iframe
                     src={previewUrlForKey(selectedTemplateForPreview.id)}
                     className="w-full h-full border-0 flex-1"
@@ -909,37 +972,43 @@ export const Templates: React.FC<TemplatesProps> = ({
               </div>
 
             {/* Modal footer CTAs */}
-            <div className="p-5 border-t border-border-light bg-off-white flex items-center justify-end gap-3 shrink-0">
-              <button
-                onClick={handleCloseModal}
-                className="px-4 py-2 border border-border-main font-semibold text-xs text-ink bg-white uppercase tracking-wider rounded hover:bg-off-white transition-all shadow-2xs cursor-pointer"
-              >
-                Cancel Preview
-              </button>
-              {setActiveTab && (
+            <div className="p-5 border-t border-border-light bg-off-white flex items-center justify-between gap-4 shrink-0">
+              <div className="flex items-center gap-2 text-xs text-ink-secondary">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                <span>Live interactive preview connected to Lunao production rendering engine</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleCloseModal}
+                  className="px-5 py-2.5 border border-border-main font-semibold text-xs text-ink bg-white uppercase tracking-wider rounded-lg hover:bg-off-white transition-all shadow-xs cursor-pointer"
+                >
+                  Close Preview
+                </button>
+                {setActiveTab && (
+                  <button
+                    onClick={() => {
+                      if (setSelectedNicheFilter) {
+                        setSelectedNicheFilter(selectedTemplateForPreview.niche);
+                      }
+                      handleCloseModal();
+                      setActiveTab('campaigns');
+                    }}
+                    className="px-6 py-2.5 bg-secondary hover:bg-secondary/90 hover:shadow-lg text-white font-bold text-xs uppercase tracking-wider rounded-lg shadow-sm flex items-center gap-2 cursor-pointer transition-all active:scale-95"
+                  >
+                    <span>Launch Campaign With This Template</span>
+                    <Zap className="w-4 h-4" />
+                  </button>
+                )}
                 <button
                   onClick={() => {
-                    if (setSelectedNicheFilter) {
-                      setSelectedNicheFilter(selectedTemplateForPreview.niche);
-                    }
-                    handleCloseModal();
-                    setActiveTab('campaigns');
+                    window.open(previewUrlForKey(selectedTemplateForPreview.id), '_blank');
                   }}
-                  className="px-5 py-2 bg-secondary hover:bg-secondary/90 hover:shadow-md text-white font-semibold text-xs uppercase tracking-wider rounded shadow-sm flex items-center gap-1.5 cursor-pointer animate-pulse"
+                  className="px-6 py-2.5 bg-accent hover:bg-accent-hover text-white font-bold text-xs uppercase tracking-wider rounded-lg shadow-sm flex items-center gap-2 cursor-pointer transition-all active:scale-95"
                 >
-                  <span>Launch Campaign</span>
-                  <Zap className="w-4 h-4" />
+                  <span>Open Full Screen</span>
+                  <ExternalLink className="w-4 h-4" />
                 </button>
-              )}
-              <button
-                onClick={() => {
-                  window.open(previewUrlForKey(selectedTemplateForPreview.id), '_blank');
-                }}
-                className="px-5 py-2 bg-accent hover:bg-accent-hover text-white font-semibold text-xs uppercase tracking-wider rounded shadow-sm flex items-center gap-1.5 cursor-pointer"
-              >
-                <span>Preview in Full Page</span>
-                <Eye className="w-4 h-4" />
-              </button>
+              </div>
             </div>
 
             </div>

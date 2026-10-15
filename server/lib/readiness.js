@@ -275,6 +275,19 @@ export function rebrandTemplate(rawHtml, business) {
   result = result.replace(/\{\{\s*GOOGLE_RATING\s*\}\}/gi, '4.9');
   result = result.replace(/\{\{\s*GOOGLE_REVIEW_COUNT\s*\}\}/gi, '280');
   result = result.replace(/\{\{\s*YEARS_IN_BUSINESS\s*\}\}/gi, '2016');
+  // HVAC & Architecture bespoke template placeholders
+  result = result.replace(/\{\{\s*CITY_NAME\s*\}\}/gi, city);
+  result = result.replace(/\{\{\s*PHONE_NUMBER\s*\}\}/gi, phone);
+  result = result.replace(/\{\{\s*BOOKING_URL\s*\}\}/gi, '#booking');
+  result = result.replace(/\{\{\s*BUSINESS_DESCRIPTION\s*\}\}/gi, 'Premier residential and commercial HVAC engineering, inverter heat pumps, concealed high-velocity zoning, and hospital-grade indoor air quality purification.');
+  result = result.replace(/\{\{\s*HERO_IMAGE\s*\}\}/gi, 'https://images.unsplash.com/photo-1581094288338-2314dddb7ece?auto=format&fit=crop&w=1920&q=85');
+  result = result.replace(/\{\{\s*LOGO\s*\}\}/gi, bizName);
+  result = result.replace(/\{\{\s*BEFORE_IMAGE_URL\s*\}\}/gi, 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80');
+  result = result.replace(/\{\{\s*AFTER_IMAGE_URL\s*\}\}/gi, 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=80');
+  result = result.replace(/\{\{\s*GOOGLE_MAPS_URL\s*\}\}/gi, 'https://maps.google.com');
+  result = result.replace(/\{\{\s*INSTAGRAM_URL\s*\}\}/gi, `https://instagram.com/${safeSlug}`);
+  result = result.replace(/\{\{\s*TIKTOK_URL\s*\}\}/gi, `https://tiktok.com/@${safeSlug}`);
+  result = result.replace(/\{\{\s*YOUTUBE_URL\s*\}\}/gi, `https://youtube.com/@${safeSlug}`);
 
   // 2. Strict Approved Placeholders:
   result = result.replace(/\{\{\s*BUSINESS_NAME\s*\}\}/g, bizName);

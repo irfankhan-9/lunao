@@ -1782,7 +1782,7 @@ The Lunao Team`);
         businessName: r.name,
         phone: r.phone || '',
         sentAt: smsComingSoon ? 'Queued' : 'Just now',
-        status: (smsComingSoon ? 'Coming Soon' : r.smsStatus === 'failed' ? 'Undelivered' : 'Delivered') as SmsLog['status'],
+        status: (smsComingSoon ? 'Coming Soon' : r.smsStatus === 'failed' ? 'Undelivered' : r.smsStatus === 'delivered' ? 'Delivered' : 'Queued') as SmsLog['status'],
         previewLink: r.siteUrl || '',
       })),
     );
@@ -2219,7 +2219,8 @@ The Lunao Team`);
                       selectedTemplateForPreview.id === 't3' || selectedTemplateForPreview.id === 'salon-atelier-01' ? '/salon-template-01.html' :
                       selectedTemplateForPreview.id === 't4' || selectedTemplateForPreview.id === 'dentist-clinical-01' ? '/dentist-template-01.html' :
                       selectedTemplateForPreview.id === 't5' || selectedTemplateForPreview.id === 'roofing-shield-01' ? '/roofing-template-01.html' :
-                      selectedTemplateForPreview.id === 't6' || selectedTemplateForPreview.id === 'hvac-everest-01' ? '/hvac-template-01.html' :
+                      selectedTemplateForPreview.id === 't6' || selectedTemplateForPreview.id === 'hvac-everest-01' || selectedTemplateForPreview.id === 'hvac-everest' ? '/hvac-template-01.html' :
+                      selectedTemplateForPreview.id === 't9' || selectedTemplateForPreview.id === 'hvac-bespoke' || selectedTemplateForPreview.id === 'hvac-template-02' ? '/hvac-template-02.html' :
                       selectedTemplateForPreview.id === 't7' || selectedTemplateForPreview.id === 'gym-steel-01' ? '/gym-template-01.html' :
                       selectedTemplateForPreview.id === 't8' || selectedTemplateForPreview.id === 'realestate-apex-01' ? '/realestate-template-01.html' :
                       `/api/templates/${encodeURIComponent(selectedTemplateForPreview.id)}/preview`
@@ -2255,7 +2256,8 @@ The Lunao Team`);
                         selectedTemplateForPreview.id === 't3' ? '/salon-template-01.html' :
                         selectedTemplateForPreview.id === 't4' ? '/dentist-template-01.html' :
                         selectedTemplateForPreview.id === 't5' ? '/roofing-template-01.html' :
-                        selectedTemplateForPreview.id === 't6' ? '/hvac-template-01.html' :
+                        selectedTemplateForPreview.id === 't6' || selectedTemplateForPreview.id === 'hvac-everest' ? '/hvac-template-01.html' :
+                        selectedTemplateForPreview.id === 't9' || selectedTemplateForPreview.id === 'hvac-bespoke' || selectedTemplateForPreview.id === 'hvac-template-02' ? '/hvac-template-02.html' :
                         selectedTemplateForPreview.id === 't7' ? '/gym-template-01.html' :
                         selectedTemplateForPreview.id === 't8' ? '/realestate-template-01.html' :
                         selectedTemplateForPreview.id === 't1' ? '/barber-template.html' :

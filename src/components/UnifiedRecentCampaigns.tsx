@@ -566,11 +566,22 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
   // We match by id so we can read total (user's chosen target) even
   // before the post-complete API backfill has written leadsFound.
   const activeProgressToggle = React.useMemo(
-    () => activeCampaignRuns?.find((r) => r.id === camp.id && r.kind === 'email') ?? null,
+    () => activeCampaignRuns?.find((r) => r.id === camp.id && (r.kind === 'email' || (r as any).kind === 'sms')) ?? null,
     [activeCampaignRuns, camp.id],
   );
-  const isRunning = camp.status === 'Active';
-  const isFrozen = camp.status === 'Completed' || camp.status === 'Crashed';
+
+  const isActiveRun = Boolean(
+    activeCampaignRuns?.some(
+      (r) => r.id === camp.id && (r.status === 'running' || r.status === 'starting' || r.status === 'delaying')
+    )
+  );
+
+  const isFinished = camp.status === 'Completed' ||
+    Boolean(camp.deployedSites?.length && camp.deployedSites.length >= (camp.totalLeads || 1)) ||
+    Boolean(camp.smsLeads?.length && camp.smsLeads.length >= (camp.totalLeads || 1));
+
+  const isRunning = isActiveRun || (!isFinished && (camp.status === 'Active' || (camp.status as string) === 'running'));
+  const isFrozen = !isRunning && (camp.status === 'Completed' || isFinished || camp.status === 'Crashed');
   const isSiteDeploy = camp.type === 'site-deploy';
   const isEmail = camp.type === 'email';
   const isSms = camp.type === 'sms';
@@ -581,8 +592,11 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
   const failed = camp.emailsFailed ?? 0;
   const sites = camp.sitesGenerated ?? camp.sites ?? 0;
 
-  const smsSentCount = camp.smsSent ?? camp.smsLeads?.filter(l => l.status === 'delivered' || l.status === 'sent').length ?? (camp.deployedSites?.length ?? 0);
-  const smsFailedCount = camp.smsFailed ?? camp.smsLeads?.filter(l => l.status === 'failed').length ?? 0;
+  // Real Telnyx status counts — NO FAKE DELIVERED
+  const smsDeliveredCount = (camp.smsLeads || []).filter(l => l.status === 'delivered').length;
+  const smsQueuedCount = (camp.smsLeads || []).filter(l => l.status === 'queued' || (!l.status && l.status !== 'failed' && l.status !== 'delivered')).length;
+  const smsSentCount = (camp.smsLeads || []).filter(l => l.status === 'sent').length;
+  const smsFailedCount = camp.smsFailed ?? (camp.smsLeads || []).filter(l => l.status === 'failed').length;
   const smsLeadsCount = camp.smsLeads?.length || camp.leads?.length || camp.totalLeads || camp.leadsFound || liveCount || 0;
   // Lead count for the card row. The wizard's `finalCampaign` payload sets both
   // `leadsFound` AND `emailLeads`, and the post-complete API backfill in
@@ -686,7 +700,7 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
             <RunningBadge label="Running" />
           ) : (
             <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border ${statusColor}`}>
-              {camp.status}
+              {camp.status === 'Active' && isFinished ? 'Completed' : camp.status}
             </span>
           )}
           {/* Delete */}
@@ -802,10 +816,32 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
                     {liveCount} live site{liveCount !== 1 ? 's' : ''} deployed
                   </span>
                 </div>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[9px] font-bold shrink-0">
-                  <CheckCircle className="w-2.5 h-2.5" />
-                  {smsSentCount} Delivered
-                </span>
+                <div className="flex items-center gap-1 shrink-0 flex-wrap">
+                  {smsDeliveredCount > 0 && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[9px] font-bold">
+                      <CheckCircle className="w-2.5 h-2.5" />
+                      {smsDeliveredCount} Delivered
+                    </span>
+                  )}
+                  {smsQueuedCount > 0 && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[9px] font-bold">
+                      <Clock className="w-2.5 h-2.5" />
+                      {smsQueuedCount} Queued
+                    </span>
+                  )}
+                  {smsSentCount > 0 && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[9px] font-bold">
+                      <Send className="w-2.5 h-2.5" />
+                      {smsSentCount} Sent
+                    </span>
+                  )}
+                  {smsFailedCount > 0 && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[9px] font-bold">
+                      <AlertCircle className="w-2.5 h-2.5" />
+                      {smsFailedCount} Failed
+                    </span>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -925,9 +961,11 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
         phone: s.phone || (camp.leads && camp.leads[idx]?.phone) || '+1 604-555-0199',
         city: s.city || (camp.leads && camp.leads[idx]?.city) || 'Local Area',
         siteUrl: s.url,
-        status: s.status === 'live' ? 'delivered' : 'failed',
+        status: (s.smsStatus || 'queued') as any,
         smsText: s.smsText || camp.smsMessage || '',
-        sentAt: 'Delivered',
+        sentAt: s.smsStatus === 'delivered' ? 'Delivered' : s.smsStatus === 'failed' ? 'Failed' : 'Queued',
+        smsError: s.smsError || null,
+        telnyxId: s.telnyxId || null,
       }));
     }
     if (camp.leads && camp.leads.length > 0) {
@@ -938,13 +976,75 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
         phone: l.phone || '+1 604-555-0199',
         city: l.city || 'Local Area',
         siteUrl: (camp.deployedSites && camp.deployedSites[idx]?.url) || '',
-        status: 'delivered' as const,
+        status: 'queued' as const,
         smsText: camp.smsMessage || '',
-        sentAt: 'Delivered',
+        sentAt: 'Queued',
       }));
     }
     return [];
   }, [camp]);
+
+  const [liveSmsLeads, setLiveSmsLeads] = useState<CampaignSmsLead[]>(smsLeads);
+
+  useEffect(() => {
+    setLiveSmsLeads(smsLeads);
+  }, [smsLeads]);
+
+  // Active 3-second live recheck from Telnyx for SMS campaigns
+  useEffect(() => {
+    if (!isSms) return;
+    let cancelled = false;
+
+    const pollTelnyxForCampaign = async () => {
+      const pendingLeads = liveSmsLeads.filter(
+        (l) => l.telnyxId && l.status !== 'delivered' && l.status !== 'failed'
+      );
+      if (pendingLeads.length === 0) return;
+
+      for (const lead of pendingLeads) {
+        if (cancelled) break;
+        try {
+          const res = await fetch(`/api/sms/status-check?id=${encodeURIComponent(lead.telnyxId!)}`);
+          const data = await res.json().catch(() => ({}));
+          if (data.ok && data.status && data.status !== lead.status) {
+            setLiveSmsLeads((prev) =>
+              prev.map((item) =>
+                item.leadId === lead.leadId || item.telnyxId === lead.telnyxId
+                  ? {
+                      ...item,
+                      status: data.status,
+                      smsError: data.errorMessage || data.errorCode || item.smsError,
+                    }
+                  : item
+              )
+            );
+            // Save updated status to localStorage so it persists
+            try {
+              const camps = JSON.parse(localStorage.getItem('lunao_campaigns') || '[]');
+              const c = camps.find((x: any) => x.id === camp.id);
+              if (c && Array.isArray(c.smsLeads)) {
+                const target = c.smsLeads.find((x: any) => x.telnyxId === lead.telnyxId || x.leadId === lead.leadId);
+                if (target) {
+                  target.status = data.status;
+                  target.smsError = data.errorMessage || data.errorCode || target.smsError;
+                  c.smsSent = c.smsLeads.filter((x: any) => x.status === 'delivered' || x.status === 'sent').length;
+                  c.smsFailed = c.smsLeads.filter((x: any) => x.status === 'failed').length;
+                  localStorage.setItem('lunao_campaigns', JSON.stringify(c));
+                }
+              }
+            } catch {}
+          }
+        } catch {}
+      }
+    };
+
+    pollTelnyxForCampaign();
+    const interval = setInterval(pollTelnyxForCampaign, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isSms, liveSmsLeads, camp.id]);
 
   // Defensively dedupe the initial state
   const [emailLeads, setEmailLeads] = useState<CampaignEmailLead[]>(dedupeLeads(camp.emailLeads || []));
@@ -1184,9 +1284,9 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
             </>
           ) : isSms ? (
             <>
-              <StatBlock label="Sites Live" value={liveSites.length || camp.sitesGenerated || camp.sites || smsLeads.filter(l => l.siteUrl).length || 0} icon={<Globe className="w-4 h-4" />} color="text-accent" />
-              <StatBlock label="Leads" value={smsLeads.length || camp.totalLeads || camp.leadsFound || 0} icon={<Users className="w-4 h-4" />} color="text-blue-600" />
-              <StatBlock label="SMS Delivered" value={camp.smsSent || smsLeads.filter(l => l.status === 'delivered').length || smsLeads.length || 0} icon={<CheckCircle className="w-4 h-4" />} color="text-success" />
+              <StatBlock label="Sites Live" value={liveSites.length || camp.sitesGenerated || camp.sites || liveSmsLeads.filter(l => l.siteUrl).length || 0} icon={<Globe className="w-4 h-4" />} color="text-accent" />
+              <StatBlock label="Leads" value={liveSmsLeads.length || camp.totalLeads || camp.leadsFound || 0} icon={<Users className="w-4 h-4" />} color="text-blue-600" />
+              <StatBlock label="SMS Delivered" value={liveSmsLeads.filter(l => l.status === 'delivered').length} icon={<CheckCircle className="w-4 h-4" />} color="text-success" />
               <StatBlock
                 label="Route"
                 value={camp.smsPhoneUsed || '+1 (604) 953-9651'}
@@ -1207,7 +1307,7 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
         {/* Body */}
         <div className="flex-1 overflow-y-auto">
           {isSms ? (
-            <SmsBody leads={smsLeads} copiedUrl={copiedUrl} onCopyUrl={onCopyUrl} />
+            <SmsBody leads={liveSmsLeads} copiedUrl={copiedUrl} onCopyUrl={onCopyUrl} />
           ) : isSiteDeploy ? (
             <SiteDeployBody liveSites={liveSites} onCopyUrl={onCopyUrl} copiedUrl={copiedUrl} />
           ) : (
@@ -1376,8 +1476,36 @@ const SmsBody: React.FC<{
             }`}
           >
             <CheckCircle className="w-3 h-3" />
-            {totalDelivered} Delivered
+            {totalDelivered} SMS Delivered
           </button>
+          {totalQueued > 0 && (
+            <button
+              type="button"
+              onClick={() => setStatusFilter('queued')}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-colors cursor-pointer ${
+                statusFilter === 'queued'
+                  ? 'bg-amber-600 text-white border-amber-600'
+                  : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+              }`}
+            >
+              <Clock className="w-3 h-3" />
+              {totalQueued} SMS Queued
+            </button>
+          )}
+          {totalSent > 0 && (
+            <button
+              type="button"
+              onClick={() => setStatusFilter('sent')}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-colors cursor-pointer ${
+                statusFilter === 'sent'
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+              }`}
+            >
+              <Send className="w-3 h-3" />
+              {totalSent} SMS Sent
+            </button>
+          )}
           {totalSites > 0 && (
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-accent-soft text-accent border border-accent/25 text-[10px] font-bold">
               <Globe className="w-3 h-3" />
@@ -1395,7 +1523,7 @@ const SmsBody: React.FC<{
               }`}
             >
               <AlertCircle className="w-3 h-3" />
-              {totalFailed} Failed
+              {totalFailed} SMS Failed
             </button>
           )}
         </div>
@@ -1430,7 +1558,8 @@ const SmsBody: React.FC<{
         {filteredLeads.map((lead, idx) => {
           const isDelivered = lead.status === 'delivered';
           const isFailed = lead.status === 'failed';
-          const isQueued = lead.status === 'queued';
+          const isQueued = lead.status === 'queued' || (!lead.status && !isDelivered && !isFailed);
+          const isSent = lead.status === 'sent';
           const hasSite = !!lead.siteUrl;
 
           return (
@@ -1457,6 +1586,12 @@ const SmsBody: React.FC<{
                       <span>{lead.phone}</span>
                     </div>
                   )}
+                  {lead.smsError && (
+                    <p className="text-[10px] text-rose-600 font-mono truncate mt-1 flex items-center gap-1" title={lead.smsError}>
+                      <AlertCircle className="w-3 h-3 shrink-0" />
+                      Reason: {lead.smsError}
+                    </p>
+                  )}
                 </div>
 
                 {/* Status Badge */}
@@ -1464,22 +1599,26 @@ const SmsBody: React.FC<{
                   {isDelivered ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
                       <CheckCircle className="w-3 h-3 text-emerald-600" />
-                      Delivered
+                      SMS Delivered ✓
                     </span>
                   ) : isFailed ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold">
                       <AlertCircle className="w-3 h-3 text-rose-600" />
-                      Failed
+                      SMS Failed
                     </span>
                   ) : isQueued ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold animate-pulse">
                       <Clock className="w-3 h-3 text-amber-600" />
-                      Queued
+                      SMS Queued
                     </span>
-                  ) : (
+                  ) : isSent ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold">
                       <Send className="w-3 h-3 text-blue-600" />
-                      Sent
+                      SMS Sent
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface text-ink-secondary border border-border-light text-[10px] font-bold">
+                      SMS {lead.status}
                     </span>
                   )}
                 </div>

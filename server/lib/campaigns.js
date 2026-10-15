@@ -261,8 +261,10 @@ export function logSmsAttempt({
   campaignId = null,
   leadId = null,
   ownerKey = null,
-  to,
+  to = null,
+  toNumber = null,
   from = '',
+  fromNumber = '',
   body = '',
   status = 'pending',
   telnyxId = null,
@@ -271,6 +273,8 @@ export function logSmsAttempt({
   segmentCount = 1,
   costCredits = 0,
 } = {}) {
+  const destNumber = String(to || toNumber || '').trim();
+  const srcNumber = String(from || fromNumber || '').trim();
   const now = Date.now();
   const info = db
     .prepare(
@@ -284,8 +288,8 @@ export function logSmsAttempt({
       campaignId,
       leadId,
       ownerKey,
-      String(to || ''),
-      String(from || ''),
+      destNumber,
+      srcNumber,
       String(body || ''),
       status,
       telnyxId,
@@ -344,12 +348,21 @@ export function listSmsForCampaign(campaignId) {
 
 export function listSmsForOwner(ownerKey, limit = 100) {
   const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 100, 1), 500);
-  const rows = db
-    .prepare(
-      `SELECT * FROM sms_logs WHERE owner_key = ?
-        ORDER BY created_at DESC LIMIT ?`,
-    )
-    .all(ownerKey, safeLimit);
+  const isDashboard = !ownerKey || ownerKey === 'dashboard' || ownerKey.startsWith('dash-') || ownerKey === 'all';
+  const rows = isDashboard
+    ? db
+        .prepare(
+          `SELECT * FROM sms_logs 
+           WHERE owner_key = ? OR owner_key LIKE 'dash-%' OR owner_key = 'dashboard' OR owner_key IS NULL OR owner_key = ''
+           ORDER BY created_at DESC LIMIT ?`,
+        )
+        .all(ownerKey, safeLimit)
+    : db
+        .prepare(
+          `SELECT * FROM sms_logs WHERE owner_key = ?
+           ORDER BY created_at DESC LIMIT ?`,
+        )
+        .all(ownerKey, safeLimit);
   return rows.map(rowToSms);
 }
 
