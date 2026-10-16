@@ -331,11 +331,17 @@ function buildScript(cfgJson) {
     var r=findRadius();if(r)root.style.setProperty('--lw-radius',r);
   }catch(e){}}
   function post(path,data){
+    var cleanP=path.startsWith('/')?path:('/'+path);
     var url=base;
-    if(url.indexOf('/functions/v1/')!==-1){
-      // Direct edge function endpoint
+    if(!url){
+      url=cleanP;
     } else {
-      url=url+path;
+      url=url.replace(/\/+$/,'');
+      if(cleanP.startsWith('/api/') && url.endsWith('/api')){
+        url=url+cleanP.substring(4);
+      } else {
+        url=url+cleanP;
+      }
     }
     var key=(data&&data.idempotencyKey)||('bk_w_'+Date.now().toString(36)+'_'+Math.random().toString(36).substring(2,8));
     var payload=Object.assign({},data,{idempotencyKey:key});
@@ -425,11 +431,7 @@ export function removeWidget(html) {
 
 export function buildWidgetConfig(slug, html) {
   const niche = nicheFromHtml(html);
-  const apiBase =
-    process.env.BOOKING_EDGE_FUNCTION_URL ||
-    (process.env.SUPABASE_URL
-      ? `${process.env.SUPABASE_URL.replace(/\/+$/, '')}/functions/v1/public-bookings`
-      : PUBLIC_API_BASE_URL);
+  const apiBase = PUBLIC_API_BASE_URL;
 
   return {
     apiBase,

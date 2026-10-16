@@ -151,12 +151,22 @@ export const supabase = {
   },
 };
 
+export const resend = {
+  apiKey: env.RESEND_API_KEY || '',
+  from: env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
+  testRecipient: env.RESEND_TEST_RECIPIENT || '',
+  get live() {
+    return Boolean(this.apiKey && this.apiKey.startsWith('re_'));
+  },
+};
+
 export function modeSummary() {
   return {
     telnyx: telnyx.live ? 'LIVE' : telnyx.enabled ? 'DRY-RUN (simulated)' : 'COMING SOON (disabled)',
     cloudflare: cloudflare.live ? 'LIVE' : 'DRY-RUN (served locally)',
     googleMaps: google.live ? 'LIVE' : 'COMING SOON (CSV mode)',
     supabase: supabase.live ? 'LIVE (Supabase Relational)' : 'LOCAL (SQLite fallback)',
+    resend: resend.live ? `LIVE (${resend.from})` : 'MOCK / DISABLED (no RESEND_API_KEY)',
     aiEditor: (gemini.live || anthropic.live) ? 'LIVE (Gemini 2.5 Flash)' : 'disabled',
     chatbot: gemini.live ? 'LIVE (Gemini)' : 'rule-based (no GEMINI_API_KEY)',
     siteBaseUrl: siteBaseUrl(),

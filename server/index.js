@@ -131,6 +131,15 @@ import {
   decryptRefreshTokenForUse,
 } from './lib/gmail.js';
 import { googleOAuth, telnyxOAuth } from './lib/config.js';
+import { checkResendConfig } from './lib/resendService.js';
+import {
+  triggerNewBookingAutomations,
+  startEmailAutomationScheduler,
+  sendCustomerBookingConfirmation,
+  sendOwnerBookingNotification,
+  sendCustomerAppointmentReminder,
+  sendCustomerReviewRequest,
+} from './lib/emailAutomations.js';
 import {
   // Telnyx OAuth (Connect with Telnyx button)
   buildTelnyxAuthUrl,
@@ -192,23 +201,36 @@ app.use((req, res, next) => {
   req.id = reqId;
 
   const origin = req.headers.origin;
-  const isPublicRoute = req.path.startsWith('/api/public') || req.path === '/api/bookings' || req.path === '/api/chat';
+  const cleanPath = (req.path || '').replace(/\/+$/, '') || '/';
+  const isPublicRoute =
+    cleanPath.startsWith('/api/public') ||
+    cleanPath === '/api/bookings' ||
+    cleanPath === '/api/chat' ||
+    cleanPath === '/functions/v1/public-bookings';
 
   if (isPublicRoute) {
     // Public widget endpoints accept cross-origin requests from any website without credentials
-    res.header('Access-Control-Allow-Origin', origin || '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-Key, x-owner-key, X-Idempotency-Key');
+    if (origin) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Vary', 'Origin');
+    } else {
+      res.header('Access-Control-Allow-Origin', '*');
+    }
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-Key, x-owner-key, X-Idempotency-Key, Accept, Origin, X-Requested-With');
+    res.header('Access-Control-Max-Age', '86400');
   } else {
     // Authenticated API routes reflect trusted origins with credentials
     if (origin) {
       res.header('Access-Control-Allow-Origin', origin);
       res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Vary', 'Origin');
     } else {
       res.header('Access-Control-Allow-Origin', '*');
     }
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-Key, x-owner-key, X-Idempotency-Key');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-Key, x-owner-key, X-Idempotency-Key, Accept, Origin, X-Requested-With');
+    res.header('Access-Control-Max-Age', '86400');
   }
 
   if (req.method === 'OPTIONS') {
@@ -826,10 +848,120 @@ app.post(['/api/bookings', '/api/public/bookings', '/functions/v1/public-booking
     const idempotencyKey = req.headers['x-idempotency-key'] || req.body?.idempotencyKey || req.body?.idempotency_key;
     const booking = await createBookingAsync({ ...req.body, idempotencyKey });
     const statusCode = booking.isExisting ? 200 : 201;
+
+    // Trigger transactional email automations for new bookings (Customer confirmation + Owner notification)
+    if (!booking.isExisting) {
+      triggerNewBookingAutomations(booking).catch((err) => {
+        console.error('[emailAutomations] Booking trigger notice:', err.message);
+      });
+    }
+
     res.status(statusCode).json({ ok: true, id: booking.id, booking });
   } catch (err) {
     const status = err.status || 500;
     res.status(status).json({ ok: false, error: err.message });
+  }
+});
+
+// Admin authentication gate for email diagnostics and testing
+function requireAdminAuth(req, res, next) {
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (!isProduction) return next();
+
+  const adminSecret = process.env.ADMIN_SECRET || process.env.JWT_SECRET;
+  const provided =
+    req.headers['x-admin-secret'] ||
+    req.headers['authorization']?.replace(/^Bearer\s+/i, '') ||
+    req.query?.adminSecret;
+
+  if (!adminSecret || provided !== adminSecret) {
+    return res.status(401).json({
+      ok: false,
+      error: 'Unauthorized: Admin authentication required for email diagnostics in production.',
+    });
+  }
+  next();
+}
+
+// Admin Diagnostic: Check Resend email configuration (Protected in production)
+app.get('/api/admin/email-status', requireAdminAuth, (_req, res) => {
+  const config = checkResendConfig();
+  res.json({
+    ok: true,
+    resend: config,
+  });
+});
+
+// Admin Test: Trigger and test the 4 email automations with Resend (Protected in production)
+app.post(['/api/admin/test-email-automations', '/api/test/email-automations'], requireAdminAuth, async (req, res) => {
+  try {
+    const targetEmail =
+      req.body?.email ||
+      req.query?.email ||
+      process.env.RESEND_TEST_RECIPIENT ||
+      'irfankhanjw03@gmail.com';
+    const specificType = req.body?.type; // 'confirmation', 'owner', 'reminder', 'review', or 'all'
+
+    const testBooking = {
+      id: Math.floor(1000 + Math.random() * 9000),
+      slug: req.body?.slug || 'hvac-artisan-lounge-austin',
+      businessName: req.body?.businessName || 'Artisan Climate Systems',
+      customerName: req.body?.customerName || 'Alex Morgan',
+      phone: '(512) 555-0199',
+      email: targetEmail,
+      service: req.body?.service || 'Premium Heat Pump & HVAC Inspection',
+      date: '2026-10-25',
+      time: '10:30 AM',
+      notes: 'Customer requested comprehensive filter inspection and airflow test.',
+      source: 'Website Booking Form',
+      status: 'confirmed',
+      createdAt: Date.now(),
+    };
+
+    const mockProfile = {
+      slug: testBooking.slug,
+      name: testBooking.businessName,
+      email: targetEmail,
+      phone: '(512) 555-0199',
+      address: '3801 Capital of Texas Hwy, Austin, TX 78746',
+      city: 'Austin',
+      timezone: 'America/Chicago',
+      websiteUrl: 'https://lunao-web-designn.pages.dev',
+      theme: { accent: '#059669' },
+    };
+
+    const results = {};
+
+    if (!specificType || specificType === 'all' || specificType === 'confirmation') {
+      results.customerConfirmation = await sendCustomerBookingConfirmation(testBooking, mockProfile);
+    }
+    if (!specificType || specificType === 'all' || specificType === 'owner') {
+      results.ownerNotification = await sendOwnerBookingNotification(testBooking, mockProfile);
+    }
+    if (!specificType || specificType === 'all' || specificType === 'reminder') {
+      results.appointmentReminder = await sendCustomerAppointmentReminder(testBooking, mockProfile);
+    }
+    if (!specificType || specificType === 'all' || specificType === 'review') {
+      results.reviewRequest = await sendCustomerReviewRequest(testBooking, mockProfile);
+    }
+
+    const config = checkResendConfig();
+
+    res.json({
+      ok: true,
+      message: 'All 4 email automations processed successfully via Resend',
+      resendConfig: {
+        ready: config.ready,
+        fromEmail: config.fromEmail,
+        apiKeyMasked: config.apiKeyMasked,
+        isSandboxSender: config.isSandboxSender,
+      },
+      targetEmail,
+      testBooking,
+      results,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
@@ -4662,6 +4794,7 @@ export function startBackgroundServices() {
   try {
     startGlobalRechecker();
     startOauthStateCleanup();
+    startEmailAutomationScheduler();
   } catch (err) {
     console.error('Failed to start background services:', err);
   }
@@ -4676,9 +4809,12 @@ if (process.env.NO_SERVER_LISTEN !== 'true') {
     // the dashboard isn't open (so a Telnyx webhook that lands while nobody's
     // looking still gets reflected in the DB before the user next loads).
     startGlobalRechecker();
+    startEmailAutomationScheduler();
     const mode = modeSummary();
+    const resendStatus = checkResendConfig();
     console.log(`\n  Lunao pipeline API  ->  http://localhost:${PORT}`);
     console.log(`  Public base        : ${PUBLIC_API_BASE_URL}`);
+    console.log(`  Resend Email       : ${resendStatus.message}`);
     console.log(`  Telnyx SMS         : ${mode.telnyx}`);
     console.log(`  Cloudflare Pages   : ${mode.cloudflare}`);
     console.log(`  Google Maps        : ${mode.googleMaps}`);

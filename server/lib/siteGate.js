@@ -147,29 +147,34 @@ function gateStatus() {
 // e.g. gateProtected(['/auth', '/dashboard', '/sites']).
 export function gateProtected(prefixes) {
   return async (req, res, next) => {
+    // OPTIONS preflight requests must NEVER be redirected or blocked
+    if (req.method === 'OPTIONS') return res.status(204).end();
+
     // Never lock out the gate endpoints themselves, the API health check,
     // the webhook endpoints, or static assets. Otherwise we'd lock ourselves
     // out on deploy.
     const path = req.path || req.url || '';
-    const isApi = path.startsWith('/api/');
-    const isWebhook = path === '/api/webhooks/telnyx';
-    const isHealth = path === '/api/health';
+    const cleanPath = path.replace(/\/+$/, '') || '/';
+    const isApi = cleanPath.startsWith('/api/');
+    const isWebhook = cleanPath === '/api/webhooks/telnyx';
+    const isHealth = cleanPath === '/api/health';
     const isGateRoute =
-      path === '/site-gate' ||
-      path === '/api/site-gate' ||
-      path === '/api/site-gate/logout' ||
-      path === '/api/site-gate/status';
+      cleanPath === '/site-gate' ||
+      cleanPath === '/api/site-gate' ||
+      cleanPath === '/api/site-gate/logout' ||
+      cleanPath === '/api/site-gate/status';
     const isStaticAsset =
-      path.startsWith('/assets/') ||
-      path.startsWith('/sites/') ||
-      path.startsWith('/templates-raw/') ||
-      path.startsWith('/favicon') ||
-      path === '/robots.txt' ||
-      path === '/sitemap.xml';
+      cleanPath.startsWith('/assets/') ||
+      cleanPath.startsWith('/sites/') ||
+      cleanPath.startsWith('/templates-raw/') ||
+      cleanPath.startsWith('/favicon') ||
+      cleanPath === '/robots.txt' ||
+      cleanPath === '/sitemap.xml';
     const isPublic =
-      path.startsWith('/api/public/') ||
-      path === '/api/bookings' ||
-      path === '/api/chat';
+      cleanPath.startsWith('/api/public') ||
+      cleanPath === '/api/bookings' ||
+      cleanPath === '/api/chat' ||
+      cleanPath === '/functions/v1/public-bookings';
 
     // Bypass for localhost development (no auth needed for local testing).
     const host = req.headers.host || '';

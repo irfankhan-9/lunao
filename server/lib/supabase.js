@@ -4,18 +4,15 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase as supabaseCfg } from './config.js';
 
 let pgPool = null;
-const databaseUrl = process.env.DATABASE_URL || 'postgresql://postgres.wqlbuadknltsjfzrltpe:%24%40Khan1234455@aws-0-us-east-1.pooler.supabase.com:6543/postgres';
-
-if (databaseUrl) {
+if (process.env.DATABASE_URL) {
   try {
     pgPool = new Pool({
-      connectionString: databaseUrl,
-      ssl: { rejectUnauthorized: false },
-      connectionTimeoutMillis: 7000,
-      idleTimeoutMillis: 10000,
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.PGSSL === 'disable' ? false : { rejectUnauthorized: false },
     });
   } catch (err) {
-    console.warn('[Postgres] Pool init warning:', err.message);
+    console.warn('[Supabase] Failed to initialize Postgres pool:', err.message);
+    pgPool = null;
   }
 }
 

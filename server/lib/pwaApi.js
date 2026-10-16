@@ -27,6 +27,8 @@ import {
   supabaseListAutomations,
   supabaseToggleAutomation,
 } from './supabase.js';
+import { sendEmail } from './resendService.js';
+import { triggerNewBookingAutomations } from './emailAutomations.js';
 
 const DEFAULT_AI = {
   enabled: true,
@@ -622,6 +624,9 @@ export function mountPwaApi(app) {
         notes: b.notes,
         source: b.source || 'form',
       });
+      triggerNewBookingAutomations(created).catch((err) => {
+        console.error('[pwaApi] Booking automations trigger error:', err.message);
+      });
       res.status(201).json({ ok: true, booking: created });
     } catch (err) {
       res
@@ -1178,6 +1183,27 @@ export function mountPwaApi(app) {
             String(b.bodyPreview || '').slice(0, 240),
             now,
           );
+
+        // Asynchronously dispatch via Resend
+        sendEmail({
+          to: recipientEmail,
+          subject: String(b.subject || 'Message from Business'),
+          text: String(b.bodyPreview || ''),
+          html: `<div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 15px; color: #1e293b; line-height: 1.6; padding: 20px;">${String(b.bodyPreview || '').replace(/\n/g, '<br>')}</div>`,
+        }).then((sendRes) => {
+          const newStatus = sendRes.success ? 'sent' : 'failed';
+          try {
+            db.prepare('UPDATE pwa_email_activity SET status = ? WHERE id = ?').run(
+              newStatus,
+              info.lastInsertRowid,
+            );
+          } catch {
+            /* ignore */
+          }
+        }).catch((err) => {
+          console.warn('[pwaApi] Resend send error:', err.message);
+        });
+
         res.status(202).json({
           ok: true,
           activity: {
