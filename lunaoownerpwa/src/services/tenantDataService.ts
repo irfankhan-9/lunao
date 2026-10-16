@@ -48,32 +48,32 @@ async function fetchPwa<T = any>(
   if (token) headers.Authorization = `Bearer ${token}`;
   const url = path.startsWith('http') ? path : `/api${path.startsWith('/') ? path : '/' + path}`;
 
+  let lastError: Error | null = null;
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1200);
+    const timeout = setTimeout(() => controller.abort(), 8000); // 8-second realistic network timeout
     const res = await fetch(url, { ...init, headers, signal: controller.signal });
     clearTimeout(timeout);
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
       return data as T;
     }
-  } catch {
-    // Network / timeout error (1.2s race) — fall through to graceful mock data
+    lastError = new Error(data?.error || `Server responded with ${res.status}`);
+  } catch (err: any) {
+    const isTimeout = err?.name === 'AbortError';
+    lastError = new Error(
+      isTimeout
+        ? 'Request to live bookings database timed out'
+        : 'Network connection to backend server failed'
+    );
   }
 
-  // Graceful fallback data when backend endpoint is unavailable
   const p = path.toLowerCase();
-  if (p.includes('/dashboard')) {
-    return {
-      dashboard: {
-        todayBookings: 3,
-        upcomingBookings: 8,
-        totalCustomers: INITIAL_CUSTOMERS.length,
-      },
-    } as unknown as T;
-  }
+
+  // STRICT RELIABILITY RULE: Never return mock data as a successful booking fallback!
+  // If real bookings cannot be loaded from Supabase / server, throw so the UI displays an explicit offline state.
   if (p.includes('/bookings')) {
-    return { bookings: INITIAL_BOOKINGS } as unknown as T;
+    throw lastError || new Error('Live bookings database is unreachable.');
   }
   if (p.includes('/customers')) {
     return { customers: INITIAL_CUSTOMERS } as unknown as T;

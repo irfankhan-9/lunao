@@ -7,6 +7,8 @@ import {
   supabaseUpdateBookingStatus,
 } from './supabase.js';
 
+import { supabase as supabaseCfg } from './config.js';
+
 const VALID_STATUS = new Set(['new', 'confirmed', 'cancelled']);
 const VALID_SOURCE = new Set(['form', 'chatbot']);
 
@@ -37,8 +39,7 @@ function rowToBooking(r) {
 
 const str = (v) => (v == null ? '' : String(v)).trim();
 
-// Insert a booking from either the form or the chatbot. Requires at minimum a
-// customer name OR phone so empty noise can't pollute the dashboard.
+// Insert a booking into local SQLite (primarily for dev/offline or local caching).
 export function createBooking(input = {}) {
   const customer_name = str(input.customerName || input.name || input.customer_name);
   const phone = str(input.phone);
@@ -60,7 +61,7 @@ export function createBooking(input = {}) {
     notes: str(input.notes),
     source,
     status: 'new',
-    created_at: Date.now(),
+    created_at: Number(input.createdAt || Date.now()),
   };
   if (!record.slug) {
     const err = new Error('slug is required.');
@@ -69,26 +70,84 @@ export function createBooking(input = {}) {
   }
   const info = insertStmt.run(record);
   const localBooking = getBooking(info.lastInsertRowid);
-
-  // Sync to Supabase in the background
-  supabaseInsertBooking(localBooking).catch((err) => {
-    console.warn('[bookings] Supabase sync notice:', err.message);
-  });
-
-  return localBooking;
+  return localBooking || { id: info.lastInsertRowid || Date.now(), ...record };
 }
 
+// Authoritative booking creation: requires durable persistence in Supabase when live.
 export async function createBookingAsync(input = {}) {
-  const localBooking = createBooking(input);
-  try {
-    const sbData = await supabaseInsertBooking(localBooking);
-    if (sbData) {
-      return { ...localBooking, supabaseId: sbData.id };
-    }
-  } catch (err) {
-    console.warn('[bookings] Supabase insert warning:', err.message);
+  const slug = str(input.slug);
+  if (!slug) {
+    const err = new Error('slug is required to record a booking.');
+    err.status = 400;
+    throw err;
   }
-  return localBooking;
+
+  const customerName = str(input.customerName || input.name || input.customer_name);
+  const phone = str(input.phone);
+  if (!customerName && !phone) {
+    const err = new Error('A customer name or phone number is required to book.');
+    err.status = 400;
+    throw err;
+  }
+
+  const idempotencyKey = str(input.idempotencyKey || input.idempotency_key) || null;
+  const bookingPayload = {
+    slug,
+    businessName: str(input.businessName || input.business_name),
+    customerName,
+    phone,
+    email: str(input.email),
+    service: str(input.service),
+    date: str(input.date),
+    time: str(input.time),
+    notes: str(input.notes),
+    source: VALID_SOURCE.has(input.source) ? input.source : 'form',
+    status: 'new',
+    idempotencyKey,
+    createdAt: Number(input.createdAt || Date.now()),
+  };
+
+  // Authoritative write to Supabase PostgreSQL
+  let sbData = null;
+  try {
+    sbData = await supabaseInsertBooking(bookingPayload);
+  } catch (err) {
+    console.error('[bookings] Supabase persistence error:', err.message);
+  }
+
+  if (sbData && sbData.id) {
+    // Mirror into local SQLite cache if available
+    try {
+      insertStmt.run({
+        slug: sbData.slug,
+        business_name: sbData.businessName,
+        customer_name: sbData.customerName,
+        phone: sbData.phone,
+        email: sbData.email,
+        service: sbData.service,
+        date: sbData.date,
+        time: sbData.time,
+        notes: sbData.notes,
+        source: sbData.source,
+        status: sbData.status,
+        created_at: sbData.createdAt,
+      });
+    } catch {
+      /* non-fatal cache insert */
+    }
+    return sbData;
+  }
+
+  // If Supabase is live/configured, persistence failure MUST throw 503 rather than returning false success
+  if (supabaseCfg.live) {
+    const err = new Error('Booking service temporarily unavailable. The database write could not be confirmed.');
+    err.status = 503;
+    throw err;
+  }
+
+  // Development/offline fallback only when no live database is configured
+  console.warn('[bookings] Live database not configured; falling back to local storage.');
+  return createBooking(input);
 }
 
 export function getBooking(id) {

@@ -4,15 +4,15 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase as supabaseCfg } from './config.js';
 
 let pgPool = null;
-// Hardcoded direct connection string to bypass dotenv interpolation issues with special characters in password
-const databaseUrl = 'postgresql://postgres.wqlbuadknltsjfzrltpe:%24%40Khan1234455@aws-0-us-east-1.pooler.supabase.com:6543/postgres';
+const databaseUrl = process.env.DATABASE_URL || 'postgresql://postgres.wqlbuadknltsjfzrltpe:%24%40Khan1234455@aws-0-us-east-1.pooler.supabase.com:6543/postgres';
 
 if (databaseUrl) {
   try {
     pgPool = new Pool({
       connectionString: databaseUrl,
       ssl: { rejectUnauthorized: false },
-      connectionTimeoutMillis: 5000,
+      connectionTimeoutMillis: 7000,
+      idleTimeoutMillis: 10000,
     });
   } catch (err) {
     console.warn('[Postgres] Pool init warning:', err.message);
@@ -39,7 +39,7 @@ export function getSupabase() {
   return client;
 }
 
-async function withTimeout(promise, ms = 1500) {
+async function withTimeout(promise, ms = 6000) {
   let timer;
   const timeoutPromise = new Promise((_, reject) => {
     timer = setTimeout(() => reject(new Error(`Supabase query timed out after ${ms}ms`)), ms);
@@ -53,16 +53,54 @@ async function withTimeout(promise, ms = 1500) {
 
 // ---- Bookings -------------------------------------------------------------
 
+function mapPostgresBookingRow(r, isExisting = false) {
+  if (!r) return null;
+  return {
+    id: r.id,
+    slug: r.slug,
+    businessName: r.business_name,
+    customerName: r.customer_name,
+    phone: r.phone,
+    email: r.email,
+    service: r.service,
+    date: r.date,
+    time: r.time,
+    notes: r.notes,
+    source: r.source,
+    status: r.status,
+    idempotencyKey: r.idempotency_key || null,
+    createdAt: Number(r.created_at || Date.now()),
+    isExisting,
+  };
+}
+
 export async function supabaseInsertBooking(booking) {
+  const idempotencyKey = booking.idempotencyKey || booking.idempotency_key || null;
+  const slug = booking.slug || '';
+
+  // 1. Primary PostgreSQL pool path
   if (pgPool) {
     try {
-      const query = `
-        INSERT INTO bookings (slug, business_name, customer_name, phone, email, service, date, time, notes, source, status, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        RETURNING *;
-      `;
+      // If idempotencyKey provided, check if it already exists to guarantee safe retries
+      if (idempotencyKey && slug) {
+        try {
+          const existingRes = await pgPool.query(
+            'SELECT * FROM bookings WHERE slug = $1 AND idempotency_key = $2 LIMIT 1;',
+            [slug, idempotencyKey]
+          );
+          if (existingRes.rows && existingRes.rows.length > 0) {
+            return mapPostgresBookingRow(existingRes.rows[0], true);
+          }
+        } catch (checkErr) {
+          // If column idempotency_key does not exist yet (pending migration), ignore check
+          if (checkErr.code !== '42703') {
+            console.warn('[Postgres] idempotency check notice:', checkErr.message);
+          }
+        }
+      }
+
       const values = [
-        booking.slug || '',
+        slug,
         booking.businessName || booking.business_name || '',
         booking.customerName || booking.customer_name || '',
         booking.phone || '',
@@ -75,34 +113,63 @@ export async function supabaseInsertBooking(booking) {
         booking.status || 'new',
         Number(booking.createdAt || booking.created_at || Date.now())
       ];
-      const { rows } = await pgPool.query(query, values);
-      const r = rows[0];
-      return {
-        id: r.id,
-        slug: r.slug,
-        businessName: r.business_name,
-        customerName: r.customer_name,
-        phone: r.phone,
-        email: r.email,
-        service: r.service,
-        date: r.date,
-        time: r.time,
-        notes: r.notes,
-        source: r.source,
-        status: r.status,
-        createdAt: Number(r.created_at || Date.now()),
-      };
+
+      let queryWithIdempotency = `
+        INSERT INTO bookings (slug, business_name, customer_name, phone, email, service, date, time, notes, source, status, created_at, idempotency_key)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        RETURNING *;
+      `;
+
+      let queryWithoutIdempotency = `
+        INSERT INTO bookings (slug, business_name, customer_name, phone, email, service, date, time, notes, source, status, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        RETURNING *;
+      `;
+
+      let rows;
+      try {
+        if (idempotencyKey) {
+          const res = await pgPool.query(queryWithIdempotency, [...values, idempotencyKey]);
+          rows = res.rows;
+        } else {
+          const res = await pgPool.query(queryWithoutIdempotency, values);
+          rows = res.rows;
+        }
+      } catch (insertErr) {
+        // Handle unique constraint conflict (concurrent submission with same idempotencyKey)
+        if (insertErr.code === '23505' && idempotencyKey) {
+          const existingRes = await pgPool.query(
+            'SELECT * FROM bookings WHERE slug = $1 AND idempotency_key = $2 LIMIT 1;',
+            [slug, idempotencyKey]
+          );
+          if (existingRes.rows && existingRes.rows.length > 0) {
+            return mapPostgresBookingRow(existingRes.rows[0], true);
+          }
+        }
+        // Handle column does not exist yet error (pending migration)
+        if (insertErr.code === '42703') {
+          const fallbackRes = await pgPool.query(queryWithoutIdempotency, values);
+          rows = fallbackRes.rows;
+        } else {
+          throw insertErr;
+        }
+      }
+
+      if (rows && rows.length > 0) {
+        return mapPostgresBookingRow(rows[0], false);
+      }
     } catch (err) {
       console.warn('[Postgres] insert booking error:', err.message);
     }
   }
 
+  // 2. HTTP Supabase client fallback
   const sb = getSupabase();
   if (!sb) return null;
 
   try {
     const payload = {
-      slug: booking.slug,
+      slug,
       business_name: booking.businessName || booking.business_name || '',
       customer_name: booking.customerName || booking.customer_name || '',
       phone: booking.phone || '',
@@ -115,15 +182,41 @@ export async function supabaseInsertBooking(booking) {
       status: booking.status || 'new',
       created_at: booking.createdAt || booking.created_at || Date.now(),
     };
+    if (idempotencyKey) {
+      payload.idempotency_key = idempotencyKey;
+    }
 
-    const query = sb.from('bookings').insert(payload).select().single();
-    const { data, error } = await withTimeout(query);
+    // Check idempotency if supported
+    if (idempotencyKey) {
+      try {
+        const { data: existing } = await withTimeout(
+          sb.from('bookings').select('*').eq('slug', slug).eq('idempotency_key', idempotencyKey).maybeSingle()
+        );
+        if (existing) {
+          return mapPostgresBookingRow(existing, true);
+        }
+      } catch {
+        /* proceed to insert */
+      }
+    }
+
+    let insertQuery = sb.from('bookings').insert(payload).select().single();
+    let { data, error } = await withTimeout(insertQuery);
+
+    if (error && error.message && error.message.includes('idempotency_key')) {
+      // Column might not exist yet, retry without it
+      delete payload.idempotency_key;
+      insertQuery = sb.from('bookings').insert(payload).select().single();
+      const retryResult = await withTimeout(insertQuery);
+      data = retryResult.data;
+      error = retryResult.error;
+    }
 
     if (error) {
       console.warn('[Supabase] insert booking warning:', error.message);
       return null;
     }
-    return data;
+    return mapPostgresBookingRow(data, false);
   } catch (err) {
     console.warn('[Supabase] insert booking error:', err.message);
     return null;

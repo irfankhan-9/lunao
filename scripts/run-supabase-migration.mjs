@@ -7,7 +7,7 @@ const projectRef = 'wqlbuadknltsjfzrltpe';
 const host = 'aws-0-us-east-1.pooler.supabase.com';
 const port = 6543;
 const user = 'postgres.' + projectRef;
-const password = '$@Khan1234455';
+const password = process.env.SUPABASE_DB_PASSWORD || '';
 
 async function runMigration() {
   console.log('Connecting to Supabase PostgreSQL at ' + host + ':' + port + '...');

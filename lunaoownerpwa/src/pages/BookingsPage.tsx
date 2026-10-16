@@ -26,7 +26,8 @@ export const BookingsPage: React.FC = () => {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [cancelConfirmMode, setCancelConfirmMode] = useState<'silent' | 'with_email' | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   // New Booking Form State
   const [newCustomerName, setNewCustomerName] = useState('');
@@ -40,10 +41,18 @@ export const BookingsPage: React.FC = () => {
   useEffect(() => {
     let isMounted = true;
     async function load() {
-      const data = await bookingService.getBookings();
-      if (isMounted) {
-        setBookings(data);
-        setIsLoading(false);
+      try {
+        const data = await bookingService.getBookings();
+        if (isMounted) {
+          setBookings(data);
+          setSyncError(null);
+          setIsLoading(false);
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          setSyncError(err?.message || 'Unable to connect to live bookings database');
+          setIsLoading(false);
+        }
       }
     }
     load();
@@ -51,9 +60,16 @@ export const BookingsPage: React.FC = () => {
     // Live background polling for real-time bookings synchronization
     const interval = setInterval(async () => {
       if (!isMounted) return;
-      const data = await bookingService.getBookings();
-      if (isMounted) {
-        setBookings(data);
+      try {
+        const data = await bookingService.getBookings();
+        if (isMounted) {
+          setBookings(data);
+          setSyncError(null);
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          setSyncError(err?.message || 'Live database sync interrupted');
+        }
       }
     }, 4000);
 
@@ -198,6 +214,30 @@ export const BookingsPage: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {/* Live Sync Warning Banner */}
+      {syncError && (
+        <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 text-amber-700 text-xs shadow-2xs">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+            <span className="truncate">
+              <strong>Database Sync Notice:</strong> {syncError}
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              setIsLoading(true);
+              bookingService.getBookings()
+                .then((d) => { setBookings(d); setSyncError(null); })
+                .catch((e) => setSyncError(e.message))
+                .finally(() => setIsLoading(false));
+            }}
+            className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 rounded-lg text-xs font-semibold shrink-0 transition"
+          >
+            Retry Sync
+          </button>
+        </div>
+      )}
 
       {/* Filter Chips & Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">

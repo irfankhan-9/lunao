@@ -330,9 +330,21 @@ function buildScript(cfgJson) {
     var f=findFont();if(f)root.style.setProperty('--lw-font',f);
     var r=findRadius();if(r)root.style.setProperty('--lw-radius',r);
   }catch(e){}}
-  detectTheme();
-
-  function post(path,data){return fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(function(r){return r.json();});}
+  function post(path,data){
+    var url=base;
+    if(url.indexOf('/functions/v1/')!==-1){
+      // Direct edge function endpoint
+    } else {
+      url=url+path;
+    }
+    var key=(data&&data.idempotencyKey)||('bk_w_'+Date.now().toString(36)+'_'+Math.random().toString(36).substring(2,8));
+    var payload=Object.assign({},data,{idempotencyKey:key});
+    return fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-Idempotency-Key':key},
+      body:JSON.stringify(payload)
+    }).then(function(r){return r.json();});
+  }
 
   // ---- Booking modal ----
   var ov=$('lw-book-overlay');
@@ -413,8 +425,14 @@ export function removeWidget(html) {
 
 export function buildWidgetConfig(slug, html) {
   const niche = nicheFromHtml(html);
+  const apiBase =
+    process.env.BOOKING_EDGE_FUNCTION_URL ||
+    (process.env.SUPABASE_URL
+      ? `${process.env.SUPABASE_URL.replace(/\/+$/, '')}/functions/v1/public-bookings`
+      : PUBLIC_API_BASE_URL);
+
   return {
-    apiBase: PUBLIC_API_BASE_URL,
+    apiBase,
     slug,
     businessName: businessNameFrom(html),
     phone: phoneFrom(html),

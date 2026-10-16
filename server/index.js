@@ -184,14 +184,35 @@ const app = express();
 // `req.protocol`, and `req.ip` reflect the real client HTTPS.
 app.set('trust proxy', 1);
 
-// Permissive CORS so the Vite dev server and deployed Cloudflare Pages sites can call the API.
-// IMPORTANT: Must be defined before any other middleware or routes to handle OPTIONS preflight.
+// CORS and Request Tracing middleware.
+// Preflight OPTIONS requests are handled with immediate 204 No Content and never redirected.
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-Key, x-owner-key');
+  const reqId = req.headers['x-request-id'] || 'req_' + Math.random().toString(36).substring(2, 11);
+  res.setHeader('X-Request-ID', reqId);
+  req.id = reqId;
+
+  const origin = req.headers.origin;
+  const isPublicRoute = req.path.startsWith('/api/public') || req.path === '/api/bookings' || req.path === '/api/chat';
+
+  if (isPublicRoute) {
+    // Public widget endpoints accept cross-origin requests from any website without credentials
+    res.header('Access-Control-Allow-Origin', origin || '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-Key, x-owner-key, X-Idempotency-Key');
+  } else {
+    // Authenticated API routes reflect trusted origins with credentials
+    if (origin) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
+    } else {
+      res.header('Access-Control-Allow-Origin', '*');
+    }
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-Key, x-owner-key, X-Idempotency-Key');
+  }
+
   if (req.method === 'OPTIONS') {
-    return res.sendStatus(204);
+    return res.status(204).end();
   }
   next();
 });
@@ -799,18 +820,29 @@ app.post('/api/ai/edit', async (req, res) => {
 
 // ---- Booking system API ----------------------------------------------------
 
-// Create a booking (called by injected widgets on live sites + the chatbot + public endpoints).
-app.post(['/api/bookings', '/api/public/bookings'], async (req, res) => {
+// Create a booking (called by injected widgets on live sites + the chatbot + public endpoints + Supabase Edge Function path).
+app.post(['/api/bookings', '/api/public/bookings', '/functions/v1/public-bookings'], async (req, res) => {
   try {
-    const booking = await createBookingAsync(req.body || {});
-    res.json({ ok: true, id: booking.id, booking });
+    const idempotencyKey = req.headers['x-idempotency-key'] || req.body?.idempotencyKey || req.body?.idempotency_key;
+    const booking = await createBookingAsync({ ...req.body, idempotencyKey });
+    const statusCode = booking.isExisting ? 200 : 201;
+    res.status(statusCode).json({ ok: true, id: booking.id, booking });
   } catch (err) {
-    res.status(err.status || 500).json({ ok: false, error: err.message });
+    const status = err.status || 500;
+    res.status(status).json({ ok: false, error: err.message });
   }
 });
 
-// List bookings (dashboard & public website verification), optionally filtered by site slug.
-app.get(['/api/bookings', '/api/public/bookings'], async (req, res) => {
+// Protect customer PII: Public endpoints must not expose historical booking records
+app.get('/api/public/bookings', (_req, res) => {
+  res.status(405).json({
+    ok: false,
+    error: 'Direct public retrieval of bookings is disabled for customer privacy. Authenticate via Owner PWA.',
+  });
+});
+
+// List bookings for authenticated dashboard users, optionally filtered by site slug.
+app.get('/api/bookings', authenticate, async (req, res) => {
   try {
     const slug = typeof req.query.slug === 'string' && req.query.slug ? req.query.slug : null;
     const bookings = await listBookingsAsync(slug);
@@ -821,7 +853,7 @@ app.get(['/api/bookings', '/api/public/bookings'], async (req, res) => {
 });
 
 // Update a booking's status (confirm / cancel).
-app.patch(['/api/bookings/:id', '/api/public/bookings/:id'], (req, res) => {
+app.patch(['/api/bookings/:id', '/api/public/bookings/:id'], authenticate, (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ ok: false, error: 'Invalid id' });

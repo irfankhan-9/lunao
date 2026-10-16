@@ -2704,59 +2704,154 @@
       document.getElementById('calc-result-monthly').innerText = '$' + Math.round(monthlyPayment) + ' /mo';
     }
 
-    // Form submission with real Supabase booking sync
+    // Central Booking Endpoint Resolution:
+    // Respects explicit config, custom domains, or defaults to production Supabase Edge Function
+    function getBookingSubmissionUrl() {
+      if (window.LUNAO_BOOKING_API_URL && typeof window.LUNAO_BOOKING_API_URL === 'string') {
+        return window.LUNAO_BOOKING_API_URL.replace(/\/+$/, '');
+      }
+      const supabaseBase = window.LUNAO_SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+      return `${supabaseBase.replace(/\/+$/, '')}/functions/v1/public-bookings`;
+    }
+
+    function getOrCreateFormIdempotencyKey(form) {
+      if (!form.dataset.idempotencyKey) {
+        const randomPart = Math.random().toString(36).substring(2, 10);
+        form.dataset.idempotencyKey = 'bk_' + Date.now().toString(36) + '_' + randomPart;
+      }
+      return form.dataset.idempotencyKey;
+    }
+
+    function showFormError(message) {
+      let errBox = document.getElementById('form-error');
+      if (!errBox) {
+        errBox = document.createElement('div');
+        errBox.id = 'form-error';
+        errBox.className = 'form-error-banner';
+        errBox.style.cssText = 'margin-top:16px;padding:12px 16px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.35);border-radius:8px;color:#fca5a5;font-size:13.5px;line-height:1.5;text-align:left;';
+        const form = document.getElementById('lead-form');
+        if (form) form.appendChild(errBox);
+      }
+      const cleanMsg = String(message || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      errBox.innerHTML = '<strong>⚠️ Submission issue:</strong> ' + cleanMsg + '<br><span style="font-size:12px;opacity:0.85;">Your information is preserved above. You can retry safely or call us directly.</span>';
+      errBox.style.display = 'block';
+    }
+
+    function clearFormError() {
+      const errBox = document.getElementById('form-error');
+      if (errBox) errBox.style.display = 'none';
+    }
+
+    // Form submission with verified Supabase Edge Function persistence
     async function handleFormSubmission(e) {
       e.preventDefault();
-      
-      const name = document.getElementById('form-name').value;
-      const phone = document.getElementById('form-phone').value;
-      const email = document.getElementById('form-email').value;
+      clearFormError();
+
+      const form = document.getElementById('lead-form');
+      const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
+      const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
+
+      const nameInput = document.getElementById('form-name');
+      const phoneInput = document.getElementById('form-phone');
+      const emailInput = document.getElementById('form-email');
       const serviceSelect = document.getElementById('service-needed');
+      const messageInput = document.getElementById('form-message');
+
+      const name = nameInput ? nameInput.value.trim() : '';
+      const phone = phoneInput ? phoneInput.value.trim() : '';
+      const email = emailInput ? emailInput.value.trim() : '';
       const service = serviceSelect ? serviceSelect.options[serviceSelect.selectedIndex].text : 'General HVAC Service';
-      const message = document.getElementById('form-message').value || '';
+      const message = messageInput ? messageInput.value.trim() : '';
+
+      if (!name || name.length < 2) {
+        showFormError('Please enter your full name.');
+        if (nameInput) nameInput.focus();
+        return;
+      }
+      if (!phone || phone.replace(/\D/g, '').length < 7) {
+        showFormError('Please enter a valid phone number (at least 7 digits).');
+        if (phoneInput) phoneInput.focus();
+        return;
+      }
 
       const slug = window.LUNAO_SLUG || window.location.pathname.split('/').filter(Boolean).pop() || 'hvac-client';
       const businessName = window.LUNAO_BUSINESS_NAME || '{{BUSINESS_NAME}}';
+      const idempotencyKey = getOrCreateFormIdempotencyKey(form);
+      const endpoint = getBookingSubmissionUrl();
 
-      // Play sound
-      try { Sound.successChime(); } catch(err) {}
-
-      // Submit to Lunao Backend / Supabase
-      const apiBase = window.location.origin.includes('pages.dev') || window.location.origin.includes('lunao.app') 
-        ? 'https://ais-dev-44ecmg4ogrs7odr4w6f2gm-664492402886.asia-southeast1.run.app' 
-        : window.location.origin;
-
-      try {
-        await fetch(`${apiBase}/api/public/bookings`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            slug: slug,
-            businessName: businessName,
-            customerName: name,
-            phone: phone,
-            email: email,
-            service: service,
-            notes: message,
-            source: 'form',
-            status: 'new',
-            createdAt: Date.now()
-          })
-        });
-      } catch (err) {
-        console.warn('Booking sync warning:', err);
+      // Non-destructive pending state (preserves form values)
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span>Verifying &amp; Submitting...</span>';
       }
 
-      // Animate interface states
-      document.getElementById('lead-form').style.display = 'none';
-      document.getElementById('form-success').classList.add('active');
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000); // 12-second timeout
+
+        const payload = {
+          slug: slug,
+          businessName: businessName,
+          customerName: name,
+          phone: phone,
+          email: email,
+          service: service,
+          notes: message,
+          source: 'form',
+          status: 'new',
+          idempotencyKey: idempotencyKey,
+          createdAt: Date.now()
+        };
+
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Idempotency-Key': idempotencyKey
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        const json = await res.json().catch(() => null);
+
+        // Verification Gate: Require confirmed 200/201 response and database record before celebrating
+        if (res.ok && json && json.ok && (json.id || json.booking)) {
+          try { Sound.successChime(); } catch(err) {}
+          if (form) delete form.dataset.idempotencyKey;
+          form.style.display = 'none';
+          const successOverlay = document.getElementById('form-success');
+          if (successOverlay) successOverlay.classList.add('active');
+        } else {
+          const serverError = (json && (json.error || json.message)) || 'Unable to confirm booking. Please call us directly.';
+          showFormError(serverError);
+        }
+      } catch (err) {
+        const isTimeout = err && err.name === 'AbortError';
+        const msg = isTimeout 
+          ? 'The request timed out. Your information is preserved — please click again to retry.' 
+          : 'Network connection error. Your information is preserved — please verify your connection and retry.';
+        showFormError(msg);
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = originalBtnText;
+        }
+      }
     }
 
     // Reset Quote Form state
     function resetFormState() {
-      document.getElementById('lead-form').reset();
-      document.getElementById('lead-form').style.display = 'block';
-      document.getElementById('form-success').classList.remove('active');
+      const form = document.getElementById('lead-form');
+      if (form) {
+        form.reset();
+        delete form.dataset.idempotencyKey;
+        form.style.display = 'block';
+      }
+      clearFormError();
+      const successOverlay = document.getElementById('form-success');
+      if (successOverlay) successOverlay.classList.remove('active');
     }
 
     // Open blog post premium modal
