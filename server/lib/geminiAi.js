@@ -27,12 +27,11 @@ export function isAiEnabled() {
   return true;
 }
 
-// Preferred primary model: gemini-2.5-flash as requested.
-// Resilient fallback: gemini-3.8-flash, gemini-3.1-pro-preview if 2.5 is unavailable/retired in this runtime.
+// Preferred primary models per Gemini API skill guidelines.
 const MODEL_PRIORITY = [
-  process.env.GEMINI_MODEL || 'gemini-1.5-flash',
-  'gemini-2.5-flash',
-  'gemini-1.5-pro',
+  process.env.GEMINI_MODEL || 'gemini-3.8-flash',
+  'gemini-4-argon',
+  'gemini-3.1-flash-lite',
 ];
 
 let _verifiedModel = null;

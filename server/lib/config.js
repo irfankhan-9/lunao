@@ -67,7 +67,7 @@ export const anthropic = {
 // fully functional rule-based booking agent, so the bot always works.
 export const gemini = {
   apiKey: env.GEMINI_API_KEY || '',
-  model: env.GEMINI_MODEL || 'gemini-1.5-flash',
+  model: env.GEMINI_MODEL || 'gemini-3.8-flash',
   get live() {
     return Boolean(this.apiKey);
   },

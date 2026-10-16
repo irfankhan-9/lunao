@@ -771,12 +771,25 @@ export async function streamAiEdit(
   onThinking?: (text: string) => void,
   onStart?: () => void,
 ): Promise<string> {
-  const res = await fetch(`${API_BASE}/api/ai/edit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  });
-  if (!res.ok || !res.body) throw new Error(`AI request failed (${res.status})`);
+  const controller = new AbortController();
+  // Connection timeout of 5 seconds: fail fast if the server or AI connection hangs
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+  let res;
+  try {
+    res = await fetch(`${API_BASE}/api/ai/edit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    throw new Error('AI servers are currently busy or unavailable. Please try again later.');
+  }
+  clearTimeout(timeoutId);
+
+  if (!res.ok || !res.body) throw new Error('AI servers are currently busy or unavailable. Please try again later.');
 
   let startFired = false;
   const triggerStart = () => {
@@ -817,7 +830,7 @@ export async function streamAiEdit(
         } else if (event.type === 'done') {
           finalHtml = event.html || acc;
         } else if (event.type === 'error') {
-          throw new Error(event.error || 'AI edit failed');
+          throw new Error(event.error || 'AI servers are currently busy or unavailable. Please try again later.');
         }
       } catch (err) {
         if (err instanceof SyntaxError) continue; // skip malformed JSON lines

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Template } from '../types';
 import { Star, Eye, Edit, Copy, Search, ChevronDown, Check, X, ShieldAlert, Zap, Monitor, Smartphone, ExternalLink } from 'lucide-react';
-import { useSyncNiches } from '../lib/nichesSync';
+import { useSyncNiches, compilePreview } from '../lib/nichesSync';
 
 // Helper to retrieve gorgeous, realistic, personalized real-world content for each of the 14 niche templates
 export const getTemplateContent = (templateId: string, name: string, niche: string) => {
@@ -232,19 +232,39 @@ export const Templates: React.FC<TemplatesProps> = ({
   const [selectedTemplateForPreview, setSelectedTemplateForPreview] = useState<Template | null>(null);
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [allNiches] = useSyncNiches();
+  const [syncedList, setSyncedList] = useState<Template[]>(templates || []);
+
+  React.useEffect(() => {
+    if (templates && templates.length > 0) setSyncedList(templates);
+  }, [templates]);
+
+  // Keep templates synchronized in real-time across the whole app
+  React.useEffect(() => {
+    const handleSync = (e: any) => {
+      if (e.detail && Array.isArray(e.detail)) {
+        setSyncedList(e.detail);
+        if (selectedTemplateForPreview) {
+          const updated = e.detail.find((t: Template) => t.id === selectedTemplateForPreview.id);
+          if (updated) setSelectedTemplateForPreview(updated);
+        }
+      }
+    };
+    window.addEventListener('lunao:templates-sync', handleSync);
+    return () => window.removeEventListener('lunao:templates-sync', handleSync);
+  }, [selectedTemplateForPreview]);
 
   // If a previewTemplateId is passed from parent (e.g. dashboard eye click), we auto open it
   React.useEffect(() => {
     if (previewTemplateId) {
-      const matched = templates.find(t => t.id === previewTemplateId);
+      const matched = syncedList.find(t => t.id === previewTemplateId);
       if (matched) {
         setSelectedTemplateForPreview(matched);
       }
     }
-  }, [previewTemplateId, templates]);
+  }, [previewTemplateId, syncedList]);
 
   // Filter templates
-  const filteredTemplates = templates.filter((temp) => {
+  const filteredTemplates = syncedList.filter((temp) => {
     const matchesSearch = temp.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesNiche = selectedNicheFilter === 'All' || temp.niche.toLowerCase() === selectedNicheFilter.toLowerCase();
     return matchesSearch && matchesNiche;
@@ -963,7 +983,11 @@ export const Templates: React.FC<TemplatesProps> = ({
                     </div>
                   </div>
                   <iframe
-                    src={previewUrlForKey(selectedTemplateForPreview.id)}
+                    src={!(selectedTemplateForPreview.previewHtml || selectedTemplateForPreview.rawHtml) ? (
+                      selectedTemplateForPreview.templateFile ? `/${selectedTemplateForPreview.templateFile}` :
+                      (BUILTIN_PREVIEW_FILE[selectedTemplateForPreview.id] || `/api/templates/${encodeURIComponent(selectedTemplateForPreview.id)}/preview`)
+                    ) : undefined}
+                    srcDoc={selectedTemplateForPreview.previewHtml || (selectedTemplateForPreview.rawHtml ? compilePreview(selectedTemplateForPreview.rawHtml) : undefined)}
                     className="w-full h-full border-0 flex-1"
                     title="Live Template Preview"
                     referrerPolicy="no-referrer"
@@ -1001,7 +1025,18 @@ export const Templates: React.FC<TemplatesProps> = ({
                 )}
                 <button
                   onClick={() => {
-                    window.open(previewUrlForKey(selectedTemplateForPreview.id), '_blank');
+                    const htmlDoc = selectedTemplateForPreview.previewHtml || (selectedTemplateForPreview.rawHtml ? compilePreview(selectedTemplateForPreview.rawHtml) : undefined);
+                    if (htmlDoc) {
+                      const blob = new Blob([htmlDoc], { type: 'text/html;charset=utf-8' });
+                      const blobUrl = URL.createObjectURL(blob);
+                      window.open(blobUrl, '_blank');
+                    } else {
+                      window.open(
+                        selectedTemplateForPreview.templateFile ? `/${selectedTemplateForPreview.templateFile}` :
+                        previewUrlForKey(selectedTemplateForPreview.id),
+                        '_blank'
+                      );
+                    }
                   }}
                   className="px-6 py-2.5 bg-accent hover:bg-accent-hover text-white font-bold text-xs uppercase tracking-wider rounded-lg shadow-sm flex items-center gap-2 cursor-pointer transition-all active:scale-95"
                 >

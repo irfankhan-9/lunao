@@ -396,11 +396,21 @@ export const Campaigns: React.FC<CampaignsProps> = ({
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('t1');
   const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>([]);
 
-  // Load custom templates on mount so they're available in the wizard picker.
+  // Load custom templates on mount and synchronize in real-time when new templates or edits are pushed
   useEffect(() => {
-    listCustomTemplates()
-      .then(setCustomTemplates)
-      .catch(() => setCustomTemplates([]));
+    const refreshCustoms = () => {
+      listCustomTemplates()
+        .then(setCustomTemplates)
+        .catch(() => setCustomTemplates([]));
+    };
+    refreshCustoms();
+
+    const handleSync = () => {
+      refreshCustoms();
+    };
+
+    window.addEventListener('lunao:templates-sync', handleSync);
+    return () => window.removeEventListener('lunao:templates-sync', handleSync);
   }, []);
 
   // Cross-tab open: the dashboard's "Open" button writes the campaign id

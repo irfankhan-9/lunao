@@ -770,10 +770,14 @@ app.post('/api/ai/edit', async (req, res) => {
   }
 
   try {
-    send({ type: 'start' });
+    let started = false;
     const full = await streamEdit(
       { html, instruction, history, apiKey: userKey || undefined },
       (delta, isThinking) => {
+        if (!started) {
+          started = true;
+          send({ type: 'start' });
+        }
         if (isThinking) {
           send({ type: 'thinking', delta });
         } else {
@@ -783,7 +787,7 @@ app.post('/api/ai/edit', async (req, res) => {
     );
     send({ type: 'done', html: cleanHtmlOutput(full) });
   } catch (err) {
-    send({ type: 'error', error: err.message });
+    send({ type: 'error', error: err.message || 'AI servers are currently busy or unavailable. Please try again later.' });
   } finally {
     res.end();
   }
@@ -4041,7 +4045,7 @@ CRITICAL RULES:
     const context = trimmed.length > 4000 ? trimmed.substring(0, 4000) + '\n... (truncated) ...' : trimmed;
 
     const resAi = await client.models.generateContent({
-      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
       contents: `Here is a raw HTML website. Rewrite it to use {{BUSINESS_NAME}}, {{CITY}}, {{PHONE_DISPLAY}}, {{PHONE_RAW}} placeholders as described in your instructions. Keep everything else identical.\n\nHTML:\n${context}`,
       config: {
         systemInstruction: injectionSystem,
@@ -4099,7 +4103,7 @@ CRITICAL RULES:
 //   - built-in: "barber-dark-luxury", "hvac-everest", ...
 //   - custom:   "tmpl_xxx" (matches custom_templates.id)
 
-import { resolveTemplate, listTemplates, loadPreviewHtml, NICHE_LIST, getAllNiches, createNiche } from './lib/templates.js';
+import { resolveTemplate, listTemplates, loadPreviewHtml, compilePreviewHtml, NICHE_LIST, getAllNiches, createNiche } from './lib/templates.js';
 
 // Expose all niches: built-in defaults + persistent categories + custom template niches.
 app.get('/api/niches', async (req, res) => {
@@ -4123,6 +4127,34 @@ app.post('/api/niches', async (req, res) => {
     const niche = await createNiche(name.trim(), emoji, color, ownerKey);
     const niches = await getAllNiches(ownerKey);
     res.json({ ok: true, niche, niches });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Synchronize custom templates from frontend across the platform
+app.post('/api/templates/sync', async (req, res) => {
+  try {
+    const { id, name, niche, rawHtml, previewHtml } = req.body || {};
+    if (!id) return res.status(400).json({ ok: false, error: 'id is required' });
+    const templateName = (name || 'Custom Template').trim();
+    const targetNiche = (niche || 'General').trim();
+    const slug = templateName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `template-${Date.now()}`;
+    const now = Math.floor(Date.now() / 1000);
+    const compiled = previewHtml || (rawHtml ? compilePreviewHtml(rawHtml, templateName) : '');
+
+    db.prepare(
+      `INSERT INTO custom_templates (id, owner_key, category_id, name, slug, niche, raw_html, preview_html, style_tags, used_count, created_at)
+       VALUES (?, 'dashboard', NULL, ?, ?, ?, ?, ?, '', 1, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         slug = excluded.slug,
+         niche = excluded.niche,
+         raw_html = COALESCE(excluded.raw_html, custom_templates.raw_html),
+         preview_html = excluded.preview_html`,
+    ).run(id, templateName, slug, targetNiche, rawHtml || compiled, compiled, now);
+
+    res.json({ ok: true, id, name: templateName, niche: targetNiche });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

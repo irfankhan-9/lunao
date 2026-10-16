@@ -130,7 +130,10 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
   }, [customTemplates, selectedNiche]);
 
   const allTemplates = useMemo(() => {
-    const list = [...nicheTemplates, ...nicheCustom];
+    const map = new Map<string, any>();
+    for (const t of nicheTemplates) map.set(t.id, t);
+    for (const c of nicheCustom) map.set(c.id, { ...c, key: c.id });
+    const list = Array.from(map.values());
     if (list.length > 0) return list;
     return templates.slice(0, 4); // Safe fallback
   }, [nicheTemplates, nicheCustom, templates]);

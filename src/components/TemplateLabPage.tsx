@@ -171,6 +171,116 @@ function summarizeHtml(rawHtml: string, promptInstruction?: string): string {
   return 'Updated your website preview with bespoke design improvements.';
 }
 
+const US_STATES = new Set([
+  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA',
+  'KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
+  'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT',
+  'VA','WA','WV','WI','WY'
+]);
+
+function formatCleanTitle(str: string): string {
+  if (!str) return 'Bespoke Business Website';
+  return str
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(word => {
+      const clean = word.replace(/[^a-zA-Z0-9]/g, '');
+      const upper = clean.toUpperCase();
+      if (US_STATES.has(upper)) {
+        return word.replace(new RegExp(clean, 'i'), upper);
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(' ');
+}
+
+// Phase 1: Instant smart website name extraction from user prompt while loading
+export function deriveSiteNameFromPrompt(prompt: string): string {
+  if (!prompt || typeof prompt !== 'string') return 'Bespoke Business Website';
+  const raw = prompt.trim();
+  if (raw.length < 3) return 'Bespoke Business Website';
+
+  // 1. Quoted names like "Vintage Cuts" or 'Apex Roofing'
+  const quoteMatch = raw.match(/["']([^"']{3,35})["']/);
+  if (quoteMatch && quoteMatch[1]) {
+    const q = quoteMatch[1].trim();
+    if (q.length >= 3 && !/^(website|landing page|page|site)$/i.test(q)) {
+      return formatCleanTitle(q);
+    }
+  }
+
+  // 2. Explicit naming phrases: called X, named X, brand X
+  const namedMatch = raw.match(/\b(?:called|named|brand(?:ed)?|titled)\s+([A-Za-z0-9&'\s-]{2,30})/i);
+  if (namedMatch && namedMatch[1]) {
+    const n = namedMatch[1].trim().split(/\s+(?:with|in|for|and|that|which)\b/i)[0].trim();
+    if (n.length >= 3) {
+      return formatCleanTitle(n);
+    }
+  }
+
+  let cleaned = raw;
+
+  // 3. Remove common introductory command prefixes
+  const commandPrefixes = [
+    /^(?:hey\s+|hi\s+|hello\s+)?(?:genius|ai|assistant|lunao)[,:\s]+/i,
+    /^(?:please\s+)?(?:can\s+you\s+)?(?:could\s+you\s+)?(?:i\s+want\s+(?:you\s+to\s+)?(?:a\s+)?)?/i,
+    /^(?:create|build|generate|make|design|code|develop|give\s+me)\s+(?:me\s+)?(?:a\s+|an\s+|the\s+)?/i,
+    /^(?:hero\s+page|landing\s+page|website|site|webpage|page|template|front\s+page)\s+(?:for\s+|of\s+|about\s+)?/i,
+    /^(?:a\s+|an\s+|the\s+)?/i,
+  ];
+
+  let prev = '';
+  while (prev !== cleaned) {
+    prev = cleaned;
+    for (const prefix of commandPrefixes) {
+      cleaned = cleaned.replace(prefix, '').trim();
+    }
+  }
+
+  // 4. Remove trailing feature specifications and filler words
+  cleaned = cleaned
+    .replace(/\s+(?:with\s+(?:online\s+)?(?:booking|reservations?|appointments?|contact\s+form|pricing|plans?|reviews?|animations?)).*$/i, '')
+    .replace(/\s+(?:for\s+(?:my\s+)?(?:site|website|business)).*$/i, '')
+    .replace(/\s+(?:please|asap|fast|now|site|website|for\s+site|for\s+website)$/i, '')
+    .trim();
+
+  if (!cleaned || cleaned.length < 3) {
+    return 'Bespoke Business Website';
+  }
+
+  // 5. Take first 3-5 core words, max 35 characters
+  const words = cleaned.split(/\s+/).slice(0, 5);
+  let shortTitle = words.join(' ');
+  if (shortTitle.length > 35) {
+    shortTitle = shortTitle.slice(0, 35).trim();
+  }
+
+  return formatCleanTitle(shortTitle);
+}
+
+// Phase 2: Auto-extract title tag from generated HTML once available
+export function extractTitleFromHtml(rawHtml: string): string | null {
+  if (!rawHtml || typeof rawHtml !== 'string') return null;
+  const match = rawHtml.match(/<title[^>]*>([^<]+)<\/title>/i);
+  if (!match || !match[1]) return null;
+  let t = match[1].trim();
+
+  // Replace placeholders if any exist in the title tag
+  t = t.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, rawKey) => {
+    const key = rawKey.toUpperCase();
+    return key in PLACEHOLDER_MAP ? PLACEHOLDER_MAP[key] : 'Business';
+  });
+
+  // Clean trailing delimiters like " — City", " | Home", etc.
+  t = t.split(/\s+[—–|-]\s+/)[0].trim();
+
+  t = sanitizeUserFacingText(t);
+  if (t && t !== 'Business' && t.length >= 3) {
+    return t.length > 40 ? t.slice(0, 40).trim() : t;
+  }
+  return null;
+}
+
 export const TemplateLabPage: React.FC<{
   aiEnabled: boolean;
   embedded?: boolean;
@@ -216,6 +326,7 @@ export const TemplateLabPage: React.FC<{
   const [isTestingRebrand, setIsTestingRebrand] = useState(false);
   const [rebrandSuite, setRebrandSuite] = useState<RebrandingSuiteReport | null>(null);
   const [isTemplateValidated, setIsTemplateValidated] = useState(false);
+  const [hasRunTestRebrand, setHasRunTestRebrand] = useState(false);
   const [showRebrandModal, setShowRebrandModal] = useState(false);
   const [activeRebrandTab, setActiveRebrandTab] = useState<'biz1' | 'biz2'>('biz1');
   const [showReadinessDetails, setShowReadinessDetails] = useState(false);
@@ -272,6 +383,7 @@ export const TemplateLabPage: React.FC<{
     }
     sfx.engage();
     setIsTestingRebrand(true);
+    setHasRunTestRebrand(true);
     try {
       const res = await testRebrandClient(html, testBiz1, testBiz2);
       setReadinessScan(res.scan);
@@ -301,15 +413,14 @@ export const TemplateLabPage: React.FC<{
   };
 
   // Action 3: Save Template Gate
-  // Only allows saving if validation and both rebrand tests have passed
+  // Mandatory to run test rebrand at least once for new templates. Optional thereafter.
   const handleOpenSaveTemplate = () => {
-    if (!isTemplateValidated || !readinessScan?.isReady || !rebrandSuite?.allPassed) {
+    if (!hasLoadedPreviousTemplate && !hasRunTestRebrand) {
       sfx.error();
       flashToast({
         type: 'error',
-        text: 'Validation required: You must run "Make Template Ready" and pass "Test Rebrand" before saving to the template library.',
+        text: 'First-time requirement: Please run "Test Rebrand" at least once before turning this new creation into a template.',
       });
-      // Automatically open the rebrand / readiness diagnostic modal so user sees what is missing
       setShowRebrandModal(true);
       return;
     }
@@ -335,8 +446,25 @@ export const TemplateLabPage: React.FC<{
   };
 
   const commitTitle = () => {
-    setTitle(titleDraft.trim() || title);
+    const newTitle = titleDraft.trim() || title;
+    setTitle(newTitle);
+    setSaveName(newTitle);
     setEditingTitle(false);
+
+    if (turnedTemplateId) {
+      addAndSyncTemplate({
+        id: turnedTemplateId,
+        name: newTitle,
+        niche: niche || turnedTemplateNiche || 'General',
+        rawHtml: html,
+        previewHtml: previewHtml || compilePreview(html),
+        previewPath: `/api/templates/${turnedTemplateId}/preview`,
+      });
+      flashToast?.({
+        type: 'success',
+        text: `Template name updated to "${newTitle}" and synced across site.`,
+      });
+    }
   };
 
   const goToStudioLanding = () => {
@@ -363,19 +491,22 @@ export const TemplateLabPage: React.FC<{
   }
   const isPlanEligible = ['growth', 'pro', 'agency'].some(p => currentPlan.toLowerCase().includes(p));
 
-  // Start vibe coding with Gemini 2.5 Flash: show brief loading until AI reaches response, then immediately load workspace
-  const handleStartVibeCode = async (promptText: string, customTitle: string) => {
+  // Start vibe coding with Gemini: show clean prompt-derived title immediately while loading, then seamlessly sync with HTML <title>
+  const handleStartVibeCode = async (promptText: string, customTitle?: string) => {
     if (!promptText.trim() || streaming || generatingNewSite) return;
     sfx.magic();
     setGeneratingNewSite(true);
-    setGeneratingStepText(`Connecting to ${selectedModel}... Synthesizing "${customTitle}"`);
+
+    // Phase 1: Instant intelligent title derivation while loading (0ms lag, no ugly suffixes)
+    const initialTitle = customTitle || deriveSiteNameFromPrompt(promptText);
+    setGeneratingStepText(`Connecting to ${selectedModel}... Synthesizing "${initialTitle}"`);
     setLabError(null);
 
-    // Completely reset workspace to pristine new environment
+    // Completely reset workspace to pristine new environment with instant clean title
     setHtml(BLANK_CANVAS);
     setPreviewHtml('');
-    setTitle(customTitle);
-    setNiche(customTitle);
+    setTitle(initialTitle);
+    setNiche(initialTitle);
     setHasLoadedPreviousTemplate(false);
     setHasGivenAiPrompt(true);
     setStreaming(true);
@@ -396,18 +527,30 @@ export const TemplateLabPage: React.FC<{
 
     try {
       const fullPrompt = `${VIBE_CODE_PROMPT}\n\nUSER REQUEST: ${promptText}`;
+
+      let activeTitle = initialTitle;
+
       const result = await streamAiEdit(
         { html: BLANK_CANVAS, instruction: fullPrompt, history: [], anthropicApiKey: apiKey.trim() || undefined },
         (fullHtmlSoFar) => {
-          if (fullHtmlSoFar && fullHtmlSoFar.length > 50 && (fullHtmlSoFar.includes('<!DOCTYPE') || fullHtmlSoFar.includes('<html') || fullHtmlSoFar.includes('<section'))) {
-            loadWorkspaceImmediately();
-          }
+          loadWorkspaceImmediately();
           setHtml(fullHtmlSoFar);
+
+          // Phase 2: As HTML code streams, auto-detect <title> tag and sync title seamlessly
+          const streamedTitle = extractTitleFromHtml(fullHtmlSoFar);
+          if (streamedTitle && streamedTitle !== activeTitle && streamedTitle.length >= 3) {
+            activeTitle = streamedTitle;
+            setTitle(streamedTitle);
+            setNiche(streamedTitle);
+          }
         },
         (thinkingText) => {
+          loadWorkspaceImmediately();
           setThinkingAcc(prev => prev + thinkingText);
         },
-        () => {}
+        () => {
+          loadWorkspaceImmediately();
+        }
       );
 
       loadWorkspaceImmediately();
@@ -416,8 +559,13 @@ export const TemplateLabPage: React.FC<{
       setPreviewHtml(finalCompiled);
       setThinkingAcc('');
 
+      // Phase 2 final verification: check if final HTML has a specific brand <title>
+      const finalTitle = extractTitleFromHtml(result) || activeTitle || initialTitle;
+      setTitle(finalTitle);
+      setNiche(finalTitle);
+
       // Dynamic AI response with typewriter word-by-word animation and sound effects
-      const dynamicResponse = `Successfully generated bespoke responsive website for "${customTitle}" with clean typography, interactive sections, and production-ready styling.`;
+      const dynamicResponse = `Successfully generated bespoke responsive website for "${finalTitle}" with clean typography, interactive sections, and production-ready styling.`;
       setMessages(m => [...m, { role: 'assistant', content: '' }]);
       const words = dynamicResponse.split(' ');
       words.forEach((word, idx) => {
@@ -434,14 +582,16 @@ export const TemplateLabPage: React.FC<{
 
       sfx.aiDone();
       try {
-        const entry = await createSiteHistory({ title: customTitle, niche: customTitle, html: result, snapshotLabel: 'Initial Vibe Build' });
+        const entry = await createSiteHistory({ title: finalTitle, niche: finalTitle, html: result, snapshotLabel: 'Initial Vibe Build' });
         setHistory(prev => [entry as any, ...prev]);
       } catch { /* ignore */ }
     } catch (err: any) {
       sfx.error();
       setGeneratingNewSite(false);
       setMode('idle');
-      setLabError('AI servers are currently busy or unavailable. Please try again later.');
+      const errText = err?.message || 'AI servers are currently busy or unavailable. Please try again later.';
+      setLabError(errText);
+      flashToast({ type: 'error', text: errText });
       window.scrollTo({ top: 0, behavior: 'smooth' });
       setThinkingAcc('');
     } finally {
@@ -486,19 +636,45 @@ export const TemplateLabPage: React.FC<{
         return next;
       });
       sfx.aiDone();
-      try {
-        const entry = await createSiteHistory({ title: title || instruction.slice(0, 40), niche, html: result, snapshotLabel: instruction.slice(0, 60) });
-        setHistory(prev => [entry as any, ...prev]);
 
-        // Auto-sync with existing template in templates section if turnedTemplateId is present
-        if (turnedTemplateId && (title || saveName)) {
+      // INSTANT TEMPLATE SYNCHRONIZATION:
+      // If this workspace is attached to an existing template (by turnedTemplateId, or matching template title/saveName),
+      // immediately push new edits to templates gallery and campaigns across the full site!
+      try {
+        const allLocal = getLocalTemplates();
+        const currentName = (title || saveName || '').trim();
+        const existingMatch = turnedTemplateId 
+          ? allLocal.find(t => t.id === turnedTemplateId)
+          : (currentName ? allLocal.find(t => t.name.toLowerCase() === currentName.toLowerCase()) : null);
+
+        const targetId = turnedTemplateId || existingMatch?.id;
+        if (targetId) {
+          if (!turnedTemplateId) {
+            setTurnedTemplateId(targetId);
+          }
+          const syncNiche = niche || turnedTemplateNiche || existingMatch?.niche || 'General';
+          const syncName = currentName || existingMatch?.name || 'Custom Template';
           addAndSyncTemplate({
-            id: turnedTemplateId,
-            name: title || saveName || 'Custom Template',
-            niche: niche || turnedTemplateNiche || 'General',
-            description: `High-converting modern website template for ${niche || 'Local Business'}. (Recently updated via Vibe Coding)`,
+            id: targetId,
+            name: syncName,
+            niche: syncNiche,
+            description: existingMatch?.description || `High-converting modern website template for ${syncNiche}. (Updated in AI Web Studio)`,
+            rawHtml: result,
+            previewHtml: finalCompiled,
+            previewPath: `/api/templates/${targetId}/preview`,
+          });
+          flashToast?.({
+            type: 'success',
+            text: `Template "${syncName}" updated & instantly synced across all campaigns and templates!`,
           });
         }
+      } catch (syncErr) {
+        console.warn('[TemplateLab] Failed to auto-sync template edits:', syncErr);
+      }
+
+      try {
+        const entry = await createSiteHistory({ title: title || instruction.slice(0, 40), niche, html: result, snapshotLabel: instruction.slice(0, 60) });
+        if (entry) setHistory(prev => [entry as any, ...prev]);
       } catch { /* ignore */ }
     } catch (err: any) {
       sfx.error();
@@ -802,9 +978,6 @@ export const TemplateLabPage: React.FC<{
             >
               {isTestingRebrand ? <Loader2 className="w-4 h-4 animate-spin text-blue-600" /> : <Play className="w-4 h-4 text-blue-600" />}
               <span>{isTestingRebrand ? 'Testing Rebrands…' : 'Test Rebrand'}</span>
-              {isTemplateValidated && (
-                <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
-              )}
             </button>
 
             {/* Save Template Button - Gated strictly until validation and both rebrand tests pass */}
@@ -812,13 +985,13 @@ export const TemplateLabPage: React.FC<{
               onClick={handleOpenSaveTemplate}
               disabled={streaming || isTestingRebrand}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold shadow-md hover:shadow-lg active:scale-[0.98] transition-all shrink-0 cursor-pointer ${
-                isTemplateValidated
+                (isTemplateValidated || hasRunTestRebrand || hasLoadedPreviousTemplate)
                   ? 'bg-blue-600 hover:bg-blue-700 text-white'
                   : 'bg-slate-200 text-slate-500 hover:bg-slate-300 hover:text-slate-700 border border-slate-300'
               } ${(streaming || isTestingRebrand) ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
-              title={isTemplateValidated ? "Save website as a reusable template" : "Make Template Ready and pass Test Rebrand to unlock saving"}
+              title={(isTemplateValidated || hasRunTestRebrand || hasLoadedPreviousTemplate) ? "Save website as a reusable template" : "Please run Test Rebrand first to unlock turning into a template"}
             >
-              {!isTemplateValidated ? <Lock className="w-3.5 h-3.5 text-slate-500" /> : <BookmarkPlus className="w-4 h-4" />}
+              {!(isTemplateValidated || hasRunTestRebrand || hasLoadedPreviousTemplate) ? <Lock className="w-3.5 h-3.5 text-slate-500" /> : <BookmarkPlus className="w-4 h-4" />}
               <span>Turn into Template</span>
             </button>
           </div>
@@ -1234,13 +1407,13 @@ export const TemplateLabPage: React.FC<{
                     onClick={handleOpenSaveTemplate}
                     disabled={streaming || isTestingRebrand}
                     className={`inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs font-bold shadow-md hover:shadow-lg active:scale-[0.98] transition-all shrink-0 cursor-pointer ${
-                      isTemplateValidated
+                      (isTemplateValidated || hasRunTestRebrand || hasLoadedPreviousTemplate)
                         ? 'bg-blue-600 hover:bg-blue-700 text-white'
                         : 'bg-slate-200 text-slate-500 hover:bg-slate-300 hover:text-slate-700 border border-slate-300'
                     } ${(streaming || isTestingRebrand) ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
-                    title={isTemplateValidated ? "Turn into reusable template" : "Make Template Ready and pass Test Rebrand to unlock saving"}
+                    title={(isTemplateValidated || hasRunTestRebrand || hasLoadedPreviousTemplate) ? "Turn into reusable template" : "Please run Test Rebrand first to unlock turning into a template"}
                   >
-                    {!isTemplateValidated ? <Lock className="w-4 h-4 text-slate-500 shrink-0" /> : <BookmarkPlus className="w-4 h-4 shrink-0" />}
+                    {!(isTemplateValidated || hasRunTestRebrand || hasLoadedPreviousTemplate) ? <Lock className="w-4 h-4 text-slate-500 shrink-0" /> : <BookmarkPlus className="w-4 h-4 shrink-0" />}
                     <span>Turn into Template</span>
                   </button>
                 </div>
@@ -1563,21 +1736,31 @@ export const TemplateLabPage: React.FC<{
       )}
 
       {generatingNewSite && (
-        <div className="fixed inset-0 z-[220] flex items-center justify-center bg-white/85 backdrop-blur-md animate-editor-fade p-4">
+        <div className="fixed inset-0 z-[220] flex items-center justify-center bg-slate-900/40 backdrop-blur-md animate-editor-fade p-4">
           <div className="w-full max-w-md rounded-3xl bg-white border border-slate-200/90 p-8 shadow-2xl text-center space-y-6 animate-editor-rise">
             <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center mx-auto text-blue-600 relative">
               <div className="absolute inset-0 rounded-2xl bg-blue-500/10 animate-ping" />
               <Code2 className="w-8 h-8 text-blue-600 relative z-10" />
             </div>
             
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-[11px] font-bold text-blue-700 uppercase tracking-widest">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-[11px] font-bold text-blue-700 uppercase tracking-widest">
+                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
                 {selectedModel} Synthesis Engine
               </div>
               <h3 className="text-xl font-bold font-serif text-slate-900 tracking-tight">
                 Synthesizing Bespoke Website
               </h3>
-              <p className="text-xs text-slate-600 font-sans min-h-[32px] flex items-center justify-center">
+
+              {/* Website Name Box - Derived instantaneously from prompt while loading */}
+              <div className="px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-center gap-2 shadow-xs">
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Website:</span>
+                <span className="text-sm font-bold text-slate-900 truncate max-w-[260px]">
+                  {title || 'Bespoke Business Website'}
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-600 font-sans min-h-[28px] flex items-center justify-center">
                 {generatingStepText}
               </p>
             </div>
@@ -1587,7 +1770,7 @@ export const TemplateLabPage: React.FC<{
             </div>
 
             <p className="text-[11px] text-slate-500 italic">
-              Loading fresh workspace environment & saving previous build to recent history…
+              Preparing live interactive workspace & code generation environment…
             </p>
           </div>
         </div>

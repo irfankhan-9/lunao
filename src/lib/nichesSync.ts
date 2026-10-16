@@ -176,6 +176,39 @@ export async function createAndSyncNiche(name: string, emoji?: string, color = '
   return newNiche;
 }
 
+export const PLACEHOLDER_MAP: Record<string, string> = {
+  BUSINESS_NAME: 'Radiant Smiles Modern Studio',
+  BUSINESS_NAME_SHORT: 'Radiant Smiles',
+  CITY: 'Austin, TX',
+  CITY_NAME: 'Austin, TX',
+  STATE: 'TX',
+  PHONE_DISPLAY: '(512) 555-0199',
+  PHONE_NUMBER: '(512) 555-0199',
+  PHONE_RAW: '5125550199',
+  EMAIL: 'concierge@radiantsmiles.com',
+  ADDRESS: '3801 Capital of Texas Hwy, Austin, TX 78746',
+  GOOGLE_RATING: '4.9',
+  GOOGLE_REVIEW_COUNT: '342',
+  INSTAGRAM_HANDLE: 'radiantsmiles',
+  FACEBOOK_URL: 'https://facebook.com/radiantsmiles',
+  WEBSITE: 'https://radiantsmiles.com',
+  SITE_URL: 'https://radiantsmiles.com',
+  YEARS_IN_BUSINESS: '2015',
+  BOOKING_URL: '#booking',
+  BUSINESS_DESCRIPTION: 'Premier luxury services tailored for modern local clientele with automated bookings and verified reviews.',
+  HERO_IMAGE: 'https://images.unsplash.com/photo-1581094288338-2314dddb7ece?auto=format&fit=crop&w=1920&q=85',
+  LOGO: 'Radiant Smiles',
+  GOOGLE_MAPS_URL: 'https://maps.google.com',
+};
+
+export function compilePreview(rawHtml: string): string {
+  if (!rawHtml || typeof rawHtml !== 'string') return rawHtml || '';
+  return rawHtml.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, rawKey) => {
+    const key = rawKey.toUpperCase();
+    return key in PLACEHOLDER_MAP ? PLACEHOLDER_MAP[key] : `{{${rawKey}}}`;
+  });
+}
+
 // Fetch templates from the backend and notify all components
 export async function fetchTemplatesFromBackend(): Promise<Template[]> {
   try {
@@ -186,26 +219,29 @@ export async function fetchTemplatesFromBackend(): Promise<Template[]> {
       const map = new Map<string, Template>();
       // 1. Initial builtins
       for (const t of initialTemplates) map.set(t.id, t);
-      // 2. Previously saved local templates
+      // 2. Previously saved local templates (with intact rawHtml & previewHtml)
       for (const l of getLocalTemplates()) map.set(l.id, l);
       // 3. Server templates
       for (const t of data.all) {
         const id = t.id || t.key;
         if (id) {
+          const existing = map.get(id);
+          const rawHtml = t.rawHtml || existing?.rawHtml;
+          const previewHtml = t.previewHtml || existing?.previewHtml || (rawHtml ? compilePreview(rawHtml) : undefined);
           map.set(id, {
             id,
-            name: t.name || 'Custom Template',
-            niche: t.niche || 'General',
-            usedCount: t.usedCount || 0,
-            rating: t.rating || 4.9,
-            tag: t.tag || 'Custom Template',
-            isMostUsed: Boolean(t.isMostUsed),
-            emoji: t.emoji || getNicheEmoji(t.niche),
-            description: t.description || `Custom website template designed for ${t.niche}.`,
-            templateFile: t.templateFile,
-            rawHtml: t.rawHtml,
-            previewHtml: t.previewHtml,
-            previewPath: t.previewPath,
+            name: t.name || existing?.name || 'Custom Template',
+            niche: t.niche || existing?.niche || 'General',
+            usedCount: t.usedCount || existing?.usedCount || 0,
+            rating: t.rating || existing?.rating || 4.9,
+            tag: t.tag || existing?.tag || 'Custom Template',
+            isMostUsed: Boolean(t.isMostUsed ?? existing?.isMostUsed),
+            emoji: t.emoji || existing?.emoji || getNicheEmoji(t.niche || existing?.niche || 'General'),
+            description: t.description || existing?.description || `Custom website template designed for ${t.niche || 'Local Business'}.`,
+            templateFile: t.templateFile || existing?.templateFile,
+            rawHtml,
+            previewHtml,
+            previewPath: t.previewPath || existing?.previewPath || `/api/templates/${id}/preview`,
           });
         }
       }
@@ -232,6 +268,7 @@ export function addAndSyncTemplate(template: {
   previewHtml?: string;
   previewPath?: string;
 }): Template {
+  const compiledPreview = template.previewHtml || (template.rawHtml ? compilePreview(template.rawHtml) : undefined);
   const newTpl: Template = {
     id: template.id,
     name: template.name,
@@ -244,16 +281,33 @@ export function addAndSyncTemplate(template: {
     description: template.description || `High-converting modern website template for ${template.niche}.`,
     templateFile: template.templateFile,
     rawHtml: template.rawHtml,
-    previewHtml: template.previewHtml,
-    previewPath: template.previewPath,
+    previewHtml: compiledPreview,
+    previewPath: template.previewPath || `/api/templates/${template.id}/preview`,
   };
 
   const current = getLocalTemplates();
   const exists = current.findIndex((t) => t.id === newTpl.id || t.name.toLowerCase() === newTpl.name.toLowerCase());
-  const updated = exists >= 0 ? current.map((t, idx) => (idx === exists ? newTpl : t)) : [newTpl, ...current];
+  const updated = exists >= 0 
+    ? current.map((t, idx) => (idx === exists ? { ...t, ...newTpl, rawHtml: newTpl.rawHtml || t.rawHtml, previewHtml: newTpl.previewHtml || t.previewHtml } : t))
+    : [newTpl, ...current];
 
   localStorage.setItem(STORAGE_TEMPLATES, JSON.stringify(updated));
   window.dispatchEvent(new CustomEvent('lunao:templates-sync', { detail: updated }));
+
+  // Post to backend so server database & endpoints are kept in lockstep
+  try {
+    fetch('/api/templates/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: newTpl.id,
+        name: newTpl.name,
+        niche: newTpl.niche,
+        rawHtml: newTpl.rawHtml,
+        previewHtml: newTpl.previewHtml,
+      }),
+    }).catch(() => {});
+  } catch {}
 
   // Ensure niche is created and synced across the whole platform
   if (template.niche && template.niche !== 'All' && template.niche !== 'General') {
@@ -276,6 +330,7 @@ export function moveAndSyncTemplate(template: {
   previewHtml?: string;
   previewPath?: string;
 }): Template {
+  const compiledPreview = template.previewHtml || (template.rawHtml ? compilePreview(template.rawHtml) : undefined);
   const newTpl: Template = {
     id: template.id,
     name: template.name,
@@ -288,16 +343,33 @@ export function moveAndSyncTemplate(template: {
     description: template.description || `High-converting modern website template for ${template.toNiche}.`,
     templateFile: template.templateFile,
     rawHtml: template.rawHtml,
-    previewHtml: template.previewHtml,
-    previewPath: template.previewPath,
+    previewHtml: compiledPreview,
+    previewPath: template.previewPath || `/api/templates/${template.id}/preview`,
   };
 
   const current = getLocalTemplates();
   const exists = current.findIndex((t) => t.id === newTpl.id || t.name.toLowerCase() === newTpl.name.toLowerCase());
-  const updated = exists >= 0 ? current.map((t, idx) => (idx === exists ? newTpl : t)) : [newTpl, ...current];
+  const updated = exists >= 0 
+    ? current.map((t, idx) => (idx === exists ? { ...t, ...newTpl, rawHtml: newTpl.rawHtml || t.rawHtml, previewHtml: newTpl.previewHtml || t.previewHtml } : t))
+    : [newTpl, ...current];
 
   localStorage.setItem(STORAGE_TEMPLATES, JSON.stringify(updated));
   window.dispatchEvent(new CustomEvent('lunao:templates-sync', { detail: updated }));
+
+  // Post to backend
+  try {
+    fetch('/api/templates/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: newTpl.id,
+        name: newTpl.name,
+        niche: newTpl.niche,
+        rawHtml: newTpl.rawHtml,
+        previewHtml: newTpl.previewHtml,
+      }),
+    }).catch(() => {});
+  } catch {}
 
   if (template.toNiche && template.toNiche !== 'All' && template.toNiche !== 'General') {
     createAndSyncNiche(template.toNiche);

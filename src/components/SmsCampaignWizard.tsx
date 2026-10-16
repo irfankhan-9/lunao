@@ -267,7 +267,10 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
   }, [customTemplates, selectedNiche]);
 
   const allTemplates = useMemo(() => {
-    const list = [...nicheTemplates, ...nicheCustom];
+    const map = new Map<string, any>();
+    for (const t of nicheTemplates) map.set(t.id, t);
+    for (const c of nicheCustom) map.set(c.id, { ...c, key: c.id });
+    const list = Array.from(map.values());
     if (list.length > 0) return list;
     return templates.slice(0, 4);
   }, [nicheTemplates, nicheCustom, templates]);
@@ -476,8 +479,18 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
     addLog(`Initializing SMS Outreach Engine for niche: "${selectedNiche}"`, 'info');
     addLog(`Sender Route: ${selectedPhoneNumber || '+1 (604) 953-9651'} (Telnyx Canada 10DLC)`, 'info');
     addLog(`Queued batch of ${totalLeads} local businesses for autonomous rebranding & SMS dispatch.`, 'info');
-
-    const completedAccumulator: Array<{ slug: string; name: string; city?: string; phone?: string; url: string; smsText?: string; status: 'live' | 'failed' }> = [];
+    const completedAccumulator: Array<{
+      slug: string;
+      name: string;
+      city?: string;
+      phone?: string;
+      url: string;
+      smsText?: string;
+      status: 'live' | 'failed';
+      smsStatus?: string;
+      smsError?: string | null;
+      telnyxId?: string | null;
+    }> = [];
 
     // Process businesses sequentially one-by-one!
     for (let i = 0; i < totalLeads; i++) {

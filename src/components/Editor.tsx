@@ -1121,18 +1121,11 @@ const TemplateLabBanner: React.FC<{
       {/* Right — CTAs */}
       <div className="flex flex-col sm:flex-row gap-2.5 shrink-0">
         <button
-          onClick={onBrowseTemplates}
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-white border border-border-main text-ink text-sm font-semibold font-sans hover:bg-off-white hover:border-accent/40 active:scale-[0.98] transition-all shadow-sm"
-        >
-          <Layout className="w-4 h-4 text-accent" />
-          Browse Templates
-        </button>
-        <button
           onClick={onOpenStudio}
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-accent text-white text-sm font-semibold font-sans shadow-sm hover:bg-accent/90 active:scale-[0.98] transition-all"
+          className="inline-flex items-center justify-center gap-3 px-8 py-3.5 rounded-2xl bg-accent text-white text-base font-bold font-sans shadow-md hover:bg-accent/90 active:scale-[0.98] transition-all transform hover:-translate-y-0.5"
         >
-          <FlaskConical className="w-4 h-4" />
-          AI Studio
+          <Sparkles className="w-5 h-5 animate-pulse text-amber-200" />
+          Open AI Studio
         </button>
       </div>
     </div>

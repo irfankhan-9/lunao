@@ -332,9 +332,15 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   const isFirstMountRef = useRef<boolean>(true);
 
   // Template list for preview navigation
-  const nicheTemplates = templates.filter(t => t.niche === selectedNiche);
-  const nicheCustom = customTemplates.filter(t => t.niche === selectedNiche);
-  const allTemplates = [...nicheTemplates, ...nicheCustom];
+  const nicheTemplates = templates.filter(t => (t.niche || '').toLowerCase() === (selectedNiche || '').toLowerCase());
+  const nicheCustom = customTemplates.filter(t => (t.niche || '').toLowerCase() === (selectedNiche || '').toLowerCase());
+  const allTemplates = React.useMemo(() => {
+    const map = new Map<string, any>();
+    for (const t of nicheTemplates) map.set(t.id, t);
+    for (const c of nicheCustom) map.set(c.id, { ...c, key: c.id });
+    const list = Array.from(map.values());
+    return list.length > 0 ? list : templates.slice(0, 4);
+  }, [templates, selectedNiche, customTemplates]);
   
   useEffect(() => {
     onStepChange?.(activeStep);
