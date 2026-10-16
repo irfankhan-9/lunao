@@ -36,17 +36,67 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
   const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [htmlContent, setHtmlContent] = useState<string>('');
   const [iframeKey, setIframeKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && template) {
       setViewMode(initialMode);
       setIsFullscreen(initialFullscreen);
       setIsLoading(true);
       setIframeKey((prev) => prev + 1);
+
+      const url = (() => {
+        if (template.templateFile && template.templateFile.endsWith('.html')) {
+          return `/${template.templateFile}`;
+        }
+        const urls: Record<string, string> = {
+          t1: '/barber-template.html',
+          t2: '/barber-template-02.html',
+          t3: '/salon-template-01.html',
+          t4: '/dentist-template-01.html',
+          t5: '/roofing-template-01.html',
+          t6: '/hvac-template-01.html',
+          t7: '/gym-template-01.html',
+          t8: '/realestate-template-01.html',
+          'barber-dark-luxury': '/barber-template.html',
+          'barber-editorial-02': '/barber-template-02.html',
+          'barber-editorial': '/barber-template-02.html',
+          'salon-atelier-01': '/salon-template-01.html',
+          'salon-maison': '/salon-template-01.html',
+          'dentist-clinical-01': '/dentist-template-01.html',
+          'dentist-clarity': '/dentist-template-01.html',
+          'roofing-shield-01': '/roofing-template-01.html',
+          'roofing-ironclad': '/roofing-template-01.html',
+          'hvac-everest-01': '/hvac-template-01.html',
+          'hvac-everest': '/hvac-template-01.html',
+          'hvac-bespoke-01': '/hvac-template-02.html',
+          'hvac-bespoke': '/hvac-template-02.html',
+          'hvac-template-02': '/hvac-template-02.html',
+          'hvac-template': '/hvac-template-02.html',
+          t9: '/hvac-template-02.html',
+          'gym-steel-01': '/gym-template-01.html',
+          'gym-iron-grit': '/gym-template-01.html',
+          'realestate-apex-01': '/realestate-template-01.html',
+          'realestate-glass': '/realestate-template-01.html',
+        };
+        if (urls[template.id]) return urls[template.id];
+        return `/api/templates/${encodeURIComponent(template.id)}/preview`;
+      })();
+
+      fetch(url)
+        .then((res) => res.text())
+        .then((text) => {
+          setHtmlContent(text);
+          setIsLoading(false);
+        })
+        .catch(() => {
+          setHtmlContent('<html><body><h3>Preview Error</h3></body></html>');
+          setIsLoading(false);
+        });
     }
-  }, [isOpen, initialFullscreen, initialMode]);
+  }, [isOpen, initialFullscreen, initialMode, template]);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -341,10 +391,9 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
             /* Desktop Mode: Fluid 100% responsive iframe */
             <div className="w-full h-full bg-white relative">
               <iframe
-                key={`desktop-${iframeKey}-${templateUrl}`}
+                key={`desktop-${iframeKey}`}
                 ref={iframeRef}
-                src={!template.previewHtml ? templateUrl : undefined}
-                srcDoc={template.previewHtml || undefined}
+                srcDoc={htmlContent}
                 className="w-full h-full border-0"
                 onLoad={() => setIsLoading(false)}
                 title={`Desktop Preview — ${template.name}`}
@@ -379,9 +428,8 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
                     {/* Iframe */}
                     <div className="flex-1 w-full h-full overflow-hidden bg-white relative">
                       <iframe
-                        key={`mobile-${iframeKey}-${templateUrl}`}
-                        src={!template.previewHtml ? templateUrl : undefined}
-                        srcDoc={template.previewHtml || undefined}
+                        key={`mobile-${iframeKey}`}
+                        srcDoc={htmlContent}
                         className="w-full h-full border-0"
                         onLoad={() => setIsLoading(false)}
                         title={`Mobile Preview — ${template.name}`}

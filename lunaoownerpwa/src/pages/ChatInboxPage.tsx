@@ -29,13 +29,24 @@ export const ChatInboxPage: React.FC = () => {
       const list = await chatService.getConversations();
       if (isMounted) {
         setConversations(list);
-        setSelectedId(''); // Always start on home / list view
         setIsLoading(false);
       }
     }
     load();
+    setSelectedId(''); // Always start on home / list view
+
+    // Live background polling for real-time visitor inquiries
+    const interval = setInterval(async () => {
+      if (!isMounted) return;
+      const list = await chatService.getConversations();
+      if (isMounted) {
+        setConversations(list);
+      }
+    }, 4000);
+
     return () => {
       isMounted = false;
+      clearInterval(interval);
     };
   }, [business.id]);
 

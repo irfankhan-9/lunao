@@ -53,6 +53,11 @@
   }
   </script>
 
+  <script>
+    window.LUNAO_SLUG = "{{SLUG}}";
+    window.LUNAO_BUSINESS_NAME = "{{BUSINESS_NAME}}";
+  </script>
+
   <style>
     :root {
       /* Palette */
@@ -2699,13 +2704,49 @@
       document.getElementById('calc-result-monthly').innerText = '$' + Math.round(monthlyPayment) + ' /mo';
     }
 
-    // Form submission simulation and audio cue
-    function handleFormSubmission(e) {
+    // Form submission with real Supabase booking sync
+    async function handleFormSubmission(e) {
       e.preventDefault();
       
-      // Play beautiful programmatic success chimes
-      Sound.successChime();
-      
+      const name = document.getElementById('form-name').value;
+      const phone = document.getElementById('form-phone').value;
+      const email = document.getElementById('form-email').value;
+      const serviceSelect = document.getElementById('service-needed');
+      const service = serviceSelect ? serviceSelect.options[serviceSelect.selectedIndex].text : 'General HVAC Service';
+      const message = document.getElementById('form-message').value || '';
+
+      const slug = window.LUNAO_SLUG || window.location.pathname.split('/').filter(Boolean).pop() || 'hvac-client';
+      const businessName = window.LUNAO_BUSINESS_NAME || '{{BUSINESS_NAME}}';
+
+      // Play sound
+      try { Sound.successChime(); } catch(err) {}
+
+      // Submit to Lunao Backend / Supabase
+      const apiBase = window.location.origin.includes('pages.dev') || window.location.origin.includes('lunao.app') 
+        ? 'https://ais-dev-44ecmg4ogrs7odr4w6f2gm-664492402886.asia-southeast1.run.app' 
+        : window.location.origin;
+
+      try {
+        await fetch(`${apiBase}/api/public/bookings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            slug: slug,
+            businessName: businessName,
+            customerName: name,
+            phone: phone,
+            email: email,
+            service: service,
+            notes: message,
+            source: 'form',
+            status: 'new',
+            createdAt: Date.now()
+          })
+        });
+      } catch (err) {
+        console.warn('Booking sync warning:', err);
+      }
+
       // Animate interface states
       document.getElementById('lead-form').style.display = 'none';
       document.getElementById('form-success').classList.add('active');

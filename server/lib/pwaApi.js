@@ -11,7 +11,22 @@ import {
   upsertProfile,
   getOwnerKeyForSlug,
 } from './businessProfile.js';
-import { listBookings, createBooking, updateBookingStatus, getBooking } from './bookings.js';
+import {
+  listBookings,
+  listBookingsAsync,
+  createBooking,
+  createBookingAsync,
+  updateBookingStatus,
+  getBooking,
+} from './bookings.js';
+import {
+  supabaseListConversations,
+  supabaseGetConversationMessages,
+  supabaseListCustomers,
+  supabaseInsertCustomer,
+  supabaseListAutomations,
+  supabaseToggleAutomation,
+} from './supabase.js';
 
 const DEFAULT_AI = {
   enabled: true,
@@ -582,10 +597,10 @@ export function mountPwaApi(app) {
   });
 
   // ---- Bookings -----
-  app.get('/api/pwa/:slug/bookings', pwaAuth, assertSameSlug, (req, res) => {
+  app.get('/api/pwa/:slug/bookings', pwaAuth, assertSameSlug, async (req, res) => {
     try {
       const { status } = req.query;
-      let rows = listBookings(req.params.slug);
+      let rows = await listBookingsAsync(req.params.slug);
       if (status) rows = rows.filter((b) => b.status === status);
       res.json({ ok: true, bookings: rows });
     } catch (err) {
@@ -593,10 +608,10 @@ export function mountPwaApi(app) {
     }
   });
 
-  app.post('/api/pwa/:slug/bookings', pwaAuth, assertSameSlug, (req, res) => {
+  app.post('/api/pwa/:slug/bookings', pwaAuth, assertSameSlug, async (req, res) => {
     try {
       const b = req.body || {};
-      const created = createBooking({
+      const created = await createBookingAsync({
         slug: req.params.slug,
         customerName: b.customerName || b.customer_name,
         phone: b.phone,
@@ -705,18 +720,27 @@ export function mountPwaApi(app) {
       const row = db
         .prepare('SELECT * FROM pwa_customers WHERE id = ?')
         .get(info.lastInsertRowid);
+      
+      const customerData = {
+        id: row.id,
+        slug: req.params.slug,
+        name: row.name,
+        phone: row.phone,
+        email: row.email,
+        notes: row.notes,
+        bookingCount: row.booking_count,
+        lastBookingDate: row.last_booking_date,
+        lastService: row.last_service,
+      };
+
+      // Sync customer to Supabase in the background
+      supabaseInsertCustomer(customerData).catch((err) => {
+        console.warn('[pwaApi] Supabase customer insert notice:', err.message);
+      });
+
       res.status(201).json({
         ok: true,
-        customer: {
-          id: row.id,
-          name: row.name,
-          phone: row.phone,
-          email: row.email,
-          notes: row.notes,
-          bookingCount: row.booking_count,
-          lastBookingDate: row.last_booking_date,
-          lastService: row.last_service,
-        },
+        customer: customerData,
       });
     } catch (err) {
       res.status(500).json({ ok: false, error: err.message });
@@ -749,9 +773,16 @@ export function mountPwaApi(app) {
   );
 
   // ---- Conversations (chat) -----
-  app.get('/api/pwa/:slug/conversations', pwaAuth, assertSameSlug, (req, res) => {
+  app.get('/api/pwa/:slug/conversations', pwaAuth, assertSameSlug, async (req, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+
+      // Check Supabase first
+      const sbConversations = await supabaseListConversations(req.params.slug, limit);
+      if (sbConversations && sbConversations.length > 0) {
+        return res.json({ ok: true, conversations: sbConversations });
+      }
+
       const rows = db
         .prepare(
           `SELECT s.id, s.slug, s.created_at,
@@ -788,9 +819,24 @@ export function mountPwaApi(app) {
     '/api/pwa/:slug/conversations/:sessionId',
     pwaAuth,
     assertSameSlug,
-    (req, res) => {
+    async (req, res) => {
       try {
         const sessionId = req.params.sessionId;
+
+        // Try Supabase messages first
+        const sbMessages = await supabaseGetConversationMessages(sessionId, req.params.slug);
+        if (sbMessages && sbMessages.length > 0) {
+          return res.json({
+            ok: true,
+            session: {
+              id: sessionId,
+              slug: req.params.slug,
+              createdAt: sbMessages[0]?.createdAt || Date.now(),
+              messages: sbMessages,
+            },
+          });
+        }
+
         const session = db
           .prepare(
             'SELECT * FROM chat_sessions WHERE id = ? AND slug = ?',

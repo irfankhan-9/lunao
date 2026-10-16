@@ -40,7 +40,6 @@ export const BookingsPage: React.FC = () => {
   useEffect(() => {
     let isMounted = true;
     async function load() {
-      setIsLoading(true);
       const data = await bookingService.getBookings();
       if (isMounted) {
         setBookings(data);
@@ -48,8 +47,19 @@ export const BookingsPage: React.FC = () => {
       }
     }
     load();
+
+    // Live background polling for real-time bookings synchronization
+    const interval = setInterval(async () => {
+      if (!isMounted) return;
+      const data = await bookingService.getBookings();
+      if (isMounted) {
+        setBookings(data);
+      }
+    }, 4000);
+
     return () => {
       isMounted = false;
+      clearInterval(interval);
     };
   }, [business.id]);
 

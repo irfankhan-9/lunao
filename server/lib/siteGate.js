@@ -166,13 +166,17 @@ export function gateProtected(prefixes) {
       path.startsWith('/favicon') ||
       path === '/robots.txt' ||
       path === '/sitemap.xml';
+    const isPublic =
+      path.startsWith('/api/public/') ||
+      path === '/api/bookings' ||
+      path === '/api/chat';
 
     // Bypass for localhost development (no auth needed for local testing).
     const host = req.headers.host || '';
     const isLocalhost = host === 'localhost:8787' || host === '127.0.0.1:8787' || host === 'localhost:3000' || host === '127.0.0.1:3000';
 
     // Bypass for paths we never want to gate.
-    if (isWebhook || isHealth || isGateRoute || isStaticAsset || isLocalhost) return next();
+    if (isWebhook || isHealth || isGateRoute || isStaticAsset || isLocalhost || isPublic) return next();
 
     // Only check the prefixes the caller asked us to protect.
     const shouldProtect = prefixes.some((p) => path === p || path.startsWith(p + '/') || path.startsWith(p));

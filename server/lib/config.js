@@ -143,11 +143,20 @@ export function siteBaseUrl() {
   return `http://localhost:${PORT}/sites`;
 }
 
+export const supabase = {
+  url: env.SUPABASE_URL || '',
+  secretKey: env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || '',
+  get live() {
+    return Boolean(env.DATABASE_URL || (this.url && this.secretKey));
+  },
+};
+
 export function modeSummary() {
   return {
     telnyx: telnyx.live ? 'LIVE' : telnyx.enabled ? 'DRY-RUN (simulated)' : 'COMING SOON (disabled)',
     cloudflare: cloudflare.live ? 'LIVE' : 'DRY-RUN (served locally)',
     googleMaps: google.live ? 'LIVE' : 'COMING SOON (CSV mode)',
+    supabase: supabase.live ? 'LIVE (Supabase Relational)' : 'LOCAL (SQLite fallback)',
     aiEditor: (gemini.live || anthropic.live) ? 'LIVE (Gemini 2.5 Flash)' : 'disabled',
     chatbot: gemini.live ? 'LIVE (Gemini)' : 'rule-based (no GEMINI_API_KEY)',
     siteBaseUrl: siteBaseUrl(),

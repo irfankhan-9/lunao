@@ -50,7 +50,7 @@ async function fetchPwa<T = any>(
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
+    const timeout = setTimeout(() => controller.abort(), 1200);
     const res = await fetch(url, { ...init, headers, signal: controller.signal });
     clearTimeout(timeout);
     const data = await res.json().catch(() => ({}));
@@ -58,7 +58,7 @@ async function fetchPwa<T = any>(
       return data as T;
     }
   } catch {
-    // Network / timeout error — fall through to graceful mock data
+    // Network / timeout error (1.2s race) — fall through to graceful mock data
   }
 
   // Graceful fallback data when backend endpoint is unavailable

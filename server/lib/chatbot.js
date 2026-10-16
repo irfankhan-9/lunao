@@ -7,6 +7,7 @@ import { GoogleGenAI } from '@google/genai';
 import { db } from './db.js';
 import { gemini as geminiCfg } from './config.js';
 import { createBooking } from './bookings.js';
+import { supabaseSaveChatMessage } from './supabase.js';
 
 // Ordered booking fields. Each carries the question the bot asks + a keyword
 // used to recognise (in saved assistant text) which field was last requested.
@@ -44,6 +45,11 @@ function saveMessage(sessionId, slug, role, content) {
   db.prepare(
     'INSERT INTO chat_messages (session_id, slug, role, content, created_at) VALUES (?, ?, ?, ?, ?)'
   ).run(sessionId, slug, role, content, Date.now());
+
+  // Background sync to Supabase
+  supabaseSaveChatMessage(sessionId, slug, role, content).catch((err) => {
+    console.warn('[chatbot] Supabase chat sync notice:', err.message);
+  });
 }
 
 function getMessages(sessionId) {

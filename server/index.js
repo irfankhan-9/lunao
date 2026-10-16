@@ -45,7 +45,7 @@ import { listCities } from './lib/cities.js';
 import { publishBatch, validateCloudflareToken, stageSite } from './lib/cloudflare.js';
 import { slugify } from './lib/slug.js';
 import { streamEdit, isAiEnabled, cleanHtmlOutput, generateTemplateHtml } from './lib/geminiAi.js';
-import { createBooking, listBookings, updateBookingStatus } from './lib/bookings.js';
+import { createBooking, createBookingAsync, listBookings, listBookingsAsync, updateBookingStatus } from './lib/bookings.js';
 import { chatTurn } from './lib/chatbot.js';
 import { getAddons, setAddons } from './lib/widget.js';
 import { db } from './lib/db.js';
@@ -183,18 +183,22 @@ const app = express();
 // Trust the first proxy hop (Railway / Cloudflare) so `req.secure`,
 // `req.protocol`, and `req.ip` reflect the real client HTTPS.
 app.set('trust proxy', 1);
+
+// Permissive CORS so the Vite dev server and deployed Cloudflare Pages sites can call the API.
+// IMPORTANT: Must be defined before any other middleware or routes to handle OPTIONS preflight.
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-Key, x-owner-key');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 app.use(express.json({ limit: '5mb' }));
 app.use(express.text({ type: 'text/csv', limit: '5mb' }));
 app.use(cookieParser());
-
-// Permissive CORS so the Vite dev server (port 3000) can call the API.
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-  next();
-});
 
 fs.mkdirSync(SITES_DIR, { recursive: true });
 
@@ -795,32 +799,33 @@ app.post('/api/ai/edit', async (req, res) => {
 
 // ---- Booking system API ----------------------------------------------------
 
-// Create a booking (called by injected widgets on live sites + the chatbot).
-app.post('/api/bookings', (req, res) => {
+// Create a booking (called by injected widgets on live sites + the chatbot + public endpoints).
+app.post(['/api/bookings', '/api/public/bookings'], async (req, res) => {
   try {
-    const booking = createBooking(req.body || {});
+    const booking = await createBookingAsync(req.body || {});
     res.json({ ok: true, id: booking.id, booking });
   } catch (err) {
     res.status(err.status || 500).json({ ok: false, error: err.message });
   }
 });
 
-// List bookings (dashboard), optionally filtered by site slug.
-app.get('/api/bookings', (req, res) => {
+// List bookings (dashboard & public website verification), optionally filtered by site slug.
+app.get(['/api/bookings', '/api/public/bookings'], async (req, res) => {
   try {
     const slug = typeof req.query.slug === 'string' && req.query.slug ? req.query.slug : null;
-    res.json({ ok: true, bookings: listBookings(slug) });
+    const bookings = await listBookingsAsync(slug);
+    res.json({ ok: true, bookings });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
 // Update a booking's status (confirm / cancel).
-app.patch('/api/bookings/:id', (req, res) => {
+app.patch(['/api/bookings/:id', '/api/public/bookings/:id'], (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ ok: false, error: 'Invalid id' });
-    const booking = updateBookingStatus(id, req.body?.status);
+    const booking = updateBookingStatus(id, req.body?.status, req.body?.notes);
     res.json({ ok: true, booking });
   } catch (err) {
     res.status(err.status || 500).json({ ok: false, error: err.message });
@@ -830,7 +835,7 @@ app.patch('/api/bookings/:id', (req, res) => {
 // ---- Booking chatbot -------------------------------------------------------
 
 // One conversational turn. Body: { slug, sessionId?, message, businessName?, services? }
-app.post('/api/chat', async (req, res) => {
+app.post(['/api/chat', '/api/public/chatbot'], async (req, res) => {
   try {
     const result = await chatTurn(req.body || {});
     res.json({ ok: true, ...result });

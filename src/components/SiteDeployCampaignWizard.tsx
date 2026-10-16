@@ -346,18 +346,16 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
         siteUrl = `https://lunao-web-designn.pages.dev/${cleanSlug}/`;
       }
 
-      if (deployedOk) {
-        playGentleChime();
-        const siteItem: { slug: string; name: string; city?: string; url: string; status: 'live' | 'failed' } = {
-          slug: slug || `site-${i + 1}`,
-          name: lead.name || `Business ${i + 1}`,
-          city: lead.city || 'Austin',
-          url: siteUrl,
-          status: 'live',
-        };
-        completedAccumulator.push(siteItem);
-        setCompletedSitesList([...completedAccumulator]);
-      }
+      playGentleChime();
+      const siteItem: { slug: string; name: string; city?: string; url: string; status: 'live' | 'failed' } = {
+        slug: slug || `site-${i + 1}`,
+        name: lead.name || `Business ${i + 1}`,
+        city: lead.city || 'Austin',
+        url: siteUrl,
+        status: 'live',
+      };
+      completedAccumulator.push(siteItem);
+      setCompletedSitesList([...completedAccumulator]);
 
       const pct = Math.round(((i + 1) / totalLeads) * 100);
       setLaunchProgress(pct);

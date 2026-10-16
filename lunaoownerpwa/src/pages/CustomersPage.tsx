@@ -39,7 +39,6 @@ export const CustomersPage: React.FC = () => {
   useEffect(() => {
     let isMounted = true;
     async function load() {
-      setIsLoading(true);
       const [custList, bookList] = await Promise.all([
         customerService.getCustomers(),
         bookingService.getBookings(),
@@ -51,8 +50,22 @@ export const CustomersPage: React.FC = () => {
       }
     }
     load();
+
+    const interval = setInterval(async () => {
+      if (!isMounted) return;
+      const [custList, bookList] = await Promise.all([
+        customerService.getCustomers(),
+        bookingService.getBookings(),
+      ]);
+      if (isMounted) {
+        setCustomers(custList);
+        setAllBookings(bookList);
+      }
+    }, 5000);
+
     return () => {
       isMounted = false;
+      clearInterval(interval);
     };
   }, [business.id]);
 

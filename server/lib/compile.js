@@ -7,6 +7,7 @@
 //   - filling {{PLACEHOLDER}} tokens with business data
 //   - guaranteeing zero leftover brackets in the final output
 import { resolveTemplate, loadRawHtml, recordTemplateUse } from './templates.js';
+import { slugify } from './slug.js';
 import { db } from './db.js';
 
 // Build the full placeholder manifest from a (possibly sparse) business
@@ -45,6 +46,7 @@ export function buildPlaceholders(biz) {
   const { state: derivedState } = splitCityState(city);
 
   return {
+    SLUG: biz.slug || slugify(name, city),
     BUSINESS_NAME: name,
     BUSINESS_NAME_SHORT: biz.business_name_short || biz.short || firstWordOf(name),
     CITY: city || 'Your City',
