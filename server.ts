@@ -14,12 +14,17 @@ const PORT = Number(process.env.PORT) || 3000;
 const isDev = process.env.NODE_ENV !== 'production';
 
 const PWA_DIST = path.resolve(__dirname, 'lunaoownerpwa', 'dist');
-if (fs.existsSync(PWA_DIST)) {
-  app.use('/owner', express.static(PWA_DIST));
-  app.get('/owner*', (_req, res) => {
-    res.sendFile(path.resolve(PWA_DIST, 'index.html'));
-  });
-}
+app.use('/owner', (req, res, next) => {
+  if (fs.existsSync(PWA_DIST)) {
+    if (req.path === '/' || req.path === '' || !req.path.includes('.')) {
+      return res.sendFile(path.resolve(PWA_DIST, 'index.html'));
+    }
+    return express.static(PWA_DIST)(req, res, () => {
+      res.sendFile(path.resolve(PWA_DIST, 'index.html'));
+    });
+  }
+  next();
+});
 
 if (isDev) {
   const vite = await createViteServer({

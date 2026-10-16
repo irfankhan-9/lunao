@@ -52,11 +52,61 @@ export const OwnerPWAModal: React.FC<OwnerPWAModalProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch or mint an active code for this site
+  // Fetch or mint an active code for this site, and pre-seed localStorage for instant 0ms PWA mount
   useEffect(() => {
     if (!open || !slug) return;
     playDialogPop();
     setIframeLoaded(false);
+
+    // Pre-seed localStorage session so the iframe immediately renders the dashboard with zero delay!
+    try {
+      const initialCode = (activeCode || slug).toUpperCase();
+      const seedSession = {
+        token: `lunao.preview.${Date.now()}`,
+        slug,
+        code: initialCode,
+        business: {
+          id: slug,
+          lunaoCode: initialCode,
+          slug,
+          name: businessName,
+          niche: niche || 'Local Business',
+          tagline: `Premier ${niche || 'Local Business'} Services`,
+          phone: '(512) 555-0199',
+          email: `contact@${slug}.com`,
+          address: '3801 Capital of Texas Hwy, Suite 200',
+          city: 'Austin, TX',
+          timezone: 'America/Chicago',
+          websiteUrl: siteUrl || `https://${slug}.lunao.app`,
+          socialLinks: { instagram: `${slug}_official` },
+          theme: {
+            accent: '#059669',
+            accentDark: '#047857',
+            accentSoft: '#ecfdf5',
+            accentBorder: '#a7f3d0',
+            surface: '#ffffff',
+            radius: 'lg',
+          },
+          features: { booking: true, chatbot: true, email: true, automations: true },
+          aiSettings: {
+            enabled: true,
+            greeting: `Welcome to ${businessName}! How can we assist you today?`,
+            tone: 'friendly',
+            businessHours: 'Mon-Sat: 8:00 AM - 7:00 PM',
+            bookingEnabled: true,
+          },
+          websiteConfig: {
+            url: siteUrl || `https://${slug}.lunao.app`,
+            status: 'deployed',
+            headline: `Exceptional ${niche} Experiences`,
+          },
+        },
+        authenticatedAt: new Date().toISOString(),
+      };
+      localStorage.setItem('lunao_owner_session', JSON.stringify(seedSession));
+    } catch {
+      /* ignore storage access */
+    }
 
     let mounted = true;
     const fetchCode = async () => {
@@ -84,7 +134,7 @@ export const OwnerPWAModal: React.FC<OwnerPWAModalProps> = ({
     return () => {
       mounted = false;
     };
-  }, [open, slug]);
+  }, [open, slug, businessName, niche, siteUrl]);
 
   // Close on Escape key
   useEffect(() => {

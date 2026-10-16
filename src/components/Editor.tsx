@@ -23,6 +23,7 @@ import {
   playElegantError, playCancelTone, playMagicWhoosh,
 } from '../utils/audio';
 import { OwnerPWADrawer } from './OwnerPWADrawer';
+import { OwnerPWAModal } from './OwnerPWAModal';
 import { TemplateLabPage } from './TemplateLabPage';
 import { useSyncNiches } from '../lib/nichesSync';
 
@@ -190,6 +191,9 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
 
   // Template Lab — unified AI site builder
   const [browseOpen, setBrowseOpen] = useState(false);
+
+  /* TEMPORARY TEST BUTTON STATE - TO BE REMOVED BEFORE PRODUCTION */
+  const [pwaPreviewOpen, setPwaPreviewOpen] = useState(false);
 
   // AI chat (legacy — AI edit now lives in TemplateLabPage)
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
@@ -522,14 +526,25 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => { sfx.primary(); loadList(); }}
-            disabled={listLoading}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-border-main text-ink text-sm font-semibold font-sans hover:bg-off-white active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
-          >
-            <RefreshCw className={`w-4 h-4 ${listLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {/* TEMPORARY TEST BUTTON - TO BE REMOVED BEFORE PRODUCTION */}
+            <button
+              onClick={() => { sfx.open(); setPwaPreviewOpen(true); }}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold font-sans shadow-sm active:scale-[0.98] transition-all cursor-pointer"
+              title="Preview the real mobile Owner PWA"
+            >
+              <Smartphone className="w-4 h-4" /> <span>📱 Preview Owner PWA</span>
+            </button>
+
+            <button
+              onClick={() => { sfx.primary(); loadList(); }}
+              disabled={listLoading}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-border-main text-ink text-sm font-semibold font-sans hover:bg-off-white active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+            >
+              <RefreshCw className={`w-4 h-4 ${listLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
         </div>
 
         {/* Template Lab — AI-powered custom template creator */}
@@ -670,8 +685,17 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
               </div>
             )}
           </div>
-        </div>
 
+        {/* TEMPORARY TEST MODAL - TO BE REMOVED BEFORE PRODUCTION */}
+        <OwnerPWAModal
+          open={pwaPreviewOpen}
+          onClose={() => setPwaPreviewOpen(false)}
+          slug={selected?.slug || sites[0]?.slug || 'vintage-cuts'}
+          businessName={selected?.title || sites[0]?.title || 'Vintage Cuts Barber Lounge'}
+          niche={selected?.niche || sites[0]?.niche || 'Barber'}
+          siteUrl={selected?.url || selected?.deployUrl || sites[0]?.deployUrl}
+        />
+      </div>
     );
   }
 
@@ -752,6 +776,15 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
               {activeInviteCount}
             </span>
           )}
+        </button>
+
+        {/* TEMPORARY TEST BUTTON - TO BE REMOVED BEFORE PRODUCTION */}
+        <button
+          onClick={() => { sfx.open(); setPwaPreviewOpen(true); }}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold font-sans shadow-sm active:scale-[0.98] transition-all cursor-pointer"
+          title="Preview the real mobile Owner PWA for this business"
+        >
+          <Smartphone className="w-4 h-4" /> <span>📱 Preview Owner PWA</span>
         </button>
 
         <button
@@ -1004,6 +1037,15 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
         refreshKey={inviteRefreshKey}
       />
 
+      {/* TEMPORARY TEST MODAL - TO BE REMOVED BEFORE PRODUCTION */}
+      <OwnerPWAModal
+        open={pwaPreviewOpen}
+        onClose={() => setPwaPreviewOpen(false)}
+        slug={selected.slug}
+        businessName={selected.title}
+        niche={selected.niche}
+        siteUrl={selected.url}
+      />
     </div>
   );
 };

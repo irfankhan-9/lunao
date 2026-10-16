@@ -61,7 +61,7 @@ export const OwnerAuthModal: React.FC = () => {
 
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-fill from ?code= URL param on mount.
+  // Auto-fill and auto-submit from ?code= URL param on mount.
   useEffect(() => {
     scrollToTop();
     const params = new URLSearchParams(window.location.search);
@@ -69,13 +69,13 @@ export const OwnerAuthModal: React.FC = () => {
     if (prefill) {
       const normalized = prefill.trim().toUpperCase();
       setInputCode(normalized);
-      // Clear the URL param so a refresh doesn't resubmit.
       window.history.replaceState({}, '', window.location.pathname);
+      loginWithCode(normalized);
     }
     if (!lockoutUntil && inputRef.current) {
       inputRef.current.focus();
     }
-  }, [lockoutUntil]);
+  }, [lockoutUntil, loginWithCode]);
 
   // Lockout countdown timer ticker
   useEffect(() => {

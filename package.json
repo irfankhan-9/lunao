@@ -11,7 +11,7 @@
     "owner:build": "npm run build --prefix lunaoownerpwa",
     "owner:start": "node server/index.js",
     "pipeline": "node scripts/run-pipeline.mjs",
-    "build": "vite build",
+    "build": "npm run owner:build && vite build",
     "preview": "vite preview",
     "start": "tsx server.ts",
     "clean": "rm -rf dist server/.sites",

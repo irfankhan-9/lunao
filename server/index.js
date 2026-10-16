@@ -963,7 +963,7 @@ const distDir = path.join(ROOT_DIR, 'dist');
 if (fs.existsSync(distDir)) {
   app.use(express.static(distDir));
   app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/sites')) return next();
+    if (req.path.startsWith('/api') || req.path.startsWith('/sites') || req.path.startsWith('/owner')) return next();
     res.sendFile(path.join(distDir, 'index.html'));
   });
 }
@@ -4591,12 +4591,18 @@ mountPwaApi(app);
 // dev server (which proxies to the backend).
 const PWA_DIST = path.join(ROOT_DIR, 'lunaoownerpwa', 'dist');
 const FRONTEND_DIST = path.join(ROOT_DIR, 'dist');
-if (fs.existsSync(PWA_DIST)) {
-  app.use('/owner', express.static(PWA_DIST));
-  app.get('/owner*', (_req, res) => {
-    res.sendFile(path.join(PWA_DIST, 'index.html'));
-  });
-}
+app.use('/owner', (req, res, next) => {
+  if (fs.existsSync(PWA_DIST)) {
+    return express.static(PWA_DIST)(req, res, next);
+  }
+  next();
+});
+app.get('/owner*', (_req, res, next) => {
+  if (fs.existsSync(PWA_DIST)) {
+    return res.sendFile(path.join(PWA_DIST, 'index.html'));
+  }
+  next();
+});
 if (fs.existsSync(FRONTEND_DIST)) {
   app.use(express.static(FRONTEND_DIST));
 }
