@@ -135,3 +135,10 @@ export function startGlobalRechecker() {
   // Set recurring 5-second interval
   recheckerInterval = setInterval(pollCycle, 5000);
 }
+
+export function stopGlobalRechecker() {
+  if (recheckerInterval) {
+    clearInterval(recheckerInterval);
+    recheckerInterval = null;
+  }
+}

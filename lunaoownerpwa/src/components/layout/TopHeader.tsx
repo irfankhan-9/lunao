@@ -90,10 +90,6 @@ export const TopHeader: React.FC = () => {
     setShowNotifications(false);
     if (type.includes('booking')) {
       setActiveSection('bookings');
-    } else if (type.includes('email')) {
-      setActiveSection('email');
-    } else if (type.includes('receptionist') || type.includes('call') || type.includes('ai')) {
-      setActiveSection('ai_receptionist');
     } else {
       setActiveSection('automations');
     }

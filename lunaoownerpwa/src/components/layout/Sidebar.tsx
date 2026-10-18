@@ -3,11 +3,8 @@ import {
   LayoutDashboard,
   CalendarDays,
   Users,
-  MessageSquare,
-  Bot,
   Globe,
   Workflow,
-  Mail,
   Settings,
   ExternalLink,
   LogOut,
@@ -44,18 +41,6 @@ export const Sidebar: React.FC = () => {
       icon: <Users className="w-4 h-4" />,
     },
     {
-      id: 'chat',
-      label: 'Front Desk Inquiries',
-      icon: <MessageSquare className="w-4 h-4" />,
-      featureFlag: 'chatbot',
-    },
-    {
-      id: 'ai_receptionist',
-      label: 'AI Receptionist',
-      icon: <Bot className="w-4 h-4" />,
-      featureFlag: 'chatbot',
-    },
-    {
       id: 'website',
       label: 'Business Website',
       icon: <Globe className="w-4 h-4" />,
@@ -65,12 +50,6 @@ export const Sidebar: React.FC = () => {
       label: 'Automations',
       icon: <Workflow className="w-4 h-4" />,
       featureFlag: 'automations',
-    },
-    {
-      id: 'email',
-      label: 'Email Center',
-      icon: <Mail className="w-4 h-4" />,
-      featureFlag: 'email',
     },
     {
       id: 'settings',

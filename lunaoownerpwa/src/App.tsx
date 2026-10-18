@@ -12,11 +12,8 @@ import { scrollToTop } from './utils/scrollToTop';
 import { DashboardPage } from './pages/DashboardPage';
 import { BookingsPage } from './pages/BookingsPage';
 import { CustomersPage } from './pages/CustomersPage';
-import { ChatInboxPage } from './pages/ChatInboxPage';
-import { AIReceptionistPage } from './pages/AIReceptionistPage';
 import { WebsitePage } from './pages/WebsitePage';
 import { AutomationsPage } from './pages/AutomationsPage';
-import { EmailCenterPage } from './pages/EmailCenterPage';
 import { SettingsPage } from './pages/SettingsPage';
 
 const ActiveSectionRenderer: React.FC = () => {
@@ -39,16 +36,10 @@ const ActiveSectionRenderer: React.FC = () => {
         return <BookingsPage />;
       case 'customers':
         return <CustomersPage />;
-      case 'chat':
-        return <ChatInboxPage />;
-      case 'ai_receptionist':
-        return <AIReceptionistPage />;
       case 'website':
         return <WebsitePage />;
       case 'automations':
         return <AutomationsPage />;
-      case 'email':
-        return <EmailCenterPage />;
       case 'settings':
         return <SettingsPage />;
       default:

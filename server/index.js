@@ -135,6 +135,7 @@ import { checkResendConfig } from './lib/resendService.js';
 import {
   triggerNewBookingAutomations,
   startEmailAutomationScheduler,
+  stopEmailAutomationScheduler,
   sendCustomerBookingConfirmation,
   sendOwnerBookingNotification,
   sendCustomerAppointmentReminder,
@@ -174,7 +175,8 @@ import {
 import {
   checkPhoneNumberEligibility,
 } from './lib/telnyxDestination.js';
-import { recheckSmsRows, startGlobalRechecker } from './lib/telnyxLiveRecheck.js';
+import { recheckSmsRows, startGlobalRechecker, stopGlobalRechecker } from './lib/telnyxLiveRecheck.js';
+import { closePostgresPool, getSupabase } from './lib/supabase.js';
 import {
   gateProtected,
   handleSiteGateLogin,
@@ -245,7 +247,7 @@ app.use(cookieParser());
 
 fs.mkdirSync(SITES_DIR, { recursive: true });
 
-app.get('/api/health', async (_req, res) => {
+app.get(['/health', '/api/health'], async (_req, res) => {
   const health = {
     ok: true,
     mode: modeSummary(),
@@ -362,7 +364,7 @@ app.post('/api/csv/parse', authenticate, (req, res) => {
 // to SQLite and enforce the credit balance server-side. Credits are charged
 // up front; failed sites refund the 1 site credit, failed SMS refund the 3
 // SMS credits. See server/lib/pipeline.js for the full lifecycle.
-app.post('/api/campaign/run', async (req, res) => {
+app.post('/api/campaign/run', authenticate, async (req, res) => {
   const {
     businesses,
     csv,
@@ -375,14 +377,10 @@ app.post('/api/campaign/run', async (req, res) => {
     plan,
   } = req.body || {};
 
-  // Resolve user identity: prefer cookie session, fall back to legacy ownerKey
-  let ownerKey = req.body?.ownerKey || req.query?.ownerKey || null;
+  // Resolve user identity strictly from verified session token
+  const ownerKey = getAuthOwnerKey(req);
   if (!ownerKey) {
-    const token = parseSessionCookie(req);
-    if (token) {
-      const payload = await verifySessionToken(token);
-      if (payload) ownerKey = `user_${payload.sub}`;
-    }
+    return res.status(401).json({ ok: false, error: 'Unauthorized: Authentication required' });
   }
 
   let leads = Array.isArray(businesses) ? businesses : [];
@@ -643,13 +641,8 @@ app.post('/api/site-deploy/rebrand-single', async (req, res) => {
 // below — otherwise Express matches "all" as a slug and returns 404.
 app.get('/api/sites/all', authenticate, (req, res) => {
   try {
-    const ownerKey = (() => {
-      if (req.userId) return `user_${req.userId}`;
-      const explicit = req.headers['x-owner-key'] || req.query.ownerKey || req.body?.ownerKey;
-      if (explicit) return String(explicit).trim();
-      return req.ownerKey || 'dashboard';
-    })();
-    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized: Authentication required' });
 
     const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
     const sourceFilter = req.query.source; // 'site-deploy' | 'email' | undefined (all)
@@ -1090,25 +1083,66 @@ app.get('/api/_diag/cookies', (req, res) => {
     host: req.headers.host,
   });
 });
+// Helper: derive verified ownership identity strictly from authenticated session.
+function getAuthOwnerKey(req) {
+  return req.ownerKey || (req.userId ? `user_${req.userId}` : null) || null;
+}
 
 // Middleware: require an authenticated dashboard session.
-//
-// In v2 the gate cookie (lunao_site_gate) is the only "session" we have —
-// there is no per-user table anymore. Any caller that already passed the
-// gateProtected() middleware is considered authenticated. The legacy
-// `ownerKey` header/query/body is still honored for back-compat with the
-// localStorage-based dashboard and the Owner App's dev-mode fallback.
+// Strictly verifies Supabase Bearer token; enforces fail-closed behavior in production.
+// An unvalidated Host header or client-supplied x-owner-key can NEVER bypass authentication.
 async function authenticate(req, res, next) {
-  const legacyKey = req.headers['x-owner-key'] || req.query.ownerKey || req.body?.ownerKey;
-  if (legacyKey) {
-    req.ownerKey = String(legacyKey);
-    return next();
+  const isProduction = process.env.NODE_ENV === 'production';
+  const authHeader = req.headers['authorization'];
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7).trim();
+
+    // Isolated test / mock authentication for development & test environments ONLY.
+    // Strictly forbidden in production.
+    if (!isProduction && (token === 'mock-test-token' || token.startsWith('mock-user-') || token === 'lunao-mock-dev-token')) {
+      const mockId = token.startsWith('mock-user-') ? token : 'mock-sandbox-user';
+      req.user = { id: mockId, email: `${mockId}@lunao.local`, role: 'authenticated' };
+      req.userId = mockId;
+      req.userKey = mockId;
+      req.ownerKey = mockId;
+      return next();
+    }
+
+    const sb = getSupabase();
+    if (sb) {
+      try {
+        const { data: { user }, error } = await sb.auth.getUser(token);
+        if (!error && user) {
+          req.user = user;
+          req.userId = user.id;
+          req.userKey = user.id;
+          req.ownerKey = user.id;
+          return next();
+        }
+        return res.status(401).json({ ok: false, error: 'Unauthorized: Invalid or expired Supabase access token' });
+      } catch (err) {
+        console.warn('[Auth] Supabase token verification error:', err.message);
+        return res.status(401).json({ ok: false, error: 'Unauthorized: Token verification failed' });
+      }
+    } else {
+      if (isProduction) {
+        return res.status(503).json({ ok: false, error: 'Authentication service unavailable: Supabase credentials not configured' });
+      }
+    }
   }
-  // gateProtected() sits in front of every API route that uses authenticate.
-  // If we got here, the cookie is valid. Stamp req.userKey for handlers.
-  req.userKey = 'dashboard';
-  req.ownerKey = req.ownerKey || 'dashboard';
-  next();
+
+  // In production: FAIL CLOSED. Missing configuration or missing token must be rejected.
+  if (isProduction) {
+    const sb = getSupabase();
+    if (!sb) {
+      return res.status(503).json({ ok: false, error: 'Authentication service unavailable: Supabase credentials not configured' });
+    }
+    return res.status(401).json({ ok: false, error: 'Unauthorized: Missing required Supabase access token' });
+  }
+
+  // In development: missing token fails closed with 401. Host header bypass is strictly disallowed.
+  return res.status(401).json({ ok: false, error: 'Unauthorized: Missing or invalid Supabase access token' });
 }
 
 // Serve the locally compiled sites (dry-run live preview).
@@ -1417,8 +1451,8 @@ app.get('/api/invite-codes/:code', (req, res) => {
 
 app.get('/api/credits', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
-    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const plan = req.query.plan ? String(req.query.plan) : null;
     const account = plan ? ensureAccount(ownerKey, plan) : getAccount(ownerKey);
     if (!account) return res.json({ ok: true, account: null, plans: PLAN_BALANCE, costPerLead: COST_PER_LEAD });
@@ -1435,8 +1469,9 @@ app.get('/api/credits', authenticate, (req, res) => {
 
 app.post('/api/credits/topup', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : req.body?.ownerKey;
-    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    const plan = req.body?.plan;
     if (!PLAN_BALANCE[plan]) return res.status(400).json({ ok: false, error: 'Unknown plan tier' });
     const account = ensureAccount(ownerKey, plan);
     res.json({ ok: true, account, plans: PLAN_BALANCE });
@@ -1447,8 +1482,8 @@ app.post('/api/credits/topup', authenticate, (req, res) => {
 
 app.get('/api/credits/ledger', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
-    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const limit = parseInt(req.query.limit, 10) || 50;
     res.json({ ok: true, ledger: listLedger(ownerKey, limit) });
   } catch (err) {
@@ -1460,8 +1495,8 @@ app.get('/api/credits/ledger', authenticate, (req, res) => {
 
 app.get('/api/campaigns', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
-    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const limit = parseInt(req.query.limit, 10) || 50;
     res.json({ ok: true, campaigns: listCampaigns(ownerKey, { limit }) });
   } catch (err) {
@@ -1471,8 +1506,12 @@ app.get('/api/campaigns', authenticate, (req, res) => {
 
 app.get('/api/campaigns/:id', authenticate, async (req, res) => {
   try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const c = getCampaign(req.params.id);
-    if (!c) return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    if (!c || !c.ownerKey || c.ownerKey !== ownerKey) {
+      return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    }
     const sms = listSmsForCampaign(c.id);
     // Live re-check on every poll, so the UI immediately receives real delivered/failed
     // status and error reasons directly from Telnyx.
@@ -1494,9 +1533,12 @@ app.get('/api/campaigns/:id', authenticate, async (req, res) => {
 // and we no-op on repeat calls.
 app.post('/api/campaigns/:id/refund', authenticate, (req, res) => {
   try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const c = getCampaign(req.params.id);
-    if (!c) return res.status(404).json({ ok: false, error: 'Campaign not found' });
-    if (!c.ownerKey) return res.status(400).json({ ok: false, error: 'Campaign has no owner' });
+    if (!c || !c.ownerKey || c.ownerKey !== ownerKey) {
+      return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    }
     const leads = listLeads(c.id);
     let refundedCount = 0;
     for (const lead of leads) {
@@ -1522,8 +1564,12 @@ app.post('/api/campaigns/:id/refund', authenticate, (req, res) => {
 // starting new ones. Idempotent: cancelling twice is a no-op.
 app.post('/api/campaigns/:id/cancel', authenticate, (req, res) => {
   try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const c = getCampaign(req.params.id);
-    if (!c) return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    if (!c || !c.ownerKey || c.ownerKey !== ownerKey) {
+      return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    }
     if (c.status === 'completed' || c.status === 'failed' || c.status === 'cancelled') {
       return res.json({ ok: true, status: c.status, alreadyTerminal: true });
     }
@@ -1539,8 +1585,13 @@ app.post('/api/campaigns/:id/cancel', authenticate, (req, res) => {
 // lead boundary.
 app.post('/api/email-campaigns/:id/cancel', authenticate, (req, res) => {
   try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const c = getEmailCampaign(req.params.id);
-    if (!c) return res.status(404).json({ ok: false, error: 'Email campaign not found' });
+    const campaignOwner = c ? (c.userId || c.ownerKey || c.user_id) : null;
+    if (!c || !campaignOwner || campaignOwner !== ownerKey) {
+      return res.status(404).json({ ok: false, error: 'Email campaign not found' });
+    }
     if (c.status === 'completed' || c.status === 'failed' || c.status === 'cancelled') {
       return res.json({ ok: true, status: c.status, alreadyTerminal: true });
     }
@@ -1556,42 +1607,19 @@ app.post('/api/email-campaigns/:id/cancel', authenticate, (req, res) => {
 // =============================================================================
 
 // ---- Dashboard Stats ----
-//
-// One-shot read for the Dashboard's "Today" counters and the celebration
-// card on the new EmailCampaignWizard. All four queries use columns that
-// already exist on `site_history`, `campaigns`, `email_campaigns`, and
-// `email_leads` — no new tables, no migrations.
-//
-// "Today" is computed as midnight (local server time) → now, in unix epoch
-// seconds, matching the INTEGER epoch columns used throughout the schema.
-
 app.get('/api/stats/dashboard', authenticate, (req, res) => {
   try {
-    // Prefer an explicit ownerKey (X-Owner-Key header / query / body) for
-    // localStorage-style callers. Fall back to the gate-only `dashboard`
-    // namespace so the live dashboard works even without per-user auth.
-    const ownerKey = (() => {
-      if (req.userId) return `user_${req.userId}`;
-      const explicit = req.headers['x-owner-key'] || req.query.ownerKey || req.body?.ownerKey;
-      if (explicit) return String(explicit).trim();
-      return req.ownerKey || 'dashboard';
-    })();
-    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
 
     const startOfToday = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
     const now = Math.floor(Date.now() / 1000);
 
-    // Sites deployed today: any site_history row stamped today for this owner.
     const sitesDeployedTodayRow = db.prepare(
       'SELECT COUNT(*) AS n FROM site_history WHERE owner_key = ? AND created_at >= ?'
     ).get(ownerKey, startOfToday);
     const sitesDeployedToday = Number(sitesDeployedTodayRow?.n) || 0;
 
-    // Lifetime sites generated: sum the cached counters on the user's two
-    // campaign tables. site_history itself isn't a perfect lifetime counter
-    // (Studio saves can re-write history for the same slug), so we lean on
-    // the aggregated per-campaign columns which are updated whenever a real
-    // lead finishes the deploy phase.
     const sitesEmailRow = db.prepare(
       'SELECT COALESCE(SUM(sites_generated), 0) AS n FROM email_campaigns WHERE user_id = ?'
     ).get(ownerKey);
@@ -1601,8 +1629,6 @@ app.get('/api/stats/dashboard', authenticate, (req, res) => {
     const sitesDeployedTotal =
       (Number(sitesEmailRow?.n) || 0) + (Number(sitesSmsRow?.n) || 0);
 
-    // Emails sent today: per-lead send_status rows for this owner's campaigns
-    // that were stamped with a sent_at timestamp today.
     const emailsSentTodayRow = db.prepare(
       `SELECT COUNT(*) AS n
          FROM email_leads l
@@ -1614,7 +1640,6 @@ app.get('/api/stats/dashboard', authenticate, (req, res) => {
     ).get(ownerKey, startOfToday);
     const emailsSentToday = Number(emailsSentTodayRow?.n) || 0;
 
-    // Lifetime emails sent — cached counter on the email_campaigns row.
     const emailsTotalRow = db.prepare(
       'SELECT COALESCE(SUM(emails_sent), 0) AS n FROM email_campaigns WHERE user_id = ?'
     ).get(ownerKey);
@@ -1627,11 +1652,6 @@ app.get('/api/stats/dashboard', authenticate, (req, res) => {
         sitesDeployedTotal,
         emailsSentToday,
         emailsSentTotal,
-        // Surface a couple of helpful metadata fields for the UI:
-        // `asOf` is the server clock the snapshot was taken at (seconds).
-        // `windowStart` is the start-of-today epoch the "today" counters
-        // are anchored to — clients use it for any client-side sanity
-        // checks (e.g. hidden by an hour or stale).
         asOf: now,
         windowStart: startOfToday,
       },
@@ -1641,17 +1661,11 @@ app.get('/api/stats/dashboard', authenticate, (req, res) => {
   }
 });
 
-// Today's email send log — used by the EmailsTodayLog component on the
-// Dashboard so the user can see per-send details without opening a campaign.
+// Today's email send log
 app.get('/api/email-logs/today', authenticate, (req, res) => {
   try {
-    const ownerKey = (() => {
-      if (req.userId) return `user_${req.userId}`;
-      const explicit = req.headers['x-owner-key'] || req.query.ownerKey || req.body?.ownerKey;
-      if (explicit) return String(explicit).trim();
-      return req.ownerKey || 'dashboard';
-    })();
-    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
 
     const startOfToday = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
 
@@ -1689,8 +1703,8 @@ app.get('/api/email-logs/today', authenticate, (req, res) => {
 // List email campaigns for a user
 app.get('/api/email-campaigns', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
-    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const limit = parseInt(req.query.limit, 10) || 50;
     const campaigns = listEmailCampaigns(ownerKey, limit);
     res.json({ ok: true, campaigns });
@@ -1702,8 +1716,13 @@ app.get('/api/email-campaigns', authenticate, (req, res) => {
 // Get single email campaign with leads
 app.get('/api/email-campaigns/:id', authenticate, (req, res) => {
   try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const campaign = getEmailCampaign(req.params.id);
-    if (!campaign) return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    const campaignOwner = campaign ? (campaign.userId || campaign.ownerKey || campaign.user_id) : null;
+    if (!campaign || !campaignOwner || campaignOwner !== ownerKey) {
+      return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    }
     const leads = listEmailLeadsWithAccounts(campaign.id);
     res.json({ ok: true, campaign, leads });
   } catch (err) {
@@ -1714,8 +1733,13 @@ app.get('/api/email-campaigns/:id', authenticate, (req, res) => {
 // Get leads for an email campaign with account email info
 app.get('/api/email-campaigns/:id/leads', authenticate, (req, res) => {
   try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const campaign = getEmailCampaign(req.params.id);
-    if (!campaign) return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    const campaignOwner = campaign ? (campaign.userId || campaign.ownerKey || campaign.user_id) : null;
+    if (!campaign || !campaignOwner || campaignOwner !== ownerKey) {
+      return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    }
     const leads = listEmailLeadsWithAccounts(campaign.id);
     res.json({ ok: true, leads });
   } catch (err) {
@@ -1726,8 +1750,8 @@ app.get('/api/email-campaigns/:id/leads', authenticate, (req, res) => {
 // Create a new email campaign (draft)
 app.post('/api/email-campaigns', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.body?.ownerKey || '').trim();
-    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     
     const csvLeads = Array.isArray(req.body?.leads) ? req.body.leads : [];
     
@@ -1755,10 +1779,14 @@ app.post('/api/email-campaigns', authenticate, (req, res) => {
 // Update email campaign
 app.put('/api/email-campaigns/:id', authenticate, (req, res) => {
   try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const campaign = getEmailCampaign(req.params.id);
-    if (!campaign) return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    const campaignOwner = campaign ? (campaign.userId || campaign.ownerKey || campaign.user_id) : null;
+    if (!campaign || !campaignOwner || campaignOwner !== ownerKey) {
+      return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    }
     
-    // Update allowed fields
     const allowedFields = ['niche', 'template_id', 'template_key', 'lead_source', 'target_volume', 
       'city', 'category', 'email_subject', 'email_body', 'status'];
     
@@ -1773,8 +1801,8 @@ app.put('/api/email-campaigns/:id', authenticate, (req, res) => {
     }
     
     if (updates.length > 0) {
-      values.push(req.params.id);
-      db.prepare(`UPDATE email_campaigns SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+      values.push(req.params.id, ownerKey);
+      db.prepare(`UPDATE email_campaigns SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`).run(...values);
     }
     
     const updated = getEmailCampaign(req.params.id);
@@ -1787,13 +1815,17 @@ app.put('/api/email-campaigns/:id', authenticate, (req, res) => {
 // Delete email campaign
 app.delete('/api/email-campaigns/:id', authenticate, (req, res) => {
   try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const campaign = getEmailCampaign(req.params.id);
-    if (!campaign) return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    const campaignOwner = campaign ? (campaign.userId || campaign.ownerKey || campaign.user_id) : null;
+    if (!campaign || !campaignOwner || campaignOwner !== ownerKey) {
+      return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    }
     
-    // Delete associated leads and logs
     db.prepare('DELETE FROM email_leads WHERE campaign_id = ?').run(req.params.id);
     db.prepare('DELETE FROM email_logs WHERE campaign_id = ?').run(req.params.id);
-    db.prepare('DELETE FROM email_campaigns WHERE id = ?').run(req.params.id);
+    db.prepare('DELETE FROM email_campaigns WHERE id = ? AND user_id = ?').run(req.params.id, ownerKey);
     
     res.json({ ok: true });
   } catch (err) {
@@ -1806,15 +1838,11 @@ app.delete('/api/email-campaigns/:id', authenticate, (req, res) => {
 // List connected email accounts for a user
 app.get('/api/email-accounts', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
-    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     
     const accounts = listEmailAccounts(ownerKey);
 
-    // Defensive dedupe by (provider, email): last-connected wins. The
-    // unique index in db.js prevents new dupes, but legacy rows from before
-    // the index existed could still show up twice. The wizard MUST never
-    // surface two cards for the same address.
     const dedupByEmail = new Map();
     for (const acc of accounts) {
       const key = `${acc.provider}::${(acc.email || '').toLowerCase()}`;
@@ -1825,9 +1853,6 @@ app.get('/api/email-accounts', authenticate, (req, res) => {
     }
     const deduped = Array.from(dedupByEmail.values());
 
-    // Add computed fields for client display.
-    // The health math (rolling 24h, non-linear %, health_ruined warning) lives
-    // entirely on the server so every page that shows this card agrees.
     const accountsWithMetrics = deduped.map(acc => {
       const health = getAccountHealth(acc.id);
       return {
@@ -1839,12 +1864,9 @@ app.get('/api/email-accounts', authenticate, (req, res) => {
         daily_cap: health?.dailyCap ?? acc.daily_cap,
         connected_at: acc.connected_at,
         status: acc.status,
-        // Rolling 24h, not calendar day:
         sends_today: health?.sendsToday ?? acc.sends_today,
         sends_this_week: acc.sends_this_week,
         remaining_today: health?.remainingToday ?? 0,
-        // v3: pause toggle + battery gauge — surfaced alongside the
-        // pre-existing Gmail-health math so the picker can render both.
         paused: health?.paused ?? acc.paused ?? 0,
         battery_capacity: health?.batteryCapacity ?? acc.battery_capacity ?? 300,
         battery_percent: health?.batteryPercent ?? null,
@@ -1867,22 +1889,24 @@ app.get('/api/email-accounts', authenticate, (req, res) => {
 // Get single account health
 app.get('/api/email-accounts/:id/health', authenticate, (req, res) => {
   try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    const account = getEmailAccount(req.params.id);
+    if (!account || !account.user_id || account.user_id !== ownerKey) {
+      return res.status(404).json({ ok: false, error: 'Account not found' });
+    }
     const health = getAccountHealth(req.params.id);
-    if (!health) return res.status(404).json({ ok: false, error: 'Account not found' });
     res.json({ ok: true, health });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-// Probe every connected account's refresh token. Lightweight — only
-// validates against Google's OAuth endpoint, never Gmail itself. Designed
-// to be called right before the user moves to the next step in the Email
-// Campaign wizard so dead tokens block the transition with a clear error.
+// Probe every connected account's refresh token.
 app.post('/api/email-accounts/probe-all', authenticate, async (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || req.body?.ownerKey || '').trim();
-    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const out = await probeAllEmailAccountTokens(ownerKey);
     res.json(out);
   } catch (err) {
@@ -1893,11 +1917,11 @@ app.post('/api/email-accounts/probe-all', authenticate, async (req, res) => {
 // Probe a single account's token.
 app.post('/api/email-accounts/:id/probe', authenticate, async (req, res) => {
   try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const account = getEmailAccount(req.params.id);
-    if (!account) return res.status(404).json({ ok: false, error: 'Account not found' });
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
-    if (ownerKey && account.user_id !== ownerKey) {
-      return res.status(403).json({ ok: false, error: 'Not your account' });
+    if (!account || !account.user_id || account.user_id !== ownerKey) {
+      return res.status(404).json({ ok: false, error: 'Account not found' });
     }
     const result = await probeEmailAccountToken(req.params.id);
     res.json({ ok: true, ...result });
@@ -1906,18 +1930,14 @@ app.post('/api/email-accounts/:id/probe', authenticate, async (req, res) => {
   }
 });
 
-// Pause/Resume toggle — user-controlled per-account. Soft warning only.
-// Per the spec: "users can still use emails even after running out of 100%
-// battery — let them use it". We don't gate `canAccountSend` on this; we
-// only mark the row so the picker UI can show the Pause badge + warning
-// card. The campaign will still send if the user clicks Launch.
+// Pause/Resume toggle — user-controlled per-account.
 app.post('/api/email-accounts/:id/pause', authenticate, (req, res) => {
   try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const account = getEmailAccount(req.params.id);
-    if (!account) return res.status(404).json({ ok: false, error: 'Account not found' });
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || req.body?.ownerKey || '').trim();
-    if (ownerKey && account.user_id !== ownerKey) {
-      return res.status(403).json({ ok: false, error: 'Not your account' });
+    if (!account || !account.user_id || account.user_id !== ownerKey) {
+      return res.status(404).json({ ok: false, error: 'Account not found' });
     }
     const updated = setEmailAccountPaused(req.params.id, true);
     const health = getAccountHealth(req.params.id);
@@ -1929,11 +1949,11 @@ app.post('/api/email-accounts/:id/pause', authenticate, (req, res) => {
 
 app.post('/api/email-accounts/:id/resume', authenticate, (req, res) => {
   try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const account = getEmailAccount(req.params.id);
-    if (!account) return res.status(404).json({ ok: false, error: 'Account not found' });
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || req.body?.ownerKey || '').trim();
-    if (ownerKey && account.user_id !== ownerKey) {
-      return res.status(403).json({ ok: false, error: 'Not your account' });
+    if (!account || !account.user_id || account.user_id !== ownerKey) {
+      return res.status(404).json({ ok: false, error: 'Account not found' });
     }
     const updated = setEmailAccountPaused(req.params.id, false);
     const health = getAccountHealth(req.params.id);
@@ -1946,10 +1966,14 @@ app.post('/api/email-accounts/:id/resume', authenticate, (req, res) => {
 // Delete/Disconnect email account
 app.delete('/api/email-accounts/:id', authenticate, (req, res) => {
   try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const account = getEmailAccount(req.params.id);
-    if (!account) return res.status(404).json({ ok: false, error: 'Account not found' });
+    if (!account || !account.user_id || account.user_id !== ownerKey) {
+      return res.status(404).json({ ok: false, error: 'Account not found' });
+    }
     
-    deleteEmailAccount(req.params.id);
+    deleteEmailAccount(req.params.id, ownerKey);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -2034,21 +2058,31 @@ function deleteOauthState(state) {
 }
 
 // Periodic cleanup of expired OAuth states (run every 2 minutes)
+let oauthCleanupTimer = null;
 function startOauthStateCleanup() {
-  setInterval(() => {
-    const deleted = db.prepare('DELETE FROM oauth_states WHERE expires_at < ?').run(Date.now());
-    if (deleted.changes > 0) {
-      console.log(`[oauth] cleaned up ${deleted.changes} expired state(s)`);
+  if (oauthCleanupTimer) return;
+  oauthCleanupTimer = setInterval(() => {
+    try {
+      const deleted = db.prepare('DELETE FROM oauth_states WHERE expires_at < ?').run(Date.now());
+      if (deleted.changes > 0) {
+        console.log(`[oauth] cleaned up ${deleted.changes} expired state(s)`);
+      }
+    } catch {
+      /* ignore */
     }
   }, 2 * 60 * 1000);
+}
+export function stopOauthStateCleanup() {
+  if (oauthCleanupTimer) {
+    clearInterval(oauthCleanupTimer);
+    oauthCleanupTimer = null;
+  }
 }
 // Start cleanup after DB is ready (server startup calls this after citiesLoadPromise)
 export function startOauthCleanupAfterInit() { startOauthStateCleanup(); }
 
 function ownerKeyForCallback(req) {
-  const legacyKey = req.headers['x-owner-key'] || req.query.ownerKey || req.body?.ownerKey;
-  if (legacyKey) return String(legacyKey);
-  return req.userId ? `user_${req.userId}` : 'dashboard';
+  return getAuthOwnerKey(req);
 }
 
 function redirectBase() {
@@ -3258,8 +3292,11 @@ app.get('/api/email-suppression/check', authenticate, (req, res) => {
 // Discover leads via Places API
 app.post('/api/email-campaigns/:id/discover-places', authenticate, async (req, res) => {
   try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const campaign = getEmailCampaign(req.params.id);
-    if (!campaign) return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    const campaignOwner = campaign ? (campaign.userId || campaign.ownerKey || campaign.user_id) : null;
+    if (!campaign || !campaignOwner || campaignOwner !== ownerKey) return res.status(404).json({ ok: false, error: 'Campaign not found' });
     
     const { city, category, limit = 50 } = req.body || {};
     if (!city || !category) {
@@ -3281,6 +3318,11 @@ app.post('/api/email-campaigns/:id/discover-places', authenticate, async (req, r
 // Get leads pending email discovery for a campaign
 app.get('/api/email-campaigns/:id/pending-discovery', authenticate, (req, res) => {
   try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    const campaign = getEmailCampaign(req.params.id);
+    const campaignOwner = campaign ? (campaign.userId || campaign.ownerKey || campaign.user_id) : null;
+    if (!campaign || !campaignOwner || campaignOwner !== ownerKey) return res.status(404).json({ ok: false, error: 'Campaign not found' });
     const leads = getLeadsPendingEmailDiscovery(req.params.id);
     res.json({ ok: true, leads });
   } catch (err) {
@@ -3346,6 +3388,12 @@ async function fetchDorkPage({ city, niche, page }) {
 // emit duplicates and never re-walk the same page.
 app.post('/api/email-campaigns/:id/dork-next', authenticate, async (req, res) => {
   try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    const campaign = getEmailCampaign(req.params.id);
+    const campaignOwner = campaign ? (campaign.userId || campaign.ownerKey || campaign.user_id) : null;
+    if (!campaign || !campaignOwner || campaignOwner !== ownerKey) return res.status(404).json({ ok: false, error: 'Campaign not found' });
+
     const { lockedCity, visited = [], seenEmails = [], niche = '' } = req.body || {};
     if (!lockedCity || !lockedCity.name || !lockedCity.country) {
       return res.status(400).json({ ok: false, error: 'lockedCity (name, country) is required' });
@@ -3422,12 +3470,15 @@ app.post('/api/email-campaigns/:id/dork-next', authenticate, async (req, res) =>
 // pipeline picks them up unchanged.
 app.post('/api/email-campaigns/:id/save-leads', authenticate, (req, res) => {
   try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const { leads = [] } = req.body || {};
     if (!Array.isArray(leads)) {
       return res.status(400).json({ ok: false, error: 'leads must be an array' });
     }
     const campaign = getEmailCampaign(req.params.id);
-    if (!campaign) return res.status(404).json({ ok: false, error: 'Campaign not found' });
+    const campaignOwner = campaign ? (campaign.userId || campaign.ownerKey || campaign.user_id) : null;
+    if (!campaign || !campaignOwner || campaignOwner !== ownerKey) return res.status(404).json({ ok: false, error: 'Campaign not found' });
 
     // Normalize + drop rows that would violate the email_leads schema
     // (business_name NOT NULL DEFAULT '' but we still want a real value).
@@ -3477,8 +3528,8 @@ app.post('/api/email-campaigns/:id/save-leads', authenticate, (req, res) => {
         );
       });
       db.prepare(
-        'UPDATE email_campaigns SET target_volume = ? WHERE id = ?'
-      ).run(clean.length, req.params.id);
+        'UPDATE email_campaigns SET target_volume = ? WHERE id = ? AND user_id = ?'
+      ).run(clean.length, req.params.id, ownerKey);
     });
     tx();
 
@@ -3492,17 +3543,28 @@ app.post('/api/email-campaigns/:id/save-leads', authenticate, (req, res) => {
 // ---- Email Campaign Run (SSE) ----
 
 // Run email campaign pipeline
-app.post('/api/email-campaigns/:id/run', async (req, res) => {
+app.post('/api/email-campaigns/:id/run', authenticate, async (req, res) => {
+  const ownerKey = getAuthOwnerKey(req);
+  if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
   const campaignId = req.params.id;
   const { accountIds } = req.body || {};
   
   const campaign = getEmailCampaign(campaignId);
-  if (!campaign) {
+  const campaignOwner = campaign ? (campaign.userId || campaign.ownerKey || campaign.user_id) : null;
+  if (!campaign || !campaignOwner || campaignOwner !== ownerKey) {
     return res.status(404).json({ ok: false, error: 'Campaign not found' });
   }
   
   if (!accountIds || !Array.isArray(accountIds) || accountIds.length === 0) {
     return res.status(400).json({ ok: false, error: 'At least one email account is required' });
+  }
+
+  // Verify all specified accountIds belong to the authenticated owner
+  for (const accId of accountIds) {
+    const acc = getEmailAccount(accId);
+    if (!acc || !acc.user_id || acc.user_id !== ownerKey) {
+      return res.status(403).json({ ok: false, error: 'Unauthorized: Email account does not belong to user' });
+    }
   }
   
   res.setHeader('Content-Type', 'text/event-stream');
@@ -3616,7 +3678,7 @@ app.post('/api/telnyx/connect', authenticate, async (req, res) => {
 
 app.post('/api/test-sms', authenticate, async (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : req.body?.ownerKey;
+    const ownerKey = getAuthOwnerKey(req);
     const { to, text } = req.body || {};
     const dest = toE164(to);
     if (!dest) return res.status(400).json({ ok: false, error: 'Invalid destination phone' });
@@ -3659,10 +3721,19 @@ app.post('/api/test-sms', authenticate, async (req, res) => {
 });
 
 // ---- Send Single Real SMS for Campaign / Quick Outreach -------------------
-app.post('/api/sms/send-single', async (req, res) => {
+app.post('/api/sms/send-single', authenticate, async (req, res) => {
   try {
-    const { to, text, leadName, businessName, city, siteUrl, campaignId, leadId, ownerKey: explicitOwner } = req.body || {};
-    const ownerKey = explicitOwner || (req.userId ? `user_${req.userId}` : 'dashboard');
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    const { to, text, leadName, businessName, city, siteUrl, campaignId, leadId } = req.body || {};
+    
+    if (campaignId) {
+      const c = getCampaign(campaignId);
+      if (!c || !c.ownerKey || c.ownerKey !== ownerKey) {
+        return res.status(404).json({ ok: false, error: 'Campaign not found' });
+      }
+    }
+
     const dest = toE164(to);
     if (!dest) {
       return res.status(400).json({ ok: false, error: 'Invalid destination phone number' });
@@ -3846,13 +3917,14 @@ app.get('/api/sms/status', (_req, res) => {
 });
 
 // ---- Owner SMS log (per-owner aggregated view) ---------------------------
+// ---- Owner SMS log (per-owner aggregated view) ---------------------------
 // Each GET fires a fast (≤2s) recheck of any non-terminal Telnyx rows so the
 // UI sees delivered/failed within a single poll cycle, even when the
 // webhook is slow/delayed/missed.
 app.get('/api/owner/sms', authenticate, async (req, res) => {
   try {
-    const rawOwner = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
-    const ownerKey = rawOwner || 'dashboard';
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const limit = parseInt(req.query.limit, 10) || 100;
     const rows = listSmsForOwner(ownerKey, limit);
     // Live re-check (never blocks the response — fire & read fresh on next tick).
@@ -3868,7 +3940,8 @@ app.get('/api/owner/sms', authenticate, async (req, res) => {
 // calls Telnyx, refunds on failure, and updates status as the webhook lands.
 app.post('/api/owner/sms', authenticate, async (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.body?.ownerKey || req.query.ownerKey || 'dashboard').trim();
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const { to, text, leadName } = req.body || {};
     const dest = toE164(to);
     if (!dest) return res.status(400).json({ ok: false, error: 'Invalid destination phone' });
@@ -3940,8 +4013,8 @@ app.post('/api/owner/sms', authenticate, async (req, res) => {
 // ---------------------------------------------------------------------------
 app.get('/api/messaging/stats', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
-    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
 
     // Get SMS stats from the database
     const smsStats = db.prepare(`
@@ -3986,8 +4059,8 @@ app.get('/api/messaging/stats', authenticate, (req, res) => {
 // ---------------------------------------------------------------------------
 app.get('/api/numbers', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
-    if (!ownerKey) return res.status(400).json({ ok: false, error: 'ownerKey is required' });
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
 
     // Get unique numbers from SMS logs for this owner
     const numbers = db.prepare(`
@@ -4025,7 +4098,8 @@ app.get('/api/numbers', authenticate, (req, res) => {
 // List site history (previous builds for a given slug).
 app.get('/api/site-history', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const { parentSlug } = req.query;
     let sql = 'SELECT * FROM site_history WHERE owner_key = ? ORDER BY created_at DESC';
     const params = [ownerKey];
@@ -4057,7 +4131,8 @@ app.get('/api/site-history', authenticate, (req, res) => {
 // Create a new site history entry (Studio saves after each AI generation).
 app.post('/api/site-history', authenticate, async (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.body?.ownerKey || req.query?.ownerKey || '').trim();
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const { parentSlug, title = '', niche = '', html, snapshotLabel = '', templateId = null, templateName = null } = req.body || {};
     if (!html || typeof html !== 'string') {
       return res.status(400).json({ ok: false, error: 'html is required' });
@@ -4079,7 +4154,8 @@ app.post('/api/site-history', authenticate, async (req, res) => {
 // Load a single history entry.
 app.get('/api/site-history/:id', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const row = db.prepare('SELECT * FROM site_history WHERE id = ? AND owner_key = ?').get(req.params.id, ownerKey);
     if (!row) return res.status(404).json({ ok: false, error: 'Not found' });
     res.json({
@@ -4103,13 +4179,13 @@ app.get('/api/site-history/:id', authenticate, (req, res) => {
 });
 
 // Turn a history entry into a named template (saves to custom_templates).
-// Turn a history entry into a named template (saves to custom_templates).
 app.post('/api/site-history/:id/convert-to-template', authenticate, async (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.body?.ownerKey || req.query?.ownerKey || 'dashboard').trim();
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const { name, categoryId = null, niche = '', templateId: existingTemplateId = null, rawHtml = null } = req.body || {};
 
-    let row = db.prepare('SELECT * FROM site_history WHERE id = ?').get(req.params.id);
+    let row = db.prepare('SELECT * FROM site_history WHERE id = ? AND owner_key = ?').get(req.params.id, ownerKey);
     const htmlToSave = rawHtml || row?.html;
     if (!htmlToSave) return res.status(400).json({ ok: false, error: 'HTML content is required to save template' });
 
@@ -4147,8 +4223,8 @@ app.post('/api/site-history/:id/convert-to-template', authenticate, async (req, 
     // Mark history entry as converted if present
     if (row) {
       db.prepare(
-        'UPDATE site_history SET is_template = 1, template_id = ?, template_name = ? WHERE id = ?',
-      ).run(templateId, templateName, req.params.id);
+        'UPDATE site_history SET is_template = 1, template_id = ?, template_name = ? WHERE id = ? AND owner_key = ?',
+      ).run(templateId, templateName, req.params.id, ownerKey);
     }
 
     const updatedNiches = await getAllNiches(ownerKey);
@@ -4173,10 +4249,11 @@ app.post('/api/site-history/:id/convert-to-template', authenticate, async (req, 
 // Delete a history entry.
 app.delete('/api/site-history/:id', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const row = db.prepare('SELECT * FROM site_history WHERE id = ? AND owner_key = ?').get(req.params.id, ownerKey);
     if (!row) return res.status(404).json({ ok: false, error: 'Not found' });
-    db.prepare('DELETE FROM site_history WHERE id = ?').run(req.params.id);
+    db.prepare('DELETE FROM site_history WHERE id = ? AND owner_key = ?').run(req.params.id, ownerKey);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -4491,7 +4568,8 @@ app.post('/api/templates/test-rebrand', (req, res) => {
 // List template categories for the current owner.
 app.get('/api/template-categories', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const cats = db.prepare(
       'SELECT id, name, color, icon, sort_order FROM template_categories WHERE owner_key = ? ORDER BY sort_order ASC, created_at ASC',
     ).all(ownerKey);
@@ -4509,7 +4587,8 @@ app.get('/api/template-categories', authenticate, (req, res) => {
 // Create a new template category.
 app.post('/api/template-categories', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.body?.ownerKey || req.query.ownerKey || '').trim();
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const { name, color = '#2563EB', icon = 'layout' } = req.body || {};
     if (!name || typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({ ok: false, error: 'name is required' });
@@ -4532,7 +4611,8 @@ app.post('/api/template-categories', authenticate, (req, res) => {
 // Update a template category.
 app.put('/api/template-categories/:id', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const { name, color, icon, sortOrder } = req.body || {};
     const existing = db.prepare(
       'SELECT * FROM template_categories WHERE id = ? AND owner_key = ?',
@@ -4557,13 +4637,14 @@ app.put('/api/template-categories/:id', authenticate, (req, res) => {
 // Delete a template category (templates move to uncategorized).
 app.delete('/api/template-categories/:id', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const existing = db.prepare(
       'SELECT * FROM template_categories WHERE id = ? AND owner_key = ?',
     ).get(req.params.id, ownerKey);
     if (!existing) return res.status(404).json({ ok: false, error: 'Category not found' });
-    db.prepare('UPDATE custom_templates SET category_id = NULL WHERE category_id = ?').run(req.params.id);
-    db.prepare('DELETE FROM template_categories WHERE id = ?').run(req.params.id);
+    db.prepare('UPDATE custom_templates SET category_id = NULL WHERE category_id = ? AND owner_key = ?').run(req.params.id, ownerKey);
+    db.prepare('DELETE FROM template_categories WHERE id = ? AND owner_key = ?').run(req.params.id, ownerKey);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -4573,7 +4654,8 @@ app.delete('/api/template-categories/:id', authenticate, (req, res) => {
 // List custom templates for the current owner.
 app.get('/api/custom-templates', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const { categoryId } = req.query;
     let rows;
     if (categoryId) {
@@ -4598,7 +4680,8 @@ app.get('/api/custom-templates', authenticate, (req, res) => {
 // Get the preview HTML for a specific custom template (iframe-safe, pre-filled with demo data).
 app.get('/api/custom-templates/:id/preview', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const t = db.prepare(
       'SELECT * FROM custom_templates WHERE id = ? AND owner_key = ?',
     ).get(req.params.id, ownerKey);
@@ -4610,13 +4693,12 @@ app.get('/api/custom-templates/:id/preview', authenticate, (req, res) => {
 });
 
 // Generate a new template via AI — THE CORE ENDPOINT.
-// Body: { prompt, niche, categoryId?, name?, ownerKey?, anthropicApiKey? }
 app.post('/api/custom-templates/generate', authenticate, async (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.body?.ownerKey || req.query?.ownerKey || '').trim();
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const { prompt, niche = 'Local Business', categoryId = null, name, anthropicApiKey, apiKey, geminiApiKey } = req.body || {};
 
-    // Input validation
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length < 20) {
       return res.status(400).json({ ok: false, error: 'Prompt must be at least 20 characters.' });
     }
@@ -4624,13 +4706,11 @@ app.post('/api/custom-templates/generate', authenticate, async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Prompt must be 2000 characters or fewer.' });
     }
 
-    // Credit gate: 2 credits per generation
     const balance = checkBalance(ownerKey);
     if (balance.available < 2) {
       return res.status(402).json({ ok: false, error: 'Insufficient credits. Need 2 credits to generate a template.', needed: 2, available: balance.available });
     }
 
-    // Charge 2 credits upfront
     charge(ownerKey, 2, 'template_generate', null);
 
     let rawHtml, previewHtml;
@@ -4642,13 +4722,11 @@ app.post('/api/custom-templates/generate', authenticate, async (req, res) => {
         } catch { /* ignore */ }
       }
     } catch (genErr) {
-      // Refund the 2 credits on AI failure
       refund(ownerKey, 2, 'template_gen_failed_refund', null);
       const msg = genErr instanceof Error ? genErr.message : 'Generation failed';
       return res.status(422).json({ ok: false, error: msg });
     }
 
-    // Persist to DB
     const id = `tmpl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const slug = (name || `template-${id}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const now = Math.floor(Date.now() / 1000);
@@ -4671,7 +4749,8 @@ app.post('/api/custom-templates/generate', authenticate, async (req, res) => {
 // Update a custom template (name, category, style tags).
 app.put('/api/custom-templates/:id', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const existing = db.prepare(
       'SELECT * FROM custom_templates WHERE id = ? AND owner_key = ?',
     ).get(req.params.id, ownerKey);
@@ -4706,12 +4785,13 @@ app.put('/api/custom-templates/:id', authenticate, (req, res) => {
 // Delete a custom template.
 app.delete('/api/custom-templates/:id', authenticate, (req, res) => {
   try {
-    const ownerKey = req.userId ? `user_${req.userId}` : String(req.query.ownerKey || '').trim();
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const existing = db.prepare(
       'SELECT * FROM custom_templates WHERE id = ? AND owner_key = ?',
     ).get(req.params.id, ownerKey);
     if (!existing) return res.status(404).json({ ok: false, error: 'Template not found' });
-    db.prepare('DELETE FROM custom_templates WHERE id = ?').run(req.params.id);
+    db.prepare('DELETE FROM custom_templates WHERE id = ? AND owner_key = ?').run(req.params.id, ownerKey);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -4779,15 +4859,28 @@ if (fs.existsSync(FRONTEND_DIST)) {
 // Catch-all for SPA deep-links. The Owner PWA lives at /owner/* so it must be
 // excluded from the catch-all. Must run AFTER /api/* routes so JSON 404s aren't
 // masked by HTML.
-const spaEntry = fs.existsSync(path.join(PWA_DIST, 'index.html'))
-  ? path.join(PWA_DIST, 'index.html')
-  : fs.existsSync(path.join(FRONTEND_DIST, 'index.html'))
-    ? path.join(FRONTEND_DIST, 'index.html')
+const spaEntry = fs.existsSync(path.join(FRONTEND_DIST, 'index.html'))
+  ? path.join(FRONTEND_DIST, 'index.html')
+  : fs.existsSync(path.join(PWA_DIST, 'index.html'))
+    ? path.join(PWA_DIST, 'index.html')
     : null;
 if (spaEntry) {
   app.get(/^(?!\/api\/|\/sites\/|\/uploads\/|\/static\/|\/owner\/).*/, (req, res) => {
     res.sendFile(spaEntry);
   });
+}
+
+export async function gracefulShutdown(signal = 'SIGTERM') {
+  console.log(`\n[Lunao Server] Received ${signal}. Initiating graceful shutdown...`);
+  try {
+    stopEmailAutomationScheduler();
+    stopOauthStateCleanup();
+    stopGlobalRechecker();
+    await closePostgresPool();
+    console.log('[Lunao Server] Background services and database connections stopped cleanly.');
+  } catch (err) {
+    console.warn('[Lunao Server] Error during graceful shutdown:', err.message);
+  }
 }
 
 export function startBackgroundServices() {
@@ -4804,7 +4897,7 @@ export { app };
 export default app;
 
 if (process.env.NO_SERVER_LISTEN !== 'true') {
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     // Background safety net: re-check non-terminal SMS rows every 30s, in case
     // the dashboard isn't open (so a Telnyx webhook that lands while nobody's
     // looking still gets reflected in the DB before the user next loads).
@@ -4840,4 +4933,15 @@ if (process.env.NO_SERVER_LISTEN !== 'true') {
     });
     console.log('');
   });
+
+  const onShutdownSignal = async (sig) => {
+    await gracefulShutdown(sig);
+    server.close(() => {
+      console.log('[Lunao Server] HTTP server closed cleanly.');
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(0), 10000).unref();
+  };
+  process.on('SIGTERM', () => onShutdownSignal('SIGTERM'));
+  process.on('SIGINT', () => onShutdownSignal('SIGINT'));
 }

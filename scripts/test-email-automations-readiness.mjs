@@ -215,25 +215,25 @@ async function runSuite() {
   console.log('\n--- TEST GROUP 7: Cloud Run Multi-Instance Deduplication & Bounded Retries ---');
 
   const testKey = 'test_idempotency_key_cloudrun';
-  const claim1 = claimAutomationJob(testKey, { bookingId: 9901, slug: 'test-slug', automationType: 'test', recipientEmail: 'test@example.com' });
+  const claim1 = await claimAutomationJob(testKey, { bookingId: 9901, slug: 'test-slug', automationType: 'test', recipientEmail: 'test@example.com' });
   assert(claim1.proceed === true && claim1.attempt === 1, 'Initial job claim succeeds with attempt count 1');
 
   // Concurrent worker trying to claim the same job while processing
-  const claimConcurrent = claimAutomationJob(testKey, { bookingId: 9901, slug: 'test-slug', automationType: 'test', recipientEmail: 'test@example.com' });
+  const claimConcurrent = await claimAutomationJob(testKey, { bookingId: 9901, slug: 'test-slug', automationType: 'test', recipientEmail: 'test@example.com' });
   assert(claimConcurrent.proceed === false && claimConcurrent.reason === 'in_progress', 'Concurrent worker on second Cloud Run instance is blocked from duplicate execution');
 
   // Simulate transient failure and retry
-  failAutomationJob(testKey, 'Resend 503 transient service timeout');
-  const claimRetry1 = claimAutomationJob(testKey, { bookingId: 9901, slug: 'test-slug', automationType: 'test', recipientEmail: 'test@example.com' });
+  await failAutomationJob(testKey, 'Resend 503 transient service timeout');
+  const claimRetry1 = await claimAutomationJob(testKey, { bookingId: 9901, slug: 'test-slug', automationType: 'test', recipientEmail: 'test@example.com' });
   assert(claimRetry1.proceed === true && claimRetry1.attempt === 2, 'Failed job safely retries with attempt count 2');
 
-  failAutomationJob(testKey, 'Resend 503 second failure');
-  const claimRetry2 = claimAutomationJob(testKey, { bookingId: 9901, slug: 'test-slug', automationType: 'test', recipientEmail: 'test@example.com' });
+  await failAutomationJob(testKey, 'Resend 503 second failure');
+  const claimRetry2 = await claimAutomationJob(testKey, { bookingId: 9901, slug: 'test-slug', automationType: 'test', recipientEmail: 'test@example.com' });
   assert(claimRetry2.proceed === true && claimRetry2.attempt === 3, 'Second retry succeeds with attempt count 3');
 
   // Permanent failure boundary check
-  failAutomationJob(testKey, 'Resend 503 third failure');
-  const claimExceeded = claimAutomationJob(testKey, { bookingId: 9901, slug: 'test-slug', automationType: 'test', recipientEmail: 'test@example.com' });
+  await failAutomationJob(testKey, 'Resend 503 third failure');
+  const claimExceeded = await claimAutomationJob(testKey, { bookingId: 9901, slug: 'test-slug', automationType: 'test', recipientEmail: 'test@example.com' });
   assert(claimExceeded.proceed === false && claimExceeded.reason === 'max_retries_exceeded', 'Bounded retry policy prevents indefinite retries beyond attempt limit');
 
   // ---------------------------------------------------------------------------

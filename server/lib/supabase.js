@@ -9,10 +9,28 @@ if (process.env.DATABASE_URL) {
     pgPool = new Pool({
       connectionString: process.env.DATABASE_URL,
       ssl: process.env.PGSSL === 'disable' ? false : { rejectUnauthorized: false },
+      max: Number(process.env.PG_POOL_MAX) || 5, // Safe limit for 1 GiB RAM servers
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+    });
+    // Prevent unhandled error events on idle connections from crashing the process
+    pgPool.on('error', (err) => {
+      console.warn('[Postgres Pool Notice] Idle client error:', err.message);
     });
   } catch (err) {
     console.warn('[Supabase] Failed to initialize Postgres pool:', err.message);
     pgPool = null;
+  }
+}
+
+export async function closePostgresPool() {
+  if (pgPool) {
+    try {
+      await pgPool.end();
+      pgPool = null;
+    } catch (err) {
+      console.warn('[Postgres] Error closing pool during shutdown:', err.message);
+    }
   }
 }
 
@@ -632,5 +650,140 @@ export async function supabaseToggleAutomation(slug, key, enabled) {
     return data;
   } catch {
     return null;
+  }
+}
+
+// ---- Email Automation Jobs (Durable Outbox & Deduplication) -----------------
+
+let jobsTableChecked = false;
+async function ensureJobsTable() {
+  if (jobsTableChecked) return;
+  if (pgPool) {
+    try {
+      await pgPool.query(`
+        CREATE TABLE IF NOT EXISTS email_automation_jobs (
+          idempotency_key TEXT PRIMARY KEY,
+          booking_id TEXT,
+          slug TEXT,
+          automation_type TEXT,
+          recipient_email TEXT,
+          status TEXT DEFAULT 'processing',
+          attempts INT DEFAULT 1,
+          last_attempt_at BIGINT,
+          resend_id TEXT,
+          error_message TEXT,
+          created_at BIGINT,
+          updated_at BIGINT
+        );
+        CREATE INDEX IF NOT EXISTS idx_email_jobs_slug_status ON email_automation_jobs (slug, status);
+      `);
+      jobsTableChecked = true;
+    } catch (err) {
+      console.warn('[Postgres] email_automation_jobs table notice:', err.message);
+    }
+  }
+}
+
+export async function supabaseClaimJob(idempotencyKey, { bookingId, slug, automationType, recipientEmail }) {
+  if (!idempotencyKey) return { proceed: true };
+  await ensureJobsTable();
+
+  const now = Date.now();
+  const maxAttempts = 3;
+  const inProgressTimeoutMs = 5 * 60 * 1000;
+
+  if (pgPool) {
+    try {
+      // 1. Atomic insert with ON CONFLICT DO NOTHING
+      const insertResult = await pgPool.query(
+        `INSERT INTO email_automation_jobs
+           (idempotency_key, booking_id, slug, automation_type, recipient_email, status, attempts, last_attempt_at, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, 'processing', 1, $6, $6, $6)
+         ON CONFLICT (idempotency_key) DO NOTHING
+         RETURNING attempts`,
+        [idempotencyKey, String(bookingId || ''), slug || '', automationType || '', recipientEmail || '', now]
+      );
+
+      // Successfully claimed on initial attempt
+      if (insertResult.rows && insertResult.rows.length > 0) {
+        return { proceed: true, attempt: 1 };
+      }
+
+      // 2. Job already exists: inspect current status
+      const { rows } = await pgPool.query(
+        'SELECT * FROM email_automation_jobs WHERE idempotency_key = $1 LIMIT 1',
+        [idempotencyKey]
+      );
+
+      if (!rows || rows.length === 0) {
+        return { proceed: false, reason: 'in_progress' };
+      }
+
+      const existing = rows[0];
+      if (existing.status === 'sent') {
+        return { proceed: false, reason: 'already_sent', resendId: existing.resend_id };
+      }
+      if (existing.status === 'processing' && now - Number(existing.last_attempt_at || 0) < inProgressTimeoutMs) {
+        return { proceed: false, reason: 'in_progress' };
+      }
+      if (existing.status === 'failed' && Number(existing.attempts || 0) >= maxAttempts) {
+        return { proceed: false, reason: 'max_retries_exceeded', attempts: Number(existing.attempts) };
+      }
+
+      // 3. Atomically claim retry lock
+      const nextAttempts = Number(existing.attempts || 1) + 1;
+      const updateResult = await pgPool.query(
+        `UPDATE email_automation_jobs
+         SET status = 'processing', attempts = $1, last_attempt_at = $2, updated_at = $2
+         WHERE idempotency_key = $3
+           AND (status = 'failed' OR (status = 'processing' AND last_attempt_at <= $4))
+           AND attempts < $5
+         RETURNING attempts`,
+        [nextAttempts, now, idempotencyKey, now - inProgressTimeoutMs, maxAttempts]
+      );
+
+      if (updateResult.rows && updateResult.rows.length > 0) {
+        return { proceed: true, attempt: Number(updateResult.rows[0].attempts) };
+      }
+
+      return { proceed: false, reason: 'in_progress' };
+    } catch (err) {
+      console.warn('[Postgres] Claim job notice:', err.message);
+    }
+  }
+
+  // Fallback if no database pool connected
+  return null;
+}
+
+export async function supabaseCompleteJob(idempotencyKey, resendId) {
+  if (!idempotencyKey) return;
+  if (pgPool) {
+    try {
+      await pgPool.query(
+        `UPDATE email_automation_jobs
+         SET status = 'sent', resend_id = $1, updated_at = $2
+         WHERE idempotency_key = $3`,
+        [resendId || '', Date.now(), idempotencyKey]
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+export async function supabaseFailJob(idempotencyKey, errorMessage) {
+  if (!idempotencyKey) return;
+  if (pgPool) {
+    try {
+      await pgPool.query(
+        `UPDATE email_automation_jobs
+         SET status = 'failed', error_message = $1, updated_at = $2
+         WHERE idempotency_key = $3`,
+        [String(errorMessage || '').slice(0, 300), Date.now(), idempotencyKey]
+      );
+    } catch {
+      /* ignore */
+    }
   }
 }

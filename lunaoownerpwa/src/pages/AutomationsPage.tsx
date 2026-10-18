@@ -286,31 +286,10 @@ export const AutomationsPage: React.FC = () => {
             </Badge>
           </div>
           <p className="text-xs md:text-sm text-slate-500 mt-1 max-w-2xl">
-            Real transactional email automations for instant confirmations, scheduled reminders, post-visit feedback, and customer re-booking.
+            Reliable transactional email reminders and post-appointment review requests with custom timing for each booking.
           </p>
         </div>
-
-        {/* Quick Reactivation Action */}
-        <div className="flex items-center gap-2 shrink-0">
-          <Button
-            variant="outline"
-            size="sm"
-            leftIcon={<RefreshCw className="w-3.5 h-3.5 text-emerald-600" />}
-            onClick={() => setShowReactivationModal(true)}
-          >
-            Send Re-booking Broadcast
-          </Button>
-        </div>
       </div>
-
-      {/* Connected Email Account Status Card */}
-      <ConnectedEmailBanner
-        account={connectedAccount}
-        onReauth={handleReauthEmail}
-        onConnect={handleConnectEmail}
-        onDisconnect={handleDisconnectEmail}
-        onToggleTestExpiry={handleToggleExpiry}
-      />
 
       {/* Overview Stats Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

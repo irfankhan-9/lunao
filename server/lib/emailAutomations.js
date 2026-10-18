@@ -9,7 +9,12 @@ import { sendEmail } from './resendService.js';
 import { getProfile } from './businessProfile.js';
 import { db } from './db.js';
 import { listBookingsAsync } from './bookings.js';
-import { supabaseListAutomations } from './supabase.js';
+import {
+  supabaseListAutomations,
+  supabaseClaimJob,
+  supabaseCompleteJob,
+  supabaseFailJob,
+} from './supabase.js';
 import { PUBLIC_API_BASE_URL } from './config.js';
 
 // =============================================================================
@@ -158,20 +163,103 @@ export async function getAutomationSetting(slug, key) {
 // In-memory cache + state tracker
 const memoryJobStore = new Map();
 
+let sqliteJobsTableInitialized = false;
+function ensureSqliteJobsTable() {
+  if (sqliteJobsTableInitialized) return;
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS email_automation_jobs (
+        idempotency_key TEXT PRIMARY KEY,
+        booking_id TEXT,
+        slug TEXT,
+        automation_type TEXT,
+        recipient_email TEXT,
+        status TEXT DEFAULT 'processing',
+        attempts INTEGER DEFAULT 1,
+        last_attempt_at INTEGER,
+        resend_id TEXT,
+        error_message TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_email_jobs_slug_status ON email_automation_jobs (slug, status);
+    `);
+    sqliteJobsTableInitialized = true;
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadJobFromSqlite(idempotencyKey) {
+  ensureSqliteJobsTable();
+  try {
+    const row = db.prepare('SELECT * FROM email_automation_jobs WHERE idempotency_key = ? LIMIT 1').get(idempotencyKey);
+    if (row) {
+      const job = {
+        idempotencyKey: row.idempotency_key,
+        bookingId: String(row.booking_id || ''),
+        slug: row.slug || '',
+        automationType: row.automation_type || '',
+        recipientEmail: row.recipient_email || '',
+        status: row.status || 'processing',
+        attempts: Number(row.attempts || 1),
+        lastAttemptAt: Number(row.last_attempt_at || 0),
+        resendId: row.resend_id || null,
+        errorMessage: row.error_message || null,
+        createdAt: Number(row.created_at || Date.now()),
+        updatedAt: Number(row.updated_at || Date.now()),
+      };
+      memoryJobStore.set(idempotencyKey, job);
+      return job;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 /**
  * Atomically claim an automation job.
  * Prevents duplicate emails across retries, restarts, and concurrent workers.
  * Implements bounded retries (max 3 attempts).
  */
-export function claimAutomationJob(idempotencyKey, { bookingId, slug, automationType, recipientEmail }) {
+export async function claimAutomationJob(idempotencyKey, { bookingId, slug, automationType, recipientEmail }) {
   if (!idempotencyKey) return { proceed: true };
+  ensureSqliteJobsTable();
+
+  // 1. Try PostgreSQL / Supabase authoritative job outbox
+  try {
+    const sbResult = await supabaseClaimJob(idempotencyKey, { bookingId, slug, automationType, recipientEmail });
+    if (sbResult) {
+      if (sbResult.proceed) {
+        memoryJobStore.set(idempotencyKey, {
+          idempotencyKey,
+          bookingId: String(bookingId || ''),
+          slug: slug || '',
+          automationType: automationType || '',
+          recipientEmail: recipientEmail || '',
+          status: 'processing',
+          attempts: sbResult.attempt || 1,
+          lastAttemptAt: Date.now(),
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+      }
+      return sbResult;
+    }
+  } catch (err) {
+    console.warn('[emailAutomations] Supabase job claim notice:', err.message);
+  }
 
   const now = Date.now();
   const maxAttempts = 3;
   const inProgressTimeoutMs = 5 * 60 * 1000; // 5 min timeout for abandoned processing
 
-  // Check memory store first for instant atomic resolution
-  const existing = memoryJobStore.get(idempotencyKey);
+  // Check memory store (or hydrate from SQLite on restart)
+  let existing = memoryJobStore.get(idempotencyKey);
+  if (!existing) {
+    existing = loadJobFromSqlite(idempotencyKey);
+  }
   if (existing) {
     if (existing.status === 'sent') {
       return { proceed: false, reason: 'already_sent', resendId: existing.resendId };
@@ -232,7 +320,7 @@ export function claimAutomationJob(idempotencyKey, { bookingId, slug, automation
 /**
  * Mark automation job completed with Resend provider ID
  */
-export function completeAutomationJob(idempotencyKey, resendId) {
+export async function completeAutomationJob(idempotencyKey, resendId) {
   if (!idempotencyKey) return;
   const now = Date.now();
 
@@ -241,6 +329,12 @@ export function completeAutomationJob(idempotencyKey, resendId) {
     job.status = 'sent';
     job.resendId = resendId;
     job.updatedAt = now;
+  }
+
+  try {
+    await supabaseCompleteJob(idempotencyKey, resendId);
+  } catch {
+    /* ignore */
   }
 
   try {
@@ -257,7 +351,7 @@ export function completeAutomationJob(idempotencyKey, resendId) {
 /**
  * Mark automation job failed with error message
  */
-export function failAutomationJob(idempotencyKey, errorMessage) {
+export async function failAutomationJob(idempotencyKey, errorMessage) {
   if (!idempotencyKey) return;
   const now = Date.now();
 
@@ -266,6 +360,12 @@ export function failAutomationJob(idempotencyKey, errorMessage) {
     job.status = 'failed';
     job.errorMessage = errorMessage;
     job.updatedAt = now;
+  }
+
+  try {
+    await supabaseFailJob(idempotencyKey, errorMessage);
+  } catch {
+    /* ignore */
   }
 
   try {
@@ -414,7 +514,7 @@ export async function sendCustomerBookingConfirmation(booking, profile = null) {
 
   // Atomic deduplication claim
   const dedupKey = `confirmation:${booking.id || `${slug}_${booking.email}_${booking.date}_${booking.time}`}`;
-  const claim = claimAutomationJob(dedupKey, {
+  const claim = await claimAutomationJob(dedupKey, {
     bookingId: booking.id,
     slug,
     automationType: 'booking_confirmation',
@@ -525,9 +625,9 @@ The ${businessName} Team
   });
 
   if (res.success) {
-    completeAutomationJob(dedupKey, res.id);
+    await completeAutomationJob(dedupKey, res.id);
   } else {
-    failAutomationJob(dedupKey, res.error);
+    await failAutomationJob(dedupKey, res.error);
   }
 
   logEmailActivity({
@@ -562,7 +662,7 @@ export async function sendOwnerBookingNotification(booking, profile = null) {
 
   // Atomic deduplication claim
   const dedupKey = `owner:${booking.id || `${slug}_${booking.phone}_${booking.date}_${booking.time}`}`;
-  const claim = claimAutomationJob(dedupKey, {
+  const claim = await claimAutomationJob(dedupKey, {
     bookingId: booking.id,
     slug,
     automationType: 'owner_notification',
@@ -684,9 +784,9 @@ ${ownerPwaUrl}
   });
 
   if (res.success) {
-    completeAutomationJob(dedupKey, res.id);
+    await completeAutomationJob(dedupKey, res.id);
   } else {
-    failAutomationJob(dedupKey, res.error);
+    await failAutomationJob(dedupKey, res.error);
   }
 
   logEmailActivity({
@@ -730,7 +830,7 @@ export async function sendCustomerAppointmentReminder(booking, profile = null) {
   // This guarantees that if a booking is rescheduled to a new date/time,
   // the old reminder is not resent, and a new reminder can be scheduled for the new time.
   const dedupKey = `reminder:${booking.id || slug}:${booking.date}:${booking.time}`;
-  const claim = claimAutomationJob(dedupKey, {
+  const claim = await claimAutomationJob(dedupKey, {
     bookingId: booking.id,
     slug,
     automationType: 'appointment_reminder',
@@ -828,9 +928,9 @@ ${businessName}
   });
 
   if (res.success) {
-    completeAutomationJob(dedupKey, res.id);
+    await completeAutomationJob(dedupKey, res.id);
   } else {
-    failAutomationJob(dedupKey, res.error);
+    await failAutomationJob(dedupKey, res.error);
   }
 
   logEmailActivity({
@@ -886,7 +986,7 @@ export async function sendCustomerReviewRequest(booking, profile = null) {
 
   // Atomic deduplication claim
   const dedupKey = `review:${booking.id || `${slug}_${booking.email}_${booking.date}`}`;
-  const claim = claimAutomationJob(dedupKey, {
+  const claim = await claimAutomationJob(dedupKey, {
     bookingId: booking.id,
     slug,
     automationType: 'post_appointment_followup',

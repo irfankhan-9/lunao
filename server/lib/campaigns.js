@@ -131,6 +131,12 @@ export function getCampaign(id) {
   return rowToCampaign(row);
 }
 
+export function getCampaignScoped(id, ownerKey) {
+  if (!id || !ownerKey) return null;
+  const row = db.prepare('SELECT * FROM campaigns WHERE id = ? AND owner_key = ?').get(id, ownerKey);
+  return rowToCampaign(row);
+}
+
 export function listCampaigns(ownerKey, { limit = 50 } = {}) {
   const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
   const rows = db

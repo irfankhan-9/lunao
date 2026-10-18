@@ -4,8 +4,7 @@ import {
   Users,
   Clock,
   ExternalLink,
-  Mail,
-  Bot,
+  Globe,
   ArrowRight,
   ShieldCheck,
   CalendarDays,
@@ -183,19 +182,19 @@ export const DashboardPage: React.FC = () => {
           <button
             onClick={() => {
               soundEffects.playButtonClick();
-              setActiveSection('email');
+              setActiveSection('customers');
             }}
             className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50 text-left transition group active:scale-[0.98]"
           >
             <div className="p-2 rounded-lg bg-emerald-100 text-emerald-800 shrink-0">
-              <Mail className="w-4 h-4" />
+              <Users className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <p className="text-xs font-semibold text-slate-900 group-hover:text-emerald-800 truncate">
-                Email Center
+                Clients
               </p>
               <p className="text-[10px] text-slate-500 truncate">
-                Message clients
+                Client directory
               </p>
             </div>
           </button>
@@ -203,19 +202,19 @@ export const DashboardPage: React.FC = () => {
           <button
             onClick={() => {
               soundEffects.playButtonClick();
-              setActiveSection('ai_receptionist');
+              setActiveSection('website');
             }}
             className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50 text-left transition group active:scale-[0.98]"
           >
             <div className="p-2 rounded-lg bg-emerald-100 text-emerald-800 shrink-0">
-              <Bot className="w-4 h-4" />
+              <Globe className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <p className="text-xs font-semibold text-slate-900 group-hover:text-emerald-800 truncate">
-                Front Desk
+                Website
               </p>
               <p className="text-[10px] text-slate-500 truncate">
-                Hours & guidelines
+                Live landing page
               </p>
             </div>
           </button>
@@ -362,22 +361,22 @@ export const DashboardPage: React.FC = () => {
             )}
           </div>
 
-          {/* Virtual Front Desk Status Card */}
+          {/* Business Automations Status Card */}
           <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200">
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-emerald-700" />
               <span className="text-xs font-semibold text-emerald-900">
-                Front Desk Ready
+                Automations Active
               </span>
             </div>
             <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-              Handling customer inquiries, answering verified hours, and queuing appointments 24/7.
+              Dispatching instant client booking receipts, 24-hour reminders, and review follow-ups automatically.
             </p>
             <button
-              onClick={() => setActiveSection('ai_receptionist')}
+              onClick={() => setActiveSection('automations')}
               className="mt-3 text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:underline"
             >
-              Review Desk Instructions &rarr;
+              Configure Automation Triggers &rarr;
             </button>
           </div>
         </div>

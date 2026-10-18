@@ -195,6 +195,18 @@ export function getEmailCampaign(id) {
   return campaign;
 }
 
+export function getEmailCampaignScoped(id, userId) {
+  if (!id || !userId) return null;
+  const campaign = db.prepare('SELECT * FROM email_campaigns WHERE id = ? AND user_id = ?').get(id, userId);
+  if (!campaign) return null;
+  const counts = getEmailCampaignCounts(id);
+  campaign.leads_found = counts.leads_found;
+  campaign.sites_generated = counts.sites_generated;
+  campaign.sent = counts.emails_sent;
+  campaign.failed = counts.emails_failed;
+  return campaign;
+}
+
 // Mark an email campaign as cancelled by the user. Soft cancel — the
 // in-flight runEmailPipeline() loop checks this on every lead boundary
 // via getEmailCampaign() and exits early.
@@ -725,8 +737,12 @@ export function updateAccountLastSuccessfulSend(accountId) {
   ).run(Math.floor(Date.now() / 1000), accountId);
 }
 
-export function deleteEmailAccount(id) {
-  db.prepare('DELETE FROM email_accounts WHERE id = ?').run(id);
+export function deleteEmailAccount(id, userId = null) {
+  if (userId) {
+    db.prepare('DELETE FROM email_accounts WHERE id = ? AND user_id = ?').run(id, userId);
+  } else {
+    db.prepare('DELETE FROM email_accounts WHERE id = ?').run(id);
+  }
 }
 
 export function updateAccountRefreshToken(id, encryptedToken) {

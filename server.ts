@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Disable immediate standalone listen in server/index.js so we can attach Vite middlewares
 process.env.NO_SERVER_LISTEN = 'true';
-const { app, startBackgroundServices } = await import('./server/index.js');
+const { app, startBackgroundServices, gracefulShutdown } = await import('./server/index.js');
 
 const PORT = Number(process.env.PORT) || 3000;
 const isDev = process.env.NODE_ENV !== 'production';
@@ -40,9 +40,23 @@ if (isDev) {
   });
 }
 
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   if (typeof startBackgroundServices === 'function') {
     startBackgroundServices();
   }
   console.log(`\n🚀 Lunao Full-Stack running on http://0.0.0.0:${PORT}\n`);
 });
+
+const onShutdownSignal = async (sig: string) => {
+  if (typeof gracefulShutdown === 'function') {
+    await gracefulShutdown(sig);
+  }
+  server.close(() => {
+    console.log('[Lunao Server] HTTP server closed cleanly.');
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(0), 10000).unref();
+};
+process.on('SIGTERM', () => onShutdownSignal('SIGTERM'));
+process.on('SIGINT', () => onShutdownSignal('SIGINT'));
+

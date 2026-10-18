@@ -20,14 +20,7 @@ import './landing/index.css';
 // to /site-gate where the visitor enters the password to unlock the cookie, then
 // the SPA at /app loads with the authenticated session.
 function openDashboard() {
-  // For localhost development: bypass the password gate and go directly to the dashboard.
-  // In production, this navigates to /site-gate to enter the shared password first.
-  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  if (isLocalhost) {
-    window.location.href = '/app';
-  } else {
-    window.location.href = '/site-gate';
-  }
+  window.location.href = '/app';
 }
 
 export const Landing: React.FC = () => {

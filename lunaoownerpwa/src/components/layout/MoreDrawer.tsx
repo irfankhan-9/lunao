@@ -1,9 +1,7 @@
 import React from 'react';
 import {
-  Bot,
   Globe,
   Workflow,
-  Mail,
   Settings,
   X,
   ChevronRight,
@@ -37,12 +35,6 @@ export const MoreDrawer: React.FC<MoreDrawerProps> = ({ isOpen, onClose }) => {
     icon: React.ReactNode;
   }[] = [
     {
-      id: 'ai_receptionist',
-      label: 'AI Receptionist',
-      sublabel: 'Operating hours, policies, & booking guidance',
-      icon: <Bot className="w-5 h-5 text-emerald-700" />,
-    },
-    {
       id: 'website',
       label: 'Business Website',
       sublabel: 'Live preview, content updates, & publishing',
@@ -53,12 +45,6 @@ export const MoreDrawer: React.FC<MoreDrawerProps> = ({ isOpen, onClose }) => {
       label: 'Automations',
       sublabel: 'Reminders, booking confirmations, & follow-ups',
       icon: <Workflow className="w-5 h-5 text-emerald-700" />,
-    },
-    {
-      id: 'email',
-      label: 'Email Center',
-      sublabel: 'Client confirmations, notices, & delivery log',
-      icon: <Mail className="w-5 h-5 text-emerald-700" />,
     },
     {
       id: 'settings',

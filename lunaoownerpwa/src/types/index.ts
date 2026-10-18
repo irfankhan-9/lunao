@@ -2,11 +2,8 @@ export type NavSection =
   | 'dashboard'
   | 'bookings'
   | 'customers'
-  | 'chat'
-  | 'ai_receptionist'
   | 'website'
   | 'automations'
-  | 'email'
   | 'settings';
 
 export interface BusinessTheme {

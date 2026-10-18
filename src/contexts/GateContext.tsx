@@ -26,18 +26,22 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
   const isLocalhost = typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-  const isMockEnv = isLocalhost ||
-    (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_STANDALONE_MOCK === 'true') ||
-    (typeof window !== 'undefined' && (
-      window.location.hostname.includes('webcontainer') ||
-      window.location.hostname.includes('aistudio') ||
-      window.location.hostname.includes('run.app') ||
-      window.location.hostname.includes('googleusercontent.com') ||
-      window.location.hostname.includes('stackblitz')
-    ));
+  // Explicit opt-in for isolated mock development mode
+  const isExplicitMock = typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_STANDALONE_MOCK === 'true';
+
+  // Only permit sandbox dev bypass in non-production local development or webcontainer environments
+  const isDevMode = typeof import.meta !== 'undefined' && Boolean((import.meta as any).env?.DEV);
+  const isLocalDevSandbox = isDevMode && typeof window !== 'undefined' && (
+    isLocalhost ||
+    window.location.hostname.includes('webcontainer') ||
+    window.location.hostname.includes('stackblitz')
+  );
+
+  // Remotely accessible hostnames (*.run.app, *.googleusercontent.com, custom domains) NEVER automatically unlock
+  const isMockEnv = isExplicitMock || isLocalDevSandbox;
 
   const refresh = useCallback(async () => {
-    // For localhost / AI Studio / standalone mock development: skip gate check and unlock directly.
+    // For local dev / standalone mock development: unlock directly.
     if (isMockEnv) {
       setUnlocked(true);
       return;
