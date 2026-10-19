@@ -19,7 +19,37 @@ const insertStmt = db.prepare(`
     (@slug, @business_name, @customer_name, @phone, @email, @service, @date, @time, @notes, @source, @status, @created_at)
 `);
 
+function extractCustomFields(input = {}) {
+  const KNOWN_KEYS = new Set([
+    'id', 'slug', 'businessName', 'business_name', 'customerName', 'customer_name',
+    'name', 'phone', 'email', 'service', 'date', 'time', 'notes', 'source',
+    'status', 'idempotencyKey', 'idempotency_key', 'createdAt', 'created_at',
+    'customFields', 'custom_fields', 'rawSubmission'
+  ]);
+  const custom = {};
+  if (input.customFields && typeof input.customFields === 'object') {
+    Object.assign(custom, input.customFields);
+  }
+  if (input.custom_fields && typeof input.custom_fields === 'object') {
+    Object.assign(custom, input.custom_fields);
+  }
+  Object.keys(input).forEach((k) => {
+    if (!KNOWN_KEYS.has(k) && input[k] !== undefined && input[k] !== null && input[k] !== '') {
+      custom[k] = input[k];
+    }
+  });
+  return custom;
+}
+
 function rowToBooking(r) {
+  let customFields = {};
+  if (r.custom_fields) {
+    try {
+      customFields = typeof r.custom_fields === 'string' ? JSON.parse(r.custom_fields) : r.custom_fields;
+    } catch {}
+  } else if (r.customFields) {
+    customFields = r.customFields;
+  }
   return {
     id: r.id,
     slug: r.slug,
@@ -33,6 +63,7 @@ function rowToBooking(r) {
     notes: r.notes,
     source: r.source,
     status: r.status,
+    customFields,
     createdAt: Number(r.created_at || r.createdAt || Date.now()),
   };
 }
@@ -53,6 +84,12 @@ export function createBooking(input = {}) {
   }
   const source = VALID_SOURCE.has(input.source) ? input.source : 'form';
   const id = input.id ? Number(input.id) : (Date.now() + Math.floor(Math.random() * 1000));
+  const customFields = extractCustomFields(input);
+  let notes = str(input.notes);
+  if (!notes && Object.keys(customFields).length > 0) {
+    notes = Object.entries(customFields).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`).join(' | ');
+  }
+
   const record = {
     id,
     slug: str(input.slug),
@@ -63,7 +100,8 @@ export function createBooking(input = {}) {
     service: str(input.service),
     date: str(input.date),
     time: str(input.time),
-    notes: str(input.notes),
+    notes,
+    customFields,
     source,
     status: input.status || 'new',
     created_at: Number(input.createdAt || Date.now()),
@@ -104,6 +142,12 @@ export async function createBookingAsync(input = {}) {
     throw err;
   }
 
+  const customFields = extractCustomFields(input);
+  let notes = str(input.notes);
+  if (!notes && Object.keys(customFields).length > 0) {
+    notes = Object.entries(customFields).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`).join(' | ');
+  }
+
   const idempotencyKey = str(input.idempotencyKey || input.idempotency_key) || null;
   const bookingPayload = {
     slug,
@@ -114,7 +158,8 @@ export async function createBookingAsync(input = {}) {
     service: str(input.service),
     date: str(input.date),
     time: str(input.time),
-    notes: str(input.notes),
+    notes,
+    customFields,
     source: VALID_SOURCE.has(input.source) ? input.source : 'form',
     status: 'new',
     idempotencyKey,

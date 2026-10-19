@@ -730,6 +730,11 @@ export async function sendOwnerBookingNotification(booking, profile = null) {
         <span class="highlight-label">Booking Reference:</span>
         <span class="highlight-val"><code>${referenceId}</code></span>
       </div>
+      ${booking.customFields && typeof booking.customFields === 'object' ? Object.entries(booking.customFields).map(([k, v]) => `
+      <div class="highlight-row">
+        <span class="highlight-label" style="text-transform: capitalize;">${k.replace(/_/g, ' ')}:</span>
+        <span class="highlight-val">${v}</span>
+      </div>`).join('') : ''}
       ${booking.notes ? `
       <div class="highlight-row">
         <span class="highlight-label">Client Notes:</span>

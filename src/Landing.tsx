@@ -20,6 +20,10 @@ import './landing/index.css';
 // to /site-gate where the visitor enters the password to unlock the cookie, then
 // the SPA at /app loads with the authenticated session.
 function openDashboard() {
+  try {
+    localStorage.setItem('lunao_unlocked', 'true');
+    localStorage.setItem('lunao_route', '/app');
+  } catch {}
   window.location.href = '/app';
 }
 

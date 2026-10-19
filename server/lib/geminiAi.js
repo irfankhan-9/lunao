@@ -29,8 +29,8 @@ export function isAiEnabled() {
 
 // Preferred primary models per Gemini API skill guidelines.
 const MODEL_PRIORITY = [
-  process.env.GEMINI_MODEL || 'gemini-3.8-flash',
-  'gemini-4-argon',
+  process.env.GEMINI_MODEL || 'gemini-flash-latest',
+  'gemini-3.8-flash',
   'gemini-3.1-flash-lite',
 ];
 

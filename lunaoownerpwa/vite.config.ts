@@ -17,7 +17,7 @@ export default defineConfig(() => {
       // on :8787 so the same-origin auth headers (cookies, bearer tokens)
       // work without CORS gymnastics. Change the target via the
       // LUNAO_API_BASE_URL env var when proxying to a remote backend.
-      port: Number(process.env.PWA_DEV_PORT || 3001),
+      port: 3000,
       host: '0.0.0.0',
       proxy: {
         '/api': {

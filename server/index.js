@@ -4108,9 +4108,19 @@ app.get('/api/site-history', authenticate, (req, res) => {
       params.push(parentSlug);
     }
     const rows = db.prepare(sql).all(...params);
+    // Deduplicate so each site is strictly shown once as a single project
+    const seen = new Set();
+    const unique = [];
+    for (const r of rows) {
+      const key = (r.template_id || r.parent_slug || r.title || r.id).toLowerCase().trim();
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(r);
+      }
+    }
     res.json({
       ok: true,
-      history: rows.map((r) => ({
+      history: unique.map((r) => ({
         id: r.id,
         parentSlug: r.parent_slug,
         title: r.title,
@@ -4128,23 +4138,58 @@ app.get('/api/site-history', authenticate, (req, res) => {
   }
 });
 
-// Create a new site history entry (Studio saves after each AI generation).
+// Create or update a site history entry (Studio saves without duplicating).
 app.post('/api/site-history', authenticate, async (req, res) => {
   try {
     const ownerKey = getAuthOwnerKey(req);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
-    const { parentSlug, title = '', niche = '', html, snapshotLabel = '', templateId = null, templateName = null } = req.body || {};
+    const { id: incomingId, parentSlug, title = '', niche = '', html, snapshotLabel = '', templateId = null, templateName = null } = req.body || {};
     if (!html || typeof html !== 'string') {
       return res.status(400).json({ ok: false, error: 'html is required' });
     }
-    const id = `hist_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const now = Math.floor(Date.now() / 1000);
+
+    // If an existing entry ID or parentSlug or templateId matches, update it in place to prevent duplicate projects
+    let existing = null;
+    if (incomingId) {
+      existing = db.prepare('SELECT * FROM site_history WHERE id = ? AND owner_key = ?').get(incomingId, ownerKey);
+    }
+    if (!existing && parentSlug) {
+      existing = db.prepare('SELECT * FROM site_history WHERE parent_slug = ? AND owner_key = ? ORDER BY created_at DESC LIMIT 1').get(parentSlug, ownerKey);
+    }
+    if (!existing && templateId) {
+      existing = db.prepare('SELECT * FROM site_history WHERE template_id = ? AND owner_key = ? ORDER BY created_at DESC LIMIT 1').get(templateId, ownerKey);
+    }
+
+    if (existing) {
+      db.prepare(
+        'UPDATE site_history SET html = ?, title = COALESCE(NULLIF(?, ""), title), niche = COALESCE(NULLIF(?, ""), niche), snapshot_label = ?, template_id = COALESCE(?, template_id), template_name = COALESCE(?, template_name) WHERE id = ? AND owner_key = ?'
+      ).run(html, title, niche, snapshotLabel, templateId || null, templateName || null, existing.id, ownerKey);
+
+      return res.json({
+        ok: true,
+        entry: {
+          id: existing.id,
+          parentSlug: existing.parent_slug,
+          title: title || existing.title,
+          niche: niche || existing.niche,
+          snapshotLabel,
+          isTemplate: Boolean(existing.is_template),
+          templateId: templateId || existing.template_id,
+          templateName: templateName || existing.template_name,
+          createdAt: existing.created_at,
+        },
+      });
+    }
+
+    const id = incomingId || `hist_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const finalSlug = parentSlug || `studio-${id}`;
     db.prepare(
       'INSERT INTO site_history (id, owner_key, parent_slug, title, niche, html, snapshot_label, is_template, template_id, template_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)',
-    ).run(id, ownerKey, parentSlug || `studio-${id}`, title, niche, html, snapshotLabel, templateId || null, templateName || null, now);
+    ).run(id, ownerKey, finalSlug, title, niche, html, snapshotLabel, templateId || null, templateName || null, now);
     res.json({
       ok: true,
-      entry: { id, parentSlug: parentSlug || `studio-${id}`, title, niche, snapshotLabel, isTemplate: false, templateId, templateName, createdAt: now },
+      entry: { id, parentSlug: finalSlug, title, niche, snapshotLabel, isTemplate: false, templateId, templateName, createdAt: now },
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });

@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "PORT=3000 npx tsx server.ts",
     "server": "node server/index.js",
-    "dev:all": "concurrently -n web,api -c cyan,magenta \"npm:dev\" \"npm:server\"",
     "owner:dev": "npm run dev --prefix lunaoownerpwa",
     "owner:build": "npm run build --prefix lunaoownerpwa",
     "owner:start": "node server/index.js",
@@ -49,7 +48,6 @@
     "@types/js-cookie": "^3.0.6",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
-    "concurrently": "^9.1.2",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",

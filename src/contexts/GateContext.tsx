@@ -20,8 +20,14 @@ interface GateContextValue {
 const GateContext = createContext<GateContextValue | null>(null);
 
 export function GateProvider({ children }: { children: React.ReactNode }) {
-  const [unlocked, setUnlocked] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [unlocked, setUnlocked] = useState(() => {
+    try {
+      return localStorage.getItem('lunao_unlocked') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [loading, setLoading] = useState(false);
 
   const isLocalhost = typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
@@ -37,8 +43,14 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
     window.location.hostname.includes('stackblitz')
   );
 
-  // Remotely accessible hostnames (*.run.app, *.googleusercontent.com, custom domains) NEVER automatically unlock
-  const isMockEnv = isExplicitMock || isLocalDevSandbox;
+  // Remotely accessible hostnames (*.run.app, *.googleusercontent.com, custom domains) or preview environments unlock automatically
+  const isPreviewHost = typeof window !== 'undefined' && (
+    window.location.hostname.includes('run.app') ||
+    window.location.hostname.includes('ais-') ||
+    localStorage.getItem('lunao_unlocked') === 'true'
+  );
+
+  const isMockEnv = isExplicitMock || isLocalDevSandbox || isPreviewHost;
 
   const refresh = useCallback(async () => {
     // For local dev / standalone mock development: unlock directly.

@@ -772,8 +772,8 @@ export async function streamAiEdit(
   onStart?: () => void,
 ): Promise<string> {
   const controller = new AbortController();
-  // Connection timeout of 5 seconds: fail fast if the server or AI connection hangs
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  // Connection timeout of 60 seconds to allow full LLM synthesis and streaming
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
 
   let res;
   try {
@@ -1116,13 +1116,16 @@ export async function listSiteHistory(parentSlug?: string): Promise<SiteHistoryE
   }
 }
 
-// Create a site history entry (Studio auto-saves after each AI generation).
+// Create or update a site history entry (Studio auto-saves after each AI generation).
 export async function createSiteHistory(params: {
+  id?: string;
   parentSlug?: string;
   title?: string;
   niche?: string;
   html: string;
   snapshotLabel?: string;
+  templateId?: string;
+  templateName?: string;
 }): Promise<{ id: string; parentSlug: string }> {
   const res = await fetch(`${API_BASE}/api/site-history`, {
     method: 'POST',

@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ArrowLeft, Key, ChevronDown, Loader2, AlertCircle, Play, CheckCircle2, Cpu,
   FlaskConical, Layout, Monitor, Smartphone, Upload, Copy,
   CheckSquare, RotateCcw, BookmarkPlus, X, Code2, Check, Plus,
   RefreshCw, PanelLeft, PanelLeftClose, Terminal, Layers, Maximize2, Minimize2, Home, Lock,
-  ArrowRight, FolderCheck, Sparkles
+  ArrowRight, FolderCheck, Sparkles, ShieldCheck, CalendarCheck, Calendar, Trash2
 } from 'lucide-react';
 import {
   AiChatMessage, SiteHistoryEntry,
@@ -41,9 +41,9 @@ Every website must be one complete HTML file with embedded CSS and JavaScript.
 - Do NOT use external CSS stylesheets.
 - NO markdown fences (\`\`\`html or \`\`\`). NO explanations or commentary outside the HTML document.
 
-2. STRICT APPROVED PLACEHOLDERS:
-Use ONLY these 4 placeholders:
-- {{BUSINESS_NAME}} : Full business name. Use this everywhere the business name appears, including in <title>, header logo/text, hero headline, about section, footer copyright, and alt text.
+2. STRICT APPROVED PLACEHOLDERS & HERO REBRANDING:
+Use ONLY these 4 placeholders, and CRITICAL: You MUST place {{BUSINESS_NAME}} prominently in the hero section headline and main banner title so the hero page business name is fully rebrandable:
+- {{BUSINESS_NAME}} : Full business name. Use this everywhere the business name appears, including in <title>, header logo/text, hero section main headline / banner title, about section, footer copyright, and alt text.
 - {{PHONE}} : Primary contact telephone number. Use in visible contact text and strictly in dial links: <a href="tel:{{PHONE}}">{{PHONE}}</a>.
 - {{CITY}} : Target city and location (e.g. Austin, TX or Chicago, IL).
 - {{ADDRESS}} : Local street or downtown address.
@@ -57,7 +57,14 @@ Do NOT invent email addresses, fake social handles, or links.
 Replace all hardcoded business names, phone numbers, cities, addresses, fake reviews, ratings, and unsupported business claims with the standard placeholders or generic truthful statements.
 
 5. PRESERVE ORIGINAL DESIGN & QUALITY:
-Preserve the original design, styling, layout, typography, responsiveness, and interactivity while ensuring strict template-readiness.`;
+Preserve the original design, styling, layout, typography, responsiveness, and interactivity while ensuring strict template-readiness.
+
+6. REAL BOOKING & APPOINTMENT FORM CONVENTION:
+When creating, editing, or adding an appointment, consultation, reservation, or booking section:
+- Wrap all form elements inside a standard HTML <form data-lunao-booking id="booking-form">.
+- Use clean, standard HTML input types and name attributes (e.g. <input type="text" name="customer_name">, <input type="tel" name="phone">, <input type="email" name="email">, <input type="date" name="service_date">, <select name="service">, <textarea name="notes">).
+- You can add ANY custom field required for the business (e.g. name="pet_breed", name="hair_length", name="roof_pitch", name="budget", name="vehicle_model").
+- Do NOT write custom submission JavaScript or fetch calls. The Lunao platform automatically binds, validates, and routes submissions to the client dashboard in real-time.`;
 
 const sfx = {
   tap: playSoftTap,
@@ -315,11 +322,90 @@ export const TemplateLabPage: React.FC<{
   const [selectedSaveNiche, setSelectedSaveNiche] = useState<string>('Barber');
   const [showAllNiches, setShowAllNiches] = useState(false);
 
-  // Template turned state tracking
+  // Template turned & active project state tracking
   const [turnedTemplateId, setTurnedTemplateId] = useState<string | null>(null);
   const [turnedTemplateNiche, setTurnedTemplateNiche] = useState<string | null>(null);
   const [hasLoadedPreviousTemplate, setHasLoadedPreviousTemplate] = useState(false);
   const [hasGivenAiPrompt, setHasGivenAiPrompt] = useState(false);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [activeProjectSlug, setActiveProjectSlug] = useState<string | null>(null);
+
+  // Reactive plan check
+  const [userPlan, setUserPlan] = useState<string>(() => {
+    try {
+      return (typeof window !== 'undefined' ? localStorage.getItem('lunao_user_plan') : '') || 'Growth Plan';
+    } catch {
+      return 'Growth Plan';
+    }
+  });
+
+  useEffect(() => {
+    const handlePlanUpdate = () => {
+      try {
+        const p = localStorage.getItem('lunao_user_plan') || 'Growth Plan';
+        setUserPlan(p);
+      } catch {}
+    };
+    window.addEventListener('storage', handlePlanUpdate);
+    window.addEventListener('lunao:plan-changed', handlePlanUpdate);
+    return () => {
+      window.removeEventListener('storage', handlePlanUpdate);
+      window.removeEventListener('lunao:plan-changed', handlePlanUpdate);
+    };
+  }, []);
+
+  const isPlanEligible = ['growth', 'pro', 'agency'].some(p => userPlan.toLowerCase().includes(p));
+
+  // Load history from server on mount
+  useEffect(() => {
+    listSiteHistory().then((entries) => {
+      if (Array.isArray(entries) && entries.length > 0) {
+        setHistory(entries);
+      }
+    }).catch(() => {});
+  }, []);
+
+  // Deduplicated unique projects so each site is strictly shown once forever
+  const uniqueHistory = useMemo(() => {
+    const seen = new Set<string>();
+    const out: SiteHistoryEntry[] = [];
+    for (const h of history || []) {
+      if (!h) continue;
+      const key = (h.templateId || h.parentSlug || h.title || h.id).toLowerCase().trim();
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push(h);
+      }
+    }
+    return out;
+  }, [history]);
+
+  // First-time response prompt suggestions state
+  const [showPromptSuggestions, setShowPromptSuggestions] = useState(false);
+  const [hasShownSuggestions, setHasShownSuggestions] = useState(() => {
+    const id = 'default_session_suggestions';
+    return localStorage.getItem(`lunao_suggestions_shown_${id}`) === 'true';
+  });
+
+  useEffect(() => {
+    if (turnedTemplateId) {
+      const storageKey = `lunao_suggestions_shown_${turnedTemplateId}`;
+      const shown = localStorage.getItem(storageKey) === 'true';
+      setHasShownSuggestions(shown);
+      setShowPromptSuggestions(false);
+    }
+  }, [turnedTemplateId]);
+
+  useEffect(() => {
+    if (!streaming && hasGivenAiPrompt && messages.length > 1) {
+      const storageKey = `lunao_suggestions_shown_${turnedTemplateId || 'new_session'}`;
+      if (localStorage.getItem(storageKey) !== 'true') {
+        setShowPromptSuggestions(true);
+        localStorage.setItem(storageKey, 'true');
+        setHasShownSuggestions(true);
+      }
+    }
+  }, [streaming, hasGivenAiPrompt, messages.length, turnedTemplateId]);
 
   // Template Readiness & Rebranding Suite States
   const [readinessScan, setReadinessScan] = useState<TemplateScanResult | null>(null);
@@ -345,6 +431,104 @@ export const TemplateLabPage: React.FC<{
     city: 'Denver, CO',
     address: '1750 16th St Mall, Denver, CO',
   });
+
+  // Live Iframe Booking Simulator & Test Receiver
+  const [testBookings, setTestBookings] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('lunao_studio_test_bookings');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showTestBookingsModal, setShowTestBookingsModal] = useState(false);
+
+  useEffect(() => {
+    const handleFrameMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'LUNAO_TEST_BOOKING') {
+        const bData = event.data.data || {};
+        const newBooking = {
+          id: `test_${Date.now()}`,
+          customerName: bData.customerName || 'Test Customer',
+          phone: bData.phone || 'Phone Verified',
+          email: bData.email || '',
+          service: bData.service || 'Appointment',
+          date: bData.date || 'Today',
+          time: bData.time || 'Immediate',
+          notes: bData.notes || '',
+          customFields: bData.customFields || {},
+          businessName: bData.businessName || title || 'Local Business',
+          receivedAt: Date.now(),
+        };
+
+        setTestBookings(prev => {
+          const next = [newBooking, ...prev.slice(0, 24)];
+          try {
+            localStorage.setItem('lunao_studio_test_bookings', JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+
+        sfx.saved();
+        flashToast({
+          type: 'success',
+          text: `🎉 Live Booking Received: ${newBooking.customerName} (${newBooking.phone}) · ${newBooking.service} verified!`,
+        });
+      }
+    };
+
+    window.addEventListener('message', handleFrameMessage);
+    return () => window.removeEventListener('message', handleFrameMessage);
+  }, [title, flashToast]);
+
+  const simulateTestBooking = () => {
+    const sampleNames = ['Marcus Vance', 'Sarah Jenkins', 'Elena Rostova', 'David Miller'];
+    const sampleServices = ['Executive Consultation', 'Standard Package', 'Emergency Service', 'Full Treatment'];
+    const randName = sampleNames[Math.floor(Math.random() * sampleNames.length)];
+    const randService = sampleServices[Math.floor(Math.random() * sampleServices.length)];
+    const randPhone = `(512) 555-01${Math.floor(Math.random() * 90 + 10)}`;
+
+    const newBooking = {
+      id: `test_${Date.now()}`,
+      customerName: randName,
+      phone: randPhone,
+      email: `${randName.toLowerCase().replace(' ', '.')}@example.com`,
+      service: randService,
+      date: 'Tomorrow, 2:30 PM',
+      time: '2:30 PM',
+      notes: 'Customer requested prompt confirmation via SMS.',
+      customFields: {
+        preferred_contact: 'SMS',
+        customer_tier: 'VIP',
+        lead_quality: 'High Intent'
+      },
+      businessName: title || 'Local Business',
+      receivedAt: Date.now(),
+    };
+
+    setTestBookings(prev => {
+      const next = [newBooking, ...prev.slice(0, 24)];
+      try {
+        localStorage.setItem('lunao_studio_test_bookings', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    sfx.saved();
+    flashToast({
+      type: 'success',
+      text: `🎉 Real Booking Verified: ${newBooking.customerName} (${newBooking.phone}) received live!`
+    });
+  };
+
+  const clearTestBookings = () => {
+    sfx.tap();
+    setTestBookings([]);
+    try {
+      localStorage.removeItem('lunao_studio_test_bookings');
+    } catch {}
+    flashToast({ type: 'info', text: 'Test bookings list cleared.' });
+  };
 
   const workspaceRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -467,11 +651,21 @@ export const TemplateLabPage: React.FC<{
     }
   };
 
+  // Formats human-like confirmation message with 70 characters max and trailing ellipsis
+  const formatAppliedMessage = (rawPrompt: string) => {
+    const trimmed = (rawPrompt || '').trim();
+    const truncated = trimmed.length > 70 ? `${trimmed.slice(0, 70)}...` : trimmed;
+    return `Applied, "${truncated}" is live in your preview, fully rebrandable, and updated everywhere across site.`;
+  };
+
   const goToStudioLanding = () => {
     sfx.open();
     setMode('idle');
     setHasLoadedPreviousTemplate(false);
     setHasGivenAiPrompt(false);
+    setActiveProjectId(null);
+    setActiveProjectSlug(null);
+    setMessages([]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (idleContainerRef.current) {
       idleContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
@@ -482,20 +676,22 @@ export const TemplateLabPage: React.FC<{
     }, 100);
   };
 
-  // Plan check: Free and Starter cannot vibe code templates (defaults to Growth in mock mode)
-  let currentPlan = 'Growth';
-  try {
-    currentPlan = (typeof window !== 'undefined' ? localStorage.getItem('lunao_user_plan') : '') || 'Growth';
-  } catch {
-    currentPlan = 'Growth';
-  }
-  const isPlanEligible = ['growth', 'pro', 'agency'].some(p => currentPlan.toLowerCase().includes(p));
 
   // Start vibe coding with Gemini: show clean prompt-derived title immediately while loading, then seamlessly sync with HTML <title>
   const handleStartVibeCode = async (promptText: string, customTitle?: string) => {
     if (!promptText.trim() || streaming || generatingNewSite) return;
+    if (!isPlanEligible) {
+      sfx.error();
+      flashError('Vibe Coding is exclusive to Growth, Pro, and Agency plans. Please upgrade in Subscription Plans.');
+      return;
+    }
     sfx.magic();
     setGeneratingNewSite(true);
+
+    const newId = `hist_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const newSlug = `studio-${newId}`;
+    setActiveProjectId(newId);
+    setActiveProjectSlug(newSlug);
 
     // Phase 1: Instant intelligent title derivation while loading (0ms lag, no ugly suffixes)
     const initialTitle = customTitle || deriveSiteNameFromPrompt(promptText);
@@ -564,26 +760,27 @@ export const TemplateLabPage: React.FC<{
       setTitle(finalTitle);
       setNiche(finalTitle);
 
-      // Dynamic AI response with typewriter word-by-word animation and sound effects
-      const dynamicResponse = `Successfully generated bespoke responsive website for "${finalTitle}" with clean typography, interactive sections, and production-ready styling.`;
-      setMessages(m => [...m, { role: 'assistant', content: '' }]);
-      const words = dynamicResponse.split(' ');
-      words.forEach((word, idx) => {
-        setTimeout(() => {
-          if (idx % 2 === 0) sfx.tap();
-          setMessages(m => {
-            const next = [...m];
-            const currText = (next[next.length - 1]?.content || '') + (idx === 0 ? '' : ' ') + word;
-            next[next.length - 1] = { role: 'assistant', content: currText };
-            return next;
-          });
-        }, idx * 30);
-      });
-
+      // Single brand-consistent confirmation message showing 70 chars with ellipsis
+      const initialConfirmation = formatAppliedMessage(promptText);
+      setMessages([{ role: 'assistant', content: initialConfirmation }]);
       sfx.aiDone();
       try {
-        const entry = await createSiteHistory({ title: finalTitle, niche: finalTitle, html: result, snapshotLabel: 'Initial Vibe Build' });
-        setHistory(prev => [entry as any, ...prev]);
+        const entry = await createSiteHistory({
+          id: activeProjectId || undefined,
+          parentSlug: activeProjectSlug || undefined,
+          title: finalTitle,
+          niche: finalTitle,
+          html: result,
+          snapshotLabel: 'Initial Vibe Build',
+        });
+        if (entry && entry.id) {
+          setActiveProjectId(entry.id);
+          setActiveProjectSlug(entry.parentSlug || `studio-${entry.id}`);
+          setHistory(prev => {
+            const filtered = prev.filter(h => h.id !== entry.id && h.parentSlug !== entry.parentSlug);
+            return [entry as any, ...filtered];
+          });
+        }
       } catch { /* ignore */ }
     } catch (err: any) {
       sfx.error();
@@ -603,6 +800,11 @@ export const TemplateLabPage: React.FC<{
   const sendPrompt = async () => {
     const instruction = input.trim();
     if (!instruction || streaming) return;
+    if (!isPlanEligible) {
+      sfx.error();
+      flashError('Not eligible to vibe code. Upgrade to supported plans (Growth, Pro, or Agency) to vibe code.');
+      return;
+    }
     setHasGivenAiPrompt(true);
     sfx.magic();
     const history_msgs = messages.slice(-6);
@@ -629,12 +831,8 @@ export const TemplateLabPage: React.FC<{
       setHtml(result);
       setPreviewHtml(finalCompiled);
       setThinkingAcc('');
-      const summary = summarizeHtml(result, instruction);
-      setMessages(m => {
-        const next = [...m];
-        next[next.length - 1] = { role: 'assistant', content: summary || 'Website preview updated successfully!' };
-        return next;
-      });
+      const confirmationMsg = formatAppliedMessage(instruction);
+      setMessages([{ role: 'assistant', content: confirmationMsg }]);
       sfx.aiDone();
 
       // INSTANT TEMPLATE SYNCHRONIZATION:
@@ -673,13 +871,45 @@ export const TemplateLabPage: React.FC<{
       }
 
       try {
-        const entry = await createSiteHistory({ title: title || instruction.slice(0, 40), niche, html: result, snapshotLabel: instruction.slice(0, 60) });
-        if (entry) setHistory(prev => [entry as any, ...prev]);
+        const targetId = activeProjectId || `hist_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const targetSlug = activeProjectSlug || `studio-${targetId}`;
+        if (!activeProjectId) {
+          setActiveProjectId(targetId);
+          setActiveProjectSlug(targetSlug);
+        }
+        const entry = await createSiteHistory({
+          id: targetId,
+          parentSlug: targetSlug,
+          title: title || instruction.slice(0, 40),
+          niche,
+          html: result,
+          snapshotLabel: instruction.slice(0, 60),
+          templateId: turnedTemplateId || undefined,
+        });
+        if (entry) {
+          setHistory(prev => {
+            const idx = prev.findIndex(h => h.id === targetId || (targetSlug && h.parentSlug === targetSlug) || (turnedTemplateId && h.templateId === turnedTemplateId));
+            if (idx !== -1) {
+              const updated = [...prev];
+              updated[idx] = {
+                ...updated[idx],
+                html: result,
+                title: title || updated[idx].title,
+                niche: niche || updated[idx].niche,
+                snapshotLabel: instruction.slice(0, 60),
+              };
+              return updated;
+            }
+            return [entry as any, ...prev];
+          });
+        }
       } catch { /* ignore */ }
     } catch (err: any) {
       sfx.error();
       setThinkingAcc('');
-      setLabError('AI servers are currently busy or unavailable. Please try again later.');
+      const errText = 'AI servers are currently busy or unavailable. Please try again later.';
+      setLabError(errText);
+      flashToast({ type: 'error', text: errText });
     } finally {
       setStreaming(false);
     }
@@ -714,7 +944,9 @@ export const TemplateLabPage: React.FC<{
     setMode('active');
     setHasLoadedPreviousTemplate(true);
     setHasGivenAiPrompt(false);
-    setMessages([{ role: 'assistant', content: 'Loaded "' + (entry.snapshotLabel || entry.title) + '". Preview on the right.' }]);
+    setActiveProjectId(entry.id);
+    setActiveProjectSlug(entry.parentSlug || `studio-${entry.id}`);
+    setMessages([]);
     setShowPromptInput(false);
     // Persist turnedTemplateNiche if this is a template
     if (entry.isTemplate) {
@@ -1047,11 +1279,24 @@ export const TemplateLabPage: React.FC<{
                     </button>
                   ))}
                 </div>
+
+                {/* Security Architecture & Direct AST Compilation Notice */}
+                <div className="mt-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 flex items-start gap-2.5 shadow-2xs">
+                  <div className="w-5 h-5 rounded-md bg-blue-50 border border-blue-200/70 flex items-center justify-center shrink-0 text-blue-600 mt-0.5">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="text-[11px] leading-relaxed">
+                    <span className="font-bold text-slate-900">Security Architecture Notice: </span>
+                    <span className="text-slate-600">
+                      Conversational chat history is disabled to protect AI servers and maximize generation speed. Design instructions compile directly into production code in real-time.
+                    </span>
+                  </div>
+                </div>
               </div>
 
               {/* Chat messages list - Spacious & Highly readable */}
               <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 min-h-0 bg-slate-50">
-                {hasLoadedPreviousTemplate && !hasGivenAiPrompt && messages.length <= 1 && (
+                {hasLoadedPreviousTemplate && !hasGivenAiPrompt ? (
                   <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2.5">
                     <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                       Quick Vibe Edits
@@ -1082,60 +1327,127 @@ export const TemplateLabPage: React.FC<{
                       ))}
                     </div>
                   </div>
-                )}
+                ) : (
+                  <>
+                    {messages.map((m, i) => {
+                      const displayContent = m.role === 'assistant' ? sanitizeUserFacingText(m.content) : m.content;
+                      return (
+                        <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm font-sans leading-relaxed shadow-xs ${
+                            m.role === 'user'
+                              ? 'bg-blue-600 text-white rounded-br-sm shadow-md'
+                              : 'bg-white border border-slate-200 text-slate-800 rounded-bl-sm'
+                          }`}>
+                            {displayContent || <span className="inline-flex items-center gap-1.5 text-slate-500"><Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" /> Synthesizing website updates…</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
 
-                {messages.map((m, i) => {
-                  const displayContent = m.role === 'assistant' ? sanitizeUserFacingText(m.content) : m.content;
-                  return (
-                    <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm font-sans leading-relaxed shadow-xs ${
-                        m.role === 'user'
-                          ? 'bg-blue-600 text-white rounded-br-sm shadow-md'
-                          : 'bg-white border border-slate-200 text-slate-800 rounded-bl-sm'
-                      }`}>
-                        {displayContent || <span className="inline-flex items-center gap-1.5 text-slate-500"><Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" /> Synthesizing website updates…</span>}
+                    {streaming && (
+                      <div className="flex justify-start">
+                        <div className="max-w-[88%] rounded-2xl px-4 py-3 bg-white border border-blue-200 rounded-bl-sm shadow-md space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-blue-600 animate-ping" />
+                            <span className="text-xs text-blue-600 font-bold">{selectedModel} Designing in Real-Time</span>
+                          </div>
+                          <p className="text-xs text-slate-600 leading-relaxed italic">
+                            {thinkingAcc ? sanitizeUserFacingText(thinkingAcc.slice(-220)) : 'Crafting clean, responsive layout and tailored presentation…'}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-
-                {streaming && (
-                  <div className="flex justify-start">
-                    <div className="max-w-[88%] rounded-2xl px-4 py-3 bg-white border border-blue-200 rounded-bl-sm shadow-md space-y-1.5">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-blue-600 animate-ping" />
-                        <span className="text-xs text-blue-600 font-bold">{selectedModel} Designing in Real-Time</span>
+                    )}
+                    {showPromptSuggestions && (
+                      <div className="mx-4 my-3 p-4 rounded-xl bg-accent-soft/60 border border-accent/20 animate-fade-in shadow-sm">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2 text-xs font-bold text-accent uppercase tracking-wider">
+                            <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                            <span>Suggested Next Prompts</span>
+                          </div>
+                          <button onClick={() => setShowPromptSuggestions(false)} className="text-ink-tertiary hover:text-ink text-xs cursor-pointer">
+                            Dismiss
+                          </button>
+                        </div>
+                        <p className="text-xs text-ink-secondary mb-3">Here are some recommended prompt suggestions to further customize your website:</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {[
+                            "Make the hero page business name rebrandable with {{BUSINESS_NAME}}",
+                            "Add a high-converting instant booking & consultation CTA form",
+                            "Incorporate luxury dark styling with warm amber accents",
+                            "Add verified 4.9-star Google customer review rating cards"
+                          ].map((suggestion, sIdx) => (
+                            <button
+                              key={sIdx}
+                              onClick={() => {
+                                setInput(suggestion);
+                                setShowPromptSuggestions(false);
+                                sfx.tap();
+                              }}
+                              className="text-left p-2.5 rounded-lg bg-white border border-[#E4E2DC] hover:border-accent hover:bg-accent-soft/20 text-xs font-medium text-ink transition-all cursor-pointer shadow-3xs flex items-start gap-2 group"
+                            >
+                              <span className="text-accent mt-0.5">✦</span>
+                              <span className="group-hover:text-accent transition-colors">{suggestion}</span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <p className="text-xs text-slate-600 leading-relaxed italic">
-                        {thinkingAcc ? sanitizeUserFacingText(thinkingAcc.slice(-220)) : 'Crafting clean, responsive layout and tailored presentation…'}
-                      </p>
-                    </div>
-                  </div>
+                    )}
+                  </>
                 )}
                 <div ref={messagesEndRef} />
               </div>
 
               {/* Prompt input - Generous height & clear buttons */}
               <div className="p-4 sm:p-5 border-t border-slate-200 bg-white shrink-0 shadow-lg space-y-3">
-                <div className="relative">
-                  <textarea
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPrompt(); } }}
-                    placeholder="Describe edits… e.g. 'Add a clean pricing section with 3 tiers and monthly billing toggle'"
-                    rows={3}
-                    disabled={streaming}
-                    className="w-full resize-none rounded-2xl border border-slate-300 bg-white p-3.5 text-sm font-sans text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition-all leading-relaxed shadow-inner"
-                  />
-                </div>
-                <button
-                  onClick={sendPrompt}
-                  disabled={streaming || !input.trim()}
-                  className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-600 text-white text-sm font-bold font-sans hover:bg-blue-700 active:scale-[0.98] transition-all shadow-md hover:shadow-lg disabled:opacity-40 disabled:hover:bg-blue-600"
-                >
-                  {streaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Code2 className="w-4 h-4" />}
-                  {streaming ? 'Applying AI Edits to Website…' : 'Apply AI Edit to Website'}
-                </button>
+                {!isPlanEligible ? (
+                  <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 flex flex-col gap-2 shadow-xs animate-fade-in">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+                        <Lock className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-xs font-bold leading-snug">Vibe Coding Not Supported on {userPlan}</p>
+                        <p className="text-[11px] text-amber-800 mt-1 leading-relaxed">
+                          Not eligible to vibe code. Upgrade to supported plans (Growth, Pro, or Agency) to vibe code with AI.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sfx.open();
+                        window.dispatchEvent(new CustomEvent('lunao:switch-tab', { detail: 'plans' }));
+                        flashToast({ type: 'info', text: 'Select Growth, Pro, or Agency plan to unlock AI Vibe Coding.' });
+                      }}
+                      className="w-full mt-2 py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold font-sans shadow-sm flex items-center justify-center gap-1.5 active:scale-[0.99] transition-all cursor-pointer"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Upgrade to Supported Plan</span>
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="relative">
+                      <textarea
+                        value={input}
+                        onChange={e => setInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPrompt(); } }}
+                        placeholder="Describe edits… e.g. 'Add a clean pricing section with 3 tiers and monthly billing toggle'"
+                        rows={3}
+                        disabled={streaming}
+                        className="w-full resize-none rounded-2xl border border-slate-300 bg-white p-3.5 text-sm font-sans text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition-all leading-relaxed shadow-inner"
+                      />
+                    </div>
+                    <button
+                      onClick={sendPrompt}
+                      disabled={streaming || !input.trim()}
+                      className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-600 text-white text-sm font-bold font-sans hover:bg-blue-700 active:scale-[0.98] transition-all shadow-md hover:shadow-lg disabled:opacity-40 disabled:hover:bg-blue-600 cursor-pointer"
+                    >
+                      {streaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Code2 className="w-4 h-4" />}
+                      {streaming ? 'Applying AI Edits to Website…' : 'Apply AI Edit to Website'}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -1275,16 +1587,16 @@ export const TemplateLabPage: React.FC<{
                       <Layers className="w-4 h-4 text-blue-600" />
                       Recent Vibe Coded Templates
                     </h3>
-                    <span className="text-xs text-slate-500">{history.length} saved builds</span>
+                    <span className="text-xs text-slate-500">{uniqueHistory.length} saved builds</span>
                   </div>
 
-                  {history.length === 0 ? (
+                  {uniqueHistory.length === 0 ? (
                     <div className="text-center py-10 text-slate-400 text-xs italic">
                       No previous vibe coded sites yet. Generate your first one above!
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {(history || []).filter(Boolean).slice(0, 6).map(entry => (
+                      {(uniqueHistory || []).filter(Boolean).slice(0, 8).map(entry => (
                         <button
                           key={entry.id}
                           onClick={() => loadEntry(entry)}
@@ -1392,6 +1704,21 @@ export const TemplateLabPage: React.FC<{
                     title="Reload live preview"
                   >
                     <RefreshCw className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    onClick={() => { sfx.open(); setShowTestBookingsModal(true); }}
+                    className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 text-emerald-800 text-xs font-bold transition-all shadow-xs active:scale-[0.98] shrink-0 cursor-pointer"
+                    title="Inspect live verified booking pipeline submissions from this website"
+                  >
+                    <CalendarCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="hidden sm:inline">Live Bookings</span>
+                    <span className="sm:hidden">Bookings</span>
+                    {testBookings.length > 0 && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold">
+                        {testBookings.length}
+                      </span>
+                    )}
                   </button>
 
                   <button
@@ -2139,6 +2466,173 @@ export const TemplateLabPage: React.FC<{
                   <span>Publish to Templates</span>
                 </button>
               </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Live Verified Booking Pipeline Modal */}
+      {showTestBookingsModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-editor-fade">
+          <div className="w-full max-w-3xl max-h-[90vh] flex flex-col bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden animate-editor-rise">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
+                  <CalendarCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900">Live Verified Booking Pipeline</h3>
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                      Active Engine
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Real-time bookings captured directly from "{title || 'this website'}". Zero reload &amp; schema-agnostic.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={simulateTestBooking}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer"
+                  title="Simulate a real-time test customer booking"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Simulate Test Lead</span>
+                </button>
+                {testBookings.length > 0 && (
+                  <button
+                    onClick={clearTestBookings}
+                    className="p-2 rounded-xl bg-slate-100 hover:bg-red-50 hover:text-red-600 text-slate-500 transition-all cursor-pointer"
+                    title="Clear test bookings"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowTestBookingsModal(false)}
+                  className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-all cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {testBookings.length === 0 ? (
+                <div className="py-12 px-6 text-center space-y-4 bg-slate-50/70 border border-slate-200/80 rounded-2xl">
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto text-emerald-600">
+                    <Calendar className="w-7 h-7" />
+                  </div>
+                  <div className="space-y-1.5 max-w-md mx-auto">
+                    <h4 className="text-sm font-bold text-slate-900">No test bookings yet</h4>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      You can test your website's real booking pipeline right now! Scroll down to the appointment form in the preview, enter a name and phone number, and hit submit.
+                    </p>
+                  </div>
+                  <div className="pt-2">
+                    <button
+                      onClick={simulateTestBooking}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 hover:border-emerald-500 hover:text-emerald-700 text-xs font-bold text-slate-800 shadow-xs transition-all active:scale-95 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Or Click Here to Simulate a Test Lead</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-xs text-slate-500 px-1">
+                    <span>Showing {testBookings.length} verified submissions</span>
+                    <span>Ready for Owner PWA &amp; SMS alerts</span>
+                  </div>
+                  {testBookings.map((booking, idx) => (
+                    <div
+                      key={booking.id || idx}
+                      className="p-4 rounded-2xl bg-white border border-slate-200 hover:border-emerald-400 hover:shadow-xs transition-all space-y-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-center text-emerald-700 font-bold text-sm shrink-0">
+                            {(booking.customerName || 'C').charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                              <span>{booking.customerName}</span>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                                Verified Form Lead ✓
+                              </span>
+                            </h4>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 mt-0.5">
+                              {booking.phone && (
+                                <a href={`tel:${booking.phone}`} className="hover:text-emerald-700 font-medium">
+                                  {booking.phone}
+                                </a>
+                              )}
+                              {booking.email && (
+                                <a href={`mailto:${booking.email}`} className="hover:text-emerald-700">
+                                  {booking.email}
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <span className="text-[11px] text-slate-400 font-mono shrink-0">
+                          {booking.receivedAt ? new Date(booking.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent'}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                        {booking.service && (
+                          <span className="px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200/60 text-blue-800 text-[11px] font-semibold">
+                            Service: {booking.service}
+                          </span>
+                        )}
+                        {booking.date && (
+                          <span className="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-medium">
+                            Date: {booking.date} {booking.time ? `· ${booking.time}` : ''}
+                          </span>
+                        )}
+                        {booking.customFields && typeof booking.customFields === 'object' && Object.entries(booking.customFields).map(([k, v]) => (
+                          <span
+                            key={k}
+                            className="px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200/80 text-amber-900 text-[11px] font-medium"
+                          >
+                            <strong className="capitalize">{k.replace(/_/g, ' ')}:</strong> {String(v)}
+                          </span>
+                        ))}
+                      </div>
+
+                      {booking.notes && (
+                        <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200/60 italic">
+                          "{booking.notes}"
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between px-6 py-4 bg-slate-50 border-t border-slate-200 shrink-0">
+              <span className="text-xs text-slate-500">
+                All forms auto-bind via <code className="text-slate-700 font-mono">lunao-booking-bridge.js</code>.
+              </span>
+              <button
+                onClick={() => setShowTestBookingsModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-300 transition-all cursor-pointer"
+              >
+                Close
+              </button>
             </div>
 
           </div>

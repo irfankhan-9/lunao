@@ -14,6 +14,7 @@ import {
   Maximize2, Minimize2, RefreshCw, Lock, Check, Globe
 } from 'lucide-react';
 import { Template } from '../types';
+import { getLocalTemplates, compilePreview } from '../lib/nichesSync';
 import { playSoftTap, playConfirmSuccess, playSlideTick, playCancelTone } from '../utils/audio';
 
 export interface TemplatePreviewModalProps {
@@ -46,6 +47,36 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
       setIsFullscreen(initialFullscreen);
       setIsLoading(true);
       setIframeKey((prev) => prev + 1);
+
+      // 1. Check if template already carries rawHtml or previewHtml
+      if (template.previewHtml) {
+        setHtmlContent(template.previewHtml);
+        setIsLoading(false);
+        return;
+      }
+      if (template.rawHtml) {
+        setHtmlContent(compilePreview(template.rawHtml));
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. Check local templates storage for matching id or name
+      try {
+        const locals = getLocalTemplates();
+        const match = locals.find(
+          (t) => t.id === template.id || (template.name && t.name.toLowerCase() === template.name.toLowerCase())
+        );
+        if (match?.previewHtml) {
+          setHtmlContent(match.previewHtml);
+          setIsLoading(false);
+          return;
+        }
+        if (match?.rawHtml) {
+          setHtmlContent(compilePreview(match.rawHtml));
+          setIsLoading(false);
+          return;
+        }
+      } catch {}
 
       const url = (() => {
         if (template.templateFile && template.templateFile.endsWith('.html')) {
@@ -88,11 +119,15 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
       fetch(url)
         .then((res) => res.text())
         .then((text) => {
-          setHtmlContent(text);
+          if (text && text.trim().startsWith('<')) {
+            setHtmlContent(text);
+          } else {
+            setHtmlContent(compilePreview(text || '<html><body><h3>Template Ready</h3></body></html>'));
+          }
           setIsLoading(false);
         })
         .catch(() => {
-          setHtmlContent('<html><body><h3>Preview Error</h3></body></html>');
+          setHtmlContent('<html><body><h3>Preview Error or Not Found</h3></body></html>');
           setIsLoading(false);
         });
     }

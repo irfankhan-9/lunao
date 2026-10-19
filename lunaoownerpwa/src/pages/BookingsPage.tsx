@@ -324,6 +324,15 @@ export const BookingsPage: React.FC = () => {
                         "{b.notes}"
                       </p>
                     )}
+                    {(b as any).customFields && typeof (b as any).customFields === 'object' && Object.keys((b as any).customFields).length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {Object.entries((b as any).customFields).slice(0, 3).map(([k, v]) => (
+                          <span key={k} className="text-[10px] px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200/60 font-medium">
+                            <span className="capitalize">{k.replace(/_/g, ' ')}:</span> {String(v)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -512,6 +521,20 @@ export const BookingsPage: React.FC = () => {
                 <p className="text-slate-700 mt-1 leading-relaxed">
                   {selectedBooking.notes}
                 </p>
+              </div>
+            )}
+
+            {(selectedBooking as any).customFields && typeof (selectedBooking as any).customFields === 'object' && Object.keys((selectedBooking as any).customFields).length > 0 && (
+              <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200/80 space-y-2">
+                <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wider block">Custom Booking Specifications</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.entries((selectedBooking as any).customFields).map(([k, v]) => (
+                    <div key={k} className="p-2 rounded-lg bg-white border border-amber-200/60">
+                      <span className="text-[10px] text-amber-800/80 uppercase font-semibold block capitalize">{k.replace(/_/g, ' ')}</span>
+                      <p className="text-xs font-bold text-slate-900 mt-0.5 truncate">{String(v)}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

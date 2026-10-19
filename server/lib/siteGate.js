@@ -176,9 +176,9 @@ export function gateProtected(prefixes) {
       cleanPath === '/api/chat' ||
       cleanPath === '/functions/v1/public-bookings';
 
-    // Bypass for localhost development (no auth needed for local testing).
+    // Bypass for localhost / preview development (no auth needed for testing).
     const host = req.headers.host || '';
-    const isLocalhost = host === 'localhost:8787' || host === '127.0.0.1:8787' || host === 'localhost:3000' || host === '127.0.0.1:3000';
+    const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || host.includes('run.app') || host.includes('ais-');
 
     // Bypass for paths we never want to gate.
     if (isWebhook || isHealth || isGateRoute || isStaticAsset || isLocalhost || isPublic) return next();

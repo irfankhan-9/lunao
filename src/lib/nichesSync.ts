@@ -203,10 +203,18 @@ export const PLACEHOLDER_MAP: Record<string, string> = {
 
 export function compilePreview(rawHtml: string): string {
   if (!rawHtml || typeof rawHtml !== 'string') return rawHtml || '';
-  return rawHtml.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, rawKey) => {
+  let compiled = rawHtml.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, rawKey) => {
     const key = rawKey.toUpperCase();
     return key in PLACEHOLDER_MAP ? PLACEHOLDER_MAP[key] : `{{${rawKey}}}`;
   });
+  if (!compiled.includes('lunao-booking-bridge.js')) {
+    if (compiled.includes('</body>')) {
+      compiled = compiled.replace('</body>', '<script src="/lunao-booking-bridge.js"></script>\n</body>');
+    } else {
+      compiled += '\n<script src="/lunao-booking-bridge.js"></script>';
+    }
+  }
+  return compiled;
 }
 
 // Fetch templates from the backend and notify all components
