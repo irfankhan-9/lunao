@@ -91,18 +91,26 @@ export function scanTemplateReadiness(html) {
   const illegalPlaceholders = Array.from(illegalPlaceholdersSet);
 
   // Must have required 4 placeholders
+  const labelMap = {
+    BUSINESS_NAME: 'Dynamic Business Name',
+    PHONE: 'Dynamic Contact Phone',
+    CITY: 'Dynamic Target City',
+    ADDRESS: 'Dynamic Street Address',
+  };
+
   for (const required of ALLOWED_PLACEHOLDERS) {
+    const cleanLabel = labelMap[required] || 'Dynamic Business Details';
     if (foundPlaceholdersSet.has(required)) {
       passed.push({
         id: `req_${required}`,
-        label: `{{${required}}} Placeholder`,
-        explanation: `Mandatory placeholder {{${required}}} is present in the template.`,
+        label: cleanLabel,
+        explanation: `${cleanLabel} configuration is verified.`,
       });
     } else {
       failed.push({
         id: `req_${required}`,
-        label: `{{${required}}} Placeholder`,
-        explanation: `Missing required placeholder {{${required}}}. Must use only the 4 canonical placeholders.`,
+        label: cleanLabel,
+        explanation: `${cleanLabel} is missing from the template structure.`,
       });
     }
   }
@@ -111,33 +119,32 @@ export function scanTemplateReadiness(html) {
   if (illegalPlaceholders.length === 0) {
     passed.push({
       id: 'no_unsupported_placeholders',
-      label: 'Only Approved Placeholders',
-      explanation: 'Only {{BUSINESS_NAME}}, {{PHONE}}, {{CITY}}, and {{ADDRESS}} are used. No disallowed placeholders.',
+      label: 'Standard Brand Architecture',
+      explanation: 'All brand identity, contact, city, and address variables follow clean architecture standards.',
     });
   } else {
     failed.push({
       id: 'no_unsupported_placeholders',
-      label: 'Only Approved Placeholders',
-      explanation: `Found unapproved placeholder(s): ${illegalPlaceholders.map(p => `{{${p}}}`).join(', ')}. Use only {{BUSINESS_NAME}}, {{PHONE}}, {{CITY}}, and {{ADDRESS}}.`,
+      label: 'Standard Brand Architecture',
+      explanation: 'Found unstandardized variables in code. All variables must adhere to unified brand structure.',
     });
   }
 
   // 3. Social Media & Email Identity Rule:
-  // Must use {{BUSINESS_NAME}} for email and social media identity text.
-  // Never create separate email or social media placeholders. Do not invent email addresses or social handles.
+  // Must use business name for email and social media identity text.
   const hasInventedEmails = /mailto:\s*[a-zA-Z0-9._%+-]+@(?!\{\{)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/i.test(html) &&
     !html.includes('{{BUSINESS_NAME}}');
   if (hasInventedEmails) {
     failed.push({
       id: 'no_invented_emails',
-      label: 'No Invented Email Addresses',
-      explanation: 'Found invented email addresses. Email identity text must derive from {{BUSINESS_NAME}}.',
+      label: 'Dynamic Email Identity',
+      explanation: 'Email identity text must dynamically derive from the target company name.',
     });
   } else {
     passed.push({
       id: 'no_invented_emails',
       label: 'Consistent Brand Email & Social Identity',
-      explanation: 'Brand identity uses {{BUSINESS_NAME}} without separate or invented placeholders.',
+      explanation: 'Brand email and social identity dynamically adapt without hardcoded accounts.',
     });
   }
 
@@ -159,20 +166,20 @@ export function scanTemplateReadiness(html) {
     }
   }
 
-  // Verify tel: links use {{PHONE}}
+  // Verify tel: links use dynamic phone
   const hasTelPhonePlaceholder = /href=["']tel:\s*\{\{\s*PHONE\s*\}\}["']/i.test(html) ||
     /href=["']tel:\s*\{\{\s*PHONE_RAW\s*\}\}["']/i.test(html);
   if (hasTelPhonePlaceholder || !html.includes('href="tel:')) {
     passed.push({
       id: 'tel_links_use_phone',
-      label: 'Phone Links Use {{PHONE}}',
-      explanation: 'Telephone click-to-call links use {{PHONE}} placeholder properly.',
+      label: 'Click-to-Call Phone Dialing',
+      explanation: 'Telephone click-to-call links dynamically dial the client contact number.',
     });
   } else {
     failed.push({
       id: 'tel_links_use_phone',
-      label: 'Phone Links Use {{PHONE}}',
-      explanation: 'Found hardcoded href="tel:..." link without {{PHONE}} placeholder.',
+      label: 'Click-to-Call Phone Dialing',
+      explanation: 'Found static telephone dial link. Dial links must dynamically dial the client contact number.',
     });
   }
 

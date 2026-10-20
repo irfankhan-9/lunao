@@ -288,6 +288,42 @@ export function extractTitleFromHtml(rawHtml: string): string | null {
   return null;
 }
 
+// Converts template issues into clean, secret-preserving natural language prompts for the AI agent
+function getCleanFixPrompt(issueOrLabel: string): string {
+  const text = (issueOrLabel || '').toLowerCase();
+  if (text.includes('phone') || text.includes('dial') || text.includes('tel')) {
+    return 'Update all contact phone numbers and click-to-call dial links on the site so they dynamically match the target business';
+  }
+  if (text.includes('business name') || text.includes('company') || text.includes('title')) {
+    return 'Ensure the main business name in the hero headline, logo, and footer automatically adapts to any company brand';
+  }
+  if (text.includes('city') || text.includes('location')) {
+    return 'Make the city and service region across the hero section, header, and footer dynamically adapt to any target local market';
+  }
+  if (text.includes('address') || text.includes('street')) {
+    return 'Make the street address and physical location in the contact section dynamically adapt to any client location';
+  }
+  if (text.includes('old demo') || text.includes('retained') || text.includes('hardcoded') || text.includes('identity')) {
+    return 'Remove all hardcoded demo company details and sample brand names so the website seamlessly adapts to new clients';
+  }
+  return 'Refine the website so all company details, branding, contact info, and service location seamlessly adapt to any client';
+}
+
+function sanitizeCheckLabel(label: string): string {
+  if (!label) return '';
+  return label
+    .replace(/\{\{\s*BUSINESS_NAME\s*\}\}\s*(Placeholder)?/gi, 'Dynamic Business Name')
+    .replace(/\{\{\s*PHONE\s*\}\}\s*(Placeholder)?/gi, 'Dynamic Contact Phone')
+    .replace(/\{\{\s*CITY\s*\}\}\s*(Placeholder)?/gi, 'Dynamic Target City')
+    .replace(/\{\{\s*ADDRESS\s*\}\}\s*(Placeholder)?/gi, 'Dynamic Street Address')
+    .replace(/Only Approved Placeholders/gi, 'Standard Brand Architecture')
+    .replace(/Phone Links Use \{\{\s*PHONE\s*\}\}/gi, 'Click-to-Call Phone Dialing')
+    .replace(/Phone Links Use Phone/gi, 'Click-to-Call Phone Dialing')
+    .replace(/\{\{\s*[A-Za-z0-9_]+\s*\}\}/g, 'Brand Detail')
+    .replace(/\bplaceholders?\b/gi, 'Dynamic Branding')
+    .trim();
+}
+
 export const TemplateLabPage: React.FC<{
   aiEnabled: boolean;
   embedded?: boolean;
@@ -359,10 +395,41 @@ export const TemplateLabPage: React.FC<{
   // Load history from server on mount
   useEffect(() => {
     listSiteHistory().then((entries) => {
-      if (Array.isArray(entries) && entries.length > 0) {
-        setHistory(entries);
+      if (Array.isArray(entries)) {
+        if (entries.length === 0) {
+          const seedEntry: SiteHistoryEntry = {
+            id: 'radiant_smiles_default',
+            parentSlug: 'studio-radiant-smiles',
+            title: 'Radiant Smiles Dental',
+            niche: 'Dental Studio',
+            html: '<!DOCTYPE html><html><head><title>Radiant Smiles Dental</title></head><body style="font-family:sans-serif;padding:40px;background:#f8fafc;color:#0f172a"><header style="max-width:800px;margin:0 auto;background:#fff;padding:40px;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,0.05)"><span style="color:#0ea5e9;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:2px">Clinical Dental Atelier</span><h1 style="font-size:36px;margin:12px 0 16px 0;color:#0f172a">Radiant Smiles Dental</h1><p style="color:#64748b;line-height:1.6">Premier family and cosmetic dentistry in Austin, TX. Advanced clinical care, painless cleanings, and stunning natural smiles.</p><div style="margin-top:24px"><a href="tel:(512)555-0199" style="background:#0ea5e9;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600">Book Appointment: (512) 555-0199</a></div></header></body></html>',
+            snapshotLabel: 'Initial Vibe Build',
+            isTemplate: false,
+            templateId: null,
+            templateName: null,
+            createdAt: Date.now(),
+          };
+          setHistory([seedEntry]);
+        } else {
+          setHistory(entries);
+        }
       }
-    }).catch(() => {});
+    }).catch(() => {
+      // Fallback seed
+      const seedEntry: SiteHistoryEntry = {
+        id: 'radiant_smiles_default',
+        parentSlug: 'studio-radiant-smiles',
+        title: 'Radiant Smiles Dental',
+        niche: 'Dental Studio',
+        html: '<!DOCTYPE html><html><head><title>Radiant Smiles Dental</title></head><body style="font-family:sans-serif;padding:40px;background:#f8fafc;color:#0f172a"><header style="max-width:800px;margin:0 auto;background:#fff;padding:40px;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,0.05)"><span style="color:#0ea5e9;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:2px">Clinical Dental Atelier</span><h1 style="font-size:36px;margin:12px 0 16px 0;color:#0f172a">Radiant Smiles Dental</h1><p style="color:#64748b;line-height:1.6">Premier family and cosmetic dentistry in Austin, TX. Advanced clinical care, painless cleanings, and stunning natural smiles.</p><div style="margin-top:24px"><a href="tel:(512)555-0199" style="background:#0ea5e9;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600">Book Appointment: (512) 555-0199</a></div></header></body></html>',
+        snapshotLabel: 'Initial Vibe Build',
+        isTemplate: false,
+        templateId: null,
+        templateName: null,
+        createdAt: Date.now(),
+      };
+      setHistory([seedEntry]);
+    });
   }, []);
 
   // Deduplicated unique projects so each site is strictly shown once forever
@@ -380,32 +447,21 @@ export const TemplateLabPage: React.FC<{
     return out;
   }, [history]);
 
-  // First-time response prompt suggestions state
-  const [showPromptSuggestions, setShowPromptSuggestions] = useState(false);
-  const [hasShownSuggestions, setHasShownSuggestions] = useState(() => {
-    const id = 'default_session_suggestions';
-    return localStorage.getItem(`lunao_suggestions_shown_${id}`) === 'true';
-  });
 
-  useEffect(() => {
-    if (turnedTemplateId) {
-      const storageKey = `lunao_suggestions_shown_${turnedTemplateId}`;
-      const shown = localStorage.getItem(storageKey) === 'true';
-      setHasShownSuggestions(shown);
-      setShowPromptSuggestions(false);
-    }
-  }, [turnedTemplateId]);
 
+  // Clean up any old session chat history on mount so fresh sessions never show old chats
   useEffect(() => {
-    if (!streaming && hasGivenAiPrompt && messages.length > 1) {
-      const storageKey = `lunao_suggestions_shown_${turnedTemplateId || 'new_session'}`;
-      if (localStorage.getItem(storageKey) !== 'true') {
-        setShowPromptSuggestions(true);
-        localStorage.setItem(storageKey, 'true');
-        setHasShownSuggestions(true);
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('lunao_chat_messages_')) {
+          keysToRemove.push(k);
+        }
       }
-    }
-  }, [streaming, hasGivenAiPrompt, messages.length, turnedTemplateId]);
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+    } catch {}
+  }, []);
 
   // Template Readiness & Rebranding Suite States
   const [readinessScan, setReadinessScan] = useState<TemplateScanResult | null>(null);
@@ -664,8 +720,23 @@ export const TemplateLabPage: React.FC<{
     setHasLoadedPreviousTemplate(false);
     setHasGivenAiPrompt(false);
     setActiveProjectId(null);
-    setActiveProjectSlug(null);
     setMessages([]);
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('lunao_chat_messages_')) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+    } catch {}
+    // Refresh history so recent vibe coded templates section displays latest builds perfectly
+    listSiteHistory().then((entries) => {
+      if (Array.isArray(entries)) {
+        setHistory(entries);
+      }
+    }).catch(() => {});
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (idleContainerRef.current) {
       idleContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
@@ -808,7 +879,13 @@ export const TemplateLabPage: React.FC<{
     setHasGivenAiPrompt(true);
     sfx.magic();
     const history_msgs = messages.slice(-6);
-    setMessages(m => [...m, { role: 'user', content: instruction }]);
+    setMessages(prev => {
+      const last = prev[prev.length - 1];
+      if (last && last.role === 'user' && last.content.trim().toLowerCase() === instruction.toLowerCase()) {
+        return prev;
+      }
+      return [...prev, { role: 'user', content: instruction }];
+    });
     setInput('');
     setStreaming(true);
     setLabError(null);
@@ -832,7 +909,7 @@ export const TemplateLabPage: React.FC<{
       setPreviewHtml(finalCompiled);
       setThinkingAcc('');
       const confirmationMsg = formatAppliedMessage(instruction);
-      setMessages([{ role: 'assistant', content: confirmationMsg }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: confirmationMsg }]);
       sfx.aiDone();
 
       // INSTANT TEMPLATE SYNCHRONIZATION:
@@ -907,9 +984,12 @@ export const TemplateLabPage: React.FC<{
     } catch (err: any) {
       sfx.error();
       setThinkingAcc('');
-      const errText = 'AI servers are currently busy or unavailable. Please try again later.';
+      const errText = 'AI servers are currently busy or unavailable. Please try again in a moment.';
       setLabError(errText);
       flashToast({ type: 'error', text: errText });
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 50);
     } finally {
       setStreaming(false);
     }
@@ -946,7 +1026,13 @@ export const TemplateLabPage: React.FC<{
     setHasGivenAiPrompt(false);
     setActiveProjectId(entry.id);
     setActiveProjectSlug(entry.parentSlug || `studio-${entry.id}`);
+    
+    // Clear old chats completely so user is greeted with a clean Quick Vibe Edits card and zero old chats
     setMessages([]);
+    try {
+      localStorage.removeItem(`lunao_chat_messages_${entry.id}`);
+    } catch {}
+
     setShowPromptInput(false);
     // Persist turnedTemplateNiche if this is a template
     if (entry.isTemplate) {
@@ -1330,6 +1416,10 @@ export const TemplateLabPage: React.FC<{
                 ) : (
                   <>
                     {messages.map((m, i) => {
+                      // Prevent duplicate consecutive user prompts from ever displaying twice
+                      if (i > 0 && m.role === 'user' && messages[i - 1]?.role === 'user' && messages[i - 1]?.content?.trim().toLowerCase() === m.content?.trim().toLowerCase()) {
+                        return null;
+                      }
                       const displayContent = m.role === 'assistant' ? sanitizeUserFacingText(m.content) : m.content;
                       return (
                         <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -1357,38 +1447,26 @@ export const TemplateLabPage: React.FC<{
                         </div>
                       </div>
                     )}
-                    {showPromptSuggestions && (
-                      <div className="mx-4 my-3 p-4 rounded-xl bg-accent-soft/60 border border-accent/20 animate-fade-in shadow-sm">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2 text-xs font-bold text-accent uppercase tracking-wider">
-                            <Sparkles className="w-3.5 h-3.5 animate-spin" />
-                            <span>Suggested Next Prompts</span>
-                          </div>
-                          <button onClick={() => setShowPromptSuggestions(false)} className="text-ink-tertiary hover:text-ink text-xs cursor-pointer">
-                            Dismiss
-                          </button>
-                        </div>
-                        <p className="text-xs text-ink-secondary mb-3">Here are some recommended prompt suggestions to further customize your website:</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {[
-                            "Make the hero page business name rebrandable with {{BUSINESS_NAME}}",
-                            "Add a high-converting instant booking & consultation CTA form",
-                            "Incorporate luxury dark styling with warm amber accents",
-                            "Add verified 4.9-star Google customer review rating cards"
-                          ].map((suggestion, sIdx) => (
+
+                    {labError && (
+                      <div className="flex justify-start animate-fade-in">
+                        <div className="max-w-[95%] rounded-2xl p-4 bg-red-50 border border-red-200 text-red-800 shadow-sm space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 font-bold text-xs text-red-700">
+                              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                              <span>AI Servers Notice</span>
+                            </div>
                             <button
-                              key={sIdx}
-                              onClick={() => {
-                                setInput(suggestion);
-                                setShowPromptSuggestions(false);
-                                sfx.tap();
-                              }}
-                              className="text-left p-2.5 rounded-lg bg-white border border-[#E4E2DC] hover:border-accent hover:bg-accent-soft/20 text-xs font-medium text-ink transition-all cursor-pointer shadow-3xs flex items-start gap-2 group"
+                              type="button"
+                              onClick={() => setLabError(null)}
+                              className="text-red-400 hover:text-red-700 text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer"
                             >
-                              <span className="text-accent mt-0.5">✦</span>
-                              <span className="group-hover:text-accent transition-colors">{suggestion}</span>
+                              ×
                             </button>
-                          ))}
+                          </div>
+                          <p className="text-xs text-red-700 leading-relaxed font-sans">
+                            {labError}
+                          </p>
                         </div>
                       </div>
                     )}
@@ -2114,7 +2192,7 @@ export const TemplateLabPage: React.FC<{
                 <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
                   isTemplateValidated ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-purple-50 text-purple-600 border border-purple-200'
                 }`}>
-                  <Sparkles className="w-5 h-5" />
+                  <ShieldCheck className="w-5 h-5" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
@@ -2130,7 +2208,7 @@ export const TemplateLabPage: React.FC<{
                     )}
                   </div>
                   <p className="text-xs text-slate-500">
-                    Strict rules: single HTML file, 4 canonical placeholders ({'{{'}BUSINESS_NAME{'}}'}, {'{{'}PHONE{'}}'}, {'{{'}CITY{'}}'}, {'{{'}ADDRESS{'}}'}), zero hardcoded demo data.
+                    Verify complete dynamic rebranding, clean single-file code structure, and zero hardcoded sample data.
                   </p>
                 </div>
               </div>
@@ -2174,14 +2252,33 @@ export const TemplateLabPage: React.FC<{
                   {showReadinessDetails && (
                     <div className="space-y-2 pt-2 border-t border-slate-200">
                       {readinessScan.failed.length > 0 && (
-                        <div className="space-y-1">
-                          <span className="text-[11px] font-bold text-red-600 uppercase tracking-wider">Failed Checks:</span>
-                          {readinessScan.failed.map((f, i) => (
-                            <div key={i} className="flex items-start gap-2 text-xs text-red-700 bg-red-50 p-2 rounded-lg">
-                              <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-red-600" />
-                              <span><strong>{f.label}:</strong> {f.explanation}</span>
-                            </div>
-                          ))}
+                        <div className="space-y-2">
+                          <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Suggested AI Fixes:</span>
+                          {readinessScan.failed.map((f, i) => {
+                            const fixPrompt = getCleanFixPrompt(`${f.label} ${f.explanation}`);
+                            return (
+                              <div key={i} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                                <div className="text-xs text-slate-800 font-medium leading-relaxed flex-1">
+                                  {fixPrompt}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setInput(fixPrompt);
+                                    setShowRebrandModal(false);
+                                    setRebrandSuite(null);
+                                    setReadinessScan(null);
+                                    setTestRebrandMobileView(false);
+                                    flashToast({ type: 'success', text: 'Fix prompt loaded into chat! Press apply edit.' });
+                                    sfx.tap();
+                                  }}
+                                  className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shrink-0 cursor-pointer shadow-xs active:scale-[0.98]"
+                                >
+                                  Fix with AI in Chat
+                                </button>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
 
@@ -2192,7 +2289,7 @@ export const TemplateLabPage: React.FC<{
                             {readinessScan.passed.map((p, i) => (
                               <div key={i} className="flex items-center gap-1.5 text-xs text-emerald-800 bg-emerald-50 px-2.5 py-1.5 rounded-lg">
                                 <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                <span className="truncate">{p.label}</span>
+                                <span className="truncate">{sanitizeCheckLabel(p.label)}</span>
                               </div>
                             ))}
                           </div>
@@ -2323,7 +2420,7 @@ export const TemplateLabPage: React.FC<{
                     disabled={isTestingRebrand}
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
                   >
-                    {isTestingRebrand ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    {isTestingRebrand ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
                     <span>{isTestingRebrand ? 'Running Rebrand Tests…' : 'Run Rebrand Test'}</span>
                   </button>
                 </div>
@@ -2385,12 +2482,32 @@ export const TemplateLabPage: React.FC<{
                         </div>
 
                         {test.issues.length > 0 && (
-                          <div className="space-y-1">
-                            {test.issues.map((iss, i) => (
-                              <div key={i} className="text-xs text-red-600 bg-red-50 p-2 rounded-lg">
-                                • {iss}
-                              </div>
-                            ))}
+                          <div className="space-y-2">
+                            {test.issues.map((iss, i) => {
+                              const fixPrompt = getCleanFixPrompt(iss);
+                              return (
+                                <div key={i} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                                  <div className="text-xs text-slate-800 font-medium leading-relaxed flex-1">
+                                    {fixPrompt}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setInput(fixPrompt);
+                                      setShowRebrandModal(false);
+                                      setRebrandSuite(null);
+                                      setReadinessScan(null);
+                                      setTestRebrandMobileView(false);
+                                      flashToast({ type: 'success', text: 'Fix prompt loaded into chat! Press apply edit.' });
+                                      sfx.tap();
+                                    }}
+                                    className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shrink-0 cursor-pointer shadow-xs active:scale-[0.98]"
+                                  >
+                                    Fix with AI in Chat
+                                  </button>
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
 

@@ -1103,20 +1103,46 @@ export interface ConvertToTemplateResult {
   categoryId: string | null;
 }
 
-// List site history entries.
+// List site history entries with localStorage cache fallback
 export async function listSiteHistory(parentSlug?: string): Promise<SiteHistoryEntry[]> {
+  let serverEntries: SiteHistoryEntry[] = [];
   try {
     const qs = parentSlug ? `?parentSlug=${encodeURIComponent(parentSlug)}` : '';
     const res = await fetch(`${API_BASE}/api/site-history${qs}`);
-    if (!res.ok) return [];
-    const d = await res.json();
-    return (d.history || []) as SiteHistoryEntry[];
+    if (res.ok) {
+      const d = await res.json();
+      serverEntries = (d.history || []) as SiteHistoryEntry[];
+    }
   } catch {
-    return [];
+    // network fallback
   }
+
+  // Load local cache
+  let localEntries: SiteHistoryEntry[] = [];
+  try {
+    const raw = localStorage.getItem('lunao_site_history_cache');
+    if (raw) {
+      localEntries = JSON.parse(raw);
+    }
+  } catch {
+    // ignore
+  }
+
+  // Merge server and local, deduplicating by id
+  const map = new Map<string, SiteHistoryEntry>();
+  for (const entry of [...serverEntries, ...localEntries]) {
+    if (entry && entry.id) {
+      if (!map.has(entry.id) || (entry.createdAt || 0) > (map.get(entry.id)?.createdAt || 0)) {
+        map.set(entry.id, entry);
+      }
+    }
+  }
+
+  const merged = Array.from(map.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  return merged;
 }
 
-// Create or update a site history entry (Studio auto-saves after each AI generation).
+// Create or update a site history entry (Studio auto-saves after each AI generation) with resilient local storage
 export async function createSiteHistory(params: {
   id?: string;
   parentSlug?: string;
@@ -1127,17 +1153,50 @@ export async function createSiteHistory(params: {
   templateId?: string;
   templateName?: string;
 }): Promise<{ id: string; parentSlug: string }> {
-  const res = await fetch(`${API_BASE}/api/site-history`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  });
-  if (!res.ok) {
-    const d = await res.json().catch(() => ({}));
-    throw new Error(d.error || `Failed to save history (${res.status})`);
+  const entryId = params.id || `hist_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const parentSlug = params.parentSlug || `studio-${entryId}`;
+  const nowEntry: SiteHistoryEntry = {
+    id: entryId,
+    parentSlug,
+    title: params.title || 'Bespoke Business Website',
+    niche: params.niche || 'Local Business',
+    html: params.html,
+    snapshotLabel: params.snapshotLabel || 'Build Snapshot',
+    isTemplate: Boolean(params.templateId),
+    templateId: params.templateId || null,
+    templateName: params.templateName || null,
+    createdAt: Date.now(),
+  };
+
+  // Save to localStorage cache immediately
+  try {
+    const raw = localStorage.getItem('lunao_site_history_cache');
+    let existing: SiteHistoryEntry[] = raw ? JSON.parse(raw) : [];
+    existing = existing.filter(e => e.id !== entryId);
+    existing.unshift(nowEntry);
+    localStorage.setItem('lunao_site_history_cache', JSON.stringify(existing.slice(0, 50)));
+  } catch {
+    // ignore
   }
-  const d = await res.json();
-  return d.entry as { id: string; parentSlug: string };
+
+  // Also sync to server API
+  try {
+    const res = await fetch(`${API_BASE}/api/site-history`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      if (d?.entry) {
+        return d.entry as { id: string; parentSlug: string };
+      }
+    }
+  } catch {
+    // server optional fallback
+  }
+
+  return { id: entryId, parentSlug };
 }
 
 // Load a single history entry.
