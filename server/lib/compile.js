@@ -149,6 +149,15 @@ export async function compileSite(biz, templateKey, ownerKey = null) {
     html = html.replace(PLACEHOLDER_RE, (_m, k) => fallbackFor(k.toUpperCase()));
   }
 
+  // Guarantee booking bridge script is injected for verified booking handling
+  if (!html.includes('lunao-booking-bridge.js')) {
+    if (html.includes('</body>')) {
+      html = html.replace('</body>', '<script src="/lunao-booking-bridge.js"></script>\n</body>');
+    } else {
+      html += '\n<script src="/lunao-booking-bridge.js"></script>';
+    }
+  }
+
   // Bump usage counter (custom only — built-ins skip).
   recordTemplateUse(resolved.key);
 

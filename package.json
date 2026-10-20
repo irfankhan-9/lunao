@@ -15,7 +15,8 @@
     "start": "tsx server.ts",
     "clean": "rm -rf dist server/.sites",
     "lint": "tsc --noEmit",
-    "test": "node scripts/test-email-automations-readiness.mjs",
+    "test": "node scripts/test-email-automations-readiness.mjs && node scripts/test-booking-beta-contract.mjs",
+    "test:contract": "node scripts/test-booking-beta-contract.mjs",
     "test:auth": "node scripts/test-authentication-security.mjs",
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:backup": "node scripts/db-backup.mjs"

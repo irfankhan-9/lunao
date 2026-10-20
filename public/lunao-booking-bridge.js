@@ -192,23 +192,31 @@
       }, 5000);
     }
 
-    // 1. Iframe Studio Preview Simulation Mode (Instant Gratification Test)
-    if (isIframe) {
-      try {
-        window.parent.postMessage({
-          type: 'LUNAO_TEST_BOOKING',
-          data: payload,
-          timestamp: Date.now()
-        }, '*');
-      } catch (postErr) {
-        console.warn('[LunaoBookingBridge] postMessage failed:', postErr);
+    function showErrorUI(errMsg) {
+      if (submitBtn) {
+        submitBtn.disabled = originalDisabled;
+        submitBtn.innerHTML = originalBtnHtml;
+        submitBtn.style.backgroundColor = '';
+        submitBtn.style.borderColor = '';
+        submitBtn.style.color = '';
       }
-      setTimeout(showSuccessUI, 400);
-      return;
+
+      var existingError = form.querySelector('.lunao-booking-error-banner');
+      if (!existingError) {
+        var banner = document.createElement('div');
+        banner.className = 'lunao-booking-error-banner';
+        banner.style.cssText = 'margin-top:14px;padding:12px 16px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;color:#991b1b;font-family:system-ui,-apple-system,sans-serif;font-size:13px;line-height:1.5;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);animation:fadeIn 0.3s ease;';
+        banner.innerHTML = '<strong>Booking could not be confirmed</strong><br><span style="font-size:12px;color:#b91c1c;">' + (errMsg || 'Please verify your details and try again or call us directly.') + '</span>';
+        form.appendChild(banner);
+        setTimeout(function() {
+          try { banner.remove(); } catch(e) {}
+        }, 7000);
+      }
     }
 
-    // 2. Production / Standalone Site Submission
+    // Strict persistence: every booking must be confirmed by /api/bookings with idempotency key
     var idempotencyKey = 'bk_' + Date.now() + '_' + Math.random().toString(36).substr(2, 8);
+    
     fetch('/api/bookings', {
       method: 'POST',
       headers: {
@@ -218,16 +226,44 @@
       body: JSON.stringify(payload)
     })
     .then(function(res) {
-      if (!res.ok) throw new Error('Booking submission failed');
-      return res.json();
+      return res.json().then(function(data) {
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || 'Server rejected booking confirmation.');
+        }
+        return data;
+      });
     })
-    .then(function() {
+    .then(function(resData) {
+      // Confirmed persistence in database
       showSuccessUI();
+
+      if (isIframe) {
+        try {
+          window.parent.postMessage({
+            type: 'LUNAO_CONFIRMED_BOOKING',
+            data: resData.booking || payload,
+            id: resData.id,
+            timestamp: Date.now()
+          }, '*');
+        } catch (postErr) {
+          console.warn('[LunaoBookingBridge] postMessage notice:', postErr);
+        }
+      }
     })
     .catch(function(err) {
-      console.warn('[LunaoBookingBridge] Server submission notice (falling back to optimistic confirmation):', err);
-      // Resilience fallback: always show confirmation to real user
-      showSuccessUI();
+      console.error('[LunaoBookingBridge] Booking persistence failed:', err.message);
+      // Under Non-Negotiable Contract: NEVER show a fake success state when persistence fails
+      showErrorUI(err.message);
+
+      if (isIframe) {
+        try {
+          window.parent.postMessage({
+            type: 'LUNAO_BOOKING_ERROR',
+            error: err.message,
+            timestamp: Date.now()
+          }, '*');
+        } catch (e) {}
+      }
     });
   }
 

@@ -8,6 +8,7 @@ import {
 } from './supabase.js';
 
 import { supabase as supabaseCfg } from './config.js';
+import { validateBookingPayloadContract } from './bookingContractValidator.js';
 
 const VALID_STATUS = new Set(['new', 'confirmed', 'cancelled']);
 const VALID_SOURCE = new Set(['form', 'chatbot']);
@@ -75,13 +76,24 @@ const localBookingsMemory = [];
 
 // Insert a booking into local storage (with SQLite statement attempt).
 export function createBooking(input = {}) {
-  const customer_name = str(input.customerName || input.name || input.customer_name);
-  const phone = str(input.phone);
-  if (!customer_name && !phone) {
-    const err = new Error('A name or phone number is required to book.');
+  const validation = validateBookingPayloadContract(input);
+  if (!validation.valid) {
+    const err = new Error(validation.error);
     err.status = 400;
     throw err;
   }
+
+  const slug = str(input.slug);
+  const idempotencyKey = str(input.idempotencyKey || input.idempotency_key) || null;
+  if (idempotencyKey) {
+    const existing = localBookingsMemory.find(b => b.slug === slug && b.idempotencyKey === idempotencyKey);
+    if (existing) {
+      return { ...existing, isExisting: true };
+    }
+  }
+
+  const customer_name = str(input.customerName || input.name || input.customer_name);
+  const phone = str(input.phone);
   const source = VALID_SOURCE.has(input.source) ? input.source : 'form';
   const id = input.id ? Number(input.id) : (Date.now() + Math.floor(Math.random() * 1000));
   const customFields = extractCustomFields(input);
@@ -92,7 +104,7 @@ export function createBooking(input = {}) {
 
   const record = {
     id,
-    slug: str(input.slug),
+    slug,
     business_name: str(input.businessName || input.business_name),
     customer_name,
     phone,
@@ -104,13 +116,9 @@ export function createBooking(input = {}) {
     customFields,
     source,
     status: input.status || 'new',
+    idempotencyKey,
     created_at: Number(input.createdAt || Date.now()),
   };
-  if (!record.slug) {
-    const err = new Error('slug is required.');
-    err.status = 400;
-    throw err;
-  }
   try {
     const info = insertStmt.run(record);
     if (info && info.lastInsertRowid) {
@@ -120,28 +128,23 @@ export function createBooking(input = {}) {
     /* ignore sqlite cache error */
   }
 
-  const formatted = rowToBooking(record);
+  const formatted = { ...rowToBooking(record), idempotencyKey };
   localBookingsMemory.push(formatted);
   return formatted;
 }
 
 // Authoritative booking creation: requires durable persistence in Supabase when live.
 export async function createBookingAsync(input = {}) {
-  const slug = str(input.slug);
-  if (!slug) {
-    const err = new Error('slug is required to record a booking.');
+  const validation = validateBookingPayloadContract(input);
+  if (!validation.valid) {
+    const err = new Error(validation.error);
     err.status = 400;
     throw err;
   }
 
+  const slug = str(input.slug);
   const customerName = str(input.customerName || input.name || input.customer_name);
   const phone = str(input.phone);
-  if (!customerName && !phone) {
-    const err = new Error('A customer name or phone number is required to book.');
-    err.status = 400;
-    throw err;
-  }
-
   const customFields = extractCustomFields(input);
   let notes = str(input.notes);
   if (!notes && Object.keys(customFields).length > 0) {

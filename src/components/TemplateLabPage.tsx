@@ -16,6 +16,12 @@ import {
 } from '../lib/pipelineClient';
 import { useSyncNiches, addAndSyncTemplate, moveAndSyncTemplate, getLocalTemplates, getNicheEmoji } from '../lib/nichesSync';
 import {
+  validateBookingContract,
+  rollbackToApprovedBooking,
+  CONTRACT_REJECTION_MESSAGE,
+  BOOKING_COMPONENT_VERSION,
+} from '../lib/bookingContractValidator';
+import {
   playSoftTap, playTiktokLike, playSlideTick, playDialogPop, playSoftBubble,
   playElegantBell, playConfirmSuccess, playVictoryCelebration, playGentleChime,
   playElegantError, playCancelTone, playMagicWhoosh,
@@ -59,12 +65,14 @@ Replace all hardcoded business names, phone numbers, cities, addresses, fake rev
 5. PRESERVE ORIGINAL DESIGN & QUALITY:
 Preserve the original design, styling, layout, typography, responsiveness, and interactivity while ensuring strict template-readiness.
 
-6. REAL BOOKING & APPOINTMENT FORM CONVENTION:
-When creating, editing, or adding an appointment, consultation, reservation, or booking section:
-- Wrap all form elements inside a standard HTML <form data-lunao-booking id="booking-form">.
-- Use clean, standard HTML input types and name attributes (e.g. <input type="text" name="customer_name">, <input type="tel" name="phone">, <input type="email" name="email">, <input type="date" name="service_date">, <select name="service">, <textarea name="notes">).
-- You can add ANY custom field required for the business (e.g. name="pet_breed", name="hair_length", name="roof_pitch", name="budget", name="vehicle_model").
-- Do NOT write custom submission JavaScript or fetch calls. The Lunao platform automatically binds, validates, and routes submissions to the client dashboard in real-time.`;
+6. STRICT BOOKING BETA CONTRACT (NON-NEGOTIABLE):
+When creating, editing, or styling an appointment or booking section:
+- Use Lunao's approved booking template with Name, Email, Phone Number, and Service ONLY.
+- Standard scheduling inputs (preferred date, preferred time, optional notes) are supported.
+- DO NOT create or add custom booking fields (e.g. no pet_breed, hair_length, budget, or custom attributes). Custom fields are strictly prohibited in Beta.
+- DO NOT replace, alter, or duplicate the approved booking component, submission handlers, or endpoints.
+- You can freely customize booking-section CSS, colors, visual styling, typography, and responsive presentation.
+- You can customize the approved service options and labels (e.g. haircuts for barbers, tune-ups for HVAC, cleaning for dentists).`;
 
 const sfx = {
   tap: playSoftTap,
@@ -156,10 +164,18 @@ function sanitizeUserFacingText(text: string): string {
 
 function compilePreview(rawHtml: string): string {
   if (!rawHtml || typeof rawHtml !== 'string') return rawHtml || '';
-  return rawHtml.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, rawKey) => {
+  let compiled = rawHtml.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, rawKey) => {
     const key = rawKey.toUpperCase();
     return key in PLACEHOLDER_MAP ? PLACEHOLDER_MAP[key] : `{{${rawKey}}}`;
   });
+  if (!compiled.includes('lunao-booking-bridge.js')) {
+    if (compiled.includes('</body>')) {
+      compiled = compiled.replace('</body>', '<script src="/lunao-booking-bridge.js"></script>\n</body>');
+    } else {
+      compiled += '\n<script src="/lunao-booking-bridge.js"></script>';
+    }
+  }
+  return compiled;
 }
 
 function summarizeHtml(rawHtml: string, promptInstruction?: string): string {
@@ -797,7 +813,7 @@ export const TemplateLabPage: React.FC<{
 
       let activeTitle = initialTitle;
 
-      const result = await streamAiEdit(
+      let result = await streamAiEdit(
         { html: BLANK_CANVAS, instruction: fullPrompt, history: [], anthropicApiKey: apiKey.trim() || undefined },
         (fullHtmlSoFar) => {
           loadWorkspaceImmediately();
@@ -821,6 +837,15 @@ export const TemplateLabPage: React.FC<{
       );
 
       loadWorkspaceImmediately();
+
+      // Enforce Non-Negotiable Booking Beta Contract deterministically
+      const contractCheck = validateBookingContract(result, BLANK_CANVAS);
+      if (!contractCheck.valid) {
+        console.warn('[BookingBetaContract] Initial generation triggered contract correction:', contractCheck.reason);
+        // Automatically rollback booking section to the canonical approved template
+        result = rollbackToApprovedBooking(result);
+      }
+
       const finalCompiled = compilePreview(result);
       setHtml(result);
       setPreviewHtml(finalCompiled);
@@ -902,6 +927,25 @@ export const TemplateLabPage: React.FC<{
         );
       } catch (err) {
         throw err;
+      }
+
+      // Enforce Non-Negotiable Booking Beta Contract deterministically
+      const contractCheck = validateBookingContract(result, base);
+      if (!contractCheck.valid) {
+        sfx.error();
+        setStreaming(false);
+        setThinkingAcc('');
+        // Requirement 4: Preserve the last verified deployment if a proposed change fails (keep base untouched)
+        // Requirement 2: Reject unsupported changes before deployment and explain the restriction to the user
+        // Requirement 3: Never silently bypass a failed validator
+        const rejectionMsg = contractCheck.customerMessage || CONTRACT_REJECTION_MESSAGE;
+        setMessages(prev => [...prev, { role: 'assistant', content: rejectionMsg }]);
+        setLabError(rejectionMsg);
+        flashToast?.({
+          type: 'error',
+          text: 'Booking Contract: Prohibited change rejected. Last verified site preserved.',
+        });
+        return; // Halt deployment and sync completely
       }
 
       const finalCompiled = compilePreview(result);
@@ -1042,6 +1086,25 @@ export const TemplateLabPage: React.FC<{
       setTurnedTemplateId(null);
       setTurnedTemplateNiche(null);
     }
+  };
+
+  const handleResetBookingToApproved = () => {
+    sfx.toggle();
+    const clean = rollbackToApprovedBooking(html);
+    const compiled = compilePreview(clean);
+    setHtml(clean);
+    setPreviewHtml(compiled);
+    setMessages(prev => [
+      ...prev,
+      {
+        role: 'assistant',
+        content: `Rolled back to Lunao Approved Booking Template (v${BOOKING_COMPONENT_VERSION}) with Name, Email, Phone Number, and Service.`
+      }
+    ]);
+    flashToast?.({
+      type: 'success',
+      text: `Restored approved Lunao booking component (v${BOOKING_COMPONENT_VERSION})`
+    });
   };
 
   const openSave = async () => {
@@ -1394,7 +1457,7 @@ export const TemplateLabPage: React.FC<{
                       {[
                         'Add a 3-tier pricing table',
                         'Make the hero section bolder with dark mahogany theme',
-                        'Add a booking calendar form',
+                        'Add approved booking section (Name, Email, Phone, Service)',
                         'Add customer review stars badge',
                         'Change main button color to royal emerald',
                         'Add FAQ accordion section'
@@ -1411,6 +1474,13 @@ export const TemplateLabPage: React.FC<{
                           + {promptSnippet}
                         </button>
                       ))}
+                      <button
+                        disabled={streaming}
+                        onClick={handleResetBookingToApproved}
+                        className="text-left text-xs px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-all font-sans font-medium"
+                      >
+                        ↺ Reset booking to approved template
+                      </button>
                     </div>
                   </div>
                 ) : (
