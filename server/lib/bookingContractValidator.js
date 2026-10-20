@@ -290,11 +290,24 @@ export function validateBookingPayloadContract(payload = {}) {
     };
   }
 
+  // Priority 4: Do not blindly allow rawSubmission. Validate every key inside rawSubmission
+  // to prevent unapproved custom fields from bypassing schema validation.
+  if (payload.rawSubmission && typeof payload.rawSubmission === 'object') {
+    const rawKeys = Object.keys(payload.rawSubmission).filter(k => !APPROVED_FIELD_IDENTIFIERS.has(normalizeIdentifier(k)));
+    if (rawKeys.length > 0) {
+      return {
+        valid: false,
+        error: CONTRACT_REJECTION_MESSAGE
+      };
+    }
+  }
+
   // Check for any unauthorized top-level keys
   const ALLOWED_TOP_LEVEL = new Set([
     'slug', 'businessName', 'business_name', 'customerName', 'customer_name', 'name',
     'phone', 'email', 'service', 'date', 'time', 'notes', 'source', 'status',
-    'idempotencyKey', 'idempotency_key', 'createdAt', 'created_at', 'customFields', 'custom_fields'
+    'idempotencyKey', 'idempotency_key', 'createdAt', 'created_at', 'customFields', 'custom_fields',
+    'rawSubmission'
   ]);
 
   for (const key of Object.keys(payload)) {
@@ -341,23 +354,70 @@ export function validateBookingPayloadContract(payload = {}) {
 }
 
 /**
- * Rollback helper: Replaces any corrupted or unapproved booking section with
- * the clean, approved Lunao booking component at version 1.0.0-beta.
+ * Extracts legitimate approved service option tags from HTML.
+ */
+function extractPreservedServiceOptions(html) {
+  if (!html || typeof html !== 'string') return [];
+  const selectMatch = html.match(/<select\b[^>]*?(?:name|id)=["'](?:service|booking-service|booking_service)["'][^>]*>([\s\S]*?)<\/select>/i);
+  if (!selectMatch) return [];
+  const optionRegex = /<option\b[^>]*>([\s\S]*?)<\/option>/gi;
+  const options = [];
+  let m;
+  while ((m = optionRegex.exec(selectMatch[1])) !== null) {
+    const rawOption = m[0];
+    const text = m[1].trim();
+    if (text && !text.includes('— Select') && !text.includes('Choose a service') && !text.includes('Select an Approved')) {
+      options.push(rawOption);
+    }
+  }
+  return options;
+}
+
+/**
+ * Rollback helper: Replaces corrupted/unapproved booking sections with the canonical
+ * approved Lunao booking component (v1.0.0-beta) while preserving legitimate business service
+ * options, pricing, and visual styling.
  */
 export function rollbackToApprovedBooking(html) {
   if (!html) return html;
+
+  // 1. Extract legitimate business service options
+  const preservedOptions = extractPreservedServiceOptions(html);
+  let componentHtml = APPROVED_BOOKING_COMPONENT_HTML;
+
+  if (preservedOptions.length > 0) {
+    const optionsBlock = [
+      '<option value="" disabled selected>— Select an Approved Service —</option>',
+      ...preservedOptions
+    ].join('\n            ');
+    componentHtml = componentHtml.replace(
+      /<select id="booking-service" name="service" class="form-input" required>[\s\S]*?<\/select>/i,
+      `<select id="booking-service" name="service" class="form-input" required>\n            ${optionsBlock}\n          </select>`
+    );
+  }
+
+  // 2. Extract existing section styling/classes if present
+  const sectionClassMatch = html.match(/<section\b[^>]*?(?:id=["'](?:book|booking|appointments)["']|class=["'][^"']*(?:booking|appointment)[^"']*["'])[^>]*?\bclass=["']([^"']+)["']/i);
+  if (sectionClassMatch && sectionClassMatch[1]) {
+    const customClasses = sectionClassMatch[1].trim();
+    componentHtml = componentHtml.replace(
+      'class="lunao-booking-section"',
+      `class="${customClasses}"`
+    );
+  }
+
   const bookingForms = extractBookingForms(html).filter(f => f.isBooking);
   if (bookingForms.length === 0) {
     if (html.includes('</body>')) {
-      return html.replace('</body>', `${APPROVED_BOOKING_COMPONENT_HTML}\n</body>`);
+      return html.replace('</body>', `${componentHtml}\n</body>`);
     }
-    return `${html}\n${APPROVED_BOOKING_COMPONENT_HTML}`;
+    return `${html}\n${componentHtml}`;
   }
 
   const sectionRegex = /<section\b[^>]*?(?:id=["'](?:book|booking|appointments)["']|class=["'][^"']*(?:booking|appointment)[^"']*["'])[^>]*>[\s\S]*?<\/section>/i;
   if (sectionRegex.test(html)) {
-    return html.replace(sectionRegex, APPROVED_BOOKING_COMPONENT_HTML);
+    return html.replace(sectionRegex, componentHtml);
   }
 
-  return html.replace(bookingForms[0].fullMatch, APPROVED_BOOKING_COMPONENT_HTML);
+  return html.replace(bookingForms[0].fullMatch, componentHtml);
 }

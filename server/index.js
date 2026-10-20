@@ -45,7 +45,9 @@ import { listCities } from './lib/cities.js';
 import { publishBatch, validateCloudflareToken, stageSite } from './lib/cloudflare.js';
 import { slugify } from './lib/slug.js';
 import { streamEdit, isAiEnabled, cleanHtmlOutput, generateTemplateHtml } from './lib/geminiAi.js';
-import { createBooking, createBookingAsync, listBookings, listBookingsAsync, updateBookingStatus } from './lib/bookings.js';
+import { createBooking, createBookingAsync, listBookings, listBookingsAsync, updateBookingStatus, getBooking } from './lib/bookings.js';
+import { validateBookingContract, rollbackToApprovedBooking, CONTRACT_REJECTION_MESSAGE } from './lib/bookingContractValidator.js';
+import { verifyOwnerSlugAccess, registerOwnerBusiness } from './lib/tenantAuth.js';
 import { chatTurn } from './lib/chatbot.js';
 import { getAddons, setAddons } from './lib/widget.js';
 import { db } from './lib/db.js';
@@ -596,6 +598,16 @@ app.post('/api/site-deploy/rebrand-single', async (req, res) => {
     // 1. Compile personalized site with exact template placeholders
     const { html, resolved } = await compileSite(business, effectiveKey, ownerKey || null);
 
+    // Priority 4: Enforce booking contract validation before staging or deploying
+    const contractCheck = validateBookingContract(html);
+    if (!contractCheck.valid) {
+      return res.status(400).json({ ok: false, error: contractCheck.customerMessage || CONTRACT_REJECTION_MESSAGE });
+    }
+
+    if (ownerKey) {
+      registerOwnerBusiness(ownerKey, slug);
+    }
+
     // 2. Stage locally to disk in SITES_DIR
     const localUrl = await stageSite(slug, html);
 
@@ -760,6 +772,11 @@ app.put('/api/sites/:slug', async (req, res) => {
     if (typeof html !== 'string' || !html.trim()) {
       return res.status(400).json({ ok: false, error: 'html is required' });
     }
+    // Priority 4: Enforce booking contract validation before saving site
+    const contractCheck = validateBookingContract(html);
+    if (!contractCheck.valid) {
+      return res.status(400).json({ ok: false, error: contractCheck.customerMessage || CONTRACT_REJECTION_MESSAGE });
+    }
     const url = await writeSite(slug, html);
     res.json({ ok: true, slug, url });
   } catch (err) {
@@ -776,6 +793,11 @@ app.post('/api/sites/:slug/deploy', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'Site not found' });
     }
     if (typeof html === 'string' && html.trim()) {
+      // Priority 4: Enforce booking contract validation before deploying site
+      const contractCheck = validateBookingContract(html);
+      if (!contractCheck.valid) {
+        return res.status(400).json({ ok: false, error: contractCheck.customerMessage || CONTRACT_REJECTION_MESSAGE });
+      }
       await writeSite(slug, html);
     }
     const result = await publishBatch();
@@ -966,10 +988,23 @@ app.get('/api/public/bookings', (_req, res) => {
   });
 });
 
-// List bookings for authenticated dashboard users, optionally filtered by site slug.
+// List bookings for authenticated dashboard users, strictly filtered by verified site slug.
 app.get('/api/bookings', authenticate, async (req, res) => {
   try {
-    const slug = typeof req.query.slug === 'string' && req.query.slug ? req.query.slug : null;
+    const ownerKey = getAuthOwnerKey(req);
+    const slug = typeof req.query.slug === 'string' && req.query.slug ? req.query.slug.trim() : null;
+    
+    // Priority 2: Require a valid business slug; never return all platform bookings when omitted.
+    if (!slug) {
+      return res.status(400).json({ ok: false, error: 'Business slug is required to list bookings.' });
+    }
+
+    // Priority 2: Verify access to the requested business on the server.
+    const hasAccess = verifyOwnerSlugAccess(ownerKey, slug, req);
+    if (!hasAccess) {
+      return res.status(403).json({ ok: false, error: 'Access denied to this business.' });
+    }
+
     const bookings = await listBookingsAsync(slug);
     res.json({ ok: true, bookings });
   } catch (err) {
@@ -977,13 +1012,26 @@ app.get('/api/bookings', authenticate, async (req, res) => {
   }
 });
 
-// Update a booking's status (confirm / cancel).
-app.patch(['/api/bookings/:id', '/api/public/bookings/:id'], authenticate, (req, res) => {
+// Update a booking's status (confirm / cancel) with strict tenant authorization.
+app.patch(['/api/bookings/:id', '/api/public/bookings/:id'], authenticate, async (req, res) => {
   try {
+    const ownerKey = getAuthOwnerKey(req);
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ ok: false, error: 'Invalid id' });
-    const booking = updateBookingStatus(id, req.body?.status, req.body?.notes);
-    res.json({ ok: true, booking });
+
+    const booking = getBooking(id);
+    if (!booking) {
+      return res.status(404).json({ ok: false, error: 'Booking not found.' });
+    }
+
+    // Priority 2: Verify that the booking belongs to a business the authenticated owner is authorized to access.
+    const hasAccess = verifyOwnerSlugAccess(ownerKey, booking.slug, req);
+    if (!hasAccess) {
+      return res.status(403).json({ ok: false, error: 'Access denied to this booking.' });
+    }
+
+    const updated = updateBookingStatus(id, req.body?.status, req.body?.notes);
+    res.json({ ok: true, booking: updated });
   } catch (err) {
     res.status(err.status || 500).json({ ok: false, error: err.message });
   }

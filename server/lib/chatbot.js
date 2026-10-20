@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { GoogleGenAI } from '@google/genai';
 import { db } from './db.js';
 import { gemini as geminiCfg } from './config.js';
-import { createBooking } from './bookings.js';
+import { createBookingAsync } from './bookings.js';
 import { supabaseSaveChatMessage } from './supabase.js';
 
 // Ordered booking fields. Each carries the question the bot asks + a keyword
@@ -93,8 +93,8 @@ function nextMissingField(slots) {
   return FIELDS.find((f) => !slots[f.key]) || null;
 }
 
-function bookFromSlots(slug, slots, businessName, source) {
-  return createBooking({
+async function bookFromSlots(slug, slots, businessName, source) {
+  return await createBookingAsync({
     slug,
     businessName,
     customerName: slots.name,
@@ -194,7 +194,7 @@ export async function chatTurn({ slug, sessionId, message, businessName, service
   let reply;
 
   if (complete) {
-    booking = bookFromSlots(slug, slots, businessName, 'chatbot');
+    booking = await bookFromSlots(slug, slots, businessName, 'chatbot');
     reply =
       `You're all set, ${slots.name}! I've booked your ${slots.service} for ${slots.date} at ${slots.time}. ` +
       `We'll confirm at ${slots.phone}. See you soon! 🎉`;

@@ -71,13 +71,11 @@
       source: 'website_form',
       slug: (window.location.pathname.replace(/^\/|\/$/g, '') || 'studio-preview'),
       businessName: document.title || 'Local Business',
-      customFields: {},
-      rawSubmission: {}
+      customFields: {}
     };
 
     Object.keys(raw).forEach(function(key) {
       var val = raw[key];
-      payload.rawSubmission[key] = val;
 
       if (!payload.customerName && matchKey(key, NAME_KEYS)) {
         payload.customerName = val;

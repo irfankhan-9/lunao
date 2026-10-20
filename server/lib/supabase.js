@@ -152,7 +152,7 @@ export async function supabaseInsertBooking(booking) {
         }
       } catch (insertErr) {
         // Handle unique constraint conflict (concurrent submission with same idempotencyKey)
-        if (insertErr.code === '23505' && idempotencyKey) {
+        if ((insertErr.code === '23505' || (insertErr.message && (insertErr.message.includes('unique constraint') || insertErr.message.includes('duplicate key')))) && idempotencyKey && slug) {
           const existingRes = await pgPool.query(
             'SELECT * FROM bookings WHERE slug = $1 AND idempotency_key = $2 LIMIT 1;',
             [slug, idempotencyKey]
@@ -218,8 +218,26 @@ export async function supabaseInsertBooking(booking) {
     let insertQuery = sb.from('bookings').insert(payload).select().single();
     let { data, error } = await withTimeout(insertQuery);
 
-    if (error && error.message && error.message.includes('idempotency_key')) {
-      // Column might not exist yet, retry without it
+    // Priority 3: Handle PostgreSQL unique violation code 23505 safely by fetching matching booking.
+    // NEVER remove an idempotency key and retry an insert on a uniqueness conflict!
+    if (error && (error.code === '23505' || (error.message && (error.message.includes('unique constraint') || error.message.includes('duplicate key') || error.message.includes('idx_bookings_slug_idempotency'))))) {
+      if (idempotencyKey && slug) {
+        try {
+          const { data: existing } = await withTimeout(
+            sb.from('bookings').select('*').eq('slug', slug).eq('idempotency_key', idempotencyKey).maybeSingle()
+          );
+          if (existing) {
+            return mapPostgresBookingRow(existing, true);
+          }
+        } catch (fetchErr) {
+          console.warn('[Supabase] error fetching existing duplicate booking:', fetchErr.message);
+        }
+      }
+      return null;
+    }
+
+    // Only if the database indicates the column itself does not exist (code 42703) do we retry without it
+    if (error && (error.code === '42703' || (error.message && error.message.includes('does not exist') && error.message.includes('idempotency_key')))) {
       delete payload.idempotency_key;
       insertQuery = sb.from('bookings').insert(payload).select().single();
       const retryResult = await withTimeout(insertQuery);

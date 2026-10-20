@@ -200,15 +200,17 @@ export async function createBookingAsync(input = {}) {
     return sbData;
   }
 
-  // If Supabase is live/configured, persistence failure MUST throw 503 rather than returning false success
-  if (supabaseCfg.live) {
+  // Priority 1: In production, never fall back to in-memory/mock storage.
+  // If database credentials are missing, connection fails, or durable write cannot be confirmed, return HTTP 503.
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (isProduction || supabaseCfg.live) {
     const err = new Error('Booking service temporarily unavailable. The database write could not be confirmed.');
     err.status = 503;
     throw err;
   }
 
-  // Development/offline fallback only when no live database is configured
-  console.warn('[bookings] Live database not configured; falling back to local storage.');
+  // Isolated development/offline fallback ONLY when NODE_ENV !== 'production' AND no live DB is configured
+  console.warn('[bookings] Non-production offline mode: falling back to local storage.');
   return createBooking(input);
 }
 

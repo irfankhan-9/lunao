@@ -840,10 +840,16 @@ export const TemplateLabPage: React.FC<{
 
       // Enforce Non-Negotiable Booking Beta Contract deterministically
       const contractCheck = validateBookingContract(result, BLANK_CANVAS);
+      let contractCorrectionNotice = '';
       if (!contractCheck.valid) {
         console.warn('[BookingBetaContract] Initial generation triggered contract correction:', contractCheck.reason);
-        // Automatically rollback booking section to the canonical approved template
+        // Priority 5: Rollback booking section to canonical approved template preserving legitimate niche services
         result = rollbackToApprovedBooking(result);
+        contractCorrectionNotice = `\n\nNotice: ${CONTRACT_REJECTION_MESSAGE}`;
+        flashToast?.({
+          type: 'error',
+          text: 'Booking Beta: Custom booking fields are not supported. Approved template restored.',
+        });
       }
 
       const finalCompiled = compilePreview(result);
@@ -857,7 +863,7 @@ export const TemplateLabPage: React.FC<{
       setNiche(finalTitle);
 
       // Single brand-consistent confirmation message showing 70 chars with ellipsis
-      const initialConfirmation = formatAppliedMessage(promptText);
+      const initialConfirmation = formatAppliedMessage(promptText) + contractCorrectionNotice;
       setMessages([{ role: 'assistant', content: initialConfirmation }]);
       sfx.aiDone();
       try {

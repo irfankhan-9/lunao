@@ -26,6 +26,7 @@ import { OwnerPWADrawer } from './OwnerPWADrawer';
 import { OwnerPWAModal } from './OwnerPWAModal';
 import { TemplateLabPage } from './TemplateLabPage';
 import { useSyncNiches } from '../lib/nichesSync';
+import { validateBookingContract, CONTRACT_REJECTION_MESSAGE } from '../lib/bookingContractValidator';
 
 interface EditorProps {
   active: boolean;
@@ -392,6 +393,15 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
     if (!selected) return;
     sfx.tap();
     const html = syncFromIframe();
+
+    // Priority 4: Enforce booking contract validation before saving
+    const check = validateBookingContract(html);
+    if (!check.valid) {
+      sfx.error();
+      flashToast({ type: 'error', text: check.customerMessage || CONTRACT_REJECTION_MESSAGE });
+      return;
+    }
+
     setSaving(true);
     try {
       await saveSiteHtml(selected.slug, html);
@@ -410,6 +420,15 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
     if (!selected) return;
     sfx.primary();
     const html = syncFromIframe();
+
+    // Priority 4: Enforce booking contract validation before deploying
+    const check = validateBookingContract(html);
+    if (!check.valid) {
+      sfx.error();
+      flashToast({ type: 'error', text: check.customerMessage || CONTRACT_REJECTION_MESSAGE });
+      return;
+    }
+
     setDeploying(true);
     try {
       const { url } = await deploySite(selected.slug, html);
