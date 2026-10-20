@@ -152,12 +152,12 @@
     // Set tactile loading state
     if (submitBtn) {
       submitBtn.disabled = true;
-      submitBtn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;"><svg style="animation:spin 1s linear infinite;width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Securing Appointment…</span>';
+      submitBtn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;"><svg style="animation:spin 1s linear infinite;width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Submitting Request…</span>';
     }
 
     function showSuccessUI() {
       if (submitBtn) {
-        submitBtn.innerHTML = '✓ Appointment Confirmed!';
+        submitBtn.innerHTML = '✓ Request Received';
         submitBtn.style.backgroundColor = '#059669';
         submitBtn.style.borderColor = '#059669';
         submitBtn.style.color = '#ffffff';
@@ -172,7 +172,8 @@
         
         var nameStr = payload.customerName || 'there';
         var contactStr = payload.phone ? 'at ' + payload.phone : 'shortly';
-        banner.innerHTML = '<strong>Appointment Confirmed, ' + nameStr + '!</strong><br><span style="font-size:12px;color:#047857;">We will reach out to you ' + contactStr + ' to finalize your booking details.</span>';
+        var dateNote = payload.date ? ' for ' + payload.date + (payload.time ? ' (' + payload.time + ')' : '') : '';
+        banner.innerHTML = '<strong>Booking Request Received, ' + nameStr + '!</strong><br><span style="font-size:12px;color:#047857;">We have received your requested time' + dateNote + '. We will contact you ' + contactStr + ' to confirm availability and finalize details.</span>';
         
         form.appendChild(banner);
       }
@@ -204,7 +205,7 @@
         var banner = document.createElement('div');
         banner.className = 'lunao-booking-error-banner';
         banner.style.cssText = 'margin-top:14px;padding:12px 16px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;color:#991b1b;font-family:system-ui,-apple-system,sans-serif;font-size:13px;line-height:1.5;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);animation:fadeIn 0.3s ease;';
-        banner.innerHTML = '<strong>Booking could not be confirmed</strong><br><span style="font-size:12px;color:#b91c1c;">' + (errMsg || 'Please verify your details and try again or call us directly.') + '</span>';
+        banner.innerHTML = '<strong>Request could not be sent</strong><br><span style="font-size:12px;color:#b91c1c;">' + (errMsg || 'Please verify your details and try again or call us directly.') + '</span>';
         form.appendChild(banner);
         setTimeout(function() {
           try { banner.remove(); } catch(e) {}

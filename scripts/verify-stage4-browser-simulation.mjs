@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import fetch from 'node-fetch';
 import pg from 'pg';
 const { Client } = pg;
@@ -6,7 +7,8 @@ const projectRef = 'wqlbuadknltsjfzrltpe';
 const host = 'aws-0-us-east-1.pooler.supabase.com';
 const port = 6543;
 const user = 'postgres.' + projectRef;
-const password = process.env.SUPABASE_DB_PASSWORD || '';
+const rawPassword = process.env.SUPABASE_DB_PASSWORD || '';
+const password = rawPassword.replace(/^["']|["']$/g, '');
 
 const EDGE_URL = process.env.EDGE_URL || 'http://localhost:3000/functions/v1/public-bookings';
 const ANON_KEY = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_KEY || '';

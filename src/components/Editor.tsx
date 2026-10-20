@@ -1146,7 +1146,7 @@ const ToastBanner: React.FC<{ toast: NonNullable<Toast>; onClose: () => void }> 
 // ===========================================================================
 
 const SAMPLE_PROMPTS = [
-  'Modern dental clinic with warm amber tones, hero with booking CTA, services grid, patient testimonials, before/after gallery',
+  'Modern dental clinic with warm amber tones, hero with direct call CTA, services grid, patient testimonials, before/after gallery',
   'Bold HVAC company website with navy and orange, emergency 24/7 banner, services checklist, service area map section',
   'Luxury barber shop with dark wood tones, vintage aesthetic, services menu with prices, about the barbers section',
 ];

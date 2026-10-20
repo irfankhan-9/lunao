@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { gemini as geminiCfg } from './config.js';
+import { replaceBookingWithPhoneCta, hasBookingForm } from './aiStudioBookingGuard.js';
 
 let _aiClient = null;
 
@@ -87,8 +88,8 @@ export function cleanHtmlOutput(text) {
     <h1>Welcome to {{BUSINESS_NAME}} in {{CITY}}</h1>
     <p>Professional services trusted by over {{GOOGLE_REVIEW_COUNT}} clients with a {{GOOGLE_RATING}}★ rating.</p>
     <div class="hero-buttons">
-      <a href="#contact" class="btn-cta">Book Appointment</a>
-      <a href="tel:{{PHONE_RAW}}" class="btn-cta" style="background:#0f172a;">Call Now</a>
+      <a href="tel:{{PHONE_RAW}}" class="btn-cta">Call {{PHONE_DISPLAY}}</a>
+      <a href="#about" class="btn-cta" style="background:#0f172a;">Learn More</a>
     </div>
   </section>
   <div class="section">
@@ -100,6 +101,9 @@ export function cleanHtmlOutput(text) {
 </footer>
 </body>
 </html>`;
+  }
+  if (hasBookingForm(out)) {
+    out = replaceBookingWithPhoneCta(out);
   }
   return out;
 }

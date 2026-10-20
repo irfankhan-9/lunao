@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import fetch from 'node-fetch';
 import pg from 'pg';
 const { Client } = pg;
@@ -6,7 +7,8 @@ const projectRef = 'wqlbuadknltsjfzrltpe';
 const host = 'aws-0-us-east-1.pooler.supabase.com';
 const port = 6543;
 const user = 'postgres.' + projectRef;
-const password = process.env.SUPABASE_DB_PASSWORD || '';
+const rawPassword = process.env.SUPABASE_DB_PASSWORD || '';
+const password = rawPassword.replace(/^["']|["']$/g, '');
 
 const API_BASE = 'http://localhost:3000';
 const TEST_SLUG = 'everest-climate-austin';
@@ -121,9 +123,28 @@ async function runStage3E2E() {
   }
   console.log('✓ Database uniqueness constraint and idempotency verified.');
 
+  // Register owner business access for test token
+  await dbClient.query(`
+    CREATE TABLE IF NOT EXISTS owner_businesses (
+      owner_key TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      created_at BIGINT NOT NULL,
+      PRIMARY KEY (owner_key, slug)
+    );
+  `);
+  await dbClient.query(`
+    INSERT INTO owner_businesses (owner_key, slug, created_at)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (owner_key, slug) DO NOTHING;
+  `, ['mock-test-token', TEST_SLUG, Date.now()]);
+
   // 6. Verify Owner PWA Read Isolation & Booking Retrieval
   console.log('\n6. Verifying Owner PWA booking read API for tenant slug...');
-  const pwaRes = await fetch(`${API_BASE}/api/bookings?slug=${TEST_SLUG}`);
+  const pwaRes = await fetch(`${API_BASE}/api/bookings?slug=${TEST_SLUG}`, {
+    headers: {
+      'Authorization': 'Bearer mock-test-token'
+    }
+  });
   const pwaBody = await pwaRes.json();
   console.log('Owner PWA Bookings API Status:', pwaRes.status);
   console.log('Fetched Bookings Count for tenant:', pwaBody.bookings?.length);

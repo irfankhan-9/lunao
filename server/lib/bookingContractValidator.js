@@ -38,7 +38,7 @@ export const APPROVED_BOOKING_COMPONENT_HTML = `
     <div class="booking-header">
       <span class="booking-eyebrow">RESERVE AN APPOINTMENT</span>
       <h2 class="booking-title">Book an Appointment</h2>
-      <p class="booking-subtitle">Choose your preferred service and contact details. We will confirm your slot promptly.</p>
+      <p class="booking-subtitle">Choose your preferred service and requested time. We will reach out to confirm your booking.</p>
     </div>
     <div class="booking-box" id="booking-form-container">
       <form id="appointment-form" data-lunao-booking="true" data-lunao-booking-version="1.0.0-beta" novalidate>
@@ -82,7 +82,7 @@ export const APPROVED_BOOKING_COMPONENT_HTML = `
           <label class="form-label" for="booking-notes">Special Requests (Optional)</label>
           <textarea id="booking-notes" name="notes" class="form-input" rows="2" placeholder="Any specific requirements..."></textarea>
         </div>
-        <button type="submit" class="btn-submit" id="submit-appointment-btn">Confirm Reservation</button>
+        <button type="submit" class="btn-submit" id="submit-appointment-btn">Request Appointment</button>
       </form>
     </div>
   </div>
@@ -348,6 +348,36 @@ export function validateBookingPayloadContract(payload = {}) {
   const email = String(payload.email || '').trim();
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { valid: false, error: 'Please provide a valid email address.' };
+  }
+
+  // Validate preferred date format if provided
+  const dateStr = String(payload.date || '').trim();
+  if (dateStr) {
+    const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) {
+      return { valid: false, error: 'Invalid preferred date. Please provide a valid calendar date in YYYY-MM-DD format.' };
+    }
+    const year = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10);
+    const day = parseInt(match[3], 10);
+    if (year < 2020 || year > 2100 || month < 1 || month > 12) {
+      return { valid: false, error: 'Invalid preferred date.' };
+    }
+    const daysInMonth = new Date(year, month, 0).getDate();
+    if (day < 1 || day > daysInMonth) {
+      return { valid: false, error: 'Invalid preferred date.' };
+    }
+  }
+
+  // Validate preferred time format if provided
+  const timeStr = String(payload.time || '').trim();
+  if (timeStr) {
+    const isFlexible = /^flexible$/i.test(timeStr);
+    const isTime12 = /^(0?[1-9]|1[0-2]):[0-5][0-9]\s*(AM|PM|am|pm)$/i.test(timeStr);
+    const isTime24 = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(timeStr);
+    if (!isFlexible && !isTime12 && !isTime24) {
+      return { valid: false, error: 'Invalid preferred time format. Please provide a standard time (e.g. 10:00 AM) or "Flexible".' };
+    }
   }
 
   return { valid: true };

@@ -9,6 +9,7 @@ import {
 
 import { supabase as supabaseCfg } from './config.js';
 import { validateBookingPayloadContract } from './bookingContractValidator.js';
+import { getBookingConfig, validateBookingAgainstConfig } from './bookingConfig.js';
 
 const VALID_STATUS = new Set(['new', 'confirmed', 'cancelled']);
 const VALID_SOURCE = new Set(['form', 'chatbot']);
@@ -92,6 +93,14 @@ export function createBooking(input = {}) {
     }
   }
 
+  // Validate date/time format against booking rules
+  const baseCheck = validateBookingAgainstConfig(input, null);
+  if (!baseCheck.valid) {
+    const err = new Error(baseCheck.error);
+    err.status = 400;
+    throw err;
+  }
+
   const customer_name = str(input.customerName || input.name || input.customer_name);
   const phone = str(input.phone);
   const source = VALID_SOURCE.has(input.source) ? input.source : 'form';
@@ -143,6 +152,16 @@ export async function createBookingAsync(input = {}) {
   }
 
   const slug = str(input.slug);
+  const config = await getBookingConfig(slug).catch(() => null);
+  if (config) {
+    const configCheck = validateBookingAgainstConfig(input, config);
+    if (!configCheck.valid) {
+      const err = new Error(configCheck.error);
+      err.status = 400;
+      throw err;
+    }
+  }
+
   const customerName = str(input.customerName || input.name || input.customer_name);
   const phone = str(input.phone);
   const customFields = extractCustomFields(input);

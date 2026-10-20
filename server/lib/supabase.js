@@ -4,16 +4,34 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase as supabaseCfg } from './config.js';
 
 let pgPool = null;
-if (process.env.DATABASE_URL) {
+const dbUrl = process.env.DATABASE_URL;
+const dbPassword = process.env.SUPABASE_DB_PASSWORD || process.env.PGPASSWORD;
+
+if (dbUrl) {
   try {
-    pgPool = new Pool({
-      connectionString: process.env.DATABASE_URL,
+    let poolConfig = {
       ssl: process.env.PGSSL === 'disable' ? false : { rejectUnauthorized: false },
-      max: Number(process.env.PG_POOL_MAX) || 5, // Safe limit for 1 GiB RAM servers
+      max: Number(process.env.PG_POOL_MAX) || 5,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
-    });
-    // Prevent unhandled error events on idle connections from crashing the process
+    };
+
+    if (dbPassword) {
+      try {
+        const parsed = new URL(dbUrl);
+        poolConfig.host = parsed.hostname;
+        poolConfig.port = parsed.port ? Number(parsed.port) : 5432;
+        poolConfig.user = parsed.username || 'postgres';
+        poolConfig.password = dbPassword;
+        poolConfig.database = parsed.pathname ? parsed.pathname.replace(/^\//, '') : 'postgres';
+      } catch {
+        poolConfig.connectionString = dbUrl;
+      }
+    } else {
+      poolConfig.connectionString = dbUrl;
+    }
+
+    pgPool = new Pool(poolConfig);
     pgPool.on('error', (err) => {
       console.warn('[Postgres Pool Notice] Idle client error:', err.message);
     });

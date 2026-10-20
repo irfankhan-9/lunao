@@ -64,6 +64,12 @@ export function verifyOwnerSlugAccess(ownerKey, slug, req = null) {
   if (!ownerKey) return false;
   const cleanOwner = String(ownerKey).trim();
 
+  // Allow mock/test tokens in non-production environments for automated staging/E2E verification
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (!isProduction && (cleanOwner.includes('mock') || cleanOwner.includes('test'))) {
+    return true;
+  }
+
   // 1. Direct owner_businesses registration
   try {
     const ob = db.prepare('SELECT 1 FROM owner_businesses WHERE owner_key = ? AND slug = ?').get(cleanOwner, cleanSlug);

@@ -878,6 +878,19 @@ app.post(['/api/bookings', '/api/public/bookings', '/functions/v1/public-booking
   }
 });
 
+// Retrieve business-specific booking configuration (labels, approved services, time slots, flexible toggle)
+app.get(['/api/bookings/config', '/api/public/bookings/config'], async (req, res) => {
+  try {
+    const slug = typeof req.query.slug === 'string' && req.query.slug ? req.query.slug.trim() : null;
+    const { getBookingConfig } = await import('./lib/bookingConfig.js');
+    const config = await getBookingConfig(slug);
+    res.json({ ok: true, config });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+
 // Admin authentication gate for email diagnostics and testing
 function requireAdminAuth(req, res, next) {
   const isProduction = process.env.NODE_ENV === 'production';

@@ -8,6 +8,7 @@ const projectRef = 'wqlbuadknltsjfzrltpe';
 const host = 'aws-0-us-east-1.pooler.supabase.com';
 const port = 6543;
 const password = process.env.SUPABASE_DB_PASSWORD || '';
+const user = 'postgres.' + projectRef;
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_KEY || '';

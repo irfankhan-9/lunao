@@ -4,7 +4,7 @@ import {
   FlaskConical, Layout, Monitor, Smartphone, Upload, Copy,
   CheckSquare, RotateCcw, BookmarkPlus, X, Code2, Check, Plus,
   RefreshCw, PanelLeft, PanelLeftClose, Terminal, Layers, Maximize2, Minimize2, Home, Lock,
-  ArrowRight, FolderCheck, Sparkles, ShieldCheck, CalendarCheck, Calendar, Trash2
+  ArrowRight, FolderCheck, Sparkles, ShieldCheck, CalendarCheck, Calendar, Trash2, Info, Clock
 } from 'lucide-react';
 import {
   AiChatMessage, SiteHistoryEntry,
@@ -21,6 +21,11 @@ import {
   CONTRACT_REJECTION_MESSAGE,
   BOOKING_COMPONENT_VERSION,
 } from '../lib/bookingContractValidator';
+import {
+  replaceBookingWithPhoneCta,
+  hasBookingForm,
+  AI_STUDIO_BOOKING_BANNER_TEXT,
+} from '../lib/aiStudioBookingGuard';
 import {
   playSoftTap, playTiktokLike, playSlideTick, playDialogPop, playSoftBubble,
   playElegantBell, playConfirmSuccess, playVictoryCelebration, playGentleChime,
@@ -65,14 +70,11 @@ Replace all hardcoded business names, phone numbers, cities, addresses, fake rev
 5. PRESERVE ORIGINAL DESIGN & QUALITY:
 Preserve the original design, styling, layout, typography, responsiveness, and interactivity while ensuring strict template-readiness.
 
-6. STRICT BOOKING BETA CONTRACT (NON-NEGOTIABLE):
-When creating, editing, or styling an appointment or booking section:
-- Use Lunao's approved booking template with Name, Email, Phone Number, and Service ONLY.
-- Standard scheduling inputs (preferred date, preferred time, optional notes) are supported.
-- DO NOT create or add custom booking fields (e.g. no pet_breed, hair_length, budget, or custom attributes). Custom fields are strictly prohibited in Beta.
-- DO NOT replace, alter, or duplicate the approved booking component, submission handlers, or endpoints.
-- You can freely customize booking-section CSS, colors, visual styling, typography, and responsive presentation.
-- You can customize the approved service options and labels (e.g. haircuts for barbers, tune-ups for HVAC, cleaning for dentists).`;
+6. AI WEBSITE STUDIO TEMPORARY BOOKING RESTRICTION:
+- Online booking forms are temporarily disabled in AI Website Studio ("Bookings coming soon to Lunao AI Website Studio").
+- Do NOT generate booking forms, appointment scheduling inputs, date/time pickers, or reservation forms.
+- Instead, always use a prominent direct phone call-to-action button (<a href="tel:{{PHONE_RAW}}" class="btn-cta">Call {{PHONE_DISPLAY}}</a>) and direct contact inquiry sections.
+- Never add inline mock success handlers, fake booking alerts, or alternative booking endpoints.`;
 
 const sfx = {
   tap: playSoftTap,
@@ -836,20 +838,13 @@ export const TemplateLabPage: React.FC<{
         }
       );
 
-      loadWorkspaceImmediately();
-
-      // Enforce Non-Negotiable Booking Beta Contract deterministically
-      const contractCheck = validateBookingContract(result, BLANK_CANVAS);
-      let contractCorrectionNotice = '';
-      if (!contractCheck.valid) {
-        console.warn('[BookingBetaContract] Initial generation triggered contract correction:', contractCheck.reason);
-        // Priority 5: Rollback booking section to canonical approved template preserving legitimate niche services
-        result = rollbackToApprovedBooking(result);
-        contractCorrectionNotice = `\n\nNotice: ${CONTRACT_REJECTION_MESSAGE}`;
-        flashToast?.({
-          type: 'error',
-          text: 'Booking Beta: Custom booking fields are not supported. Approved template restored.',
-        });
+      // Enforce AI Website Studio temporary booking restriction:
+      // Replace any generated booking forms with a high-converting phone & contact CTA
+      let bookingNotice = '';
+      if (hasBookingForm(result)) {
+        console.warn('[AIStudioBookingGuard] Booking form detected in AI Studio generation. Replacing with telephone CTA.');
+        result = replaceBookingWithPhoneCta(result);
+        bookingNotice = '\n\nNote: Bookings coming soon to Lunao AI Website Studio. Booking forms have been replaced with a direct phone inquiry CTA.';
       }
 
       const finalCompiled = compilePreview(result);
@@ -863,7 +858,7 @@ export const TemplateLabPage: React.FC<{
       setNiche(finalTitle);
 
       // Single brand-consistent confirmation message showing 70 chars with ellipsis
-      const initialConfirmation = formatAppliedMessage(promptText) + contractCorrectionNotice;
+      const initialConfirmation = formatAppliedMessage(promptText) + bookingNotice;
       setMessages([{ role: 'assistant', content: initialConfirmation }]);
       sfx.aiDone();
       try {
@@ -935,30 +930,19 @@ export const TemplateLabPage: React.FC<{
         throw err;
       }
 
-      // Enforce Non-Negotiable Booking Beta Contract deterministically
-      const contractCheck = validateBookingContract(result, base);
-      if (!contractCheck.valid) {
-        sfx.error();
-        setStreaming(false);
-        setThinkingAcc('');
-        // Requirement 4: Preserve the last verified deployment if a proposed change fails (keep base untouched)
-        // Requirement 2: Reject unsupported changes before deployment and explain the restriction to the user
-        // Requirement 3: Never silently bypass a failed validator
-        const rejectionMsg = contractCheck.customerMessage || CONTRACT_REJECTION_MESSAGE;
-        setMessages(prev => [...prev, { role: 'assistant', content: rejectionMsg }]);
-        setLabError(rejectionMsg);
-        flashToast?.({
-          type: 'error',
-          text: 'Booking Contract: Prohibited change rejected. Last verified site preserved.',
-        });
-        return; // Halt deployment and sync completely
+      // Enforce AI Website Studio temporary booking restriction:
+      let bookingEditNotice = '';
+      if (hasBookingForm(result)) {
+        console.warn('[AIStudioBookingGuard] Booking form detected in AI Studio edit. Replacing with phone CTA.');
+        result = replaceBookingWithPhoneCta(result);
+        bookingEditNotice = '\n\nNote: Bookings coming soon to Lunao AI Website Studio. Booking forms have been replaced with a direct phone inquiry CTA.';
       }
 
       const finalCompiled = compilePreview(result);
       setHtml(result);
       setPreviewHtml(finalCompiled);
       setThinkingAcc('');
-      const confirmationMsg = formatAppliedMessage(instruction);
+      const confirmationMsg = formatAppliedMessage(instruction) + bookingEditNotice;
       setMessages(prev => [...prev, { role: 'assistant', content: confirmationMsg }]);
       sfx.aiDone();
 
@@ -1385,6 +1369,15 @@ export const TemplateLabPage: React.FC<{
         )}
       </div>
 
+      {/* Informational Booking Banner */}
+      <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 sm:px-6 py-2 flex items-center justify-between text-xs text-amber-900 select-none shrink-0">
+        <div className="flex items-center gap-2">
+          <Info className="w-4 h-4 text-amber-600 shrink-0" />
+          <span className="font-semibold">{AI_STUDIO_BOOKING_BANNER_TEXT}</span>
+        </div>
+        <span className="text-[11px] text-amber-700/80 hidden sm:inline">Approved standard templates support live bookings.</span>
+      </div>
+
       {/* MAIN WORKSPACE */}
       <div className="flex flex-1 overflow-hidden min-h-0">
 
@@ -1480,13 +1473,6 @@ export const TemplateLabPage: React.FC<{
                           + {promptSnippet}
                         </button>
                       ))}
-                      <button
-                        disabled={streaming}
-                        onClick={handleResetBookingToApproved}
-                        className="text-left text-xs px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-all font-sans font-medium"
-                      >
-                        ↺ Reset booking to approved template
-                      </button>
                     </div>
                   </div>
                 ) : (
@@ -1860,20 +1846,14 @@ export const TemplateLabPage: React.FC<{
                     <RefreshCw className="w-4 h-4" />
                   </button>
 
-                  <button
-                    onClick={() => { sfx.open(); setShowTestBookingsModal(true); }}
-                    className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 text-emerald-800 text-xs font-bold transition-all shadow-xs active:scale-[0.98] shrink-0 cursor-pointer"
-                    title="Inspect live verified booking pipeline submissions from this website"
+                  <div
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 text-xs font-semibold shrink-0 select-none cursor-default"
+                    title="Bookings coming soon to Lunao AI Website Studio"
                   >
-                    <CalendarCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span className="hidden sm:inline">Live Bookings</span>
-                    <span className="sm:hidden">Bookings</span>
-                    {testBookings.length > 0 && (
-                      <span className="px-1.5 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-bold">
-                        {testBookings.length}
-                      </span>
-                    )}
-                  </button>
+                    <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span className="hidden sm:inline">Bookings Coming Soon</span>
+                    <span className="sm:hidden">Bookings Soon</span>
+                  </div>
 
                   <button
                     onClick={() => { sfx.open(); setFullScreenPreview(true); }}
@@ -2659,173 +2639,6 @@ export const TemplateLabPage: React.FC<{
                   <span>Publish to Templates</span>
                 </button>
               </div>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* Live Verified Booking Pipeline Modal */}
-      {showTestBookingsModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-editor-fade">
-          <div className="w-full max-w-3xl max-h-[90vh] flex flex-col bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden animate-editor-rise">
-            
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
-                  <CalendarCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-slate-900">Live Verified Booking Pipeline</h3>
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                      Active Engine
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    Real-time bookings captured directly from "{title || 'this website'}". Zero reload &amp; schema-agnostic.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={simulateTestBooking}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer"
-                  title="Simulate a real-time test customer booking"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Simulate Test Lead</span>
-                </button>
-                {testBookings.length > 0 && (
-                  <button
-                    onClick={clearTestBookings}
-                    className="p-2 rounded-xl bg-slate-100 hover:bg-red-50 hover:text-red-600 text-slate-500 transition-all cursor-pointer"
-                    title="Clear test bookings"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
-                <button
-                  onClick={() => setShowTestBookingsModal(false)}
-                  className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-all cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              {testBookings.length === 0 ? (
-                <div className="py-12 px-6 text-center space-y-4 bg-slate-50/70 border border-slate-200/80 rounded-2xl">
-                  <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto text-emerald-600">
-                    <Calendar className="w-7 h-7" />
-                  </div>
-                  <div className="space-y-1.5 max-w-md mx-auto">
-                    <h4 className="text-sm font-bold text-slate-900">No test bookings yet</h4>
-                    <p className="text-xs text-slate-500 leading-relaxed">
-                      You can test your website's real booking pipeline right now! Scroll down to the appointment form in the preview, enter a name and phone number, and hit submit.
-                    </p>
-                  </div>
-                  <div className="pt-2">
-                    <button
-                      onClick={simulateTestBooking}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 hover:border-emerald-500 hover:text-emerald-700 text-xs font-bold text-slate-800 shadow-xs transition-all active:scale-95 cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Or Click Here to Simulate a Test Lead</span>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-xs text-slate-500 px-1">
-                    <span>Showing {testBookings.length} verified submissions</span>
-                    <span>Ready for Owner PWA &amp; SMS alerts</span>
-                  </div>
-                  {testBookings.map((booking, idx) => (
-                    <div
-                      key={booking.id || idx}
-                      className="p-4 rounded-2xl bg-white border border-slate-200 hover:border-emerald-400 hover:shadow-xs transition-all space-y-3"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-center text-emerald-700 font-bold text-sm shrink-0">
-                            {(booking.customerName || 'C').charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                              <span>{booking.customerName}</span>
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                                Verified Form Lead ✓
-                              </span>
-                            </h4>
-                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 mt-0.5">
-                              {booking.phone && (
-                                <a href={`tel:${booking.phone}`} className="hover:text-emerald-700 font-medium">
-                                  {booking.phone}
-                                </a>
-                              )}
-                              {booking.email && (
-                                <a href={`mailto:${booking.email}`} className="hover:text-emerald-700">
-                                  {booking.email}
-                                </a>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        <span className="text-[11px] text-slate-400 font-mono shrink-0">
-                          {booking.receivedAt ? new Date(booking.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent'}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                        {booking.service && (
-                          <span className="px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200/60 text-blue-800 text-[11px] font-semibold">
-                            Service: {booking.service}
-                          </span>
-                        )}
-                        {booking.date && (
-                          <span className="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-medium">
-                            Date: {booking.date} {booking.time ? `· ${booking.time}` : ''}
-                          </span>
-                        )}
-                        {booking.customFields && typeof booking.customFields === 'object' && Object.entries(booking.customFields).map(([k, v]) => (
-                          <span
-                            key={k}
-                            className="px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200/80 text-amber-900 text-[11px] font-medium"
-                          >
-                            <strong className="capitalize">{k.replace(/_/g, ' ')}:</strong> {String(v)}
-                          </span>
-                        ))}
-                      </div>
-
-                      {booking.notes && (
-                        <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200/60 italic">
-                          "{booking.notes}"
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex items-center justify-between px-6 py-4 bg-slate-50 border-t border-slate-200 shrink-0">
-              <span className="text-xs text-slate-500">
-                All forms auto-bind via <code className="text-slate-700 font-mono">lunao-booking-bridge.js</code>.
-              </span>
-              <button
-                onClick={() => setShowTestBookingsModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-300 transition-all cursor-pointer"
-              >
-                Close
-              </button>
             </div>
 
           </div>

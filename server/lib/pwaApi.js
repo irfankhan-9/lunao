@@ -672,6 +672,27 @@ export function mountPwaApi(app) {
     },
   );
 
+  // ---- Booking Configuration (Owner Customization) ----
+  app.get('/api/pwa/:slug/booking-config', pwaAuth, assertSameSlug, async (req, res) => {
+    try {
+      const { getBookingConfig } = await import('./bookingConfig.js');
+      const config = await getBookingConfig(req.params.slug);
+      res.json({ ok: true, config });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.put('/api/pwa/:slug/booking-config', pwaAuth, assertSameSlug, async (req, res) => {
+    try {
+      const { saveBookingConfig } = await import('./bookingConfig.js');
+      const updated = await saveBookingConfig(req.params.slug, req.body || {});
+      res.json({ ok: true, config: updated });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
   // ---- Customers -----
   app.get('/api/pwa/:slug/customers', pwaAuth, assertSameSlug, (req, res) => {
     try {
