@@ -27,7 +27,7 @@ process.env.NODE_ENV = 'development';
 const { app } = await import('../server/index.js');
 const { createBooking, createBookingAsync } = await import('../server/lib/bookings.js');
 const { validateBookingContract, rollbackToApprovedBooking, CONTRACT_REJECTION_MESSAGE } = await import('../server/lib/bookingContractValidator.js');
-const { registerOwnerBusiness, verifyOwnerSlugAccess } = await import('../server/lib/tenantAuth.js');
+const { registerOwnerBusiness, verifyOwnerSlugAccess, registerTenant, removeTenant } = await import('../server/lib/tenantAuth.js');
 
 const server = http.createServer(app);
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -67,25 +67,30 @@ console.log('================================================================\n'
 
 // 1. Valid browser booking submissions
 await testAsync('1. Valid browser booking submissions succeed', async () => {
-  const res = await fetch(`${baseUrl}/api/bookings`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Idempotency-Key': `test-browser-${Date.now()}`
-    },
-    body: JSON.stringify({
-      slug: 'valid-browser-salon',
-      customerName: 'Sam Developer',
-      phone: '(512) 555-0199',
-      email: 'sam@lunao.app',
-      service: 'Precision Cut',
-      source: 'website_form'
-    })
-  });
-  const data = await res.json();
-  assert.strictEqual(res.status, 201);
-  assert.strictEqual(data.ok, true);
-  assert.ok(data.booking);
+  registerTenant('valid-browser-salon', 'Valid Browser Salon', true);
+  try {
+    const res = await fetch(`${baseUrl}/api/bookings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Idempotency-Key': `test-browser-${Date.now()}`
+      },
+      body: JSON.stringify({
+        slug: 'valid-browser-salon',
+        customerName: 'Sam Developer',
+        phone: '(512) 555-0199',
+        email: 'sam@lunao.app',
+        service: 'Precision Cut',
+        source: 'website_form'
+      })
+    });
+    const data = await res.json();
+    assert.strictEqual(res.status, 201);
+    assert.strictEqual(data.ok, true);
+    assert.ok(data.booking);
+  } finally {
+    removeTenant('valid-browser-salon');
+  }
 });
 
 // 2. Production mode with missing database credentials throws HTTP 503

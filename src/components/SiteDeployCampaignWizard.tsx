@@ -316,7 +316,10 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
       try {
         const resp = await fetch('/api/site-deploy/rebrand-single', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('lunao_auth_token') || 'lunao-mock-dev-token'}`,
+          },
           body: JSON.stringify({
             business: { name: lead.name, city: lead.city, phone: lead.phone },
             niche: selectedNiche,
@@ -328,7 +331,7 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
         const data = await resp.json();
         if (data.ok && data.slug) {
           slug = data.slug;
-          siteUrl = `https://lunao-web-designn.pages.dev/${slug}/`;
+          siteUrl = data.siteUrl || `https://lunao-web-designn.pages.dev/${slug}/`;
           deployedOk = true;
           addLog(`Deploying to Lunao servers done: ${siteUrl}`, 'success');
         } else {

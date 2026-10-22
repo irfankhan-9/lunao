@@ -2123,7 +2123,7 @@
   <nav class="nav-bar" id="navbar">
     <div class="logo-container" id="logo_trigger">
       <div class="logo-mark"></div>
-      <span class="logo-text">Maison</span>
+      <span class="logo-text">Maison de Beauté</span>
     </div>
 
     <!-- Center Navigation Links (Desktop Only) -->
@@ -2178,16 +2178,16 @@
       <div class="hero-split">
         <!-- Left content half -->
         <div class="hero-content">
-          <span class="hero-eyebrow">✨ Hair Studio · Miami, FL</span>
+          <span class="hero-eyebrow">✨ Hair Studio · Dallas, TX</span>
           <div class="hero-title-container">
             <h1 class="hero-title-1">Maison de Beauté Salon</h1>
-            <h1 class="hero-title-2">Miami, FL</h1>
+            <h1 class="hero-title-2">Dallas, TX</h1>
           </div>
           <div class="hero-divider">
             <div class="hero-divider-line"></div>
             <div class="hero-divider-dot"></div>
           </div>
-          <p class="hero-description">Precision cuts, flawless color, and the kind of care that keeps clients coming back. Miami, FL's salon, rebuilt for a new era.</p>
+          <p class="hero-description">Precision cuts, flawless color, and the kind of care that keeps clients coming back. Dallas, TX's salon, rebuilt for a new era.</p>
           <div class="hero-cta-group">
             <button class="hero-btn-primary" id="hero_book_btn">Book an Appointment</button>
             <button class="hero-btn-secondary" id="hero_see_work">See Our Work</button>
@@ -2208,7 +2208,7 @@
       <div class="hero-stats-strip">
         <div class="stat-item">
           <span class="stat-number font-serif">12 Years</span>
-          <span class="stat-label">In Miami, FL</span>
+          <span class="stat-label">In Dallas, TX</span>
         </div>
         <div class="stat-item">
           <span class="stat-number font-serif">8 Stylists</span>
@@ -2433,7 +2433,7 @@
             <h3 class="stylist-name font-serif">Sophie Laurent</h3>
             <span class="stylist-role">Senior Colorist</span>
             <p class="stylist-bio">Sophie trained in Paris and brings a European sensibility to every color consultation. She specializes in natural-looking blondes and complex color corrections.</p>
-            <span class="stylist-tenure">9 years in Miami, FL</span>
+            <span class="stylist-tenure">9 years in Dallas, TX</span>
           </div>
           <div>
             <div class="stylist-divider"></div>
@@ -2455,7 +2455,7 @@
             <h3 class="stylist-name font-serif">Marcus Webb</h3>
             <span class="stylist-role">Master Stylist</span>
             <p class="stylist-bio">Known for precision cuts and a calm, unhurried approach. Marcus works with all hair types and has a particular gift for curly and textured hair.</p>
-            <span class="stylist-tenure">7 years in Miami, FL</span>
+            <span class="stylist-tenure">7 years in Dallas, TX</span>
           </div>
           <div>
             <div class="stylist-divider"></div>
@@ -2477,7 +2477,7 @@
             <h3 class="stylist-name font-serif">Priya Nair</h3>
             <span class="stylist-role">Color Specialist</span>
             <p class="stylist-bio">Priya's foiling technique is consistently requested by new clients. She focuses on dimensional color that moves naturally in light.</p>
-            <span class="stylist-tenure">5 years in Miami, FL</span>
+            <span class="stylist-tenure">5 years in Dallas, TX</span>
           </div>
           <div>
             <div class="stylist-divider"></div>
@@ -2499,7 +2499,7 @@
             <h3 class="stylist-name font-serif">James Tello</h3>
             <span class="stylist-role">Stylist</span>
             <p class="stylist-bio">James brings energy and precision to every appointment. He is equally at home with editorial styling and everyday cuts for busy clients.</p>
-            <span class="stylist-tenure">4 years in Miami, FL</span>
+            <span class="stylist-tenure">4 years in Dallas, TX</span>
           </div>
           <div>
             <div class="stylist-divider"></div>
@@ -2521,7 +2521,7 @@
             <h3 class="stylist-name font-serif">Camille Roux</h3>
             <span class="stylist-role">Senior Stylist</span>
             <p class="stylist-bio">Camille's background in fashion made her a natural at salon work. Her eye for proportion and balance shows in every cut she delivers.</p>
-            <span class="stylist-tenure">6 years in Miami, FL</span>
+            <span class="stylist-tenure">6 years in Dallas, TX</span>
           </div>
           <div>
             <div class="stylist-divider"></div>
@@ -2543,7 +2543,7 @@
             <h3 class="stylist-name font-serif">Aisha Moore</h3>
             <span class="stylist-role">Texture Specialist</span>
             <p class="stylist-bio">Aisha has built one of the most loyal client rosters in the salon through her specialty in textured, natural, and protective styles.</p>
-            <span class="stylist-tenure">5 years in Miami, FL</span>
+            <span class="stylist-tenure">5 years in Dallas, TX</span>
           </div>
           <div>
             <div class="stylist-divider"></div>
@@ -2888,26 +2888,26 @@
       <div class="book-split" data-reveal>
         <div>
           <!-- Unsubmitted form panel -->
-          <form id="reservation_form" class="reservation-form">
+          <form id="reservation_form" class="reservation-form" data-lunao-booking="true" data-lunao-inline-booking="true" novalidate>
             <div class="form-group-row">
               <div class="form-field-container">
                 <label for="frm_fullname" class="form-label">Full Name *</label>
-                <input type="text" id="frm_fullname" class="input-underlined" placeholder="e.g. Rachel Miller" required>
+                <input type="text" id="frm_fullname" name="name" class="input-underlined" placeholder="e.g. Rachel Miller" required autocomplete="name">
               </div>
               <div class="form-field-container">
                 <label for="frm_email" class="form-label">Email Address *</label>
-                <input type="email" id="frm_email" class="input-underlined" placeholder="e.g. rachel@example.com" required>
+                <input type="email" id="frm_email" name="email" class="input-underlined" placeholder="e.g. rachel@example.com" required autocomplete="email">
               </div>
             </div>
 
             <div class="form-group-row">
               <div class="form-field-container">
-                <label for="frm_phone" class="form-label">Phone Number</label>
-                <input type="tel" id="frm_phone" class="input-underlined" placeholder="e.g. (310) 555-0193">
+                <label for="frm_phone" class="form-label">Phone Number *</label>
+                <input type="tel" id="frm_phone" name="phone" class="input-underlined" placeholder="e.g. (214) 555-0193" required autocomplete="tel">
               </div>
               <div class="form-field-container">
                 <label for="frm_service" class="form-label">Service</label>
-                <select id="frm_service" class="input-underlined">
+                <select id="frm_service" name="service" class="input-underlined" required>
                   <option value="" disabled selected>Select a Service</option>
                   <optgroup label="Hair">
                     <option value="Signature Cut">Signature Cut ✂️</option>
@@ -2943,7 +2943,7 @@
             <div class="form-group-row">
               <div class="form-field-container">
                 <label for="frm_stylist" class="form-label">Preferred Stylist</label>
-                <select id="frm_stylist" class="input-underlined">
+                <select id="frm_stylist" name="service_stylist" class="input-underlined">
                   <option value="No Preference">No Preference</option>
                   <option value="Sophie Laurent">Sophie Laurent</option>
                   <option value="Marcus Webb">Marcus Webb</option>
@@ -2955,14 +2955,14 @@
               </div>
               <div class="form-field-container">
                 <label for="frm_date" class="form-label">Preferred Date</label>
-                <input type="date" id="frm_date" class="input-underlined">
+                <input type="date" id="frm_date" name="date" class="input-underlined">
               </div>
             </div>
 
             <div class="form-group-row">
               <div class="form-field-container">
                 <label for="frm_time" class="form-label">Preferred Time</label>
-                <select id="frm_time" class="input-underlined">
+                <select id="frm_time" name="time" class="input-underlined">
                   <option value="09:00 AM">9:00 AM</option>
                   <option value="09:30 AM">9:30 AM</option>
                   <option value="10:00 AM">10:00 AM</option>
@@ -2988,7 +2988,7 @@
               </div>
               <div class="form-field-container">
                 <label for="frm_source" class="form-label">How did you hear about us?</label>
-                <select id="frm_source" class="input-underlined">
+                <select id="frm_source" name="service_referral" class="input-underlined">
                   <option value="Instagram">Instagram</option>
                   <option value="Google Search">Google Search</option>
                   <option value="Friend Referral">Friend Referral</option>
@@ -3001,8 +3001,10 @@
 
             <div class="form-field-container">
               <label for="frm_notes" class="form-label">Additional Notes</label>
-              <textarea id="frm_notes" rows="3" class="input-underlined" placeholder="Mention hair length, custom requests, or questions here..."></textarea>
+              <textarea id="frm_notes" name="notes" rows="3" class="input-underlined" placeholder="Mention hair length, custom requests, or questions here..."></textarea>
             </div>
+
+            <div id="salon_form_error" class="form-error-banner" style="display:none;margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#b91c1c;font-size:13.5px;line-height:1.5;text-align:left;"></div>
 
             <div class="form-submit-container">
               <button type="submit" class="form-submit-btn" id="frm_submit_btn">Request Booking</button>
@@ -3038,7 +3040,7 @@
 
           <div class="notice-item">
             <span class="notice-label">🚗 Parking</span>
-            <p class="notice-content">Street parking available. Miami, FL transit stops nearby.</p>
+            <p class="notice-content">Street parking available. Dallas, TX transit stops nearby.</p>
           </div>
 
           <div class="notice-hours">
@@ -3058,7 +3060,7 @@
 
           <div style="border-top: var(--rule-ghost); padding-top: 16px;">
             <span class="notice-label" style="margin-bottom: 4px;">📞 Direct Call</span>
-            <a href="tel:3055550374" class="sidebar-phone-link font-serif">(305) 555-0374</a>
+            <a href="tel:2145550193" class="sidebar-phone-link font-serif">(214) 555-0193</a>
           </div>
         </div>
       </div>
@@ -3086,10 +3088,10 @@
           <div class="blog-body">
             <div class="blog-badge-row">
               <span class="blog-tag">💆‍♀️ Hair Care</span>
-              <span class="blog-date">Miami, FL · April 2025</span>
+              <span class="blog-date">Dallas, TX · April 2025</span>
             </div>
             <h4 class="blog-title font-serif">How Often Should You Actually Wash Your Hair?</h4>
-            <p class="blog-excerpt">The answer depends on your hair type, your routine, and what products you are using — and it is probably different from what you were told growing up. Maison de Beauté Salon's senior stylists share what they recommend for their own clients in Miami, FL.</p>
+            <p class="blog-excerpt">The answer depends on your hair type, your routine, and what products you are using — and it is probably different from what you were told growing up. Maison de Beauté Salon's senior stylists share what they recommend for their own clients in Dallas, TX.</p>
             <button class="blog-read-more link-tap" data-post-id="1">Read more</button>
           </div>
         </div>
@@ -3102,7 +3104,7 @@
           <div class="blog-body">
             <div class="blog-badge-row">
               <span class="blog-tag">🎨 Color</span>
-              <span class="blog-date">Miami, FL · March 2025</span>
+              <span class="blog-date">Dallas, TX · March 2025</span>
             </div>
             <h4 class="blog-title font-serif">What Nobody Tells You Before Getting Balayage</h4>
             <p class="blog-excerpt">Balayage is one of the most requested services we do. It is also one of the most misunderstood. Here is what to expect, how to prepare, and how to make your color last as long as possible.</p>
@@ -3118,10 +3120,10 @@
           <div class="blog-body">
             <div class="blog-badge-row">
               <span class="blog-tag">💇‍♀️ Style Guide</span>
-              <span class="blog-date">Miami, FL · February 2025</span>
+              <span class="blog-date">Dallas, TX · February 2025</span>
             </div>
             <h4 class="blog-title font-serif">The Three Haircuts That Work for Nearly Everyone</h4>
-            <p class="blog-excerpt">After years of cuts across every face shape and hair type in Miami, FL, our team has noticed patterns. These three cuts come up again and again — and there is a reason for that.</p>
+            <p class="blog-excerpt">After years of cuts across every face shape and hair type in Dallas, TX, our team has noticed patterns. These three cuts come up again and again — and there is a reason for that.</p>
             <button class="blog-read-more link-tap" data-post-id="3">Read more</button>
           </div>
         </div>
@@ -3133,7 +3135,7 @@
           <button id="blog_back_btn" class="blog-back-btn">
             ← Back to Blog
           </button>
-          <span class="blog-reader-logo text-ink">Maison</span>
+          <span class="blog-reader-logo text-ink">Maison de Beauté</span>
           <div style="width: 100px; display: flex; justify-content: flex-end;">
             <button id="blog_nav_book_btn" class="nav-cta-btn" style="padding: 6px 14px; font-size: 11px;">Book Now</button>
           </div>
@@ -3148,12 +3150,12 @@
         <div class="blog-reader-hero-image" style="background-image: url('https://images.unsplash.com/photo-1519014816548-bf5fe059e98b?auto=format&fit=crop&q=80&w=1200');"></div>
         <div class="blog-reader-meta">
           <span class="blog-reader-tag">💆‍♀️ Hair Care</span>
-          <span class="blog-reader-date">Miami, FL · April 2025</span>
+          <span class="blog-reader-date">Dallas, TX · April 2025</span>
         </div>
         <h1 class="blog-reader-title font-serif">How Often Should You Actually Wash Your Hair?</h1>
-        <p class="blog-reader-subtitle">An SEO-Optimized Scientific &amp; Artistic Exploration Into The Delicate Balance of Sebum, Scalp Preservation, and Double-Cleansing. Written by the Master Stylists of Maison de Beauté Salon in Miami, FL.</p>
+        <p class="blog-reader-subtitle">An SEO-Optimized Scientific &amp; Artistic Exploration Into The Delicate Balance of Sebum, Scalp Preservation, and Double-Cleansing. Written by the Master Stylists of Maison de Beauté Salon in Dallas, TX.</p>
         <div class="blog-reader-body">
-          <p>Few grooming questions spark as much debate as the optimal frequency of washing one's hair. In our French-themed atelier, Maison in the heart of Miami, FL, our senior styling artisans hear this query multiple times a day. Is daily washing really stripping your cuticle of essential nutrients? Or is extending time between washes simply hosting fine particles of environmental pollution and sebum build-up that smothers follicles? The answer is not a generic rule but a precise equation based on science, scalp chemistry, and specialized hair textures.</p>
+          <p>Few grooming questions spark as much debate as the optimal frequency of washing one's hair. In our French-themed atelier, Maison de Beauté in the heart of Dallas, TX, our senior styling artisans hear this query multiple times a day. Is daily washing really stripping your cuticle of essential nutrients? Or is extending time between washes simply hosting fine particles of environmental pollution and sebum build-up that smothers follicles? The answer is not a generic rule but a precise equation based on science, scalp chemistry, and specialized hair textures.</p>
           
           <h2>The Sebum Equation and the Hyper-Drive Rebound Effect</h2>
           <p>To truly understand hair washing, we must first analyze the scalp’s natural ecosystem. Your hair follicles are connected to sebaceous glands that produce a vital lipid-rich substance known as sebum. Sebum is not your enemy—it is a sophisticated, natural barrier designed to lubricate the hair sheath, seal in cellular moisture, and protect the scalp from bacterial invasion. When you cleanse your hair daily with harsh, industrial-grade sulfates, you completely strip away this organic shield.</p>
@@ -3168,7 +3170,7 @@
           <p>Fine hair has a smaller diameter, meaning the sebaceous oil can easily travel down the smooth shaft, coating the hair quickly and making it appear flat. However, fine hair is also highly susceptible to breakage when wet. We recommend a schedule of <strong>two to three times per week</strong> using a gentle, lightweight purifying formula. To extend the look between washes, use a premium, clean-starch dry shampoo at the roots instead of wet scrubbing.</p>
           
           <h3>2. Medium Density or Wavy Textures</h3>
-          <p>In Miami, FL, medium density is the most common texture type. This structure can easily support natural oils for a longer period. We advise washing <strong>once or twice per week</strong>. On non-wash days, simply rinse with warm-to-cool water and use a light leave-in conditioner on the mid-shaft to ends to maintain the pristine style of your Maison haircut.</p>
+          <p>In Dallas, TX, medium density is the most common texture type. This structure can easily support natural oils for a longer period. We advise washing <strong>once or twice per week</strong>. On non-wash days, simply rinse with warm-to-cool water and use a light leave-in conditioner on the mid-shaft to ends to maintain the pristine style of your Maison de Beauté haircut.</p>
           
           <h3>3. Thick, Coarse, or High-Density Hair</h3>
           <p>Thick strands require substantial natural moisture to prevent frizz and wire-like stiffness. Natural oils take much longer to migrate down the length of thick hair. Thus, a schedule of <strong>once a week</strong> is highly sufficient. Stripping thick hair more frequently will result in excessive dryness, dullness, and hard-to-manage cuticles.</p>
@@ -3188,7 +3190,7 @@
           
           <div class="blog-reader-cta-card">
             <h3 class="blog-reader-cta-title" style="font-family: 'Fraunces', serif; font-size: 22px;">Ready for Your Personalized Scalp Assessment?</h3>
-            <p class="blog-reader-cta-desc">Book a signature wash, precision haircut, or custom styling analysis at Maison today. Our dedicated expert stylers in Miami, FL will prescribe the exact professional-grade formulas and scheduling your locks deserve.</p>
+            <p class="blog-reader-cta-desc">Book a signature wash, precision haircut, or custom styling analysis at Maison de Beauté today. Our dedicated expert stylers in Dallas, TX will prescribe the exact professional-grade formulas and scheduling your locks deserve.</p>
             <button class="blog-reader-cta-btn" onclick="closeBlogReaderAndBook()">Request Your Session</button>
           </div>
         </div>
@@ -3198,13 +3200,13 @@
         <div class="blog-reader-hero-image" style="background-image: url('https://images.unsplash.com/photo-1522337660859-02fbefca4702?auto=format&fit=crop&q=80&w=1200');"></div>
         <div class="blog-reader-meta">
           <span class="blog-reader-tag">🎨 Color</span>
-          <span class="blog-reader-date">Miami, FL · March 2025</span>
+          <span class="blog-reader-date">Dallas, TX · March 2025</span>
         </div>
         <h1 class="blog-reader-title font-serif">What Nobody Tells You Before Getting Balayage</h1>
-        <p class="blog-reader-subtitle">An SEO-Optimized Professional Guide to Hand-Painted Highlights, Dimensional Blending, Low-Maintenance Regrowth, and Preserving Your Brightness in Miami, FL.</p>
+        <p class="blog-reader-subtitle">An SEO-Optimized Professional Guide to Hand-Painted Highlights, Dimensional Blending, Low-Maintenance Regrowth, and Preserving Your Brightness in Dallas, TX.</p>
         <div class="blog-reader-body">
           <p>Look at any major editorial beauty magazine, and you will see gorgeous cascading waves of hair reflecting multidimensional, sun-kissed blonde gradients. This is balayage, the French word for "sweeping" or "painting," which has revolutionized the hair coloring market. But while the visual allure is undeniable, there is a substantial amount of misinformation surrounding what it takes to achieve and preserve this premium technique.</p>
-          <p>Before you commit to a color transformation at Maison de Beauté Salon in Miami, FL, our master colorists have compiled everything you need to know about the science of balayage, the preparation phase, and keeping your dimensional tone brilliant long after you walk out of our atelier.</p>
+          <p>Before you commit to a color transformation at Maison de Beauté Salon in Dallas, TX, our master colorists have compiled everything you need to know about the science of balayage, the preparation phase, and keeping your dimensional tone brilliant long after you walk out of our atelier.</p>
           
           <h2>Balayage vs. Traditional Foil Highlights: The Structural Difference</h2>
           <p>To understand why balayage looks so sophisticated, we must look at how the lightning pigment is applied. Traditional highlights utilize aluminum foils to isolate hair sections from the root to the tip. This creates a uniform, hard line of color starting directly at the scalp. As your hair grows, this creates a distinct, harsh grow-out line that requires touch-ups every 4 to 6 weeks.</p>
@@ -3216,13 +3218,13 @@
           <p>While the final look appears effortless, the process itself is highly meticulous and custom-calibrated. Here are three truths about your color journey that other salons often gloss over:</p>
           
           <h3>1. It Often Requires Multiple Sessions</h3>
-          <p>If you have dark brunette hair or a history of previous box dyes, achieving a pale honey, caramel, or champagne blonde using balayage is a marathon, not a sprint. To maintain the structural integrity of your hair, we work in gradual progressive stages. Rushing the bleach process will tear open the outer cuticle, leading to porous, brittle shafts that cannot hold onto color. Trust the developmental plan laid out by your Maison specialist.</p>
+          <p>If you have dark brunette hair or a history of previous box dyes, achieving a pale honey, caramel, or champagne blonde using balayage is a marathon, not a sprint. To maintain the structural integrity of your hair, we work in gradual progressive stages. Rushing the bleach process will tear open the outer cuticle, leading to porous, brittle shafts that cannot hold onto color. Trust the developmental plan laid out by your Maison de Beauté specialist.</p>
           
           <h3>2. Prep Work Starts Before You Arrive</h3>
           <p>The state of your strands on the morning of your color appointment heavily dictates your results. We highly recommend coming with <strong>second-day hair</strong> rather than freshly washed locks. The scalp's natural oils act as a gentle protective barrier against lightener sensitivity. However, do not load your hair with metal-heavy dry shampoos, heavy wax build-ups, or thick color touchup sprays immediately before, as these form a physical wall that blocks the lightener from lifting evenly.</p>
           
           <h3>3. Hydration History is Crucial</h3>
-          <p>For two weeks leading up to your coloring event at our studio in Miami, FL, incorporate a deep moisture-replenishing treatment mask once a week. Well-hydrated hair cuticle layers lift more smoothly, exhibit less warmth or brassiness, and hold onto their post-toning glosses far longer than dry or compromised strands.</p>
+          <p>For two weeks leading up to your coloring event at our studio in Dallas, TX, incorporate a deep moisture-replenishing treatment mask once a week. Well-hydrated hair cuticle layers lift more smoothly, exhibit less warmth or brassiness, and hold onto their post-toning glosses far longer than dry or compromised strands.</p>
       
           <h2>The Lifeline of Your Color: Toner and Post-Salon Maintenance</h2>
           <p>Many color guests believe they are leaving with raw bleach blonde. In reality, the most critical step of any luxury balayage is the <strong>Toner &amp; Gloss</strong>. The lightener lifts your natural pigment out, while the subsequent demi-permanent toner infuses the cool, warm, lavender, or beige tones that create the final aesthetic.</p>
@@ -3234,11 +3236,11 @@
           </ul>
       
           <h2>Invest in Your Color Journey</h2>
-          <p>Balayage is the ultimate expression of low-maintenance beauty, but it still requires the hand of a true master to avoid patchy paint lines or dynamic damage. If you are seeking dimensional color that feels completely integrated and luxurious, we invite you to consult with the colorists at Maison.</p>
+          <p>Balayage is the ultimate expression of low-maintenance beauty, but it still requires the hand of a true master to avoid patchy paint lines or dynamic damage. If you are seeking dimensional color that feels completely integrated and luxurious, we invite you to consult with the colorists at Maison de Beauté.</p>
           
           <div class="blog-reader-cta-card">
             <h3 class="blog-reader-cta-title" style="font-family: 'Fraunces', serif; font-size: 22px;">Reserve Your Custom Color Painting Session</h3>
-            <p class="blog-reader-cta-desc">Elevate your hair game with a natural balayage, toner gloss, or dimensional root melt in the hands of our trained experts. Contact our Miami, FL booking desk or book online below.</p>
+            <p class="blog-reader-cta-desc">Elevate your hair game with a natural balayage, toner gloss, or dimensional root melt in the hands of our trained experts. Contact our Dallas, TX booking desk or book online below.</p>
             <button class="blog-reader-cta-btn" onclick="closeBlogReaderAndBook()">Explore Balayage Sessions</button>
           </div>
         </div>
@@ -3248,12 +3250,12 @@
         <div class="blog-reader-hero-image" style="background-image: url('https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=1200');"></div>
         <div class="blog-reader-meta">
           <span class="blog-reader-tag">💇‍♀️ Style Guide</span>
-          <span class="blog-reader-date">Miami, FL · February 2025</span>
+          <span class="blog-reader-date">Dallas, TX · February 2025</span>
         </div>
         <h1 class="blog-reader-title font-serif">The Three Haircuts That Work for Nearly Everyone</h1>
-        <p class="blog-reader-subtitle">An SEO-Optimized Guide to Universal Cuts, Precision Geometry, and Effortless Face-Framing Layer Styles. Hand-Crafted by the Stylists of Maison de Beauté Salon in Miami, FL.</p>
+        <p class="blog-reader-subtitle">An SEO-Optimized Guide to Universal Cuts, Precision Geometry, and Effortless Face-Framing Layer Styles. Hand-Crafted by the Stylists of Maison de Beauté Salon in Dallas, TX.</p>
         <div class="blog-reader-body">
-          <p>Trends in the beauty industry are notoriously seasonal. A particular hair shape will dominate social feeds for three months, only to be deemed obsolete by the arrival of a new vintage aesthetic. However, in our over twelve years of cutting and sculpturing hair at Maison here in Miami, FL, our master stylists have observed three distinct cuts that completely transcend the seasonal cycle. These are the classics: shapes built on spatial math, precision geometry, and fluid weight distribution that work seamlessly on almost any face structure and hair texture.</p>
+          <p>Trends in the beauty industry are notoriously seasonal. A particular hair shape will dominate social feeds for three months, only to be deemed obsolete by the arrival of a new vintage aesthetic. However, in our over twelve years of cutting and sculpturing hair at Maison de Beauté here in Dallas, TX, our master stylists have observed three distinct cuts that completely transcend the seasonal cycle. These are the classics: shapes built on spatial math, precision geometry, and fluid weight distribution that work seamlessly on almost any face structure and hair texture.</p>
           <p>Whether you want to frame your cheekbones, introduce maximum movement to flat strands, or simply find an easy-to-style daily look, here are the three universally beautiful haircuts we consistently recommend for our guests.</p>
       
           <h2>1. The Parisian Slob (The Soft Modern Bob)</h2>
@@ -3267,7 +3269,7 @@
           <p>The genius component of this cut is the integration of <strong>Curtain Bangs</strong>. Unlike classic heavy front bangs, curtain bangs split elegantly down the middle, sweeping outward toward your temples like folded drapes. Because they are cut with soft diagonal transitions, they frame the eyes and cheekbones beautifully, instantly highlighting the bone structure. When your hair grows out, curtain bangs seamlessly merge into the rest of the layers, sparing you the awkward, monthly growing stages of traditional bangs.</p>
       
           <h2>3. The Long Seamless "Invisible" Layers</h2>
-          <p>For many women in Miami, FL, long hair is a non-negotiable luxury. But without architectural layers, very long hair can become flat, draping over the shoulders like a column and dragging down the facial features. Traditional short layers, however, can leave distinct "shelves" in the hair, which look dated and disjointed.</p>
+          <p>For many women in Dallas, TX, long hair is a non-negotiable luxury. But without architectural layers, very long hair can become flat, draping over the shoulders like a column and dragging down the facial features. Traditional short layers, however, can leave distinct "shelves" in the hair, which look dated and disjointed.</p>
           <p>Our answer at Maison de Beauté Salon is the <strong>Seamless Invisible Layer</strong> cut. Using precision slide-cutting techniques on entirely dry hair, we carve delicate internal pathways of air within the shape. Rather than carving visible lines on the outer layers, our stylists shorten intermediate layers from the inside out. This preserves the dense, luxurious healthy appearance of your bottom ends while introducing soft airiness, dimensional swing, and volume to the mid-shaft. This cut is particularly breathtaking when paired with hand-painted balayage highlights, as the layers catch light and movement beautifully.</p>
       
           <h2>Custom Validation: Choosing What Works for Your Features</h2>
@@ -3284,7 +3286,7 @@
           
           <div class="blog-reader-cta-card">
             <h3 class="blog-reader-cta-title" style="font-family: 'Fraunces', serif; font-size: 22px;">Book Your Structural Cut Consultation</h3>
-            <p class="blog-reader-cta-desc">Work with the precision stylists of Maison to design a haircut customized to your hair flow, face shape, and daily lifestyle. View availability and reserve your spot today.</p>
+            <p class="blog-reader-cta-desc">Work with the precision stylists of Maison de Beauté to design a haircut customized to your hair flow, face shape, and daily lifestyle. View availability and reserve your spot today.</p>
             <button class="blog-reader-cta-btn" onclick="closeBlogReaderAndBook()">Schedule Your Precision Cut</button>
           </div>
         </div>
@@ -3303,26 +3305,26 @@
       <div class="contact-cols" data-reveal>
         <div class="contact-col">
           <span class="contact-label">☎️ Telephone</span>
-          <a href="tel:3055550374" class="contact-head font-serif">(305) 555-0374</a>
+          <a href="tel:2145550193" class="contact-head font-serif">(214) 555-0193</a>
           <p style="font-size:13.5px; color: var(--ink-muted);">Mon&ndash;Sun, 9 AM &ndash; 7 PM. We answer.</p>
-          <a href="tel:3055550374" class="contact-btn">Call Now</a>
+          <a href="tel:2145550193" class="contact-btn">Call Now</a>
         </div>
 
         <div class="contact-col">
           <span class="contact-label">📱 Social</span>
-          <a href="https://instagram.com/maison_de_beaute" class="contact-head font-serif">@maison_de_beaute</a>
+          <a href="https://instagram.com/maisonbeaute_dallas" class="contact-head font-serif">@maisonbeaute_dallas</a>
           <p style="font-size:13.5px; color: var(--ink-muted);">Before and after shots, daily work, and the occasional look inside the salon.</p>
-          <a href="https://instagram.com/maison_de_beaute" target="_blank" class="contact-btn">Follow on Instagram</a>
+          <a href="https://instagram.com/maisonbeaute_dallas" target="_blank" class="contact-btn">Follow on Instagram</a>
           <div class="contact-block-divider"></div>
           <span class="contact-label">👤 Facebook Profile</span>
-          <a href="https://facebook.com/maisondebeaute" target="_blank" class="contact-btn" style="margin-top: 4px;">Visit Our Page &rarr;</a>
+          <a href="https://facebook.com/maisonbeautedallas" target="_blank" class="contact-btn" style="margin-top: 4px;">Visit Our Page &rarr;</a>
         </div>
 
         <div class="contact-col">
           <span class="contact-label">📍 Location</span>
-          <span class="contact-head font-serif">Miami, FL</span>
-          <p style="font-size:13.5px; color: var(--ink-muted); line-height: 1.75;">We are in the heart of Miami, FL. Street parking is available and we are close to transit lines. Call us for custom directions.</p>
-          <a href="https://maps.google.com?q=Maison de Beauté Salon+Miami, FL" target="_blank" class="contact-btn">Get Directions</a>
+          <span class="contact-head font-serif">Dallas, TX</span>
+          <p style="font-size:13.5px; color: var(--ink-muted); line-height: 1.75;">We are in the heart of Dallas, TX. Street parking is available and we are close to transit lines. Call us for custom directions.</p>
+          <a href="https://maps.google.com?q=Maison de Beauté Salon+Dallas, TX" target="_blank" class="contact-btn">Get Directions</a>
         </div>
       </div>
     </section>
@@ -3334,9 +3336,9 @@
       <div class="footer-brand">
         <div class="logo-container" style="cursor: default;">
           <div class="logo-mark"></div>
-          <span class="logo-text">Maison</span>
+          <span class="logo-text">Maison de Beauté</span>
         </div>
-        <p class="footer-tagline">Precision cuts. Flawless color. Miami, FL.</p>
+        <p class="footer-tagline">Precision cuts. Flawless color. Dallas, TX.</p>
       </div>
 
       <div class="footer-navs">
@@ -3619,13 +3621,13 @@
       });
     });
 
-    // 7. BOOKING RESERVATION FORM HANDLING
+    // 7. BOOKING RESERVATION FORM HANDLING (Hardened Supabase Persistence)
     const reservationForm = document.getElementById('reservation_form');
     const successBox = document.getElementById('booking_success_box');
     const successHeader = document.getElementById('success_header');
     const successSubtext = document.getElementById('success_subtext');
 
-    // Default min date to today as requested
+    // Default min date to today
     const dateInput = document.getElementById('frm_date');
     if (dateInput) {
       const today = new Date().toISOString().split('T')[0];
@@ -3633,27 +3635,232 @@
       dateInput.value = today;
     }
 
-    reservationForm.addEventListener('submit', (e) => {
+    function getResolvedSalonSlug() {
+      const openTag = '{' + '{';
+      const winSlug = typeof window.LUNAO_SLUG === 'string' ? window.LUNAO_SLUG.trim() : '';
+      if (winSlug && !winSlug.includes(openTag) && winSlug !== 'preview') {
+        return winSlug;
+      }
+      const parts = (window.location.pathname || '').split('/').filter(Boolean);
+      const sitesIdx = parts.indexOf('sites');
+      if (sitesIdx !== -1 && parts[sitesIdx + 1]) {
+        return parts[sitesIdx + 1];
+      }
+      if (winSlug && !winSlug.includes(openTag)) {
+        return winSlug;
+      }
+      const last = parts[parts.length - 1] || '';
+      if (last && !/\.html?$/i.test(last)) return last;
+      return 'salon-client';
+    }
+
+    function getOrCreateSalonIdempotencyKey(form) {
+      if (!form.dataset.idempotencyKey) {
+        const randomPart = Math.random().toString(36).substring(2, 10);
+        form.dataset.idempotencyKey = 'bk_' + Date.now().toString(36) + '_' + randomPart;
+      }
+      return form.dataset.idempotencyKey;
+    }
+
+    function showSalonFormError(message) {
+      let errBox = document.getElementById('salon_form_error');
+      if (!errBox) {
+        errBox = document.createElement('div');
+        errBox.id = 'salon_form_error';
+        errBox.className = 'form-error-banner';
+        errBox.style.cssText = 'margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#b91c1c;font-size:13.5px;line-height:1.5;text-align:left;';
+        const submitContainer = reservationForm.querySelector('.form-submit-container');
+        if (submitContainer) {
+          reservationForm.insertBefore(errBox, submitContainer);
+        } else {
+          reservationForm.appendChild(errBox);
+        }
+      }
+      const cleanMsg = String(message || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      errBox.innerHTML = '<strong>⚠️ Reservation request issue:</strong> ' + cleanMsg + '<br><span style="font-size:12px;opacity:0.85;">Your information is preserved above. You can retry safely or call us directly.</span>';
+      errBox.style.display = 'block';
+    }
+
+    function clearSalonFormError() {
+      const errBox = document.getElementById('salon_form_error');
+      if (errBox) errBox.style.display = 'none';
+    }
+
+    function getBookingSubmissionEndpoints() {
+      const list = [];
+      if (window.LUNAO_BOOKING_API_URL && typeof window.LUNAO_BOOKING_API_URL === 'string') {
+        list.push(window.LUNAO_BOOKING_API_URL.replace(/\/+$/, ''));
+      }
+      const supabaseBase = window.LUNAO_SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+      list.push(`${supabaseBase.replace(/\/+$/, '')}/functions/v1/public-bookings`);
+      if (window.location && /^https?:$/i.test(window.location.protocol)) {
+        list.push('/api/bookings');
+        list.push('/api/public/bookings');
+        list.push('/functions/v1/public-bookings');
+      }
+      list.push('https://api.lunao.app/api/bookings');
+      list.push('https://lunao.app/api/bookings');
+      return [...new Set(list)];
+    }
+
+    reservationForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (reservationForm.dataset.submitting === 'true') return;
+      clearSalonFormError();
 
-      const name = document.getElementById('frm_fullname').value.trim();
-      const email = document.getElementById('frm_email').value.trim();
-      const phone = document.getElementById('frm_phone').value.trim() || 'your specified contact channel';
+      const nameInput = document.getElementById('frm_fullname');
+      const emailInput = document.getElementById('frm_email');
+      const phoneInput = document.getElementById('frm_phone');
+      const serviceSelect = document.getElementById('frm_service');
+      const stylistSelect = document.getElementById('frm_stylist');
+      const dateInput = document.getElementById('frm_date');
+      const timeSelect = document.getElementById('frm_time');
+      const notesInput = document.getElementById('frm_notes');
+      const submitBtn = document.getElementById('frm_submit_btn');
 
-      if (!name || !email) {
+      const name = (nameInput ? nameInput.value : '').trim();
+      const email = (emailInput ? emailInput.value : '').trim();
+      const phone = (phoneInput ? phoneInput.value : '').trim();
+      const service = (serviceSelect && serviceSelect.value) ? serviceSelect.value.trim() : '';
+      const stylist = (stylistSelect && stylistSelect.value) ? stylistSelect.value.trim() : '';
+      const date = (dateInput ? dateInput.value : '').trim();
+      const time = (timeSelect && timeSelect.value) ? timeSelect.value.trim() : '';
+      const userNotes = (notesInput ? notesInput.value : '').trim();
+
+      // Client-side non-destructive validation
+      if (!name || name.length < 2) {
         SoundSystem.click();
-        reservationForm.style.animation = 'whatsapp-bounce 0.3s ease';
-        setTimeout(() => { reservationForm.style.animation = ''; }, 300);
+        showSalonFormError('Please enter your full name (at least 2 characters).');
+        if (nameInput) nameInput.focus();
         return;
       }
 
-      // Success workflow
-      SoundSystem.success();
-      reservationForm.style.display = 'none';
-      successBox.style.display = 'block';
+      if (!phone || phone.replace(/\D/g, '').length < 7) {
+        SoundSystem.click();
+        showSalonFormError('Please enter a valid telephone number (at least 7 digits).');
+        if (phoneInput) phoneInput.focus();
+        return;
+      }
 
-      successHeader.textContent = "Your appointment is requested. We will confirm at " + phone + " within the hour.";
-      successSubtext.textContent = "Thank you for choosing Maison.";
+      if (!service) {
+        SoundSystem.click();
+        showSalonFormError('Please choose a salon service from the menu.');
+        if (serviceSelect) serviceSelect.focus();
+        return;
+      }
+
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        SoundSystem.click();
+        showSalonFormError('Please provide a valid email address.');
+        if (emailInput) emailInput.focus();
+        return;
+      }
+
+      let notes = userNotes;
+      if (stylist && stylist !== 'No Preference') {
+        notes = notes ? `${notes} (Preferred Stylist: ${stylist})` : `Preferred Stylist: ${stylist}`;
+      }
+
+      const slug = getResolvedSalonSlug();
+      const rawBizName = window.LUNAO_BUSINESS_NAME || 'Maison de Beauté Salon';
+      const businessName = rawBizName.includes('{' + '{') ? 'Aurora Salon Atelier' : rawBizName;
+      const idempotencyKey = getOrCreateSalonIdempotencyKey(reservationForm);
+
+      reservationForm.dataset.submitting = 'true';
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Requesting Booking...';
+      }
+
+      const payload = {
+        slug: slug,
+        businessName: businessName,
+        customerName: name,
+        phone: phone,
+        email: email,
+        service: service,
+        date: date || '',
+        time: time || '',
+        notes: notes || '',
+        source: 'form',
+        status: 'new',
+        idempotencyKey: idempotencyKey,
+        createdAt: Date.now()
+      };
+
+      const endpoints = getBookingSubmissionEndpoints();
+      let lastError = null;
+      let successData = null;
+
+      for (const endpoint of endpoints) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Idempotency-Key': idempotencyKey
+            },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+          });
+
+          clearTimeout(timeoutId);
+
+          const json = await res.json().catch(() => null);
+
+          if (res.ok && (res.status === 200 || res.status === 201) && json && (json.ok || json.booking || json.id)) {
+            successData = json;
+            break;
+          }
+
+          if (res.status === 400 || res.status === 422) {
+            lastError = new Error((json && (json.error || json.message)) || 'Invalid booking details provided.');
+            break;
+          }
+
+          if (res.status >= 500) {
+            lastError = new Error((json && json.error) || 'The booking server encountered an issue. Please try again.');
+          }
+        } catch (fetchErr) {
+          lastError = fetchErr;
+        }
+      }
+
+      if (successData) {
+        SoundSystem.success();
+        reservationForm.style.display = 'none';
+        if (successBox) successBox.style.display = 'block';
+
+        if (successHeader) {
+          successHeader.textContent = 'Your appointment is requested. We will confirm at ' + phone + ' within the hour.';
+        }
+        if (successSubtext) {
+          const shortName = window.LUNAO_BUSINESS_NAME_SHORT || 'Maison de Beauté';
+          successSubtext.textContent = 'Thank you for choosing ' + (shortName.includes('{' + '{') ? 'Aurora Salon' : shortName) + '.';
+        }
+
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({
+              type: 'LUNAO_BOOKING_SUCCESS',
+              data: successData.booking || payload,
+              id: successData.id || successData.booking?.id,
+              timestamp: Date.now()
+            }, '*');
+          }
+        } catch (e) {}
+      } else {
+        SoundSystem.click();
+        reservationForm.dataset.submitting = 'false';
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Request Booking';
+        }
+        showSalonFormError(lastError ? lastError.message : 'Unable to confirm your booking with the server. Please try again.');
+      }
     });
 
     // 8. SCROLL REVEAL (INTERSECTION OBSERVER)

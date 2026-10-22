@@ -2888,26 +2888,26 @@
       <div class="book-split" data-reveal>
         <div>
           <!-- Unsubmitted form panel -->
-          <form id="reservation_form" class="reservation-form">
+          <form id="reservation_form" class="reservation-form" data-lunao-booking="true" data-lunao-inline-booking="true" novalidate>
             <div class="form-group-row">
               <div class="form-field-container">
                 <label for="frm_fullname" class="form-label">Full Name *</label>
-                <input type="text" id="frm_fullname" class="input-underlined" placeholder="e.g. Rachel Miller" required>
+                <input type="text" id="frm_fullname" name="name" class="input-underlined" placeholder="e.g. Rachel Miller" required autocomplete="name">
               </div>
               <div class="form-field-container">
                 <label for="frm_email" class="form-label">Email Address *</label>
-                <input type="email" id="frm_email" class="input-underlined" placeholder="e.g. rachel@example.com" required>
+                <input type="email" id="frm_email" name="email" class="input-underlined" placeholder="e.g. rachel@example.com" required autocomplete="email">
               </div>
             </div>
 
             <div class="form-group-row">
               <div class="form-field-container">
-                <label for="frm_phone" class="form-label">Phone Number</label>
-                <input type="tel" id="frm_phone" class="input-underlined" placeholder="e.g. (310) 555-0193">
+                <label for="frm_phone" class="form-label">Phone Number *</label>
+                <input type="tel" id="frm_phone" name="phone" class="input-underlined" placeholder="e.g. {{PHONE_DISPLAY}}" required autocomplete="tel">
               </div>
               <div class="form-field-container">
                 <label for="frm_service" class="form-label">Service</label>
-                <select id="frm_service" class="input-underlined">
+                <select id="frm_service" name="service" class="input-underlined" required>
                   <option value="" disabled selected>Select a Service</option>
                   <optgroup label="Hair">
                     <option value="Signature Cut">Signature Cut ✂️</option>
@@ -2943,7 +2943,7 @@
             <div class="form-group-row">
               <div class="form-field-container">
                 <label for="frm_stylist" class="form-label">Preferred Stylist</label>
-                <select id="frm_stylist" class="input-underlined">
+                <select id="frm_stylist" name="service_stylist" class="input-underlined">
                   <option value="No Preference">No Preference</option>
                   <option value="Sophie Laurent">Sophie Laurent</option>
                   <option value="Marcus Webb">Marcus Webb</option>
@@ -2955,14 +2955,14 @@
               </div>
               <div class="form-field-container">
                 <label for="frm_date" class="form-label">Preferred Date</label>
-                <input type="date" id="frm_date" class="input-underlined">
+                <input type="date" id="frm_date" name="date" class="input-underlined">
               </div>
             </div>
 
             <div class="form-group-row">
               <div class="form-field-container">
                 <label for="frm_time" class="form-label">Preferred Time</label>
-                <select id="frm_time" class="input-underlined">
+                <select id="frm_time" name="time" class="input-underlined">
                   <option value="09:00 AM">9:00 AM</option>
                   <option value="09:30 AM">9:30 AM</option>
                   <option value="10:00 AM">10:00 AM</option>
@@ -2988,7 +2988,7 @@
               </div>
               <div class="form-field-container">
                 <label for="frm_source" class="form-label">How did you hear about us?</label>
-                <select id="frm_source" class="input-underlined">
+                <select id="frm_source" name="service_referral" class="input-underlined">
                   <option value="Instagram">Instagram</option>
                   <option value="Google Search">Google Search</option>
                   <option value="Friend Referral">Friend Referral</option>
@@ -3001,8 +3001,10 @@
 
             <div class="form-field-container">
               <label for="frm_notes" class="form-label">Additional Notes</label>
-              <textarea id="frm_notes" rows="3" class="input-underlined" placeholder="Mention hair length, custom requests, or questions here..."></textarea>
+              <textarea id="frm_notes" name="notes" rows="3" class="input-underlined" placeholder="Mention hair length, custom requests, or questions here..."></textarea>
             </div>
+
+            <div id="salon_form_error" class="form-error-banner" style="display:none;margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#b91c1c;font-size:13.5px;line-height:1.5;text-align:left;"></div>
 
             <div class="form-submit-container">
               <button type="submit" class="form-submit-btn" id="frm_submit_btn">Request Booking</button>
@@ -3619,13 +3621,13 @@
       });
     });
 
-    // 7. BOOKING RESERVATION FORM HANDLING
+    // 7. BOOKING RESERVATION FORM HANDLING (Hardened Supabase Persistence)
     const reservationForm = document.getElementById('reservation_form');
     const successBox = document.getElementById('booking_success_box');
     const successHeader = document.getElementById('success_header');
     const successSubtext = document.getElementById('success_subtext');
 
-    // Default min date to today as requested
+    // Default min date to today
     const dateInput = document.getElementById('frm_date');
     if (dateInput) {
       const today = new Date().toISOString().split('T')[0];
@@ -3633,27 +3635,232 @@
       dateInput.value = today;
     }
 
-    reservationForm.addEventListener('submit', (e) => {
+    function getResolvedSalonSlug() {
+      const openTag = '{' + '{';
+      const winSlug = typeof window.LUNAO_SLUG === 'string' ? window.LUNAO_SLUG.trim() : '';
+      if (winSlug && !winSlug.includes(openTag) && winSlug !== 'preview') {
+        return winSlug;
+      }
+      const parts = (window.location.pathname || '').split('/').filter(Boolean);
+      const sitesIdx = parts.indexOf('sites');
+      if (sitesIdx !== -1 && parts[sitesIdx + 1]) {
+        return parts[sitesIdx + 1];
+      }
+      if (winSlug && !winSlug.includes(openTag)) {
+        return winSlug;
+      }
+      const last = parts[parts.length - 1] || '';
+      if (last && !/\.html?$/i.test(last)) return last;
+      return 'salon-client';
+    }
+
+    function getOrCreateSalonIdempotencyKey(form) {
+      if (!form.dataset.idempotencyKey) {
+        const randomPart = Math.random().toString(36).substring(2, 10);
+        form.dataset.idempotencyKey = 'bk_' + Date.now().toString(36) + '_' + randomPart;
+      }
+      return form.dataset.idempotencyKey;
+    }
+
+    function showSalonFormError(message) {
+      let errBox = document.getElementById('salon_form_error');
+      if (!errBox) {
+        errBox = document.createElement('div');
+        errBox.id = 'salon_form_error';
+        errBox.className = 'form-error-banner';
+        errBox.style.cssText = 'margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#b91c1c;font-size:13.5px;line-height:1.5;text-align:left;';
+        const submitContainer = reservationForm.querySelector('.form-submit-container');
+        if (submitContainer) {
+          reservationForm.insertBefore(errBox, submitContainer);
+        } else {
+          reservationForm.appendChild(errBox);
+        }
+      }
+      const cleanMsg = String(message || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      errBox.innerHTML = '<strong>⚠️ Reservation request issue:</strong> ' + cleanMsg + '<br><span style="font-size:12px;opacity:0.85;">Your information is preserved above. You can retry safely or call us directly.</span>';
+      errBox.style.display = 'block';
+    }
+
+    function clearSalonFormError() {
+      const errBox = document.getElementById('salon_form_error');
+      if (errBox) errBox.style.display = 'none';
+    }
+
+    function getBookingSubmissionEndpoints() {
+      const list = [];
+      if (window.LUNAO_BOOKING_API_URL && typeof window.LUNAO_BOOKING_API_URL === 'string') {
+        list.push(window.LUNAO_BOOKING_API_URL.replace(/\/+$/, ''));
+      }
+      const supabaseBase = window.LUNAO_SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+      list.push(`${supabaseBase.replace(/\/+$/, '')}/functions/v1/public-bookings`);
+      if (window.location && /^https?:$/i.test(window.location.protocol)) {
+        list.push('/api/bookings');
+        list.push('/api/public/bookings');
+        list.push('/functions/v1/public-bookings');
+      }
+      list.push('https://api.lunao.app/api/bookings');
+      list.push('https://lunao.app/api/bookings');
+      return [...new Set(list)];
+    }
+
+    reservationForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (reservationForm.dataset.submitting === 'true') return;
+      clearSalonFormError();
 
-      const name = document.getElementById('frm_fullname').value.trim();
-      const email = document.getElementById('frm_email').value.trim();
-      const phone = document.getElementById('frm_phone').value.trim() || 'your specified contact channel';
+      const nameInput = document.getElementById('frm_fullname');
+      const emailInput = document.getElementById('frm_email');
+      const phoneInput = document.getElementById('frm_phone');
+      const serviceSelect = document.getElementById('frm_service');
+      const stylistSelect = document.getElementById('frm_stylist');
+      const dateInput = document.getElementById('frm_date');
+      const timeSelect = document.getElementById('frm_time');
+      const notesInput = document.getElementById('frm_notes');
+      const submitBtn = document.getElementById('frm_submit_btn');
 
-      if (!name || !email) {
+      const name = (nameInput ? nameInput.value : '').trim();
+      const email = (emailInput ? emailInput.value : '').trim();
+      const phone = (phoneInput ? phoneInput.value : '').trim();
+      const service = (serviceSelect && serviceSelect.value) ? serviceSelect.value.trim() : '';
+      const stylist = (stylistSelect && stylistSelect.value) ? stylistSelect.value.trim() : '';
+      const date = (dateInput ? dateInput.value : '').trim();
+      const time = (timeSelect && timeSelect.value) ? timeSelect.value.trim() : '';
+      const userNotes = (notesInput ? notesInput.value : '').trim();
+
+      // Client-side non-destructive validation
+      if (!name || name.length < 2) {
         SoundSystem.click();
-        reservationForm.style.animation = 'whatsapp-bounce 0.3s ease';
-        setTimeout(() => { reservationForm.style.animation = ''; }, 300);
+        showSalonFormError('Please enter your full name (at least 2 characters).');
+        if (nameInput) nameInput.focus();
         return;
       }
 
-      // Success workflow
-      SoundSystem.success();
-      reservationForm.style.display = 'none';
-      successBox.style.display = 'block';
+      if (!phone || phone.replace(/\D/g, '').length < 7) {
+        SoundSystem.click();
+        showSalonFormError('Please enter a valid telephone number (at least 7 digits).');
+        if (phoneInput) phoneInput.focus();
+        return;
+      }
 
-      successHeader.textContent = "Your appointment is requested. We will confirm at " + phone + " within the hour.";
-      successSubtext.textContent = "Thank you for choosing {{BUSINESS_NAME_SHORT}}.";
+      if (!service) {
+        SoundSystem.click();
+        showSalonFormError('Please choose a salon service from the menu.');
+        if (serviceSelect) serviceSelect.focus();
+        return;
+      }
+
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        SoundSystem.click();
+        showSalonFormError('Please provide a valid email address.');
+        if (emailInput) emailInput.focus();
+        return;
+      }
+
+      let notes = userNotes;
+      if (stylist && stylist !== 'No Preference') {
+        notes = notes ? `${notes} (Preferred Stylist: ${stylist})` : `Preferred Stylist: ${stylist}`;
+      }
+
+      const slug = getResolvedSalonSlug();
+      const rawBizName = window.LUNAO_BUSINESS_NAME || '{{BUSINESS_NAME}}';
+      const businessName = rawBizName.includes('{' + '{') ? 'Aurora Salon Atelier' : rawBizName;
+      const idempotencyKey = getOrCreateSalonIdempotencyKey(reservationForm);
+
+      reservationForm.dataset.submitting = 'true';
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Requesting Booking...';
+      }
+
+      const payload = {
+        slug: slug,
+        businessName: businessName,
+        customerName: name,
+        phone: phone,
+        email: email,
+        service: service,
+        date: date || '',
+        time: time || '',
+        notes: notes || '',
+        source: 'form',
+        status: 'new',
+        idempotencyKey: idempotencyKey,
+        createdAt: Date.now()
+      };
+
+      const endpoints = getBookingSubmissionEndpoints();
+      let lastError = null;
+      let successData = null;
+
+      for (const endpoint of endpoints) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Idempotency-Key': idempotencyKey
+            },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+          });
+
+          clearTimeout(timeoutId);
+
+          const json = await res.json().catch(() => null);
+
+          if (res.ok && (res.status === 200 || res.status === 201) && json && (json.ok || json.booking || json.id)) {
+            successData = json;
+            break;
+          }
+
+          if (res.status === 400 || res.status === 422) {
+            lastError = new Error((json && (json.error || json.message)) || 'Invalid booking details provided.');
+            break;
+          }
+
+          if (res.status >= 500) {
+            lastError = new Error((json && json.error) || 'The booking server encountered an issue. Please try again.');
+          }
+        } catch (fetchErr) {
+          lastError = fetchErr;
+        }
+      }
+
+      if (successData) {
+        SoundSystem.success();
+        reservationForm.style.display = 'none';
+        if (successBox) successBox.style.display = 'block';
+
+        if (successHeader) {
+          successHeader.textContent = 'Your appointment is requested. We will confirm at ' + phone + ' within the hour.';
+        }
+        if (successSubtext) {
+          const shortName = window.LUNAO_BUSINESS_NAME_SHORT || '{{BUSINESS_NAME_SHORT}}';
+          successSubtext.textContent = 'Thank you for choosing ' + (shortName.includes('{' + '{') ? 'Aurora Salon' : shortName) + '.';
+        }
+
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({
+              type: 'LUNAO_BOOKING_SUCCESS',
+              data: successData.booking || payload,
+              id: successData.id || successData.booking?.id,
+              timestamp: Date.now()
+            }, '*');
+          }
+        } catch (e) {}
+      } else {
+        SoundSystem.click();
+        reservationForm.dataset.submitting = 'false';
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Request Booking';
+        }
+        showSalonFormError(lastError ? lastError.message : 'Unable to confirm your booking with the server. Please try again.');
+      }
     });
 
     // 8. SCROLL REVEAL (INTERSECTION OBSERVER)

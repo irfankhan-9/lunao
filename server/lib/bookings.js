@@ -2,6 +2,7 @@
 // with real-time bidirectional synchronization with Supabase and SQLite.
 import { db } from './db.js';
 import {
+  getPgPool,
   supabaseInsertBooking,
   supabaseListBookings,
   supabaseUpdateBookingStatus,
@@ -222,7 +223,7 @@ export async function createBookingAsync(input = {}) {
   // Priority 1: In production, never fall back to in-memory/mock storage.
   // If database credentials are missing, connection fails, or durable write cannot be confirmed, return HTTP 503.
   const isProduction = process.env.NODE_ENV === 'production';
-  if (isProduction || supabaseCfg.live) {
+  if (isProduction || supabaseCfg.live || Boolean(getPgPool())) {
     const err = new Error('Booking service temporarily unavailable. The database write could not be confirmed.');
     err.status = 503;
     throw err;

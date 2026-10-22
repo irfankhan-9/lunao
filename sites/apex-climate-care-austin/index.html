@@ -20,7 +20,7 @@
     "@context": "https://schema.org",
     "@type": "HVACBusiness",
     "name": "Apex Climate Care",
-    "description": "Premier residential and commercial HVAC engineering, inverter heat pumps, concealed high-velocity zoning, and hospital-grade indoor air quality purification.",
+    "description": "Premier residential and commercial HVAC engineering, inverter heat pumps, concealed high-velocity zoning, and hospital-grade indoor air quality purification in Austin, TX.",
     "image": "https://images.unsplash.com/photo-1581094288338-2314dddb7ece?auto=format&fit=crop&w=1920&q=85",
     "telephone": "+1 (512) 555-0199",
     "email": "contact@apexclimatecare.com",
@@ -42,6 +42,11 @@
       "https://youtube.com/@apex_climate_care"
     ]
   }
+  </script>
+
+  <script>
+    window.LUNAO_SLUG = "apex-climate-care-austin";
+    window.LUNAO_BUSINESS_NAME = "Apex Climate Care";
   </script>
 
   <!-- Typography: Cinzel (Display Luxury Serif) & Plus Jakarta Sans (Modern Body) -->
@@ -8041,10 +8046,12 @@
           <input type="text" id="bookingNotes" class="form-input" placeholder="e.g. Variable-speed heat pump, concealed slot diffusers, MERV 16 filtration, brownstone preservation" />
         </div>
 
+        <div id="bookingModalError" class="booking-modal-error" style="display: none; margin-bottom: 1rem; padding: 0.85rem 1rem; background: rgba(220, 38, 38, 0.08); border: 1px solid rgba(220, 38, 38, 0.4); border-radius: var(--radius-sm); color: #B91C1C; font-size: 0.88rem; line-height: 1.5; text-align: left;" role="alert" aria-live="assertive"></div>
+
         <div class="booking-step-footer">
           <button type="button" class="btn btn-ghost booking-ghost-btn" onclick="app.prevBookingStep(3)">← PREVIOUS</button>
           <div class="booking-step-footer-actions">
-            <button type="button" class="btn btn-gold brand-spinner-btn" onclick="app.submitBooking()">
+            <button type="button" id="bookingSubmitBtn" class="btn btn-gold brand-spinner-btn" onclick="app.submitBooking()">
               <span>SUBMIT ESTIMATE REQUEST</span> <span class="brand-spinner-icon">✦</span>
             </button>
             <button type="button" class="btn btn-ghost btn-sm booking-ghost-btn" onclick="app.closeBookingModal()">✕ EXIT</button>
@@ -10891,45 +10898,243 @@
         }, 50);
       },
 
-      submitBooking() {
+      getResolvedHvacSlug() {
+        if (window.LUNAO_SLUG && typeof window.LUNAO_SLUG === 'string' && !window.LUNAO_SLUG.includes('{')) {
+          return window.LUNAO_SLUG.trim();
+        }
+        if (window.location && window.location.pathname) {
+          const m = window.location.pathname.match(/\/sites\/([^\/]+)/);
+          if (m && m[1]) return m[1].trim();
+        }
+        return 'apex-climate-care-austin';
+      },
+
+      getOrCreateHvacIdempotencyKey(container, prefix = 'hvac') {
+        if (container && container.dataset && container.dataset.idempotencyKey) {
+          return container.dataset.idempotencyKey;
+        }
+        const key = prefix + '-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
+        if (container && container.dataset) {
+          container.dataset.idempotencyKey = key;
+        }
+        return key;
+      },
+
+      getBookingEndpoints() {
+        const list = [];
+        if (window.LUNAO_BOOKING_API_URL && typeof window.LUNAO_BOOKING_API_URL === 'string') {
+          list.push(window.LUNAO_BOOKING_API_URL.replace(/\/+$/, ''));
+        }
+        const supabaseBase = window.LUNAO_SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+        list.push(`${supabaseBase.replace(/\/+$/, '')}/functions/v1/public-bookings`);
+        if (window.location && /^https?:$/i.test(window.location.protocol)) {
+          list.push('/functions/v1/public-bookings');
+          list.push('/api/bookings');
+          list.push('/api/public/bookings');
+        }
+        list.push('https://api.lunao.app/api/bookings');
+        list.push('https://lunao.app/api/bookings');
+        return [...new Set(list)];
+      },
+
+      getLeadEndpoints() {
+        const list = [];
+        if (window.LUNAO_LEADS_API_URL && typeof window.LUNAO_LEADS_API_URL === 'string') {
+          list.push(window.LUNAO_LEADS_API_URL.replace(/\/+$/, ''));
+        }
+        const supabaseBase = window.LUNAO_SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+        list.push(`${supabaseBase.replace(/\/+$/, '')}/functions/v1/public-leads`);
+        if (window.location && /^https?:$/i.test(window.location.protocol)) {
+          list.push('/functions/v1/public-leads');
+          list.push('/api/leads');
+          list.push('/api/public/leads');
+        }
+        list.push('https://api.lunao.app/api/leads');
+        list.push('https://lunao.app/api/leads');
+        return [...new Set(list)];
+      },
+
+      showBookingError(msg) {
+        const errEl = document.getElementById('bookingModalError');
+        if (!errEl) return;
+        errEl.innerHTML = `<strong>⚠️ Submission issue:</strong> ${msg}<br><span style="font-size:0.8rem;opacity:0.9;">Your selections are preserved. Please review and retry.</span>`;
+        errEl.style.display = 'block';
+        if (sound && sound.playClick) sound.playClick();
+      },
+
+      clearBookingError() {
+        const errEl = document.getElementById('bookingModalError');
+        if (errEl) {
+          errEl.style.display = 'none';
+          errEl.innerHTML = '';
+        }
+      },
+
+      async submitBooking() {
+        const modalBox = document.getElementById('bookingModalBox') || document.querySelector('.booking-modal');
+        if (modalBox && modalBox.dataset.submitting === 'true') return;
+        this.clearBookingError();
+
         const nameInput = document.getElementById('bookingName');
         const phoneInput = document.getElementById('bookingPhone');
         const emailInput = document.getElementById('bookingEmail');
-        const beverageSelect = document.getElementById('bookingBeverage');
+        const addressInput = document.getElementById('bookingAddress');
+        const budgetSelect = document.getElementById('bookingBudget');
+        const timelineSelect = document.getElementById('bookingTimeline');
         const notesInput = document.getElementById('bookingNotes');
         const dateInput = document.getElementById('bookingDateInput');
+        const submitBtn = document.getElementById('bookingSubmitBtn') || (modalBox ? modalBox.querySelector('.booking-step-pane#bookingStep4 button.btn-gold') : null);
 
-        const clientName = (nameInput && nameInput.value.trim()) || 'Julian Sterling';
-        const clientPhone = (phoneInput && phoneInput.value.trim()) || '+1 (555) 019-2831';
-        const clientEmail = (emailInput && emailInput.value.trim()) || 'julian.sterling@example.com';
-        const beverage = (beverageSelect && beverageSelect.value) || 'Single Malt Scotch';
-        const rawDate = (dateInput && dateInput.value) || new Date().toISOString().split('T')[0];
-        
-        this.selectedDate = rawDate;
-        this.clientName = clientName;
-        this.clientEmail = clientEmail;
-        this.clientPhone = clientPhone;
-        this.clientBeverage = beverage;
+        const clientName = (nameInput && nameInput.value.trim()) || '';
+        const clientPhone = (phoneInput && phoneInput.value.trim()) || '';
+        const clientEmail = (emailInput && emailInput.value.trim()) || '';
+        const clientAddress = (addressInput && addressInput.value.trim()) || '';
+        const budget = (budgetSelect && budgetSelect.value) || '$18,500 – $38,000 (Whole-Home Inverter Heat Pump Retrofit)';
+        const timeline = (timelineSelect && timelineSelect.value) || 'Ready to Start Immediately (Emergency / Fast-Track)';
+        const notes = (notesInput && notesInput.value.trim()) || '';
+        const rawDate = (dateInput && dateInput.value) || this.selectedDate || new Date().toISOString().split('T')[0];
+        const rawTime = this.selectedTime || '10:00 AM';
+        const service = this.selectedService || 'Whole-Home Inverter Heat Pump & Climate Overhaul';
+        const propertyType = this.selectedBarber || 'Penthouse / Luxury Residence';
 
-        // Generate reservation reference code
-        const refCode = `#ATELIER-${Math.floor(1000 + Math.random() * 9000)}`;
-        this.bookingRef = refCode;
+        // Canonical contract field validations
+        if (!clientName || clientName.length < 2) {
+          this.showBookingError('Please enter your full name (minimum 2 characters).');
+          if (nameInput) nameInput.focus();
+          return;
+        }
 
-        // Populate celebration confirmation summary card
-        const sRef = document.getElementById('summaryRef');
-        const sService = document.getElementById('summaryService');
-        const sBarber = document.getElementById('summaryBarber');
-        const sTime = document.getElementById('summaryTime');
-        const sClient = document.getElementById('summaryClient');
+        const phoneDigits = clientPhone.replace(/\D/g, '');
+        if (!phoneDigits || phoneDigits.length < 7) {
+          this.showBookingError('Please enter a valid telephone number with at least 7 digits.');
+          if (phoneInput) phoneInput.focus();
+          return;
+        }
 
-        if (sRef) sRef.textContent = `REF: ${refCode}`;
-        if (sService) sService.textContent = this.selectedService;
-        if (sBarber) sBarber.textContent = this.selectedBarber;
-        if (sTime) sTime.textContent = `${rawDate} @ ${this.selectedTime}`;
-        if (sClient) sClient.textContent = `${clientName} · ${clientPhone}`;
+        if (clientEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail)) {
+          this.showBookingError('Please enter a valid email address.');
+          if (emailInput) emailInput.focus();
+          return;
+        }
 
-        // Advance to celebration confirmation step with sound & confetti
-        this.goToBookingStep(5, 'next');
+        if (!clientAddress || clientAddress.length < 3) {
+          this.showBookingError('Please enter your property address or neighborhood.');
+          if (addressInput) addressInput.focus();
+          return;
+        }
+
+        const slug = this.getResolvedHvacSlug();
+        const businessName = business.name || 'Aeris Climate Atelier';
+        const idempotencyKey = this.getOrCreateHvacIdempotencyKey(modalBox, 'hvac-book');
+
+        // Submitting state (lock UI, preserve fields)
+        if (modalBox) modalBox.dataset.submitting = 'true';
+        let originalBtnHtml = '';
+        if (submitBtn) {
+          originalBtnHtml = submitBtn.innerHTML;
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = '<span>SECURING CONSULTATION...</span> <span class="brand-spinner-icon">✦</span>';
+        }
+
+        const payload = {
+          slug: slug,
+          businessName: businessName,
+          customerName: clientName,
+          phone: clientPhone,
+          email: clientEmail,
+          service: service,
+          date: rawDate,
+          time: rawTime,
+          notes: `Property: ${clientAddress} | Scope: ${propertyType} | Budget: ${budget} | Timeline: ${timeline}${notes ? ' | Notes: ' + notes : ''}`,
+          source: 'website_bespoke_modal',
+          status: 'new',
+          idempotencyKey: idempotencyKey,
+          createdAt: Date.now()
+        };
+
+        const endpoints = this.getBookingEndpoints();
+        let lastError = null;
+        let successResult = null;
+
+        for (const ep of endpoints) {
+          try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 12000);
+            const res = await fetch(ep, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Idempotency-Key': idempotencyKey,
+              },
+              body: JSON.stringify(payload),
+              signal: controller.signal,
+            });
+            clearTimeout(timer);
+
+            if (res.ok) {
+              const data = await res.json().catch(() => null);
+              if (data && data.ok && (data.id || data.booking)) {
+                successResult = data;
+                break;
+              }
+            } else if (res.status === 400) {
+              const errData = await res.json().catch(() => null);
+              lastError = (errData && (errData.error || errData.message)) || `Server rejected booking (${res.status})`;
+              break;
+            }
+          } catch (e) {
+            lastError = e && e.name === 'AbortError' ? 'Request timed out' : (e.message || 'Network connection error');
+          }
+        }
+
+        if (modalBox) delete modalBox.dataset.submitting;
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = originalBtnHtml;
+        }
+
+        if (successResult) {
+          // Success verified by database
+          const confirmedRef = (successResult.booking && successResult.booking.ref) ||
+                               (successResult.id ? '#' + String(successResult.id).padStart(6, '0') : '#ATELIER-' + Math.floor(1000 + Math.random() * 9000));
+          this.bookingRef = confirmedRef;
+          this.selectedDate = rawDate;
+          this.clientName = clientName;
+          this.clientEmail = clientEmail;
+          this.clientPhone = clientPhone;
+
+          if (modalBox && modalBox.dataset) delete modalBox.dataset.idempotencyKey;
+
+          const sRef = document.getElementById('summaryRef');
+          const sService = document.getElementById('summaryService');
+          const sBarber = document.getElementById('summaryBarber');
+          const sTime = document.getElementById('summaryTime');
+          const sClient = document.getElementById('summaryClient');
+
+          if (sRef) sRef.textContent = `REF: ${confirmedRef}`;
+          if (sService) sService.textContent = service;
+          if (sBarber) sBarber.textContent = propertyType;
+          if (sTime) sTime.textContent = `${rawDate} @ ${rawTime}`;
+          if (sClient) sClient.textContent = `${clientName} · ${clientPhone}`;
+
+          // Notify parent frame if embedded
+          try {
+            if (window.parent && window.parent !== window) {
+              window.parent.postMessage({
+                type: 'LUNAO_CONFIRMED_BOOKING',
+                data: successResult.booking || payload,
+                id: successResult.id,
+                timestamp: Date.now()
+              }, '*');
+            }
+          } catch (_) {}
+
+          // Advance to Step 5 celebration
+          this.goToBookingStep(5, 'next');
+        } else {
+          const errorMsg = lastError || 'Unable to confirm booking. Please verify your connection or call us directly.';
+          this.showBookingError(errorMsg);
+        }
       },
 
       downloadCalendarEvent() {
@@ -11693,16 +11898,549 @@
         setTimeout(() => alertBox.remove(), 4500);
       },
 
-      submitWarrantyRequest(e) {
+      async submitLead(form, leadType, payloadData, options = {}) {
+        if (!form) return { ok: false, error: 'Form element not found' };
+        if (form.dataset.submitting === 'true') return { ok: false, error: 'Submission in flight' };
+
+        const slug = this.getResolvedHvacSlug();
+        const businessName = (business && business.name) || 'Aeris Climate Atelier';
+        const idempotencyKey = this.getOrCreateHvacIdempotencyKey(form, 'lead-' + leadType);
+
+        form.dataset.submitting = 'true';
+        const submitBtn = form.querySelector('button[type="submit"]');
+        let originalBtnHtml = '';
+        if (submitBtn) {
+          originalBtnHtml = submitBtn.innerHTML;
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = options.loadingText || '<span>TRANSMITTING...</span> <span class="brand-spinner-icon">✦</span>';
+        }
+
+        const payload = {
+          slug: slug,
+          businessName: businessName,
+          leadType: leadType,
+          customerName: payloadData.customerName,
+          phone: payloadData.phone,
+          email: payloadData.email || null,
+          notes: payloadData.notes || '',
+          details: payloadData.details || {},
+          source: options.source || 'website_hvac_bespoke',
+          status: 'new',
+          idempotencyKey: idempotencyKey,
+          createdAt: Date.now()
+        };
+
+        const endpoints = this.getLeadEndpoints();
+        let successResult = null;
+        let lastError = null;
+
+        for (const ep of endpoints) {
+          try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 12000);
+            const res = await fetch(ep, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Idempotency-Key': idempotencyKey,
+              },
+              body: JSON.stringify(payload),
+              signal: controller.signal,
+            });
+            clearTimeout(timer);
+
+            if (res.ok) {
+              const data = await res.json().catch(() => null);
+              if (data && data.ok) {
+                successResult = data;
+                break;
+              }
+            } else if (res.status === 400) {
+              const errData = await res.json().catch(() => null);
+              lastError = (errData && (errData.error || errData.message)) || `Server rejected request (${res.status})`;
+              break;
+            }
+          } catch (e) {
+            lastError = e && e.name === 'AbortError' ? 'Request timed out' : (e.message || 'Network connection error');
+          }
+        }
+
+        delete form.dataset.submitting;
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = originalBtnHtml;
+        }
+
+        if (successResult) {
+          delete form.dataset.idempotencyKey;
+          return { ok: true, data: successResult };
+        } else {
+          return { ok: false, error: lastError || 'Unable to submit inquiry. Please check your connection and retry.' };
+        }
+      },
+
+      async submitFeasibilityInquiry(e) {
         if (e) e.preventDefault();
-        if (this.sound && this.sound.playConfirm) this.sound.playConfirm();
-        const alertBox = document.createElement('div');
-        alertBox.className = 'warranty-toast-alert';
-        alertBox.innerHTML = `<span>🛡️</span> <strong>Warranty Ticket Dispatched!</strong> Our Senior Superintendent will contact you within 4 business hours to coordinate on-site inspection.`;
-        document.body.appendChild(alertBox);
-        setTimeout(() => alertBox.remove(), 5000);
-        const form = document.getElementById('warrantyClaimForm');
-        if (form) form.reset();
+        const form = document.getElementById('feasibilityReviewForm') || (e ? e.target : null);
+        if (!form) return;
+
+        const nameInput = document.getElementById('feasibilityName');
+        const phoneInput = document.getElementById('feasibilityPhone');
+        const emailInput = document.getElementById('feasibilityEmail');
+        const addressInput = document.getElementById('feasibilityAddress');
+        const notesInput = document.getElementById('feasibilityNotes');
+        const feedback = document.getElementById('feasibilityFeedback');
+
+        const name = (nameInput ? nameInput.value : '').trim();
+        const phone = (phoneInput ? phoneInput.value : '').trim();
+        const email = (emailInput ? emailInput.value : '').trim();
+        const address = (addressInput ? addressInput.value : '').trim();
+        const notes = (notesInput ? notesInput.value : '').trim();
+
+        if (feedback) feedback.style.display = 'none';
+
+        if (!name || name.length < 2) {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(220, 38, 38, 0.08)';
+            feedback.style.border = '1px solid rgba(220, 38, 38, 0.4)';
+            feedback.style.color = '#B91C1C';
+            feedback.innerHTML = '<strong>⚠️ Error:</strong> Please enter your full name (minimum 2 characters).';
+          }
+          if (nameInput) nameInput.focus();
+          return;
+        }
+
+        const phoneDigits = phone.replace(/\D/g, '');
+        if (!phoneDigits || phoneDigits.length < 7) {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(220, 38, 38, 0.08)';
+            feedback.style.border = '1px solid rgba(220, 38, 38, 0.4)';
+            feedback.style.color = '#B91C1C';
+            feedback.innerHTML = '<strong>⚠️ Error:</strong> Please enter a valid telephone number with at least 7 digits.';
+          }
+          if (phoneInput) phoneInput.focus();
+          return;
+        }
+
+        const result = await this.submitLead(form, 'consultation', {
+          customerName: name,
+          phone: phone,
+          email: email,
+          notes: notes,
+          details: {
+            property_address: address,
+            inquiry_type: 'feasibility_review',
+            goals_timeline: notes
+          }
+        }, { loadingText: '<span>TRANSMITTING INQUIRY...</span> <span class="brand-spinner-icon">✦</span>' });
+
+        if (result.ok) {
+          if (sound && sound.playConfirm) sound.playConfirm();
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(184, 134, 11, 0.12)';
+            feedback.style.border = '1px solid var(--border-gold)';
+            feedback.style.color = 'var(--text-main)';
+            feedback.innerHTML = `<span>✦</span> <strong>Feasibility Review Received!</strong> The ${business.name} mechanical engineering team will review your specifications and respond promptly.`;
+          }
+          form.reset();
+        } else {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(220, 38, 38, 0.08)';
+            feedback.style.border = '1px solid rgba(220, 38, 38, 0.4)';
+            feedback.style.color = '#B91C1C';
+            feedback.innerHTML = `<strong>⚠️ Submission issue:</strong> ${result.error}<br><span style="font-size:0.8rem;opacity:0.85;">Your entered details have been preserved. You can retry safely.</span>`;
+          }
+        }
+      },
+
+      async submitNewsletter(e) {
+        if (e) e.preventDefault();
+        const form = document.getElementById('climateDispatchForm') || (e ? e.target : null);
+        if (!form) return;
+
+        const emailInput = document.getElementById('dispatchEmail') || (form ? form.querySelector('input[type="email"]') : null);
+        const feedback = document.getElementById('dispatchFeedback');
+        const email = (emailInput ? emailInput.value : '').trim();
+
+        if (feedback) feedback.style.display = 'none';
+
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(220, 38, 38, 0.08)';
+            feedback.style.border = '1px solid rgba(220, 38, 38, 0.4)';
+            feedback.style.color = '#B91C1C';
+            feedback.innerHTML = '<strong>⚠️ Error:</strong> Please enter a valid email address.';
+          }
+          if (emailInput) emailInput.focus();
+          return;
+        }
+
+        const result = await this.submitLead(form, 'newsletter', {
+          customerName: email.split('@')[0] || 'Newsletter Subscriber',
+          phone: '(000) 000-0000',
+          email: email,
+          details: {
+            newsletter: 'climate_dispatch',
+            subscribed_at: new Date().toISOString()
+          }
+        }, { loadingText: '<span>SUBSCRIBING...</span>' });
+
+        if (result.ok) {
+          if (sound && sound.playConfirm) sound.playConfirm();
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(184, 134, 11, 0.12)';
+            feedback.style.border = '1px solid var(--border-gold)';
+            feedback.style.color = 'var(--text-main)';
+            feedback.innerHTML = `<span>✦</span> <strong>Subscribed!</strong> Thank you for subscribing to the ${business.name} Climate Dispatch.`;
+          }
+          form.reset();
+        } else {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(220, 38, 38, 0.08)';
+            feedback.style.border = '1px solid rgba(220, 38, 38, 0.4)';
+            feedback.style.color = '#B91C1C';
+            feedback.innerHTML = `<strong>⚠️ Subscription issue:</strong> ${result.error}`;
+          }
+        }
+      },
+
+      async submitWarrantyRequest(e) {
+        if (e) e.preventDefault();
+        const form = document.getElementById('warrantyClaimForm') || (e ? e.target : null);
+        if (!form) return;
+
+        const nameInput = document.getElementById('warrantyClientName');
+        const phoneInput = document.getElementById('warrantyPhone');
+        const addrInput = document.getElementById('warrantyAddress');
+        const yearSelect = document.getElementById('warrantyYear');
+        const descInput = document.getElementById('warrantyAdjustment');
+        const feedback = document.getElementById('warrantyFeedback');
+
+        const name = (nameInput ? nameInput.value : '').trim();
+        const phone = (phoneInput ? phoneInput.value : '').trim();
+        const address = (addrInput ? addrInput.value : '').trim();
+        const year = (yearSelect ? yearSelect.value : '').trim();
+        const desc = (descInput ? descInput.value : '').trim();
+
+        if (feedback) feedback.style.display = 'none';
+
+        if (!name || name.length < 2) {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(220, 38, 38, 0.08)';
+            feedback.style.border = '1px solid rgba(220, 38, 38, 0.4)';
+            feedback.style.color = '#B91C1C';
+            feedback.innerHTML = '<strong>⚠️ Error:</strong> Please enter client name (minimum 2 characters).';
+          }
+          if (nameInput) nameInput.focus();
+          return;
+        }
+
+        const phoneDigits = phone.replace(/\D/g, '');
+        if (!phoneDigits || phoneDigits.length < 7) {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(220, 38, 38, 0.08)';
+            feedback.style.border = '1px solid rgba(220, 38, 38, 0.4)';
+            feedback.style.color = '#B91C1C';
+            feedback.innerHTML = '<strong>⚠️ Error:</strong> Please enter a valid telephone number for engineering dispatch.';
+          }
+          if (phoneInput) phoneInput.focus();
+          return;
+        }
+
+        const result = await this.submitLead(form, 'warranty_claim', {
+          customerName: name,
+          phone: phone,
+          notes: desc,
+          details: {
+            commission_address: address,
+            year_commissioned: year,
+            adjustment_requested: desc
+          }
+        }, { loadingText: '<span>DISPATCHING TICKET...</span> 🛡️' });
+
+        if (result.ok) {
+          if (sound && sound.playConfirm) sound.playConfirm();
+          const alertBox = document.createElement('div');
+          alertBox.className = 'warranty-toast-alert';
+          alertBox.innerHTML = `<span>🛡️</span> <strong>Warranty Ticket Dispatched!</strong> Our Senior Superintendent will contact you within 4 business hours to coordinate on-site inspection.`;
+          document.body.appendChild(alertBox);
+          setTimeout(() => alertBox.remove(), 5000);
+
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(184, 134, 11, 0.12)';
+            feedback.style.border = '1px solid var(--border-gold)';
+            feedback.style.color = 'var(--text-main)';
+            feedback.innerHTML = `<span>🛡️</span> <strong>Warranty Ticket Dispatched!</strong> Ticket confirmed for ${address}. Our Senior Superintendent will reach out to ${phone} within 4 hours.`;
+          }
+          form.reset();
+        } else {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(220, 38, 38, 0.08)';
+            feedback.style.border = '1px solid rgba(220, 38, 38, 0.4)';
+            feedback.style.color = '#B91C1C';
+            feedback.innerHTML = `<strong>⚠️ Dispatch issue:</strong> ${result.error}<br><span style="font-size:0.8rem;opacity:0.85;">Your information is preserved. Please retry or call us directly.</span>`;
+          }
+        }
+      },
+
+      async submitSpecimenOrder(e) {
+        if (e) e.preventDefault();
+        const form = document.getElementById('specimenCheckoutForm') || (e ? e.target : null);
+        if (!form) return;
+
+        const nameInput = document.getElementById('specimenName');
+        const phoneInput = document.getElementById('specimenPhone');
+        const emailInput = document.getElementById('specimenEmail');
+        const addrInput = document.getElementById('specimenAddress');
+        const notesInput = document.getElementById('specimenNotes');
+        const feedback = document.getElementById('specimenFeedback');
+
+        const name = (nameInput ? nameInput.value : '').trim();
+        const phone = (phoneInput ? phoneInput.value : '').trim();
+        const email = (emailInput ? emailInput.value : '').trim();
+        const address = (addrInput ? addrInput.value : '').trim();
+        const notes = (notesInput ? notesInput.value : '').trim();
+
+        if (feedback) feedback.style.display = 'none';
+
+        if (!name || name.length < 2) {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(220, 38, 38, 0.08)';
+            feedback.style.border = '1px solid rgba(220, 38, 38, 0.4)';
+            feedback.style.color = '#B91C1C';
+            feedback.innerHTML = '<strong>⚠️ Error:</strong> Please enter your full delivery name.';
+          }
+          if (nameInput) nameInput.focus();
+          return;
+        }
+
+        const phoneDigits = phone.replace(/\D/g, '');
+        if (!phoneDigits || phoneDigits.length < 7) {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(220, 38, 38, 0.08)';
+            feedback.style.border = '1px solid rgba(220, 38, 38, 0.4)';
+            feedback.style.color = '#B91C1C';
+            feedback.innerHTML = '<strong>⚠️ Error:</strong> Please enter a valid telephone number for courier confirmation.';
+          }
+          if (phoneInput) phoneInput.focus();
+          return;
+        }
+
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(220, 38, 38, 0.08)';
+            feedback.style.border = '1px solid rgba(220, 38, 38, 0.4)';
+            feedback.style.color = '#B91C1C';
+            feedback.innerHTML = '<strong>⚠️ Error:</strong> Please enter a valid email address.';
+          }
+          if (emailInput) emailInput.focus();
+          return;
+        }
+
+        const cartItems = (this.cart && Array.isArray(this.cart)) ? [...this.cart] : [];
+
+        const result = await this.submitLead(form, 'specimen_order', {
+          customerName: name,
+          phone: phone,
+          email: email,
+          notes: notes,
+          details: {
+            delivery_address: address,
+            delivery_notes: notes,
+            cart_items: cartItems,
+            item_count: cartItems.length
+          }
+        }, { loadingText: '<span>DISPATCHING COURIER...</span> 📦' });
+
+        if (result.ok) {
+          if (sound && sound.playConfirm) sound.playConfirm();
+          this.cart = [];
+          this.updateCartBadge();
+
+          const alertBox = document.createElement('div');
+          alertBox.className = 'warranty-toast-alert';
+          alertBox.innerHTML = `<span>📦</span> <strong>Specimen Order Dispatched!</strong> Courier delivery confirmation dispatched to ${email || phone}.`;
+          document.body.appendChild(alertBox);
+          setTimeout(() => alertBox.remove(), 5000);
+
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(184, 134, 11, 0.12)';
+            feedback.style.border = '1px solid var(--border-gold)';
+            feedback.style.color = 'var(--text-main)';
+            feedback.innerHTML = `<span>📦</span> <strong>Specimen Order Dispatched!</strong> Complimentary courier confirmation has been sent. Your material samples are being prepared.`;
+          }
+          form.reset();
+        } else {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(220, 38, 38, 0.08)';
+            feedback.style.border = '1px solid rgba(220, 38, 38, 0.4)';
+            feedback.style.color = '#B91C1C';
+            feedback.innerHTML = `<strong>⚠️ Courier issue:</strong> ${result.error}<br><span style="font-size:0.8rem;opacity:0.85;">Your order information is preserved. Please retry.</span>`;
+          }
+        }
+      },
+
+      async submitWorkshopInquiry(e) {
+        if (e) e.preventDefault();
+        const form = document.getElementById('workshopInquiryForm') || (e ? e.target : null);
+        if (!form) return;
+
+        const typeSelect = document.getElementById('workshopType');
+        const sqftInput = document.getElementById('workshopSqft');
+        const nameInput = document.getElementById('workshopContactName');
+        const phoneInput = document.getElementById('workshopContactPhone');
+        const feedback = document.getElementById('workshopFeedback');
+
+        const type = (typeSelect ? typeSelect.value : '').trim();
+        const sqft = (sqftInput ? sqftInput.value : '').trim();
+        const name = (nameInput ? nameInput.value : '').trim();
+        const phone = (phoneInput ? phoneInput.value : '').trim();
+
+        if (feedback) feedback.style.display = 'none';
+
+        if (!name || name.length < 2) {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(220, 38, 38, 0.08)';
+            feedback.style.border = '1px solid rgba(220, 38, 38, 0.4)';
+            feedback.style.color = '#B91C1C';
+            feedback.innerHTML = '<strong>⚠️ Error:</strong> Please enter contact name.';
+          }
+          if (nameInput) nameInput.focus();
+          return;
+        }
+
+        const phoneDigits = phone.replace(/\D/g, '');
+        if (!phoneDigits || phoneDigits.length < 7) {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(220, 38, 38, 0.08)';
+            feedback.style.border = '1px solid rgba(220, 38, 38, 0.4)';
+            feedback.style.color = '#B91C1C';
+            feedback.innerHTML = '<strong>⚠️ Error:</strong> Please enter a valid phone number with at least 7 digits.';
+          }
+          if (phoneInput) phoneInput.focus();
+          return;
+        }
+
+        const result = await this.submitLead(form, 'workshop_inquiry', {
+          customerName: name,
+          phone: phone,
+          details: {
+            workshop_type: type,
+            residential_sqft: sqft
+          }
+        }, { loadingText: '<span>TRANSMITTING REGISTRATION...</span> ✦' });
+
+        if (result.ok) {
+          if (sound && sound.playConfirm) sound.playConfirm();
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(184, 134, 11, 0.12)';
+            feedback.style.border = '1px solid var(--border-gold)';
+            feedback.style.color = 'var(--text-main)';
+            feedback.innerHTML = `<span>✦</span> <strong>Consultation Requested!</strong> Thank you, ${name}. Our principal mechanical engineer will contact you within 24 hours.`;
+          }
+          form.reset();
+        } else {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(220, 38, 38, 0.08)';
+            feedback.style.border = '1px solid rgba(220, 38, 38, 0.4)';
+            feedback.style.color = '#B91C1C';
+            feedback.innerHTML = `<strong>⚠️ Registration issue:</strong> ${result.error}<br><span style="font-size:0.8rem;opacity:0.85;">Your selections are preserved. Please retry.</span>`;
+          }
+        }
+      },
+
+      async submitContactInquiry(e) {
+        if (e) e.preventDefault();
+        const form = document.getElementById('contactInquiryForm') || (e ? e.target : null);
+        if (!form) return;
+
+        const nameInput = document.getElementById('contactName');
+        const phoneInput = document.getElementById('contactPhone');
+        const emailInput = document.getElementById('contactEmail');
+        const scopeInput = document.getElementById('contactScope');
+        const feedback = document.getElementById('contactFeedback');
+
+        const name = (nameInput ? nameInput.value : '').trim();
+        const phone = (phoneInput ? phoneInput.value : '').trim();
+        const email = (emailInput ? emailInput.value : '').trim();
+        const scope = (scopeInput ? scopeInput.value : '').trim();
+
+        if (feedback) feedback.style.display = 'none';
+
+        if (!name || name.length < 2) {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(220, 38, 38, 0.08)';
+            feedback.style.border = '1px solid rgba(220, 38, 38, 0.4)';
+            feedback.style.color = '#B91C1C';
+            feedback.innerHTML = '<strong>⚠️ Error:</strong> Please enter your full name.';
+          }
+          if (nameInput) nameInput.focus();
+          return;
+        }
+
+        const phoneDigits = phone.replace(/\D/g, '');
+        if (!phoneDigits || phoneDigits.length < 7) {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(220, 38, 38, 0.08)';
+            feedback.style.border = '1px solid rgba(220, 38, 38, 0.4)';
+            feedback.style.color = '#B91C1C';
+            feedback.innerHTML = '<strong>⚠️ Error:</strong> Please enter a valid phone number with at least 7 digits.';
+          }
+          if (phoneInput) phoneInput.focus();
+          return;
+        }
+
+        const result = await this.submitLead(form, 'general_inquiry', {
+          customerName: name,
+          phone: phone,
+          email: email,
+          notes: scope,
+          details: {
+            project_scope: scope
+          }
+        }, { loadingText: '<span>TRANSMITTING INQUIRY...</span> ✦' });
+
+        if (result.ok) {
+          if (sound && sound.playConfirm) sound.playConfirm();
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(184, 134, 11, 0.12)';
+            feedback.style.border = '1px solid var(--border-gold)';
+            feedback.style.color = 'var(--text-main)';
+            feedback.innerHTML = `<span>✦</span> <strong>Message Transmitted!</strong> Thank you for reaching out. The ${business.name} engineering concierge will respond within 24 hours.`;
+          }
+          form.reset();
+        } else {
+          if (feedback) {
+            feedback.style.display = 'block';
+            feedback.style.background = 'rgba(220, 38, 38, 0.08)';
+            feedback.style.border = '1px solid rgba(220, 38, 38, 0.4)';
+            feedback.style.color = '#B91C1C';
+            feedback.innerHTML = `<strong>⚠️ Transmission issue:</strong> ${result.error}<br><span style="font-size:0.8rem;opacity:0.85;">Your message has been preserved. Please retry.</span>`;
+          }
+        }
       }
     };
 
@@ -12901,29 +13639,30 @@
               <div class="contact-form-card">
                 <span class="eyebrow" style="color: var(--accent-gold);">DIRECT ENGINEERING DESK</span>
                 <h3 style="font-size: 1.35rem; margin: 0.35rem 0 1.25rem; color: var(--text-main);">REQUEST A FEASIBILITY REVIEW</h3>
-                <form onsubmit="event.preventDefault(); sound.playConfirm(); alert('Thank you for your project inquiry. The ${business.name} mechanical engineering team will respond promptly.'); this.reset();">
+                <form id="feasibilityReviewForm" onsubmit="app.submitFeasibilityInquiry(event)">
                   <div class="form-group">
-                    <label class="form-label">FULL NAME</label>
-                    <input type="text" class="form-input" required placeholder="Julian Sterling" />
+                    <label class="form-label" for="feasibilityName">FULL NAME</label>
+                    <input type="text" id="feasibilityName" class="form-input" required placeholder="Julian Sterling" />
                   </div>
                   <div class="form-row-2col">
                     <div class="form-group">
-                      <label class="form-label">PHONE NUMBER</label>
-                      <input type="tel" class="form-input" required placeholder="+1 (555) 019-2831" />
+                      <label class="form-label" for="feasibilityPhone">PHONE NUMBER</label>
+                      <input type="tel" id="feasibilityPhone" class="form-input" required placeholder="+1 (555) 019-2831" />
                     </div>
                     <div class="form-group">
-                      <label class="form-label">EMAIL ADDRESS</label>
-                      <input type="email" class="form-input" required placeholder="julian@example.com" />
+                      <label class="form-label" for="feasibilityEmail">EMAIL ADDRESS</label>
+                      <input type="email" id="feasibilityEmail" class="form-input" required placeholder="julian@example.com" />
                     </div>
                   </div>
                   <div class="form-group">
-                    <label class="form-label">PROPERTY ADDRESS &amp; CURRENT SYSTEM</label>
-                    <input type="text" class="form-input" placeholder="e.g. Historic Brownstone, existing steam radiators or oil boiler" />
+                    <label class="form-label" for="feasibilityAddress">PROPERTY ADDRESS &amp; CURRENT SYSTEM</label>
+                    <input type="text" id="feasibilityAddress" class="form-input" placeholder="e.g. Historic Brownstone, existing steam radiators or oil boiler" />
                   </div>
                   <div class="form-group">
-                    <label class="form-label">CLIMATE GOALS &amp; TARGET TIMELINE</label>
-                    <textarea class="form-textarea" rows="3" required placeholder="Describe your heating/cooling requirements, zoning preferences, or desired commissioning window..."></textarea>
+                    <label class="form-label" for="feasibilityNotes">CLIMATE GOALS &amp; TARGET TIMELINE</label>
+                    <textarea id="feasibilityNotes" class="form-textarea" rows="3" required placeholder="Describe your heating/cooling requirements, zoning preferences, or desired commissioning window..."></textarea>
                   </div>
+                  <div id="feasibilityFeedback" style="display: none; margin-bottom: 0.85rem; padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.88rem; line-height: 1.5;"></div>
                   <div class="home-feasibility-btn-row">
                     <button type="submit" class="btn btn-gold home-feasibility-submit-btn">SEND INQUIRY</button>
                     <button type="button" class="btn btn-outline home-feasibility-estimate-btn" onclick="app.openBookingModal()">SCHEDULE ESTIMATE ✦</button>
@@ -13010,10 +13749,11 @@
                 <p style="margin-bottom: 2rem; font-size: 0.95rem; color: var(--text-muted);">
                   Receive private invitations to completed installation tours, thermal performance engineering reports, and clean heat rebate updates from ${business.name}.
                 </p>
-                <form onsubmit="event.preventDefault(); sound.playConfirm(); alert('Thank you for subscribing to the ${business.name} Climate Dispatch.'); this.reset();" style="display: flex; gap: 0.6rem; flex-wrap: wrap; justify-content: center;">
-                  <input type="email" placeholder="Enter your email address..." class="form-input" style="max-width: 380px; background: var(--bg-surface); border-color: var(--border-gold);" required />
+                <form id="climateDispatchForm" onsubmit="app.submitNewsletter(event)" style="display: flex; gap: 0.6rem; flex-wrap: wrap; justify-content: center;">
+                  <input type="email" id="dispatchEmail" placeholder="Enter your email address..." class="form-input" style="max-width: 380px; background: var(--bg-surface); border-color: var(--border-gold);" required />
                   <button type="submit" class="btn btn-gold">SUBSCRIBE</button>
                 </form>
+                <div id="dispatchFeedback" style="display: none; margin-top: 1rem; padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.9rem; line-height: 1.5;"></div>
               </div>
             </div>
           </section>
@@ -13421,18 +14161,22 @@
                 If your commissioned property requires an airflow rebalance, filter check, or emergency engineering review, submit below for immediate priority scheduling.
               </p>
 
-              <form id="warrantyClaimForm" onsubmit="app.submitWarrantyRequest(event)" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.2rem; text-align: left;">
+              <form id="warrantyClaimForm" onsubmit="app.submitWarrantyRequest(event)" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.2rem; text-align: left;">
                 <div class="form-group" style="margin-bottom: 0;">
-                  <label class="form-label">CLIENT NAME</label>
-                  <input type="text" class="form-input" required placeholder="e.g., Harrison Sterling" />
+                  <label class="form-label" for="warrantyClientName">CLIENT NAME</label>
+                  <input type="text" id="warrantyClientName" class="form-input" required placeholder="e.g., Harrison Sterling" />
                 </div>
                 <div class="form-group" style="margin-bottom: 0;">
-                  <label class="form-label">COMMISSION ADDRESS</label>
-                  <input type="text" class="form-input" required placeholder="e.g., 42 Beacon St, ${business.city}" />
+                  <label class="form-label" for="warrantyPhone">TELEPHONE NUMBER</label>
+                  <input type="tel" id="warrantyPhone" class="form-input" required placeholder="e.g., +1 (512) 555-0198" />
                 </div>
                 <div class="form-group" style="margin-bottom: 0;">
-                  <label class="form-label">YEAR COMMISSIONED</label>
-                  <select class="form-input" required>
+                  <label class="form-label" for="warrantyAddress">COMMISSION ADDRESS</label>
+                  <input type="text" id="warrantyAddress" class="form-input" required placeholder="e.g., 42 Beacon St, ${business.city}" />
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label class="form-label" for="warrantyYear">YEAR COMMISSIONED</label>
+                  <select id="warrantyYear" class="form-input" required>
                     <option value="2026">2026 (Active Warranty)</option>
                     <option value="2025">2025 (Active Warranty)</option>
                     <option value="2024">2024 (Active Warranty)</option>
@@ -13441,9 +14185,10 @@
                   </select>
                 </div>
                 <div class="form-group" style="grid-column: 1 / -1; margin-bottom: 0;">
-                  <label class="form-label">DESCRIPTION OF ADJUSTMENT REQUESTED</label>
-                  <textarea class="form-input" rows="3" required placeholder="Describe any temperature delta, filter replacement needed, or mechanical sound review requested..."></textarea>
+                  <label class="form-label" for="warrantyAdjustment">DESCRIPTION OF ADJUSTMENT REQUESTED</label>
+                  <textarea id="warrantyAdjustment" class="form-input" rows="3" required placeholder="Describe any temperature delta, filter replacement needed, or mechanical sound review requested..."></textarea>
                 </div>
+                <div id="warrantyFeedback" style="grid-column: 1 / -1; display: none; padding: 0.85rem 1rem; border-radius: var(--radius-sm); font-size: 0.88rem; line-height: 1.5;"></div>
                 <div style="grid-column: 1 / -1; text-align: center; margin-top: 0.5rem;">
                   <button type="submit" class="btn btn-gold" style="min-width: 240px;">DISPATCH SERVICE ENGINEER 🛡️</button>
                 </div>
@@ -13654,17 +14399,21 @@
           <div class="content-wrap" style="max-width: 800px;">
             <span class="eyebrow">SPECIMEN ATELIER COURIER</span>
             <h1 class="section-title" style="margin-bottom: 2rem;">SPECIMEN ORDER CHECKOUT</h1>
-            <form onsubmit="event.preventDefault(); sound.playConfirm(); alert('Specimen order dispatched! Complimentary courier confirmation sent to your email.'); app.cart = []; app.updateCartBadge(); window.location.hash='#home';" style="background: var(--bg-surface); border: 1px solid var(--border-gold); border-radius: var(--radius-md); padding: 2.5rem;">
+            <form id="specimenCheckoutForm" onsubmit="app.submitSpecimenOrder(event)" style="background: var(--bg-surface); border: 1px solid var(--border-gold); border-radius: var(--radius-md); padding: 2.5rem;">
               <h4 style="font-size: 1.2rem; margin-bottom: 1rem; color: var(--accent-gold);">1. CLIENT &amp; RESIDENTIAL DELIVERY DETAILS</h4>
-              <div class="form-group"><label class="form-label">FULL NAME</label><input type="text" class="form-input" required placeholder="Julian Sterling" /></div>
-              <div class="form-group"><label class="form-label">EMAIL ADDRESS</label><input type="email" class="form-input" required placeholder="julian@example.com" /></div>
-              <div class="form-group"><label class="form-label">DELIVERY STREET ADDRESS</label><input type="text" class="form-input" required placeholder="128 Commonwealth Ave, Suite 4B" /></div>
+              <div class="form-group"><label class="form-label" for="specimenName">FULL NAME</label><input type="text" id="specimenName" class="form-input" required placeholder="Julian Sterling" /></div>
+              <div class="form-row-2col" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                <div class="form-group"><label class="form-label" for="specimenPhone">TELEPHONE NUMBER</label><input type="tel" id="specimenPhone" class="form-input" required placeholder="+1 (555) 019-2831" /></div>
+                <div class="form-group"><label class="form-label" for="specimenEmail">EMAIL ADDRESS</label><input type="email" id="specimenEmail" class="form-input" required placeholder="julian@example.com" /></div>
+              </div>
+              <div class="form-group"><label class="form-label" for="specimenAddress">DELIVERY STREET ADDRESS</label><input type="text" id="specimenAddress" class="form-input" required placeholder="128 Commonwealth Ave, Suite 4B" /></div>
               
               <h4 style="font-size: 1.2rem; margin: 2rem 0 1rem; color: var(--accent-gold);">2. SPECIMEN COURIER CONFIRMATION</h4>
               <div style="background: var(--bg-elevated); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); margin-bottom: 1.5rem; font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted);">
                 ✦ CLIMATE &amp; IAQ SPECIMEN DISPATCH — Complimentary courier delivery across ${business.city}. Zero charge for sample review.
               </div>
-              <div class="form-group"><label class="form-label">SPECIAL DELIVERY NOTES / GATE CODE</label><input type="text" class="form-input" placeholder="e.g., Leave with doorman or call on arrival" /></div>
+              <div class="form-group"><label class="form-label" for="specimenNotes">SPECIAL DELIVERY NOTES / GATE CODE</label><input type="text" id="specimenNotes" class="form-input" placeholder="e.g., Leave with doorman or call on arrival" /></div>
+              <div id="specimenFeedback" style="display: none; margin-bottom: 1rem; padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.88rem; line-height: 1.5;"></div>
               <button type="submit" class="btn btn-gold" style="width: 100%; margin-top: 1rem;">CONFIRM SPECIMEN DISPATCH</button>
             </form>
           </div>
@@ -13890,10 +14639,14 @@
 
             <div style="background: var(--bg-surface); border: 1px solid var(--border-gold); border-radius: var(--radius-md); padding: 2.5rem; margin-bottom: 3rem;">
               <h3 style="font-size: 1.35rem; margin-bottom: 1rem; color: var(--accent-gold);">PLAN YOUR TECHNICAL COMMISSION OR WORKSHOP</h3>
-              <form onsubmit="event.preventDefault(); sound.playConfirm(); alert('Thank you. Our principal mechanical engineer will contact you within 24 hours.'); this.reset();">
-                <div class="form-group"><label class="form-label">COMMISSION OR MASTERCLASS TYPE</label><select class="form-select"><option>Whole-Home Inverter Heat Pump Conversion</option><option>Historic Landmark Concealed High-Velocity Retrofit</option><option>Hospital-Grade Whole-Building IAQ &amp; ERV Integration</option><option>Subterranean Wine Cellar &amp; Specialty Hydronics</option></select></div>
-                <div class="form-group"><label class="form-label">ESTIMATED RESIDENTIAL SQUARE FOOTAGE</label><input type="number" class="form-input" min="500" max="25000" placeholder="e.g. 4500 sq ft" required /></div>
-                <div class="form-group"><label class="form-label">PRIMARY CONTACT NAME &amp; PHONE</label><input type="text" class="form-input" placeholder="Julian Sterling · +1 (555) 019-2831" required /></div>
+              <form id="workshopInquiryForm" onsubmit="app.submitWorkshopInquiry(event)">
+                <div class="form-group"><label class="form-label" for="workshopType">COMMISSION OR MASTERCLASS TYPE</label><select id="workshopType" class="form-select"><option>Whole-Home Inverter Heat Pump Conversion</option><option>Historic Landmark Concealed High-Velocity Retrofit</option><option>Hospital-Grade Whole-Building IAQ &amp; ERV Integration</option><option>Subterranean Wine Cellar &amp; Specialty Hydronics</option></select></div>
+                <div class="form-group"><label class="form-label" for="workshopSqft">ESTIMATED RESIDENTIAL SQUARE FOOTAGE</label><input type="number" id="workshopSqft" class="form-input" min="500" max="25000" placeholder="e.g. 4500 sq ft" required /></div>
+                <div class="form-row-2col" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                  <div class="form-group"><label class="form-label" for="workshopContactName">PRIMARY CONTACT NAME</label><input type="text" id="workshopContactName" class="form-input" placeholder="Julian Sterling" required /></div>
+                  <div class="form-group"><label class="form-label" for="workshopContactPhone">PRIMARY CONTACT PHONE</label><input type="tel" id="workshopContactPhone" class="form-input" placeholder="+1 (555) 019-2831" required /></div>
+                </div>
+                <div id="workshopFeedback" style="display: none; margin-bottom: 1rem; padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.88rem; line-height: 1.5;"></div>
                 <button type="submit" class="btn btn-gold" style="width: 100%; margin-top: 1rem;">SCHEDULE ENGINEERING CONSULTATION</button>
               </form>
             </div>
@@ -14028,12 +14781,13 @@
 
             <div class="editorial-split">
               <div>
-                <form onsubmit="event.preventDefault(); sound.playConfirm(); alert('Thank you for your message. The ${business.name} engineering concierge will respond within 24 hours.'); this.reset();" style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 2.5rem;">
+                <form id="contactInquiryForm" onsubmit="app.submitContactInquiry(event)" style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 2.5rem;">
                   <h3 style="font-size: 1.3rem; margin-bottom: 1.5rem; color: var(--accent-gold);">SCHEDULE AN ENGINEERING CONSULTATION</h3>
-                  <div class="form-group"><label class="form-label">FULL NAME</label><input type="text" class="form-input" required placeholder="Julian Sterling" /></div>
-                  <div class="form-group"><label class="form-label">PHONE NUMBER</label><input type="tel" class="form-input" required placeholder="+1 (555) 019-2831" /></div>
-                  <div class="form-group"><label class="form-label">EMAIL ADDRESS</label><input type="email" class="form-input" required placeholder="julian@example.com" /></div>
-                  <div class="form-group"><label class="form-label">PROJECT LOCATION &amp; SCOPE</label><textarea class="form-textarea" rows="4" required placeholder="Describe your residential property, square footage, current heating equipment (oil/gas/steam), and goals..."></textarea></div>
+                  <div class="form-group"><label class="form-label" for="contactName">FULL NAME</label><input type="text" id="contactName" class="form-input" required placeholder="Julian Sterling" /></div>
+                  <div class="form-group"><label class="form-label" for="contactPhone">PHONE NUMBER</label><input type="tel" id="contactPhone" class="form-input" required placeholder="+1 (555) 019-2831" /></div>
+                  <div class="form-group"><label class="form-label" for="contactEmail">EMAIL ADDRESS</label><input type="email" id="contactEmail" class="form-input" required placeholder="julian@example.com" /></div>
+                  <div class="form-group"><label class="form-label" for="contactScope">PROJECT LOCATION &amp; SCOPE</label><textarea id="contactScope" class="form-textarea" rows="4" required placeholder="Describe your residential property, square footage, current heating equipment (oil/gas/steam), and goals..."></textarea></div>
+                  <div id="contactFeedback" style="display: none; margin-bottom: 1rem; padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.88rem; line-height: 1.5;"></div>
                   <button type="submit" class="btn btn-gold" style="width: 100%;">SUBMIT INQUIRY</button>
                 </form>
               </div>
@@ -14425,5 +15179,6 @@
       }
     });
   </script>
+<script src="/lunao-booking-bridge.js"></script>
 </body>
 </html>

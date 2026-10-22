@@ -2171,6 +2171,8 @@
 
         <div>
           <div class="form-box">
+            <div class="error-alert" id="gym-error-message" style="display:none; background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#fca5a5; padding:12px 16px; border-radius:8px; margin-bottom:16px; font-size:14px; text-align:left;"></div>
+
             <div class="success-alert" id="success-message">
               <h3>🎉 Profile Registered!</h3>
               <p>Your free week intake ticket was submitted. Check your text messages for confirmation details inside 15 mins.</p>
@@ -2933,16 +2935,184 @@
     /* -------------------------------------
        LEAD FORM CAPTURE & SUCCESS ALERTS
        ------------------------------------- */
-    function handleFormSubmission(event) {
-      event.preventDefault();
-      
-      _gaq = window._gaq || [];
-      _gaq.push(['_trackEvent', 'Form', 'Submit', 'Gym Lead Pass']);
+    function showGymFormError(message) {
+      const errAlert = document.getElementById('gym-error-message');
+      if (errAlert) {
+        errAlert.textContent = message;
+        errAlert.style.display = 'block';
+      } else {
+        alert(message);
+      }
+    }
 
-      // Simple UX success sequence
-      document.getElementById('lead-form').style.display = 'none';
-      document.getElementById('success-message').style.display = 'block';
-      Sound.successChime();
+    function clearGymFormError() {
+      const errAlert = document.getElementById('gym-error-message');
+      if (errAlert) {
+        errAlert.style.display = 'none';
+        errAlert.textContent = '';
+      }
+    }
+
+    function getResolvedGymSlug() {
+      if (window.LUNAO_SLUG && typeof window.LUNAO_SLUG === 'string' && !window.LUNAO_SLUG.includes('{')) {
+        return window.LUNAO_SLUG.trim();
+      }
+      if (window.location && window.location.pathname) {
+        const m = window.location.pathname.match(/\/sites\/([^\/]+)/);
+        if (m && m[1]) return m[1].trim();
+      }
+      return 'iron-vault-gym-austin';
+    }
+
+    function getOrCreateGymIdempotencyKey(form) {
+      if (form.dataset.idempotencyKey) {
+        return form.dataset.idempotencyKey;
+      }
+      const key = 'gym-lead-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+      form.dataset.idempotencyKey = key;
+      return key;
+    }
+
+    function getLeadSubmissionEndpoints() {
+      const list = [];
+      if (window.LUNAO_LEADS_API_URL && typeof window.LUNAO_LEADS_API_URL === 'string') {
+        list.push(window.LUNAO_LEADS_API_URL.replace(/\/+$/, ''));
+      }
+      const supabaseBase = window.LUNAO_SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+      list.push(`${supabaseBase.replace(/\/+$/, '')}/functions/v1/public-leads`);
+      if (window.location && /^https?:$/i.test(window.location.protocol)) {
+        list.push('/api/leads');
+        list.push('/api/public/leads');
+        list.push('/functions/v1/public-leads');
+      }
+      list.push('https://api.lunao.app/api/leads');
+      list.push('https://lunao.app/api/leads');
+      return [...new Set(list)];
+    }
+
+    async function handleFormSubmission(event) {
+      if (event && typeof event.preventDefault === 'function') event.preventDefault();
+      const form = document.getElementById('lead-form');
+      if (!form || form.dataset.submitting === 'true') return;
+      clearGymFormError();
+
+      const nameInput = document.getElementById('form-name');
+      const phoneInput = document.getElementById('form-phone');
+      const emailInput = document.getElementById('form-email');
+      const goalSelect = document.getElementById('form-goal');
+      const descInput = document.getElementById('form-desc');
+      const submitBtn = form.querySelector('button[type="submit"]');
+
+      const name = (nameInput ? nameInput.value : '').trim();
+      const phone = (phoneInput ? phoneInput.value : '').trim();
+      const email = (emailInput ? emailInput.value : '').trim();
+      const goal = (goalSelect ? goalSelect.value : '').trim();
+      const desc = (descInput ? descInput.value : '').trim();
+
+      if (!name || name.length < 2) {
+        if (typeof Sound !== 'undefined' && Sound.tap) Sound.tap();
+        showGymFormError('Please enter your full name (at least 2 characters).');
+        if (nameInput) nameInput.focus();
+        return;
+      }
+
+      if (!phone || phone.replace(/\D/g, '').length < 7) {
+        if (typeof Sound !== 'undefined' && Sound.tap) Sound.tap();
+        showGymFormError('Please enter a valid telephone number (at least 7 digits).');
+        if (phoneInput) phoneInput.focus();
+        return;
+      }
+
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        if (typeof Sound !== 'undefined' && Sound.tap) Sound.tap();
+        showGymFormError('Please enter a valid email address.');
+        if (emailInput) emailInput.focus();
+        return;
+      }
+
+      const slug = getResolvedGymSlug();
+      const rawBizName = window.LUNAO_BUSINESS_NAME || '{{BUSINESS_NAME}}';
+      const businessName = rawBizName.includes('{' + '{') ? 'Iron Vault Fitness' : rawBizName;
+      const idempotencyKey = getOrCreateGymIdempotencyKey(form);
+
+      form.dataset.submitting = 'true';
+      let originalBtnText = 'Start My Transformation ⚡';
+      if (submitBtn) {
+        originalBtnText = submitBtn.textContent || originalBtnText;
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Claiming Free VIP Pass...';
+      }
+
+      const payload = {
+        slug: slug,
+        businessName: businessName,
+        leadType: 'gym_vip_pass',
+        customerName: name,
+        phone: phone,
+        email: email || null,
+        notes: desc ? ('Goal: ' + goal + ' | Note: ' + desc) : ('Goal: ' + goal),
+        details: {
+          goal: goal,
+          description: desc
+        },
+        source: 'form',
+        status: 'new',
+        idempotencyKey: idempotencyKey,
+        createdAt: Date.now()
+      };
+
+      const endpoints = getLeadSubmissionEndpoints();
+      let lastError = null;
+
+      for (const endpoint of endpoints) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Idempotency-Key': idempotencyKey
+            },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+          });
+
+          clearTimeout(timeoutId);
+
+          const json = await res.json().catch(() => null);
+
+          if (res.ok && (res.status === 200 || res.status === 201) && json && (json.ok || json.lead || json.id)) {
+            _gaq = window._gaq || [];
+            _gaq.push(['_trackEvent', 'Form', 'Submit', 'Gym Lead Pass']);
+
+            form.style.display = 'none';
+            const succMsg = document.getElementById('success-message');
+            if (succMsg) succMsg.style.display = 'block';
+            if (typeof Sound !== 'undefined' && Sound.successChime) Sound.successChime();
+            form.dataset.submitting = 'false';
+            return;
+          }
+
+          if (json && json.error) {
+            lastError = json.error;
+          } else {
+            lastError = `Server returned status ${res.status}`;
+          }
+        } catch (fetchErr) {
+          lastError = fetchErr.message || 'Network connectivity error';
+        }
+      }
+
+      // If all endpoints failed
+      form.dataset.submitting = 'false';
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalBtnText;
+      }
+      if (typeof Sound !== 'undefined' && Sound.tap) Sound.tap();
+      showGymFormError('Unable to register your profile. ' + (lastError || 'Please try again in a moment.'));
     }
 
     /* -------------------------------------

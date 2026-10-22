@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Noir Barber Studio — Austin, TX</title>
-    <meta name="description" content="The Noir Barber Studio — Austin, TX. Haircuts. Fades. Shaves. Precision craft.">
+    <title>Modern Barbershop Pro — Austin, TX</title>
+    <meta name="description" content="Modern Barbershop Pro — Austin, TX. Haircuts. Fades. Shaves. Precision craft.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
@@ -1624,7 +1624,7 @@
     <nav id="nav-header">
         <div class="nav-wrapper">
             <!-- LOGO_AREA -->
-            <a href="#home" class="nav-logo"><span>💈</span> The Noir</a>
+            <a href="#home" class="nav-logo"><span>💈</span> Modern Barber</a>
             
             <div class="nav-menu">
                 <a href="#home" class="nav-anchor">Home</a>
@@ -1694,7 +1694,7 @@
                 📞 Call (512) 555-0291
             </a>
             <div style="display: flex; gap: 10px;">
-                <a href="https://instagram.com/thenoir_barber" target="_blank" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; background: rgba(197,168,128,0.12); border: 1px solid var(--gold); border-radius: var(--r-sm); color: var(--gold); font-family: 'IBM Plex Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; text-decoration: none;">
+                <a href="https://instagram.com/modernbarber_atx" target="_blank" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; background: rgba(197,168,128,0.12); border: 1px solid var(--gold); border-radius: var(--r-sm); color: var(--gold); font-family: 'IBM Plex Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; text-decoration: none;">
                     📸 Instagram
                 </a>
                 <a href="#book" class="mobile-link-anchor" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; background: var(--red); border-radius: var(--r-sm); color: var(--white); font-family: 'IBM Plex Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; text-decoration: none; font-style: normal !important; font-weight: 600;">
@@ -1938,7 +1938,7 @@
                         <div class="offer-block-content">
                             <span class="offer-tag">🏷️ First Visit</span>
                             <h3 class="offer-title">Welcome Cut, Reduced Rate 🎉</h3>
-                            <p class="offer-desc">New to The Noir Barber Studio? Your introductory haircut is $15 off our standard rate. No coupon code needed &mdash; just mention this offer at the chair.</p>
+                            <p class="offer-desc">New to Modern Barbershop Pro? Your introductory haircut is $15 off our standard rate. No coupon code needed &mdash; just mention this offer at the chair.</p>
                         </div>
                         <div class="offer-cta-col">
                             <span class="offer-price" style="color: var(--red); font-weight: 700;">&ndash;$15</span>
@@ -2181,7 +2181,7 @@
                     <div class="booking-form-box" id="js-booking-container">
                         <h3 class="booking-form-title" style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 28px; font-weight: 700; margin-bottom: 24px; color: var(--ink);">Your Appointment Information ✍️</h3>
                         
-                        <form id="js-booking-form" novalidate>
+                        <form id="js-booking-form" data-lunao-booking="true" data-lunao-inline-booking="true" onsubmit="handleBarber02Booking(event)" novalidate>
                             <div class="form-field-group" style="margin-bottom: 20px;">
                                 <label for="name" class="form-field-label" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-light); display: block; margin-bottom: 8px;">👤 Full Name</label>
                                 <input type="text" id="name" name="name" class="form-input-editorial" placeholder="e.g. Marcus Aurelius" required style="width: 100%; padding: 12px; background: var(--white); border: 1px solid var(--ink-ghost); border-radius: var(--r-xs); font-family: inherit; font-size: 14px; color: var(--ink);">
@@ -2244,7 +2244,7 @@
                                 <textarea id="notes" name="notes" class="form-input-editorial" placeholder="Any special requirements, styles, hair conditions or preferences..." style="width: 100%; padding: 12px; background: var(--white); border: 1px solid var(--ink-ghost); border-radius: var(--r-xs); font-family: inherit; font-size: 14px; color: var(--ink); min-height: 80px; resize: vertical;"></textarea>
                             </div>
 
-                            <button type="submit" class="btn-submit-booking" style="width: 100%; padding: 16px; background: var(--red); color: var(--white); font-family: inherit; font-weight: 500; font-size: 14px; text-transform: uppercase; letter-spacing: 0.15em; border-radius: var(--r-sm); transition: all 0.2s ease;">Confirm Booking Appointment 🎟️</button>
+                            <button type="submit" class="btn-submit-booking" id="submit-booking-btn" style="width: 100%; padding: 16px; background: var(--red); color: var(--white); font-family: inherit; font-weight: 500; font-size: 14px; text-transform: uppercase; letter-spacing: 0.15em; border-radius: var(--r-sm); transition: all 0.2s ease;">Confirm Booking Appointment 🎟️</button>
                             <span class="booking-terms-note" style="display: block; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-light); text-align: center; margin-top: 12px;">We will confirm back immediately by SMS or phone. Appointments held for 15 min.</span>
                         </form>
                     </div>
@@ -2308,8 +2308,8 @@
                     <div style="grid-column: 1 / -1; background: var(--gold-soft); border: 1.5px solid var(--gold); border-radius: var(--r-md); padding: 32px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 8px; box-shadow: var(--shadow-lift);">
                         <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--gold-hover); letter-spacing: 0.1em; margin-bottom: 4px;">📸 Active On Instagram</span>
                         <h3 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 28px; font-weight: 700; color: var(--ink); margin: 0;">Prefer instant messaging on social media?</h3>
-                        <p style="font-size: 14px; color: var(--ink-mid); max-width: 800px; line-height: 1.5; margin: 8px 0 16px 0;">Drop us a line on Instagram at <strong style="color: var(--ink);">@thenoir_barber</strong>! Our front desk monitors DMs live, and you will receive a response very fast (usually inside 3-5 minutes).</p>
-                        <a href="https://instagram.com/thenoir_barber" target="_blank" style="display: inline-block; padding: 12px 24px; background: var(--ink); color: var(--gold-soft); font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; border-radius: var(--r-sm); transition: transform 0.2s ease;">Message Us Now &rarr;</a>
+                        <p style="font-size: 14px; color: var(--ink-mid); max-width: 800px; line-height: 1.5; margin: 8px 0 16px 0;">Drop us a line on Instagram at <strong style="color: var(--ink);">@modernbarber_atx</strong>! Our front desk monitors DMs live, and you will receive a response very fast (usually inside 3-5 minutes).</p>
+                        <a href="https://instagram.com/modernbarber_atx" target="_blank" style="display: inline-block; padding: 12px 24px; background: var(--ink); color: var(--gold-soft); font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; border-radius: var(--r-sm); transition: transform 0.2s ease;">Message Us Now &rarr;</a>
                     </div>
                     
                     <!-- Column 1: Call -->
@@ -2326,14 +2326,14 @@
                     <div class="contact-column" style="background: rgba(255, 255, 255, 0.4); border: 1px solid var(--ink-ghost); border-radius: var(--r-md); padding: 32px; box-shadow: var(--shadow-lift);">
                         <span class="contact-col-lbl" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; color: var(--ink-light); letter-spacing: 0.1em;">📸 Social media</span>
                         <h3 class="contact-col-val" style="margin: 12px 0; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 28px; font-weight: 700;">
-                            <a href="https://instagram.com/thenoir_barber" target="_blank" style="color: var(--ink);">@thenoir_barber</a>
+                            <a href="https://instagram.com/modernbarber_atx" target="_blank" style="color: var(--ink);">@modernbarber_atx</a>
                         </h3>
                         <p class="contact-col-sub" style="font-size: 13px; color: var(--ink-mid); margin-bottom: 16px;">Clean cuts, premium fades, and daily style inspirations. Follow along.</p>
-                        <a href="https://instagram.com/thenoir_barber" target="_blank" class="contact-col-link" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; text-transform: uppercase;">Instagram &rarr;</a>
+                        <a href="https://instagram.com/modernbarber_atx" target="_blank" class="contact-col-link" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; text-transform: uppercase;">Instagram &rarr;</a>
                         
                         <div class="fb-section-mini" style="margin-top: 15px; border-top: 1px solid var(--ink-ghost); padding-top: 15px;">
                             <span class="contact-col-lbl" style="font-size: 9px; text-transform: uppercase; color: var(--ink-light);">👥 Facebook Page</span>
-                            <a href="https://facebook.com/thenoirbarber" target="_blank" class="contact-col-link" style="display: block; margin-top: 4px; font-size: 12px;">Visit our Facebook &rarr;</a>
+                            <a href="https://facebook.com/modernbarber" target="_blank" class="contact-col-link" style="display: block; margin-top: 4px; font-size: 12px;">Visit our Facebook &rarr;</a>
                         </div>
                     </div>
 
@@ -2342,7 +2342,7 @@
                         <span class="contact-col-lbl" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; color: var(--ink-light); letter-spacing: 0.1em;">📍 Location</span>
                         <h3 class="contact-col-val" style="margin: 12px 0; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 28px; font-weight: 700; color: var(--ink);">Austin, TX</h3>
                         <p class="contact-col-sub" style="font-size: 13px; color: var(--ink-mid); margin-bottom: 16px;">Walk-ins welcome all day long. Book to guarantee zero wait-time.</p>
-                        <a href="https://maps.google.com?q=The Noir Barber Studio+Austin, TX" target="_blank" class="contact-col-link" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; text-transform: uppercase;">Get Directions &rarr;</a>
+                        <a href="https://maps.google.com?q=Modern Barbershop Pro+Austin, TX" target="_blank" class="contact-col-link" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; text-transform: uppercase;">Get Directions &rarr;</a>
                     </div>
 
                 </div>
@@ -2358,7 +2358,7 @@
             
             <div class="footer-top-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px;">
                 <!-- LOGO_AREA -->
-                <span class="footer-logo" style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; font-weight: 700; font-[style]: italic;">💈 The Noir</span>
+                <span class="footer-logo" style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; font-weight: 700; font-[style]: italic;">💈 Modern Barber</span>
                 <span class="footer-city" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gold);">📍 Austin, TX</span>
             </div>
 
@@ -2374,7 +2374,7 @@
             <div class="footer-divider" style="height: 1px; background: rgba(255,255,255,0.1); margin-bottom: 24px;"></div>
 
             <div class="footer-bottom-row" style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; font-size: 11px;">
-                <span class="footer-copyright" style="color: rgba(255,255,255,0.4);">&copy; 2026 The Noir Barber Studio. Built &amp; Crafted to perfection. ✨</span>
+                <span class="footer-copyright" style="color: rgba(255,255,255,0.4);">&copy; 2026 Modern Barbershop Pro. Built &amp; Crafted to perfection. ✨</span>
                 <span class="footer-credit" style="color: rgba(255,255,255,0.3);">Designed &amp; Powered by Lunao ⚡</span>
             </div>
 
@@ -2548,63 +2548,235 @@
                 });
             });
 
-            // 5. Booking Form validations & Success Transitions
-            const bookingForm = document.getElementById('js-booking-form');
-            const bookingContainer = document.getElementById('js-booking-container');
+            // 5. Authoritative Booking Form validations & Supabase/API Persistence
+            function getBookingSubmissionUrl() {
+                if (window.LUNAO_BOOKING_API_URL && typeof window.LUNAO_BOOKING_API_URL === 'string') {
+                    return window.LUNAO_BOOKING_API_URL.replace(/\/+$/, '');
+                }
+                const supabaseBase = window.LUNAO_SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+                return `${supabaseBase.replace(/\/+$/, '')}/functions/v1/public-bookings`;
+            }
 
-            bookingForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                
-                // Fetch fields
+            function getResolvedSlug() {
+                const openTag = '{' + '{';
+                const winSlug = typeof window.LUNAO_SLUG === 'string' ? window.LUNAO_SLUG.trim() : '';
+                if (winSlug && !winSlug.includes(openTag) && winSlug !== 'preview') {
+                    return winSlug;
+                }
+                const parts = (window.location.pathname || '').split('/').filter(Boolean);
+                const sitesIdx = parts.indexOf('sites');
+                if (sitesIdx !== -1 && parts[sitesIdx + 1]) {
+                    return parts[sitesIdx + 1];
+                }
+                if (winSlug && !winSlug.includes(openTag)) {
+                    return winSlug;
+                }
+                const last = parts[parts.length - 1] || '';
+                if (last && !/\.html?$/i.test(last)) return last;
+                return 'barber-02-client';
+            }
+
+            function getOrCreateFormIdempotencyKey(form) {
+                if (!form.dataset.idempotencyKey) {
+                    const randomPart = Math.random().toString(36).substring(2, 10);
+                    form.dataset.idempotencyKey = 'bk_' + Date.now().toString(36) + '_' + randomPart;
+                }
+                return form.dataset.idempotencyKey;
+            }
+
+            function showBarber02Error(message) {
+                let errBox = document.getElementById('barber02-form-error');
+                if (!errBox) {
+                    errBox = document.createElement('div');
+                    errBox.id = 'barber02-form-error';
+                    errBox.className = 'barber-form-error-banner';
+                    errBox.style.cssText = 'margin-top:16px;padding:12px 16px;background:rgba(239,68,68,0.12);border:1px solid var(--red, #e11d48);border-radius:var(--r-xs, 4px);color:#b91c1c;font-family:"IBM Plex Mono",monospace;font-size:12px;line-height:1.5;text-align:left;';
+                    const form = document.getElementById('js-booking-form');
+                    if (form) form.appendChild(errBox);
+                }
+                const cleanMsg = String(message || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                errBox.innerHTML = '<strong>⚠️ Reservation Note:</strong> ' + cleanMsg + '<br><span style="font-size:11px;opacity:0.85;">Your information is preserved above. You can retry safely.</span>';
+                errBox.style.display = 'block';
+            }
+
+            function clearBarber02Error() {
+                const errBox = document.getElementById('barber02-form-error');
+                if (errBox) errBox.style.display = 'none';
+            }
+
+            function escapeHtml(str) {
+                return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+
+            async function handleBarber02Booking(e) {
+                if (e && typeof e.preventDefault === 'function') e.preventDefault();
+                if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+
+                const bookingForm = document.getElementById('js-booking-form');
+                if (!bookingForm) return;
+                if (bookingForm.dataset.submitting === 'true') return;
+                clearBarber02Error();
+
+                const submitBtn = document.getElementById('submit-booking-btn') || bookingForm.querySelector('button[type="submit"]');
+                const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
+
                 const nameField = document.getElementById('name');
                 const phoneField = document.getElementById('phone');
                 const serviceField = document.getElementById('service');
                 const dateField = document.getElementById('date-input');
                 const timeField = document.getElementById('time');
+                const notesField = document.getElementById('notes');
 
                 const requiredFields = [nameField, phoneField, serviceField, dateField, timeField];
                 let isFormValid = true;
 
-                // Reset field highlight borders
                 requiredFields.forEach(fld => {
-                    fld.style.borderBottomColor = '';
+                    if (fld) fld.style.borderBottomColor = '';
                 });
 
-                // Check field entries
                 requiredFields.forEach(fld => {
-                    if (!fld.value || fld.value.trim() === '') {
-                        fld.style.borderBottomColor = 'var(--red)';
+                    if (!fld || !fld.value || fld.value.trim() === '') {
+                        if (fld) fld.style.borderBottomColor = 'var(--red)';
                         isFormValid = false;
                     }
                 });
 
+                const clientName = nameField ? nameField.value.trim() : '';
+                const clientPhone = phoneField ? phoneField.value.trim() : '';
+                const rawPhoneDigits = clientPhone.replace(/\D/g, '');
+
+                if (!clientName || clientName.length < 2) {
+                    if (nameField) nameField.style.borderBottomColor = 'var(--red)';
+                    isFormValid = false;
+                }
+                if (!clientPhone || rawPhoneDigits.length < 7) {
+                    if (phoneField) phoneField.style.borderBottomColor = 'var(--red)';
+                    isFormValid = false;
+                }
+
                 if (!isFormValid) {
-                    // Shake entire container layout
                     bookingForm.classList.remove('shake-form');
-                    void bookingForm.offsetWidth; // Force CSS reflow
+                    void bookingForm.offsetWidth;
                     bookingForm.classList.add('shake-form');
+                    showBarber02Error('Please fill in all required booking fields with valid details.');
                     return;
                 }
 
-                // If perfectly valid, replace container with sleek succès state
-                const clientName = nameField.value.trim();
-                const clientPhone = phoneField.value.trim();
-                
-                bookingContainer.innerHTML = `
-                    <div class="booking-success-box" data-reveal style="text-align: center; padding: 32px 16px;">
-                        <span style="font-size: 56px; display: block; margin-bottom: 16px;">🎉💈✂️</span>
-                        <h3 class="booking-success-title" style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 32px; font-weight: 700; color: var(--ink); margin-bottom: 12px;">We have reserved your chair, ${clientName}!</h3>
-                        <p class="booking-success-sub" style="font-size: 14px; color: var(--ink-mid); margin-bottom: 8px;">Expect a warm confirmation call or SMS text at <strong>${clientPhone}</strong> within the hour. 📞</p>
-                        <p class="booking-success-sub" style="font-size: 12px; color: var(--gold); font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; margin-top: 20px;">We look forward to giving you an exceptional experience! ✨</p>
-                    </div>
-                `;
-                
-                // Trigger reveal for success box
-                const newSuccessBox = bookingContainer.querySelector('.booking-success-box');
-                setTimeout(() => {
-                    newSuccessBox.classList.add('in-view');
-                }, 100);
-            });
+                const serviceOption = serviceField && serviceField.options ? serviceField.options[serviceField.selectedIndex] : null;
+                const serviceText = serviceOption ? serviceOption.text : (serviceField ? serviceField.value : 'Classic Cut');
+                const dateVal = dateField ? dateField.value.trim() : '';
+                const timeOption = timeField && timeField.options ? timeField.options[timeField.selectedIndex] : null;
+                const timeVal = timeOption ? timeOption.text : (timeField ? timeField.value : '');
+                const notesVal = notesField ? notesField.value.trim() : '';
+
+                const slug = getResolvedSlug();
+                const rawBizName = window.LUNAO_BUSINESS_NAME || 'Modern Barbershop Pro';
+                const openTag = '{' + '{';
+                const businessName = rawBizName.includes(openTag) ? 'Modern Barbershop Pro' : rawBizName;
+                const idempotencyKey = getOrCreateFormIdempotencyKey(bookingForm);
+                const endpoint = getBookingSubmissionUrl();
+
+                bookingForm.dataset.submitting = 'true';
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span>Confirming Chair Reservation...</span>';
+                }
+
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+                    const payload = {
+                        slug: slug,
+                        businessName: businessName,
+                        customerName: clientName,
+                        phone: clientPhone,
+                        email: '',
+                        service: serviceText,
+                        date: dateVal,
+                        time: timeVal,
+                        notes: notesVal,
+                        source: 'form',
+                        status: 'new',
+                        idempotencyKey: idempotencyKey,
+                        createdAt: Date.now()
+                    };
+
+                    const reqOptions = {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Idempotency-Key': idempotencyKey
+                        },
+                        body: JSON.stringify(payload),
+                        signal: controller.signal
+                    };
+
+                    let res = await fetch(endpoint, reqOptions);
+
+                    if (
+                        res.status === 404 &&
+                        !window.LUNAO_BOOKING_API_URL &&
+                        window.location &&
+                        /^https?:$/i.test(window.location.protocol)
+                    ) {
+                        res = await fetch('/functions/v1/public-bookings', reqOptions);
+                    }
+
+                    clearTimeout(timeoutId);
+
+                    const json = await res.json().catch(() => null);
+
+                    if (res.ok && json && json.ok && (json.id || json.booking)) {
+                        delete bookingForm.dataset.idempotencyKey;
+
+                        const bookingContainer = document.getElementById('js-booking-container');
+                        if (bookingContainer) {
+                            bookingContainer.innerHTML = `
+                                <div class="booking-success-box in-view" data-reveal style="text-align: center; padding: 32px 16px;">
+                                    <span style="font-size: 56px; display: block; margin-bottom: 16px;">🎉💈✂️</span>
+                                    <h3 class="booking-success-title" style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 32px; font-weight: 700; color: var(--ink); margin-bottom: 12px;">We have reserved your chair, ${escapeHtml(clientName)}!</h3>
+                                    <p class="booking-success-sub" style="font-size: 14px; color: var(--ink-mid); margin-bottom: 8px;">Expect a confirmation call or SMS text at <strong>${escapeHtml(clientPhone)}</strong> for <strong>${escapeHtml(serviceText)}</strong> on <strong>${escapeHtml(dateVal)}</strong> at <strong>${escapeHtml(timeVal)}</strong>. 📞</p>
+                                    <p class="booking-success-sub" style="font-size: 12px; color: var(--gold); font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; margin-top: 20px;">We look forward to giving you an exceptional experience! ✨</p>
+                                </div>
+                            `;
+                        }
+
+                        try {
+                            if (window.parent && window.parent !== window) {
+                                window.parent.postMessage({
+                                    type: 'LUNAO_CONFIRMED_BOOKING',
+                                    data: json.booking || payload,
+                                    id: json.id,
+                                    timestamp: Date.now()
+                                }, '*');
+                            }
+                        } catch (postErr) {}
+                    } else {
+                        const serverError = (json && (json.error || json.message)) || 'Unable to confirm booking. Please call us directly.';
+                        showBarber02Error(serverError);
+                    }
+                } catch (err) {
+                    const isTimeout = err && err.name === 'AbortError';
+                    const msg = isTimeout
+                        ? 'The reservation request timed out. Your information is preserved — please click again to retry.'
+                        : 'Network error. Your information is preserved — please check connection and retry.';
+                    showBarber02Error(msg);
+                } finally {
+                    delete bookingForm.dataset.submitting;
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalBtnText;
+                    }
+                }
+            }
+
+            window.handleBarber02Booking = handleBarber02Booking;
+
+            const bookingForm = document.getElementById('js-booking-form');
+            if (bookingForm) {
+                bookingForm.addEventListener('submit', handleBarber02Booking);
+            }
 
             // 6. Scroll Reveal Observer
             const revealElements = document.querySelectorAll('[data-reveal]');

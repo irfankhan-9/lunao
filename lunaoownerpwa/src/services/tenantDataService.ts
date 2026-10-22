@@ -18,6 +18,7 @@ import {
   ActivityEvent,
   ConnectedEmailAccount,
   BookingStatus,
+  InboundLead,
 } from '../types';
 import { tenantAuthService } from './tenantAuthService';
 
@@ -282,6 +283,59 @@ export const tenantDataService = {
       },
     );
     return bookingFromApi(res.booking);
+  },
+
+  async getLeads(businessId?: string): Promise<InboundLead[]> {
+    const slug = tenantAuthService.getActiveSlug() || businessId || '';
+    if (!slug) return [];
+    try {
+      const data = await fetchPwa<{ leads: any[] }>(`/pwa/${encodeURIComponent(slug)}/leads`);
+      return (data.leads || []).map((l) => ({
+        id: l.id,
+        slug: l.slug,
+        businessName: l.businessName,
+        leadType: l.leadType || 'general_inquiry',
+        customerName: l.customerName || l.customer_name || '',
+        phone: l.phone || '',
+        email: l.email || null,
+        notes: l.notes || null,
+        details: l.details || {},
+        source: l.source || 'form',
+        status: l.status || 'new',
+        createdAt: Number(l.createdAt || Date.now()),
+      }));
+    } catch {
+      return [];
+    }
+  },
+
+  async updateLeadStatus(id: string | number, status: string, businessId?: string): Promise<InboundLead | null> {
+    const slug = tenantAuthService.getActiveSlug() || businessId || '';
+    if (!slug) return null;
+    try {
+      const data = await fetchPwa<{ lead: any }>(
+        `/pwa/${encodeURIComponent(slug)}/leads/${encodeURIComponent(String(id))}`,
+        { method: 'PATCH', body: JSON.stringify({ status }) },
+      );
+      const l = data.lead;
+      if (!l) return null;
+      return {
+        id: l.id,
+        slug: l.slug,
+        businessName: l.businessName,
+        leadType: l.leadType || 'general_inquiry',
+        customerName: l.customerName || l.customer_name || '',
+        phone: l.phone || '',
+        email: l.email || null,
+        notes: l.notes || null,
+        details: l.details || {},
+        source: l.source || 'form',
+        status: l.status || 'new',
+        createdAt: Number(l.createdAt || Date.now()),
+      };
+    } catch {
+      return null;
+    }
   },
 
   // Customers (derived server-side from bookings + pwa_customers enrichment)

@@ -41,6 +41,14 @@ if (dbUrl) {
   }
 }
 
+export function getPgPool() {
+  return pgPool;
+}
+
+export function setPgPool(customPool) {
+  pgPool = customPool || null;
+}
+
 export async function closePostgresPool() {
   if (pgPool) {
     try {
@@ -55,7 +63,7 @@ export async function closePostgresPool() {
 let client = null;
 
 export function getSupabase() {
-  if (!supabaseCfg.live) return null;
+  if (!supabaseCfg.live || !supabaseCfg.url || !supabaseCfg.secretKey) return null;
   if (!client) {
     try {
       client = createClient(supabaseCfg.url, supabaseCfg.secretKey, {
@@ -823,3 +831,218 @@ export async function supabaseFailJob(idempotencyKey, errorMessage) {
     }
   }
 }
+
+// ---- Customer Inbound Leads ------------------------------------------------
+
+function mapPostgresLeadRow(r, isExisting = false) {
+  if (!r) return null;
+  let details = r.details;
+  if (typeof details === 'string') {
+    try {
+      details = JSON.parse(details);
+    } catch {
+      details = {};
+    }
+  }
+  return {
+    id: r.id,
+    slug: r.slug,
+    businessName: r.business_name,
+    leadType: r.lead_type,
+    customerName: r.customer_name,
+    phone: r.phone,
+    email: r.email,
+    notes: r.notes,
+    details: details || {},
+    source: r.source,
+    status: r.status,
+    idempotencyKey: r.idempotency_key || null,
+    createdAt: Number(r.created_at || Date.now()),
+    isExisting,
+  };
+}
+
+export async function supabaseInsertLead(lead) {
+  const idempotencyKey = lead.idempotencyKey || lead.idempotency_key || null;
+  const slug = lead.slug || '';
+
+  // 1. Primary PostgreSQL pool path
+  if (pgPool) {
+    try {
+      if (idempotencyKey && slug) {
+        try {
+          const existingRes = await pgPool.query(
+            'SELECT * FROM leads WHERE slug = $1 AND idempotency_key = $2 LIMIT 1;',
+            [slug, idempotencyKey]
+          );
+          if (existingRes.rows && existingRes.rows.length > 0) {
+            return mapPostgresLeadRow(existingRes.rows[0], true);
+          }
+        } catch (checkErr) {
+          console.warn('[Postgres] lead idempotency check notice:', checkErr.message);
+        }
+      }
+
+      const detailsJson = lead.details && typeof lead.details === 'object' ? JSON.stringify(lead.details) : '{}';
+
+      const values = [
+        slug,
+        lead.businessName || lead.business_name || '',
+        lead.leadType || lead.lead_type || 'general_inquiry',
+        lead.customerName || lead.customer_name || lead.fullName || lead.name || '',
+        lead.phone || '',
+        lead.email || null,
+        lead.notes || lead.message || null,
+        detailsJson,
+        lead.source || 'form',
+        lead.status || 'new',
+        Number(lead.createdAt || lead.created_at || Date.now()),
+        idempotencyKey,
+      ];
+
+      const query = `
+        INSERT INTO leads (slug, business_name, lead_type, customer_name, phone, email, notes, details, source, status, created_at, idempotency_key)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        RETURNING *;
+      `;
+
+      const { rows } = await pgPool.query(query, values);
+      return mapPostgresLeadRow(rows[0], false);
+    } catch (err) {
+      console.warn('[Postgres] Insert lead error:', err.message);
+    }
+  }
+
+  // 2. Supabase client fallback
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      if (idempotencyKey && slug) {
+        const { data: existing } = await sb
+          .from('leads')
+          .select('*')
+          .eq('slug', slug)
+          .eq('idempotency_key', idempotencyKey)
+          .maybeSingle();
+        if (existing) {
+          return mapPostgresLeadRow(existing, true);
+        }
+      }
+
+      const insertPayload = {
+        slug,
+        business_name: lead.businessName || lead.business_name || '',
+        lead_type: lead.leadType || lead.lead_type || 'general_inquiry',
+        customer_name: lead.customerName || lead.customer_name || lead.fullName || lead.name || '',
+        phone: lead.phone || '',
+        email: lead.email || null,
+        notes: lead.notes || lead.message || null,
+        details: lead.details || {},
+        source: lead.source || 'form',
+        status: lead.status || 'new',
+        created_at: Number(lead.createdAt || lead.created_at || Date.now()),
+      };
+      if (idempotencyKey) {
+        insertPayload.idempotency_key = idempotencyKey;
+      }
+
+      const { data, error } = await sb.from('leads').insert(insertPayload).select().single();
+      if (!error && data) {
+        return mapPostgresLeadRow(data, false);
+      }
+    } catch (sbErr) {
+      console.warn('[Supabase] Insert lead error:', sbErr.message);
+    }
+  }
+
+  if (process.env.NODE_ENV === 'production' || supabaseCfg.live || pgPool || sb) {
+    const err = new Error('Lead service temporarily unavailable. The database write could not be confirmed.');
+    err.status = 503;
+    throw err;
+  }
+
+  // Fallback in-memory object ONLY in isolated offline development mode
+  return {
+    id: Date.now(),
+    slug,
+    businessName: lead.businessName || '',
+    leadType: lead.leadType || 'general_inquiry',
+    customerName: lead.customerName || '',
+    phone: lead.phone || '',
+    email: lead.email || null,
+    notes: lead.notes || null,
+    details: lead.details || {},
+    source: lead.source || 'form',
+    status: lead.status || 'new',
+    idempotencyKey,
+    createdAt: Date.now(),
+    isExisting: false,
+  };
+}
+
+export async function supabaseListLeads(slug) {
+  if (pgPool) {
+    try {
+      const { rows } = await pgPool.query(
+        'SELECT * FROM leads WHERE slug = $1 ORDER BY created_at DESC',
+        [slug]
+      );
+      return rows.map((r) => mapPostgresLeadRow(r));
+    } catch (err) {
+      console.warn('[Postgres] List leads error:', err.message);
+    }
+  }
+
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const { data, error } = await withTimeout(
+        sb.from('leads').select('*').eq('slug', slug).order('created_at', { ascending: false })
+      );
+      if (!error && data) {
+        return data.map((r) => mapPostgresLeadRow(r));
+      }
+    } catch (err) {
+      console.warn('[Supabase] List leads error:', err.message);
+    }
+  }
+
+  return [];
+}
+
+export async function supabaseUpdateLeadStatus(slug, id, status) {
+  if (pgPool) {
+    try {
+      const { rows } = await pgPool.query(
+        'UPDATE leads SET status = $1 WHERE id = $2 AND slug = $3 RETURNING *',
+        [status, id, slug]
+      );
+      if (rows && rows.length > 0) {
+        return mapPostgresLeadRow(rows[0]);
+      }
+    } catch (err) {
+      console.warn('[Postgres] Update lead status error:', err.message);
+    }
+  }
+
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const { data, error } = await sb
+        .from('leads')
+        .update({ status })
+        .eq('id', id)
+        .eq('slug', slug)
+        .select()
+        .single();
+      if (!error && data) {
+        return mapPostgresLeadRow(data);
+      }
+    } catch (err) {
+      console.warn('[Supabase] Update lead status error:', err.message);
+    }
+  }
+
+  return null;
+}
+

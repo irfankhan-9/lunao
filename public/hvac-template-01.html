@@ -24,7 +24,7 @@
     "@type": "HVACBusiness",
     "name": "Everest Climate Systems",
     "image": "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=1200&q=80",
-    "telephone": "5125550988",
+    "telephone": "5125550199",
     "priceRange": "$$",
     "address": {
       "@type": "PostalAddress",
@@ -1589,9 +1589,9 @@
       <span>🚨</span>
       <span>24/7 HVAC Emergency Comfort Services Active in Austin, TX</span>
     </div>
-    <a href="tel:5125550988" class="emergency-phone" onclick="Sound.click()">
+    <a href="tel:5125550199" class="emergency-phone" onclick="Sound.click()">
       <span>📞</span>
-      <span>CALL NOW: (512) 555-0988</span>
+      <span>CALL NOW: (512) 555-0199</span>
     </a>
   </div>
 
@@ -1667,8 +1667,8 @@
         </div>
 
         <div class="hero-ctas">
-          <a href="tel:5125550988" class="btn btn-primary" onclick="Sound.click()">
-            <span>📞 Call (512) 555-0988</span>
+          <a href="tel:5125550199" class="btn btn-primary" onclick="Sound.click()">
+            <span>📞 Call (512) 555-0199</span>
           </a>
           <a href="#contact" class="btn btn-outline" onclick="Sound.click()">
             <span>Get Free Estimate 📅</span>
@@ -2049,25 +2049,25 @@
 
       <div class="estimate-form-card">
         <!-- Main Interactive Form -->
-        <form id="lead-form" onsubmit="handleFormSubmission(event)">
+        <form id="lead-form" data-lunao-booking="true" data-lunao-inline-booking="true" onsubmit="handleFormSubmission(event)">
           <div class="form-group">
             <label for="form-name">Your Full Name</label>
-            <input type="text" id="form-name" class="form-input" placeholder="e.g. Robert Henderson" required>
+            <input type="text" id="form-name" name="name" class="form-input" placeholder="e.g. Robert Henderson" required>
           </div>
 
           <div class="form-group">
             <label for="form-phone">Mobile Phone Number</label>
-            <input type="tel" id="form-phone" class="form-input" placeholder="e.g. (512) 555-0199" required>
+            <input type="tel" id="form-phone" name="phone" class="form-input" placeholder="e.g. (512) 555-0199" required>
           </div>
 
           <div class="form-group">
             <label for="form-email">Your Email Address</label>
-            <input type="email" id="form-email" class="form-input" placeholder="e.g. robert@gmail.com" required>
+            <input type="email" id="form-email" name="email" class="form-input" placeholder="e.g. robert@gmail.com" required>
           </div>
 
           <div class="form-group">
             <label for="service-needed">Required Service Niche</label>
-            <select id="service-needed">
+            <select id="service-needed" name="service">
               <option value="cooling-repair">Emergency Cooling &amp; AC Repair</option>
               <option value="heating-repair">Emergency Heating &amp; Furnace Repair</option>
               <option value="system-install">New System Install / Upgrade Estimate</option>
@@ -2078,7 +2078,7 @@
 
           <div class="form-group">
             <label for="form-message">Special Homeowner Requests</label>
-            <textarea id="form-message" class="form-input" rows="4" placeholder="Briefly write about what comfort errors you are facing..."></textarea>
+            <textarea id="form-message" name="notes" class="form-input" rows="4" placeholder="Briefly write about what comfort errors you are facing..."></textarea>
           </div>
 
           <button type="submit" class="btn btn-primary estimate-cta-btn">
@@ -2233,7 +2233,7 @@
           </div>
           <div class="faq-content">
             <div class="faq-content-inner">
-              Simply dial (512) 555-0988 directly. Our overnight live operators are ready to dispatch an on-call emergency technician straight to your driveway with a fully equipped vehicle. We never leave you freezing or overheating!
+              Simply dial (512) 555-0199 directly. Our overnight live operators are ready to dispatch an on-call emergency technician straight to your driveway with a fully equipped vehicle. We never leave you freezing or overheating!
             </div>
           </div>
         </div>
@@ -2346,7 +2346,7 @@
       <div class="footer-brand">
         <h3>🔥❄️ Everest Climate Systems</h3>
         <p>Premium 24/7 HVAC solutions, ecological climate controls, and high-efficiency installation crews serving residential &amp; commercial properties.</p>
-        <span style="font-size: 13.5px; font-weight: 700; color: var(--secondary);">📞 (512) 555-0988</span>
+        <span style="font-size: 13.5px; font-weight: 700; color: var(--secondary);">📞 (512) 555-0199</span>
       </div>
 
       <div class="footer-links">
@@ -2385,8 +2385,8 @@
 
   <!-- Floating Mobile Quick CTA Action Tab -->
   <div class="floating-call-drawer">
-    <a href="tel:5125550988" class="btn btn-primary floating-call-btn" onclick="Sound.click()">
-      <span>📞 CALL NOW: (512) 555-0988</span>
+    <a href="tel:5125550199" class="btn btn-primary floating-call-btn" onclick="Sound.click()">
+      <span>📞 CALL NOW: (512) 555-0199</span>
     </a>
   </div>
 
@@ -2714,6 +2714,25 @@
       return `${supabaseBase.replace(/\/+$/, '')}/functions/v1/public-bookings`;
     }
 
+    function getResolvedSlug() {
+      const openTag = '{' + '{';
+      const winSlug = typeof window.LUNAO_SLUG === 'string' ? window.LUNAO_SLUG.trim() : '';
+      if (winSlug && !winSlug.includes(openTag) && winSlug !== 'preview') {
+        return winSlug;
+      }
+      const parts = (window.location.pathname || '').split('/').filter(Boolean);
+      const sitesIdx = parts.indexOf('sites');
+      if (sitesIdx !== -1 && parts[sitesIdx + 1]) {
+        return parts[sitesIdx + 1];
+      }
+      if (winSlug && !winSlug.includes(openTag)) {
+        return winSlug;
+      }
+      const last = parts[parts.length - 1] || '';
+      if (last && !/\.html?$/i.test(last)) return last;
+      return 'hvac-client';
+    }
+
     function getOrCreateFormIdempotencyKey(form) {
       if (!form.dataset.idempotencyKey) {
         const randomPart = Math.random().toString(36).substring(2, 10);
@@ -2744,10 +2763,13 @@
 
     // Form submission with verified Supabase Edge Function persistence
     async function handleFormSubmission(e) {
-      e.preventDefault();
-      clearFormError();
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
 
       const form = document.getElementById('lead-form');
+      if (form && form.dataset.submitting === 'true') return;
+      clearFormError();
+
       const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
       const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
 
@@ -2760,7 +2782,9 @@
       const name = nameInput ? nameInput.value.trim() : '';
       const phone = phoneInput ? phoneInput.value.trim() : '';
       const email = emailInput ? emailInput.value.trim() : '';
-      const service = serviceSelect ? serviceSelect.options[serviceSelect.selectedIndex].text : 'General HVAC Service';
+      const service = (serviceSelect && serviceSelect.options[serviceSelect.selectedIndex])
+        ? serviceSelect.options[serviceSelect.selectedIndex].text
+        : (serviceSelect && serviceSelect.value ? serviceSelect.value : 'General HVAC Service');
       const message = messageInput ? messageInput.value.trim() : '';
 
       if (!name || name.length < 2) {
@@ -2774,12 +2798,14 @@
         return;
       }
 
-      const slug = window.LUNAO_SLUG || window.location.pathname.split('/').filter(Boolean).pop() || 'hvac-client';
-      const businessName = window.LUNAO_BUSINESS_NAME || 'Everest Climate Systems';
+      const slug = getResolvedSlug();
+      const rawBizName = window.LUNAO_BUSINESS_NAME || 'Everest Climate Systems';
+      const businessName = rawBizName.includes('{' + '{') ? 'Everest Climate Systems' : rawBizName;
       const idempotencyKey = getOrCreateFormIdempotencyKey(form);
       const endpoint = getBookingSubmissionUrl();
 
       // Non-destructive pending state (preserves form values)
+      if (form) form.dataset.submitting = 'true';
       if (submitBtn) {
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<span>Verifying &amp; Submitting...</span>';
@@ -2803,7 +2829,7 @@
           createdAt: Date.now()
         };
 
-        const res = await fetch(endpoint, {
+        const reqOptions = {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -2811,7 +2837,21 @@
           },
           body: JSON.stringify(payload),
           signal: controller.signal
-        });
+        };
+
+        let res = await fetch(endpoint, reqOptions);
+
+        // If default remote Edge Function is not deployed (404) and page is served over HTTP(S),
+        // fall back cleanly to the same-origin public-bookings endpoint with the identical idempotencyKey
+        if (
+          res.status === 404 &&
+          !window.LUNAO_BOOKING_API_URL &&
+          window.location &&
+          /^https?:$/i.test(window.location.protocol)
+        ) {
+          res = await fetch('/functions/v1/public-bookings', reqOptions);
+        }
+
         clearTimeout(timeoutId);
 
         const json = await res.json().catch(() => null);
@@ -2823,6 +2863,16 @@
           form.style.display = 'none';
           const successOverlay = document.getElementById('form-success');
           if (successOverlay) successOverlay.classList.add('active');
+          try {
+            if (window.parent && window.parent !== window) {
+              window.parent.postMessage({
+                type: 'LUNAO_CONFIRMED_BOOKING',
+                data: json.booking || payload,
+                id: json.id,
+                timestamp: Date.now()
+              }, '*');
+            }
+          } catch (postErr) {}
         } else {
           const serverError = (json && (json.error || json.message)) || 'Unable to confirm booking. Please call us directly.';
           showFormError(serverError);
@@ -2834,6 +2884,7 @@
           : 'Network connection error. Your information is preserved — please verify your connection and retry.';
         showFormError(msg);
       } finally {
+        if (form) delete form.dataset.submitting;
         if (submitBtn) {
           submitBtn.disabled = false;
           submitBtn.innerHTML = originalBtnText;
@@ -2847,6 +2898,7 @@
       if (form) {
         form.reset();
         delete form.dataset.idempotencyKey;
+        delete form.dataset.submitting;
         form.style.display = 'block';
       }
       clearFormError();
@@ -2943,5 +2995,6 @@
       }
     });
   </script>
+<script src="/lunao-booking-bridge.js"></script>
 </body>
 </html>

@@ -47,7 +47,14 @@ import { slugify } from './lib/slug.js';
 import { streamEdit, isAiEnabled, cleanHtmlOutput, generateTemplateHtml } from './lib/geminiAi.js';
 import { createBooking, createBookingAsync, listBookings, listBookingsAsync, updateBookingStatus, getBooking } from './lib/bookings.js';
 import { validateBookingContract, rollbackToApprovedBooking, CONTRACT_REJECTION_MESSAGE } from './lib/bookingContractValidator.js';
-import { verifyOwnerSlugAccess, registerOwnerBusiness } from './lib/tenantAuth.js';
+import {
+  verifyOwnerSlugAccess,
+  registerOwnerBusiness,
+  registerOwnerBusinessAsync,
+  verifyActiveTenantAsync,
+  checkPublicRateLimitAsync,
+  checkInvalidSlugRateLimitAsync,
+} from './lib/tenantAuth.js';
 import { chatTurn } from './lib/chatbot.js';
 import { getAddons, setAddons } from './lib/widget.js';
 import { db } from './lib/db.js';
@@ -209,8 +216,10 @@ app.use((req, res, next) => {
   const isPublicRoute =
     cleanPath.startsWith('/api/public') ||
     cleanPath === '/api/bookings' ||
+    cleanPath === '/api/leads' ||
     cleanPath === '/api/chat' ||
-    cleanPath === '/functions/v1/public-bookings';
+    cleanPath === '/functions/v1/public-bookings' ||
+    cleanPath === '/functions/v1/public-leads';
 
   if (isPublicRoute) {
     // Public widget endpoints accept cross-origin requests from any website without credentials
@@ -584,9 +593,14 @@ app.post('/api/site-deploy/run', async (req, res) => {
 
 // Single business AI rebrand + stage + live deploy endpoint.
 // Powers the sequential step-by-step AI deployment in SiteDeployCampaignWizard.
-app.post('/api/site-deploy/rebrand-single', async (req, res) => {
+app.post('/api/site-deploy/rebrand-single', authenticate, async (req, res) => {
   try {
-    const { business, niche, templateKey, ownerKey, deploy = true } = req.body || {};
+    const verifiedOwnerKey = getAuthOwnerKey(req);
+    if (!verifiedOwnerKey) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized: Server-side authentication required to deploy and register sites' });
+    }
+
+    const { business, niche, templateKey, deploy = true } = req.body || {};
     if (!business || !business.name) {
       return res.status(400).json({ ok: false, error: 'Business name is required' });
     }
@@ -596,16 +610,12 @@ app.post('/api/site-deploy/rebrand-single', async (req, res) => {
     const slug = business.slug || slugify(business.name, business.city || '');
 
     // 1. Compile personalized site with exact template placeholders
-    const { html, resolved } = await compileSite(business, effectiveKey, ownerKey || null);
+    const { html, resolved } = await compileSite(business, effectiveKey, verifiedOwnerKey);
 
     // Priority 4: Enforce booking contract validation before staging or deploying
     const contractCheck = validateBookingContract(html);
     if (!contractCheck.valid) {
       return res.status(400).json({ ok: false, error: contractCheck.customerMessage || CONTRACT_REJECTION_MESSAGE });
-    }
-
-    if (ownerKey) {
-      registerOwnerBusiness(ownerKey, slug);
     }
 
     // 2. Stage locally to disk in SITES_DIR
@@ -614,13 +624,50 @@ app.post('/api/site-deploy/rebrand-single', async (req, res) => {
     // 3. Deploy to Lunao / Cloudflare servers
     const projName = cloudflare.project || 'lunao-web-designn';
     let liveUrl = `https://${projName}.pages.dev/${slug}/`;
-    let deployed = true;
+    let deployed = false;
     try {
       if (deploy) {
-        await publishBatch();
+        const pubRes = await publishBatch();
+        deployed = Boolean(pubRes?.deployed);
       }
     } catch (err) {
       console.warn('[rebrand-single] Cloudflare deploy error:', err.message);
+    }
+
+    // 4. Synchronize newly deployed legitimate site to canonical public.tenants registry.
+    await registerOwnerBusinessAsync(verifiedOwnerKey, slug, {
+      name: business.name,
+      niche: effectiveNiche,
+    });
+
+    // Also ensure the live Supabase Edge database has this tenant active so live bookings on <project>.pages.dev/<slug>/ succeed immediately
+    if (deploy) {
+      try {
+        const pgMod = await import('pg');
+        const PoolCtor = pgMod.default?.Pool || pgMod.Pool;
+        const edgePool = new PoolCtor({
+          host: 'aws-0-us-east-1.pooler.supabase.com',
+          port: 6543,
+          user: 'postgres.wqlbuadknltsjfzrltpe',
+          password: process.env.SUPABASE_DB_PASSWORD || '$@Khan1234455',
+          database: 'postgres',
+          ssl: { rejectUnauthorized: false },
+          connectionTimeoutMillis: 4000,
+        });
+        await edgePool.query(
+          `INSERT INTO public.tenants (id, slug, name, niche, is_active, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, true, NOW(), NOW())
+           ON CONFLICT (slug) DO UPDATE SET
+             name = EXCLUDED.name,
+             niche = EXCLUDED.niche,
+             is_active = true,
+             updated_at = NOW()`,
+          [`t-${slug.slice(0, 48)}`, slug, business.name, effectiveNiche]
+        );
+        await edgePool.end();
+      } catch (edgeSyncErr) {
+        console.warn('[rebrand-single] Live Supabase tenant sync notice:', edgeSyncErr.message);
+      }
     }
 
     res.json({
@@ -860,8 +907,74 @@ app.post('/api/ai/edit', async (req, res) => {
 // Create a booking (called by injected widgets on live sites + the chatbot + public endpoints + Supabase Edge Function path).
 app.post(['/api/bookings', '/api/public/bookings', '/functions/v1/public-bookings'], async (req, res) => {
   try {
-    const idempotencyKey = req.headers['x-idempotency-key'] || req.body?.idempotencyKey || req.body?.idempotency_key;
-    const booking = await createBookingAsync({ ...req.body, idempotencyKey });
+    const b = req.body || {};
+    // 1. Validate basic request structure before any database or rate-limit RPC calls
+    const slug = String(b.slug || '').trim().toLowerCase();
+    if (!slug || !/^[a-z0-9][a-z0-9-]{0,120}$/.test(slug)) {
+      return res.status(400).json({ ok: false, error: 'Missing required field: slug' });
+    }
+
+    const customerName = String(b.customerName || b.customer_name || b.name || '').trim();
+    if (!customerName || customerName.length < 2) {
+      return res.status(400).json({ ok: false, error: 'Customer name must be at least 2 characters' });
+    }
+
+    const phone = String(b.phone || '').trim();
+    const digits = phone.replace(/\D/g, '');
+    if (!digits || digits.length < 7) {
+      return res.status(400).json({ ok: false, error: 'Valid phone number with at least 7 digits is required' });
+    }
+
+    const email = String(b.email || '').trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ ok: false, error: 'Invalid email address format' });
+    }
+
+    // 2. Authoritative tenant registration & active status check BEFORE per-tenant rate-limit buckets
+    const tenantCheck = await verifyActiveTenantAsync(slug);
+    if (!tenantCheck.valid) {
+      if (tenantCheck.status === 503 || tenantCheck.status === 400) {
+        return res.status(tenantCheck.status).json({
+          ok: false,
+          error: tenantCheck.error,
+        });
+      }
+      // Unknown or inactive tenant (404): increment coarse per-IP invalid-slug bucket (no per-tenant row created)
+      const invRl = await checkInvalidSlugRateLimitAsync(req, 'bookings', 15);
+      if (invRl.ok === false) {
+        return res.status(invRl.status || 503).json({ ok: false, error: invRl.error });
+      }
+      if (!invRl.allowed) {
+        res.setHeader('Retry-After', String(invRl.retryAfter || 300));
+        return res.status(429).json({
+          ok: false,
+          error: 'Rate limit exceeded: Too many requests. Please try again later.',
+        });
+      }
+      return res.status(404).json({
+        ok: false,
+        error: tenantCheck.error,
+      });
+    }
+
+    // 3. Fail-closed atomic rate-limiting check (per-IP + per-tenant aggregate) for verified active tenant
+    const rl = await checkPublicRateLimitAsync(req, 'bookings', slug, 10, 30);
+    if (rl.ok === false) {
+      return res.status(rl.status || 503).json({
+        ok: false,
+        error: rl.error,
+      });
+    }
+    if (!rl.allowed) {
+      res.setHeader('Retry-After', String(rl.retryAfter || 300));
+      return res.status(429).json({
+        ok: false,
+        error: 'Rate limit exceeded: Too many requests. Please try again later.',
+      });
+    }
+
+    const idempotencyKey = req.headers['x-idempotency-key'] || b.idempotencyKey || b.idempotency_key;
+    const booking = await createBookingAsync({ ...b, slug, idempotencyKey });
     const statusCode = booking.isExisting ? 200 : 201;
 
     // Trigger transactional email automations for new bookings (Customer confirmation + Owner notification)
@@ -873,8 +986,100 @@ app.post(['/api/bookings', '/api/public/bookings', '/functions/v1/public-booking
 
     res.status(statusCode).json({ ok: true, id: booking.id, booking });
   } catch (err) {
-    const status = err.status || 500;
-    res.status(status).json({ ok: false, error: err.message });
+    res.status(err.status || 400).json({ ok: false, error: err.message });
+  }
+});
+
+// Public customer lead submission endpoint (Gym VIP pass, Home Valuation, General Inquiries)
+app.post(['/api/leads', '/api/public/leads', '/functions/v1/public-leads'], async (req, res) => {
+  try {
+    const { supabaseInsertLead } = await import('./lib/supabase.js');
+    const b = req.body || {};
+    const idempotencyKey = req.headers['x-idempotency-key'] || b.idempotencyKey || b.idempotency_key;
+
+    // 1. Validate basic request structure before any database or rate-limit RPC calls
+    const slug = String(b.slug || '').trim().toLowerCase();
+    if (!slug || !/^[a-z0-9][a-z0-9-]{0,120}$/.test(slug)) {
+      return res.status(400).json({ ok: false, error: 'Missing required field: slug' });
+    }
+
+    const rawLeadType = String(b.leadType || b.lead_type || 'general_inquiry').trim().toLowerCase();
+    const isNewsletter = rawLeadType === 'newsletter';
+
+    const customerName = String(b.customerName || b.customer_name || b.fullName || b.full_name || b.name || (isNewsletter ? 'Newsletter Subscriber' : '')).trim();
+    if (!customerName || customerName.length < 2) {
+      return res.status(400).json({ ok: false, error: 'Customer name must be at least 2 characters' });
+    }
+    const rawPhone = String(b.phone || '').trim();
+    const phone = (!rawPhone && isNewsletter) ? '(000) 000-0000' : rawPhone;
+    const digits = phone.replace(/\D/g, '');
+    if (!isNewsletter && (!digits || digits.length < 7)) {
+      return res.status(400).json({ ok: false, error: 'Valid phone number with at least 7 digits is required' });
+    }
+    const email = String(b.email || '').trim();
+    if (isNewsletter && (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+      return res.status(400).json({ ok: false, error: 'Valid email address is required for newsletter subscription' });
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ ok: false, error: 'Invalid email address format' });
+    }
+
+    // 2. Authoritative tenant registration & active status check BEFORE per-tenant rate-limit buckets
+    const tenantCheck = await verifyActiveTenantAsync(slug);
+    if (!tenantCheck.valid) {
+      if (tenantCheck.status === 503 || tenantCheck.status === 400) {
+        return res.status(tenantCheck.status).json({
+          ok: false,
+          error: tenantCheck.error,
+        });
+      }
+      // Unknown or inactive tenant (404): increment coarse per-IP invalid-slug bucket (no per-tenant row created)
+      const invRl = await checkInvalidSlugRateLimitAsync(req, 'leads', 15);
+      if (invRl.ok === false) {
+        return res.status(invRl.status || 503).json({ ok: false, error: invRl.error });
+      }
+      if (!invRl.allowed) {
+        res.setHeader('Retry-After', String(invRl.retryAfter || 300));
+        return res.status(429).json({
+          ok: false,
+          error: 'Rate limit exceeded: Too many requests. Please try again later.',
+        });
+      }
+      return res.status(404).json({
+        ok: false,
+        error: tenantCheck.error,
+      });
+    }
+
+    // 3. Fail-closed atomic rate-limiting check (per-IP + per-tenant aggregate) for verified active tenant
+    const rl = await checkPublicRateLimitAsync(req, 'leads', slug, 10, 30);
+    if (rl.ok === false) {
+      return res.status(rl.status || 503).json({
+        ok: false,
+        error: rl.error,
+      });
+    }
+    if (!rl.allowed) {
+      res.setHeader('Retry-After', String(rl.retryAfter || 300));
+      return res.status(429).json({
+        ok: false,
+        error: 'Rate limit exceeded: Too many requests. Please try again later.',
+      });
+    }
+
+    const lead = await supabaseInsertLead({
+      ...b,
+      slug,
+      customerName,
+      phone,
+      email: email || null,
+      idempotencyKey,
+    });
+
+    const statusCode = lead.isExisting ? 200 : 201;
+    res.status(statusCode).json({ ok: true, id: lead.id, lead, isExisting: lead.isExisting });
+  } catch (err) {
+    res.status(err.status || 500).json({ ok: false, error: err.message });
   }
 });
 

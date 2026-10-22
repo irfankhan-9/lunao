@@ -38,10 +38,18 @@ export const telnyx = {
 };
 
 export const cloudflare = {
-  apiToken: env.CLOUDFLARE_API_TOKEN || '',
-  accountId: env.CLOUDFLARE_ACCOUNT_ID || '',
-  project: env.CLOUDFLARE_PAGES_PROJECT || '',
-  branch: env.CLOUDFLARE_PAGES_BRANCH || 'main',
+  get apiToken() {
+    return env.CLOUDFLARE_API_TOKEN || '';
+  },
+  get accountId() {
+    return env.CLOUDFLARE_ACCOUNT_ID || '';
+  },
+  get project() {
+    return env.CLOUDFLARE_PAGES_PROJECT || 'lunao-web-designn';
+  },
+  get branch() {
+    return env.CLOUDFLARE_PAGES_BRANCH || 'main';
+  },
   get live() {
     return Boolean(this.apiToken && this.accountId && this.project);
   },

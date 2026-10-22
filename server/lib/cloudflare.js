@@ -10,12 +10,20 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { SITES_DIR, cloudflare, siteBaseUrl } from './config.js';
+import { ROOT_DIR, SITES_DIR, cloudflare, siteBaseUrl } from './config.js';
 
 async function writeSiteToDisk(slug, html) {
   const dir = path.join(SITES_DIR, slug);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(path.join(dir, 'index.html'), html, 'utf8');
+  // Ensure /lunao-booking-bridge.js is present at the root of SITES_DIR so Cloudflare Pages serves it for all deployed client sites
+  try {
+    const srcBridge = path.join(ROOT_DIR, 'public', 'lunao-booking-bridge.js');
+    const dstBridge = path.join(SITES_DIR, 'lunao-booking-bridge.js');
+    await fs.copyFile(srcBridge, dstBridge);
+  } catch (err) {
+    console.warn('[cloudflare] Could not copy lunao-booking-bridge.js to SITES_DIR:', err.message);
+  }
   return dir;
 }
 

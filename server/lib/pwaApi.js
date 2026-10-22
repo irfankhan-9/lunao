@@ -26,6 +26,8 @@ import {
   supabaseInsertCustomer,
   supabaseListAutomations,
   supabaseToggleAutomation,
+  supabaseListLeads,
+  supabaseUpdateLeadStatus,
 } from './supabase.js';
 import { sendEmail } from './resendService.js';
 import { triggerNewBookingAutomations } from './emailAutomations.js';
@@ -671,6 +673,29 @@ export function mountPwaApi(app) {
       }
     },
   );
+
+  // ---- Inbound Customer Leads -----
+  app.get('/api/pwa/:slug/leads', pwaAuth, assertSameSlug, async (req, res) => {
+    try {
+      const rows = await supabaseListLeads(req.params.slug);
+      res.json({ ok: true, leads: rows });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.patch('/api/pwa/:slug/leads/:id', pwaAuth, assertSameSlug, async (req, res) => {
+    try {
+      const { status } = req.body || {};
+      const updated = await supabaseUpdateLeadStatus(req.params.slug, req.params.id, status || 'contacted');
+      if (!updated) {
+        return res.status(404).json({ ok: false, error: 'Lead not found or update failed.' });
+      }
+      res.json({ ok: true, lead: updated });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
 
   // ---- Booking Configuration (Owner Customization) ----
   app.get('/api/pwa/:slug/booking-config', pwaAuth, assertSameSlug, async (req, res) => {

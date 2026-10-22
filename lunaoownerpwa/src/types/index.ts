@@ -292,3 +292,19 @@ export interface TenantDataState {
   activities: ActivityEvent[];
   connectedEmail: ConnectedEmailAccount;
 }
+
+export interface InboundLead {
+  id: string | number;
+  slug: string;
+  businessName?: string;
+  leadType: 'gym_vip_pass' | 'valuation_request' | 'general_inquiry' | string;
+  customerName: string;
+  phone: string;
+  email?: string | null;
+  notes?: string | null;
+  details?: Record<string, any>;
+  source?: string;
+  status: 'new' | 'contacted' | 'converted' | 'archived' | string;
+  createdAt: number;
+}
+

@@ -132,7 +132,7 @@
       background: var(--gold);
     }
 
-    /* Placeholder Badge — fully transparent on live/preview pages */
+    /* Placeholder Badge — fully transparent on live pages */
     .slot-badge {
       display: inline;
       background: none;
@@ -1844,7 +1844,7 @@
           <div class="logo-mark">
             <div class="logo-mark-dot"></div>
           </div>
-          <span class="logo-text"><span class="slot-badge" title="BUSINESS_NAME_SHORT">Vintage Cuts</span></span>
+          <span class="logo-text">Vintage Cuts</span>
         </a>
 
         <!-- Desktop Navigation Items -->
@@ -1890,7 +1890,7 @@
       <div class="container">
         <div class="hero-content">
           <span class="hero-eyebrow hero-anim-1">PREMIUM BARBERSHOP · <span class="slot-badge" title="CITY">Austin, TX</span></span>
-          <h1 class="hero-title hero-anim-1"><span class="slot-badge" title="BUSINESS_NAME">Vintage Cuts Barber Lounge</span></h1>
+          <h1 class="hero-title hero-anim-1">Vintage Cuts Barber Lounge</h1>
           <div class="divider-line hero-anim-2"></div>
           <p class="hero-sub hero-anim-2">Expert cuts, clean fades, and old-school service. Walk in or book your seat with <span class="slot-badge" title="CITY">Austin, TX</span>'s elite grooming specialists.</p>
           
@@ -2328,20 +2328,20 @@
         <div class="booking-wrapper reveal-elem">
           <!-- Left Column: Form -->
           <div class="booking-box" id="booking-form-container">
-            <form id="appointment-form" novalidate>
+            <form id="appointment-form" data-lunao-booking="true" data-lunao-inline-booking="true" onsubmit="handleBarberBooking(event)" novalidate>
               <div class="form-group">
                 <label class="form-label" for="client-name">Your Full Name</label>
-                <input type="text" id="client-name" class="form-input" placeholder="e.g. John Doe" required>
+                <input type="text" id="client-name" name="name" class="form-input" placeholder="e.g. John Doe" required autocomplete="name">
               </div>
 
               <div class="form-group">
                 <label class="form-label" for="client-phone">Your Mobile Phone</label>
-                <input type="tel" id="client-phone" class="form-input" placeholder="e.g. (512) 555-0182" required>
+                <input type="tel" id="client-phone" name="phone" class="form-input" placeholder="e.g. (512) 555-0182" required autocomplete="tel">
               </div>
 
               <div class="form-group">
                 <label class="form-label" for="booking-service">Selected Craft Service</label>
-                <select id="booking-service" class="form-input" required>
+                <select id="booking-service" name="service" class="form-input" required>
                   <option value="" disabled selected>— Choose Barber Service —</option>
                   <option value="Classic Haircut">Classic Haircut — From $25</option>
                   <option value="Skin Fade">Skin Fade — From $30</option>
@@ -2361,11 +2361,11 @@
               <div class="form-row-23">
                 <div class="form-group">
                   <label class="form-label" for="booking-date">Appointment Date</label>
-                  <input type="date" id="booking-date" class="form-input" required>
+                  <input type="date" id="booking-date" name="date" class="form-input" required>
                 </div>
                 <div class="form-group">
                   <label class="form-label" for="booking-time">Preferred Time Slot</label>
-                  <select id="booking-time" class="form-input" required>
+                  <select id="booking-time" name="time" class="form-input" required>
                     <option value="" disabled selected>— Choose Time —</option>
                     <option value="9:00 AM">9:00 AM</option>
                     <option value="9:30 AM">9:30 AM</option>
@@ -2392,7 +2392,7 @@
 
               <div class="form-group">
                 <label class="form-label" for="booking-notes">Special Notes (Optional)</label>
-                <textarea id="booking-notes" class="form-input" rows="3" placeholder="Tell us if you have preferred barbers / specific instructions..."></textarea>
+                <textarea id="booking-notes" name="notes" class="form-input" rows="3" placeholder="Tell us if you have preferred barbers / specific instructions..."></textarea>
               </div>
 
               <button type="submit" class="btn-submit" id="submit-appointment-btn">Request Reservation</button>
@@ -2573,7 +2573,7 @@
           <div class="logo-mark">
             <div class="logo-mark-dot"></div>
           </div>
-          <span class="logo-text"><span class="slot-badge" title="BUSINESS_NAME_SHORT">Vintage Cuts</span></span>
+          <span class="logo-text">Vintage Cuts</span>
         </div>
 
         <p class="footer-tagline">Quality cuts. Old-school respect. <span class="slot-badge" title="CITY">Austin, TX</span>'s absolute finest.</p>
@@ -2596,7 +2596,7 @@
         <div class="footer-bottom-line"></div>
 
         <div class="footer-copyright">
-          <span>&copy; <span id="current-year"></span> <span class="slot-badge" title="BUSINESS_NAME">Vintage Cuts Barber Lounge</span>. All rights reserved.</span>
+          <span>&copy; <span id="current-year"></span> Vintage Cuts Barber Lounge. All rights reserved.</span>
           <span class="footer-powerBy">Built &amp; automated by <span>Lunao.io</span></span>
         </div>
       </div>
@@ -2754,8 +2754,7 @@
         });
       }
 
-      // slot-badge tooltip disabled on preview pages
-      });
+      // slot-badge tooltip disabled on live compiled pages
 
       // Booking Form dynamic submit with animations and replacement
       const apptForm = document.getElementById("appointment-form");
@@ -3002,7 +3001,7 @@
       </button>
       <div class="logo-header" style="pointer-events:none;">
         <div class="logo-mark"><div class="logo-mark-dot"></div></div>
-        <span class="logo-text"><span class="slot-badge" title="BUSINESS_NAME_SHORT">Vintage Cuts</span></span>
+        <span class="logo-text">Vintage Cuts</span>
       </div>
     </div>
     <div class="article-container">

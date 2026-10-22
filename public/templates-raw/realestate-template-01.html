@@ -2157,6 +2157,7 @@
         </div>
         <div>
           <div class="lead-card" id="leadFormCard">
+            <div class="form-error-message" id="reErrorMessage" style="display:none; background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#fca5a5; padding:12px 16px; border-radius:8px; margin-bottom:16px; font-size:14px; text-align:left;"></div>
             <form id="valuationForm" onsubmit="handleFormSubmit(event)">
               <div class="form-group">
                 <label for="fullName">Full Name</label>
@@ -3005,15 +3006,194 @@
     // ----------------------------------------
     // PRIVATE LEAD FORM HANDLE
     // ----------------------------------------
-    function handleFormSubmit(event) {
-      event.preventDefault();
-      playAudio('success-chime');
-      
+    function showReFormError(message) {
+      const errAlert = document.getElementById('reErrorMessage');
+      if (errAlert) {
+        errAlert.textContent = message;
+        errAlert.style.display = 'block';
+      } else {
+        alert(message);
+      }
+    }
+
+    function clearReFormError() {
+      const errAlert = document.getElementById('reErrorMessage');
+      if (errAlert) {
+        errAlert.style.display = 'none';
+        errAlert.textContent = '';
+      }
+    }
+
+    function getResolvedReSlug() {
+      if (window.LUNAO_SLUG && typeof window.LUNAO_SLUG === 'string' && !window.LUNAO_SLUG.includes('{')) {
+        return window.LUNAO_SLUG.trim();
+      }
+      if (window.location && window.location.pathname) {
+        const m = window.location.pathname.match(/\/sites\/([^\/]+)/);
+        if (m && m[1]) return m[1].trim();
+      }
+      return 'crestview-luxury-realestate';
+    }
+
+    function getOrCreateReIdempotencyKey(form) {
+      if (form.dataset.idempotencyKey) {
+        return form.dataset.idempotencyKey;
+      }
+      const key = 're-lead-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+      form.dataset.idempotencyKey = key;
+      return key;
+    }
+
+    function getLeadSubmissionEndpoints() {
+      const list = [];
+      if (window.LUNAO_LEADS_API_URL && typeof window.LUNAO_LEADS_API_URL === 'string') {
+        list.push(window.LUNAO_LEADS_API_URL.replace(/\/+$/, ''));
+      }
+      const supabaseBase = window.LUNAO_SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+      list.push(`${supabaseBase.replace(/\/+$/, '')}/functions/v1/public-leads`);
+      if (window.location && /^https?:$/i.test(window.location.protocol)) {
+        list.push('/api/leads');
+        list.push('/api/public/leads');
+        list.push('/functions/v1/public-leads');
+      }
+      list.push('https://api.lunao.app/api/leads');
+      list.push('https://lunao.app/api/leads');
+      return [...new Set(list)];
+    }
+
+    async function handleFormSubmit(event) {
+      if (event && typeof event.preventDefault === 'function') event.preventDefault();
       const form = document.getElementById('valuationForm');
-      const success = document.getElementById('successMessage');
-      
-      form.style.display = 'none';
-      success.style.display = 'block';
+      if (!form || form.dataset.submitting === 'true') return;
+      clearReFormError();
+
+      const nameInput = document.getElementById('fullName');
+      const phoneInput = document.getElementById('phone');
+      const emailInput = document.getElementById('email');
+      const addressInput = document.getElementById('address');
+      const propTypeSelect = document.getElementById('propertyType');
+      const timelineSelect = document.getElementById('timeline');
+      const messageInput = document.getElementById('message');
+      const submitBtn = form.querySelector('button[type="submit"]');
+
+      const name = (nameInput ? nameInput.value : '').trim();
+      const phone = (phoneInput ? phoneInput.value : '').trim();
+      const email = (emailInput ? emailInput.value : '').trim();
+      const address = (addressInput ? addressInput.value : '').trim();
+      const propertyType = (propTypeSelect ? propTypeSelect.value : 'Single Family').trim();
+      const timeline = (timelineSelect ? timelineSelect.value : 'Immediately').trim();
+      const message = (messageInput ? messageInput.value : '').trim();
+
+      if (!name || name.length < 2) {
+        if (typeof playAudio === 'function') playAudio('tap');
+        showReFormError('Please enter your full name (at least 2 characters).');
+        if (nameInput) nameInput.focus();
+        return;
+      }
+
+      if (!phone || phone.replace(/\D/g, '').length < 7) {
+        if (typeof playAudio === 'function') playAudio('tap');
+        showReFormError('Please enter a valid telephone number (at least 7 digits).');
+        if (phoneInput) phoneInput.focus();
+        return;
+      }
+
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        if (typeof playAudio === 'function') playAudio('tap');
+        showReFormError('Please enter a valid email address.');
+        if (emailInput) emailInput.focus();
+        return;
+      }
+
+      if (!address || address.length < 3) {
+        if (typeof playAudio === 'function') playAudio('tap');
+        showReFormError('Please enter the property address.');
+        if (addressInput) addressInput.focus();
+        return;
+      }
+
+      const slug = getResolvedReSlug();
+      const rawBizName = window.LUNAO_BUSINESS_NAME || '{{BUSINESS_NAME}}';
+      const businessName = rawBizName.includes('{' + '{') ? 'Crestview Luxury Real Estate' : rawBizName;
+      const idempotencyKey = getOrCreateReIdempotencyKey(form);
+
+      form.dataset.submitting = 'true';
+      let originalBtnText = 'Get My Free Home Valuation';
+      if (submitBtn) {
+        originalBtnText = submitBtn.textContent || originalBtnText;
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Requesting Valuation...';
+      }
+
+      const payload = {
+        slug: slug,
+        businessName: businessName,
+        leadType: 'valuation_request',
+        customerName: name,
+        phone: phone,
+        email: email,
+        notes: `Property: ${address} | Type: ${propertyType} | Timeline: ${timeline}${message ? ' | Message: ' + message : ''}`,
+        details: {
+          address: address,
+          propertyType: propertyType,
+          timeline: timeline,
+          message: message
+        },
+        source: 'form',
+        status: 'new',
+        idempotencyKey: idempotencyKey,
+        createdAt: Date.now()
+      };
+
+      const endpoints = getLeadSubmissionEndpoints();
+      let lastError = null;
+
+      for (const endpoint of endpoints) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Idempotency-Key': idempotencyKey
+            },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+          });
+
+          clearTimeout(timeoutId);
+
+          const json = await res.json().catch(() => null);
+
+          if (res.ok && (res.status === 200 || res.status === 201) && json && (json.ok || json.lead || json.id)) {
+            form.style.display = 'none';
+            const succMsg = document.getElementById('successMessage');
+            if (succMsg) succMsg.style.display = 'block';
+            if (typeof playAudio === 'function') playAudio('success-chime');
+            form.dataset.submitting = 'false';
+            return;
+          }
+
+          if (json && json.error) {
+            lastError = json.error;
+          } else {
+            lastError = `Server returned status ${res.status}`;
+          }
+        } catch (fetchErr) {
+          lastError = fetchErr.message || 'Network connectivity error';
+        }
+      }
+
+      // If all endpoints failed
+      form.dataset.submitting = 'false';
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalBtnText;
+      }
+      if (typeof playAudio === 'function') playAudio('tap');
+      showReFormError('Unable to request valuation. ' + (lastError || 'Please try again in a moment.'));
     }
 
     // ----------------------------------------

@@ -2305,7 +2305,7 @@
     <div class="nav-container">
       <a href="#home" class="logo-box">
         <div class="tooth-logo"></div>
-        <span class="logo-text">Dallas Dental</span>
+        <span class="logo-text">Dallas Family Dental</span>
       </a>
 
       <div class="nav-links">
@@ -2323,7 +2323,7 @@
       </div>
 
       <div class="nav-actions">
-        <a href="tel:2145550211" class="nav-phone">(214) 555-0211</a>
+        <a href="tel:2145550188" class="nav-phone">(214) 555-0188</a>
         <button class="btn btn-teal nav-book-btn">Book Now</button>
       </div>
 
@@ -2340,7 +2340,7 @@
     <div class="mobile-overlay-header">
       <div class="logo-box">
         <div class="tooth-logo"></div>
-        <span class="logo-text">Dallas Dental</span>
+        <span class="logo-text">Dallas Family Dental</span>
       </div>
       <button class="mobile-close" id="mobile_close">×</button>
     </div>
@@ -2365,7 +2365,7 @@
   <!-- Emergency Banner -->
   <div class="emergency-banner">
     <span class="emergency-text">🚨 Dental emergency? We see same-day urgent cases.</span>
-    <a href="tel:2145550211" class="emergency-cta">Call Now: (214) 555-0211 📞</a>
+    <a href="tel:2145550188" class="emergency-cta">Call Now: (214) 555-0188 📞</a>
   </div>
 
   <!-- HERO -->
@@ -2611,7 +2611,7 @@
           <div class="team-top">
             <div class="portrait portrait-1">SK</div>
             <div class="team-info">
-              <span class="team-name">Dr. Sarah Keller, DDS</span>
+              <span class="team-name">Dr. Sarah Kovacs, DDS</span>
               <span class="team-role">Lead Dentist</span>
               <span class="team-edu">Columbia University</span>
             </div>
@@ -3134,7 +3134,7 @@
                 <div class="badge-check"></div>
               </div>
             </div>
-            <p class="insurance-sub">Not sure if we accept yours? Call us at (214) 555-0211 or ask at booking.</p>
+            <p class="insurance-sub">Not sure if we accept yours? Call us at (214) 555-0188 or ask at booking.</p>
           </div>
 
           <div class="insurance-right">
@@ -3246,11 +3246,11 @@
 
       <div class="book-grid">
         <div class="book-form-box" id="form_container">
-          <form class="book-form" id="booking_form">
+          <form class="book-form" id="booking_form" data-lunao-booking="true" data-lunao-inline-booking="true" novalidate>
             <div class="form-group-half">
               <div class="form-group">
                 <label class="form-label">Full Name *</label>
-                <input type="text" class="form-input" id="frm_name" placeholder="John Doe" required>
+                <input type="text" class="form-input" id="frm_name" name="name" placeholder="John Doe" required autocomplete="name">
               </div>
               <div class="form-group">
                 <label class="form-label">Date of Birth</label>
@@ -3261,18 +3261,18 @@
             <div class="form-group-half">
               <div class="form-group">
                 <label class="form-label">Email Address *</label>
-                <input type="email" class="form-input" id="frm_email" placeholder="john@example.com" required>
+                <input type="email" class="form-input" id="frm_email" name="email" placeholder="john@example.com" required autocomplete="email">
               </div>
               <div class="form-group">
                 <label class="form-label">Phone Number *</label>
-                <input type="tel" class="form-input" id="frm_phone" placeholder="(214) 555-0211" required>
+                <input type="tel" class="form-input" id="frm_phone" name="phone" placeholder="(214) 555-0188" required autocomplete="tel">
               </div>
             </div>
 
             <div class="form-group-half">
               <div class="form-group">
                 <label class="form-label">Service Needed</label>
-                <select class="form-input" id="frm_service">
+                <select class="form-input" id="frm_service" name="service" required>
                   <option value="Comp Exam">Comprehensive Exam</option>
                   <option value="Teeth Cleaning">Teeth Cleaning</option>
                   <option value="Whitening">Teeth Whitening</option>
@@ -3282,7 +3282,7 @@
               </div>
               <div class="form-group">
                 <label class="form-label">Preferred Provider</label>
-                <select class="form-input" id="frm_provider">
+                <select class="form-input" id="frm_provider" name="service_provider">
                   <option value="No Preference">No Preference</option>
                   <option value="Dr. Sarah Kovacs">Dr. Sarah Kovacs</option>
                   <option value="Dr. Michael Chen">Dr. Michael Chen</option>
@@ -3294,21 +3294,21 @@
             <div class="form-group-half">
               <div class="form-group">
                 <label class="form-label">Preferred Date</label>
-                <input type="date" class="form-input" id="frm_date">
+                <input type="date" class="form-input" id="frm_date" name="date">
               </div>
               <div class="form-group">
                 <label class="form-label">Preferred Time Slot</label>
-                <select class="form-input" id="frm_time">
-                  <option value="Morning">Morning (8:00 AM - 12:00 PM)</option>
-                  <option value="Afternoon">Afternoon (12:00 PM - 4:00 PM)</option>
-                  <option value="Late Afternoon">Late Afternoon (4:00 PM - 6:00 PM)</option>
+                <select class="form-input" id="frm_time" name="time">
+                  <option value="09:00 AM">Morning (8:00 AM - 12:00 PM)</option>
+                  <option value="01:00 PM">Afternoon (12:00 PM - 4:00 PM)</option>
+                  <option value="04:00 PM">Late Afternoon (4:00 PM - 6:00 PM)</option>
                 </select>
               </div>
             </div>
 
             <div class="form-group" id="hear_about_us_group">
               <label class="form-label">How did you hear about us?</label>
-              <select class="form-input" id="frm_hear">
+              <select class="form-input" id="frm_hear" name="service_referral">
                 <option value="Google Search">Google Search</option>
                 <option value="Social Media">Social Media</option>
                 <option value="Friend Referral">Friend Referral</option>
@@ -3318,10 +3318,12 @@
 
             <div class="form-group">
               <label class="form-label">Additional Notes</label>
-              <input type="text" class="form-input" id="frm_notes" placeholder="Any details or constraints...">
+              <input type="text" class="form-input" id="frm_notes" name="notes" placeholder="Any details or constraints...">
             </div>
 
-            <button type="submit" class="btn btn-teal btn-large" style="width: 100%; border-radius: var(--r-sm);">Request Appointment</button>
+            <div id="dentist_form_error" class="form-error-banner" style="display:none;margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#b91c1c;font-size:13.5px;line-height:1.5;text-align:left;"></div>
+
+            <button type="submit" id="frm_dentist_submit_btn" class="btn btn-teal btn-large" style="width: 100%; border-radius: var(--r-sm);">Request Appointment</button>
             <p class="form-fine">We confirm within 1 hour by phone or email. Your information is kept strictly private.</p>
           </form>
         </div>
@@ -3358,7 +3360,7 @@
             </div>
           </div>
 
-          <a href="tel:2145550211" class="sidebar-phone">(214) 555-0211</a>
+          <a href="tel:2145550188" class="sidebar-phone">(214) 555-0188</a>
         </div>
       </div>
     </div>
@@ -3428,19 +3430,19 @@
         <!-- Col 1 -->
         <div class="contact-col">
           <span class="contact-label">TELEPHONE</span>
-          <span class="contact-val"><a href="tel:2145550211">(214) 555-0211</a></span>
+          <span class="contact-val"><a href="tel:2145550188">(214) 555-0188</a></span>
           <p class="contact-info-text">Mon–Sat, 8 AM – 6 PM. Emergencies answered any time.</p>
-          <a href="tel:2145550211" class="contact-action-btn">CALL NOW →</a>
+          <a href="tel:2145550188" class="contact-action-btn">CALL NOW →</a>
         </div>
 
         <!-- Col 2 -->
         <div class="contact-col">
           <span class="contact-label">SOCIAL</span>
           <span class="contact-val contact-val-small">
-            <a href="https://instagram.com/radiantsmiles_dental" target="_blank">@radiantsmiles_dental</a>
+            <a href="https://instagram.com/dallasdental_care" target="_blank">@dallasdental_care</a>
           </span>
           <p class="contact-info-text">Before and after photos, patient stories, and team updates from our Dallas, TX practice.</p>
-          <a href="https://instagram.com/radiantsmiles_dental" class="contact-action-btn" target="_blank">FOLLOW ON INSTAGRAM</a>
+          <a href="https://instagram.com/dallasdental_care" class="contact-action-btn" target="_blank">FOLLOW ON INSTAGRAM</a>
         </div>
 
         <!-- Col 3 -->
@@ -3461,7 +3463,7 @@
         <div class="footer-left">
           <div class="footer-logo">
             <div class="tooth-logo"></div>
-            <span class="footer-logo-text">Dallas Dental</span>
+            <span class="footer-logo-text">Dallas Family Dental</span>
           </div>
           <p class="footer-tagline">General, cosmetic & emergency dentistry. Dallas, TX.</p>
         </div>
@@ -3755,41 +3757,254 @@
       hearGroup.style.display = 'none';
     });
 
-    // Booking form logic
+    // Booking form logic (Hardened Supabase Persistence with Patient Privacy Protection)
     const bookingForm = document.getElementById('booking_form');
-    bookingForm.addEventListener('submit', (e) => {
-      e.preventDefault();
 
-      const requiredInputs = bookingForm.querySelectorAll('[required]');
-      let hasError = false;
+    function getResolvedDentistSlug() {
+      const openTag = '{' + '{';
+      const winSlug = typeof window.LUNAO_SLUG === 'string' ? window.LUNAO_SLUG.trim() : '';
+      if (winSlug && !winSlug.includes(openTag) && winSlug !== 'preview') {
+        return winSlug;
+      }
+      const parts = (window.location.pathname || '').split('/').filter(Boolean);
+      const sitesIdx = parts.indexOf('sites');
+      if (sitesIdx !== -1 && parts[sitesIdx + 1]) {
+        return parts[sitesIdx + 1];
+      }
+      if (winSlug && !winSlug.includes(openTag)) {
+        return winSlug;
+      }
+      const last = parts[parts.length - 1] || '';
+      if (last && !/\.html?$/i.test(last)) return last;
+      return 'dentist-client';
+    }
 
-      requiredInputs.forEach(inp => {
-        if (!inp.value.trim()) {
-          hasError = true;
-          inp.classList.add('highlight-err');
+    function getOrCreateDentistIdempotencyKey(form) {
+      if (!form.dataset.idempotencyKey) {
+        const randomPart = Math.random().toString(36).substring(2, 10);
+        form.dataset.idempotencyKey = 'bk_' + Date.now().toString(36) + '_' + randomPart;
+      }
+      return form.dataset.idempotencyKey;
+    }
+
+    function showDentistFormError(message) {
+      let errBox = document.getElementById('dentist_form_error');
+      if (!errBox) {
+        errBox = document.createElement('div');
+        errBox.id = 'dentist_form_error';
+        errBox.className = 'form-error-banner';
+        errBox.style.cssText = 'margin-bottom:16px;padding:12px 16px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#b91c1c;font-size:13.5px;line-height:1.5;text-align:left;';
+        const submitBtn = document.getElementById('frm_dentist_submit_btn');
+        if (submitBtn) {
+          bookingForm.insertBefore(errBox, submitBtn);
         } else {
-          inp.classList.remove('highlight-err');
+          bookingForm.appendChild(errBox);
         }
-      });
+      }
+      const cleanMsg = String(message || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      errBox.innerHTML = '<strong>⚠️ Appointment request issue:</strong> ' + cleanMsg + '<br><span style="font-size:12px;opacity:0.85;">Your information is preserved above. You can retry safely or call our office directly.</span>';
+      errBox.style.display = 'block';
+    }
 
-      if (hasError) {
+    function clearDentistFormError() {
+      const errBox = document.getElementById('dentist_form_error');
+      if (errBox) errBox.style.display = 'none';
+    }
+
+    function getBookingSubmissionEndpoints() {
+      const list = [];
+      if (window.LUNAO_BOOKING_API_URL && typeof window.LUNAO_BOOKING_API_URL === 'string') {
+        list.push(window.LUNAO_BOOKING_API_URL.replace(/\/+$/, ''));
+      }
+      const supabaseBase = window.LUNAO_SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+      list.push(`${supabaseBase.replace(/\/+$/, '')}/functions/v1/public-bookings`);
+      if (window.location && /^https?:$/i.test(window.location.protocol)) {
+        list.push('/api/bookings');
+        list.push('/api/public/bookings');
+        list.push('/functions/v1/public-bookings');
+      }
+      list.push('https://api.lunao.app/api/bookings');
+      list.push('https://lunao.app/api/bookings');
+      return [...new Set(list)];
+    }
+
+    bookingForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (bookingForm.dataset.submitting === 'true') return;
+      clearDentistFormError();
+
+      const nameInput = document.getElementById('frm_name');
+      const emailInput = document.getElementById('frm_email');
+      const phoneInput = document.getElementById('frm_phone');
+      const serviceSelect = document.getElementById('frm_service');
+      const providerSelect = document.getElementById('frm_provider');
+      const dateInput = document.getElementById('frm_date');
+      const timeSelect = document.getElementById('frm_time');
+      const notesInput = document.getElementById('frm_notes');
+      const submitBtn = document.getElementById('frm_dentist_submit_btn');
+
+      const name = (nameInput ? nameInput.value : '').trim();
+      const email = (emailInput ? emailInput.value : '').trim();
+      const phone = (phoneInput ? phoneInput.value : '').trim();
+      const service = (serviceSelect && serviceSelect.value) ? serviceSelect.value.trim() : '';
+      const date = (dateInput ? dateInput.value : '').trim();
+      const rawTime = (timeSelect && timeSelect.value) ? timeSelect.value.trim() : '';
+      const userNotes = (notesInput ? notesInput.value : '').trim();
+
+      // Normalize time to contract-approved format
+      let time = rawTime;
+      if (time === 'Morning') time = '09:00 AM';
+      else if (time === 'Afternoon') time = '01:00 PM';
+      else if (time === 'Late Afternoon') time = '04:00 PM';
+
+      // Required field validation
+      if (!name || name.length < 2) {
         Sound.urgent();
         bookingForm.classList.add('shake');
         setTimeout(() => bookingForm.classList.remove('shake'), 400);
+        showDentistFormError('Please enter your full name (at least 2 characters).');
+        if (nameInput) nameInput.focus();
         return;
       }
 
-      Sound.success();
-      const name = document.getElementById('frm_name').value;
-      const email = document.getElementById('frm_email').value;
-      const formContainer = document.getElementById('form_container');
-      
-      formContainer.innerHTML = `
-        <div class="success-box">
-          <h3>Appointment Requested, ${name}!</h3>
-          <p>We have received your requested date slot and will confirm with you at <strong>${email}</strong> within an hour. See you soon!</p>
-        </div>
-      `;
+      if (!phone || phone.replace(/\D/g, '').length < 7) {
+        Sound.urgent();
+        bookingForm.classList.add('shake');
+        setTimeout(() => bookingForm.classList.remove('shake'), 400);
+        showDentistFormError('Please enter a valid telephone number (at least 7 digits).');
+        if (phoneInput) phoneInput.focus();
+        return;
+      }
+
+      if (!service) {
+        Sound.urgent();
+        bookingForm.classList.add('shake');
+        setTimeout(() => bookingForm.classList.remove('shake'), 400);
+        showDentistFormError('Please select a dental service.');
+        if (serviceSelect) serviceSelect.focus();
+        return;
+      }
+
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        Sound.urgent();
+        bookingForm.classList.add('shake');
+        setTimeout(() => bookingForm.classList.remove('shake'), 400);
+        showDentistFormError('Please provide a valid email address.');
+        if (emailInput) emailInput.focus();
+        return;
+      }
+
+      // PRIVACY SAFEGUARD:
+      // Date of Birth (#frm_dob) is intentionally NOT read, NOT mapped, and NOT included in notes.
+      // Referral source (#frm_hear) is omitted from booking persistence.
+      // Only user-entered notes and non-sensitive provider preference are retained.
+      let notes = userNotes;
+      const provider = (providerSelect && providerSelect.value) ? providerSelect.value.trim() : '';
+      if (provider && provider !== 'No Preference') {
+        notes = notes ? `${notes} (Preferred Provider: ${provider})` : `Preferred Provider: ${provider}`;
+      }
+
+      const slug = getResolvedDentistSlug();
+      const rawBizName = window.LUNAO_BUSINESS_NAME || 'Dallas Family Dental Care';
+      const businessName = rawBizName.includes('{' + '{') ? 'Radiant Smiles Dental' : rawBizName;
+      const idempotencyKey = getOrCreateDentistIdempotencyKey(bookingForm);
+
+      bookingForm.dataset.submitting = 'true';
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Requesting Appointment...';
+      }
+
+      const payload = {
+        slug: slug,
+        businessName: businessName,
+        customerName: name,
+        phone: phone,
+        email: email,
+        service: service,
+        date: date || '',
+        time: time || '',
+        notes: notes || '',
+        source: 'form',
+        status: 'new',
+        idempotencyKey: idempotencyKey,
+        createdAt: Date.now()
+      };
+
+      const endpoints = getBookingSubmissionEndpoints();
+      let lastError = null;
+      let successData = null;
+
+      for (const endpoint of endpoints) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Idempotency-Key': idempotencyKey
+            },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+          });
+
+          clearTimeout(timeoutId);
+
+          const json = await res.json().catch(() => null);
+
+          if (res.ok && (res.status === 200 || res.status === 201) && json && (json.ok || json.booking || json.id)) {
+            successData = json;
+            break;
+          }
+
+          if (res.status === 400 || res.status === 422) {
+            lastError = new Error((json && (json.error || json.message)) || 'Invalid appointment details provided.');
+            break;
+          }
+
+          if (res.status >= 500) {
+            lastError = new Error((json && json.error) || 'The dental booking server encountered an issue. Please try again.');
+          }
+        } catch (fetchErr) {
+          lastError = fetchErr;
+        }
+      }
+
+      if (successData) {
+        Sound.success();
+        const formContainer = document.getElementById('form_container');
+        if (formContainer) {
+          formContainer.innerHTML = `
+            <div class="success-box">
+              <h3>Appointment Requested, ${name}!</h3>
+              <p>We have received your requested date slot and will confirm with you at <strong>${phone || email}</strong> within an hour. See you soon!</p>
+            </div>
+          `;
+        }
+
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({
+              type: 'LUNAO_BOOKING_SUCCESS',
+              data: successData.booking || payload,
+              id: successData.id || successData.booking?.id,
+              timestamp: Date.now()
+            }, '*');
+          }
+        } catch (e) {}
+      } else {
+        Sound.urgent();
+        bookingForm.classList.add('shake');
+        setTimeout(() => bookingForm.classList.remove('shake'), 400);
+        bookingForm.dataset.submitting = 'false';
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Request Appointment';
+        }
+        showDentistFormError(lastError ? lastError.message : 'Unable to confirm your appointment request with the server. Please try again.');
+      }
     });
 
     // Wire general actions
