@@ -88,25 +88,25 @@ export const CampaignTemplateStep: React.FC<CampaignTemplateStepProps> = ({
   }, [campaignType]);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
       {/* Clean White / Blue / Green Header Banner */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center shrink-0 shadow-xs">
-              <Globe className="w-6 h-6" />
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 md:p-8 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 sm:gap-4">
+          <div className="flex items-start gap-3 sm:gap-4">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center shrink-0 shadow-xs">
+              <Globe className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
 
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] uppercase font-bold tracking-wider text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100">
+            <div className="space-y-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] sm:text-[11px] uppercase font-bold tracking-wider text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100">
                   Step 03 · Template
                 </span>
                 <span className="text-xs text-slate-500 font-medium">
                   {allTemplates.length} layouts for {selectedNiche}
                 </span>
               </div>
-              <h3 className="font-serif text-2xl md:text-3xl font-bold text-slate-900 leading-tight">
+              <h3 className="font-serif text-xl sm:text-2xl md:text-3xl font-bold text-slate-900 leading-tight">
                 Choose your website template
               </h3>
               <p className="text-xs md:text-sm text-slate-600 max-w-2xl leading-relaxed">
@@ -116,7 +116,7 @@ export const CampaignTemplateStep: React.FC<CampaignTemplateStepProps> = ({
           </div>
 
           {/* Quick Search Input */}
-          <div className="relative max-w-xs w-full sm:self-center">
+          <div className="relative w-full sm:max-w-xs sm:self-center">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -131,7 +131,7 @@ export const CampaignTemplateStep: React.FC<CampaignTemplateStepProps> = ({
 
       {/* Templates Grid */}
       {filteredTemplates.length === 0 ? (
-        <div className="text-center py-16 px-6 bg-white rounded-2xl border border-dashed border-slate-200">
+        <div className="text-center py-12 sm:py-16 px-4 sm:px-6 bg-white rounded-2xl border border-dashed border-slate-200">
           <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center mx-auto mb-3">
             <Globe className="w-6 h-6" />
           </div>
@@ -148,7 +148,7 @@ export const CampaignTemplateStep: React.FC<CampaignTemplateStepProps> = ({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
           {filteredTemplates.map((tpl) => {
             const isSelected = selectedTemplateId === tpl.id;
 
@@ -218,9 +218,9 @@ export const CampaignTemplateStep: React.FC<CampaignTemplateStepProps> = ({
                 </div>
 
                 {/* Card Body */}
-                <div className="p-5 flex-1 flex flex-col justify-between space-y-3 bg-white">
-                  <div>
-                    <h4 className="font-serif text-lg font-bold text-slate-900 group-hover:text-blue-600 transition-colors leading-snug truncate">
+                <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between space-y-3 bg-white">
+                  <div className="min-w-0">
+                    <h4 className="font-serif text-base sm:text-lg font-bold text-slate-900 group-hover:text-blue-600 transition-colors leading-snug truncate">
                       {tpl.name}
                     </h4>
                     <p className="text-xs text-slate-500 line-clamp-2 mt-1 leading-relaxed">

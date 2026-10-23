@@ -181,12 +181,12 @@ export const SmsLeadFinder: React.FC<SmsLeadFinderProps> = ({
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-xl font-serif text-ink">Find Leads in Canada</h2>
+          <h2 className="text-lg sm:text-xl font-serif text-ink">Find Leads in Canada</h2>
           <p className="text-xs text-ink-secondary mt-0.5">
             Discover businesses with phone numbers using Google Maps
           </p>
         </div>
-        <div className="bg-white border border-border-main rounded-xl p-12 flex flex-col items-center justify-center gap-3">
+        <div className="bg-white border border-border-main rounded-xl p-6 sm:p-12 flex flex-col items-center justify-center gap-3">
           <Loader2 className="w-8 h-8 text-accent animate-spin" />
           <p className="text-sm text-ink-secondary">Loading Canadian provinces…</p>
         </div>
@@ -195,9 +195,9 @@ export const SmsLeadFinder: React.FC<SmsLeadFinderProps> = ({
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-5 sm:space-y-6 animate-fade-in">
       <div>
-        <h2 className="text-xl font-serif text-ink">Find Leads in Canada</h2>
+        <h2 className="text-lg sm:text-xl font-serif text-ink">Find Leads in Canada</h2>
         <p className="text-xs text-ink-secondary mt-0.5">
           Discover businesses with phone numbers using Google Maps
         </p>
@@ -296,19 +296,19 @@ export const SmsLeadFinder: React.FC<SmsLeadFinderProps> = ({
             type="button"
             onClick={handleDiscover}
             disabled={stage === 'discovering'}
-            className="w-full px-6 py-4 bg-accent hover:bg-accent-hover text-white text-sm font-bold rounded-xl
+            className="w-full px-4 py-3.5 sm:px-6 sm:py-4 bg-accent hover:bg-accent-hover text-white text-xs sm:text-sm font-bold rounded-xl
                        flex items-center justify-center gap-2 transition-all shadow-sm hover:shadow-md active:scale-[0.98]
-                       disabled:opacity-60 disabled:cursor-not-allowed"
+                       disabled:opacity-60 disabled:cursor-not-allowed text-center"
           >
             {stage === 'discovering' ? (
               <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Discovering {niche} businesses in {selectedCity.name}…
+                <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin shrink-0" />
+                <span>Discovering {niche} businesses in {selectedCity.name}…</span>
               </>
             ) : (
               <>
-                <Sparkles className="w-5 h-5" />
-                Find {niche} businesses in {selectedCity.name}
+                <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                <span>Find {niche} businesses in {selectedCity.name}</span>
               </>
             )}
           </button>
@@ -322,7 +322,7 @@ export const SmsLeadFinder: React.FC<SmsLeadFinderProps> = ({
 
       {/* Error state */}
       {stage === 'error' && (
-        <div className="bg-danger-soft border-2 border-danger/30 rounded-xl p-5 text-center">
+        <div className="bg-danger-soft border-2 border-danger/30 rounded-xl p-4 sm:p-5 text-center">
           <AlertCircle className="w-8 h-8 text-danger mx-auto mb-2" />
           <p className="text-sm font-bold text-danger mb-1">Discovery failed</p>
           <p className="text-xs text-ink-secondary mb-4">{errorMsg}</p>
@@ -340,9 +340,9 @@ export const SmsLeadFinder: React.FC<SmsLeadFinderProps> = ({
       {/* Results */}
       {stage === 'results' && (
         <div className="space-y-4 animate-fade-in">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-bold text-ink">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-bold text-ink truncate">
                 {leads.length} businesses found in {selectedCity?.name}
               </p>
               <p className="text-[11px] text-ink-secondary mt-0.5">
@@ -353,7 +353,7 @@ export const SmsLeadFinder: React.FC<SmsLeadFinderProps> = ({
               type="button"
               onClick={handleDiscover}
               disabled={stage === 'discovering'}
-              className="px-3 py-1.5 border border-border-main hover:bg-off-white text-ink text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all disabled:opacity-50"
+              className="px-3 py-1.5 border border-border-main hover:bg-off-white text-ink text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all disabled:opacity-50 shrink-0"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${stage === 'discovering' ? 'animate-spin' : ''}`} />
               Refresh
@@ -385,7 +385,7 @@ export const SmsLeadFinder: React.FC<SmsLeadFinderProps> = ({
                   key={lead.phone}
                   type="button"
                   onClick={() => handleToggle(lead)}
-                  className={`w-full p-4 rounded-xl border-2 text-left flex items-start gap-3 transition-all ${
+                  className={`w-full p-3.5 sm:p-4 rounded-xl border-2 text-left flex items-start gap-2.5 sm:gap-3 transition-all ${
                     isSelected
                       ? 'border-accent bg-accent-soft'
                       : 'border-border-main hover:border-accent/40 bg-white'
@@ -399,8 +399,8 @@ export const SmsLeadFinder: React.FC<SmsLeadFinderProps> = ({
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-ink truncate">{lead.name}</p>
-                    <p className="text-xs text-ink-secondary mt-0.5">
+                    <p className="text-xs sm:text-sm font-bold text-ink truncate">{lead.name}</p>
+                    <p className="text-[11px] sm:text-xs text-ink-secondary mt-0.5 break-words">
                       {lead.address ? `${lead.address} · ` : ''}
                       {lead.city && lead.province ? `${lead.city}, ${lead.province}` : lead.city}
                     </p>

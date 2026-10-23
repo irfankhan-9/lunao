@@ -421,8 +421,8 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
     const pct = Math.min(100, Math.round(((completedSitesList.length) / Math.max(1, csvLeads.length)) * 100));
 
     return (
-      <div className="p-6 md:p-8 space-y-6 animate-fade-in">
-        <div className="bg-white border border-border-main rounded-3xl p-6 md:p-8 text-ink shadow-xl space-y-6 relative overflow-hidden">
+      <div className="p-4 sm:p-6 md:p-8 space-y-6 animate-fade-in">
+        <div className="bg-white border border-border-main rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 text-ink shadow-xl space-y-6 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-96 h-96 bg-accent/5 rounded-full blur-3xl pointer-events-none" />
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border-light pb-5 relative z-10">
@@ -431,7 +431,7 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
                 Lunao AI Rebranding Engine Active
               </div>
-              <h3 className="text-2xl font-bold font-serif text-ink">
+              <h3 className="text-xl sm:text-2xl font-bold font-serif text-ink">
                 Autonomous AI Rebranding in Progress
               </h3>
               <p className="text-xs text-ink-secondary">
@@ -440,7 +440,7 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="px-4 py-2 rounded-xl bg-surface border border-border-main text-right shadow-xs">
+              <div className="w-full sm:w-auto px-4 py-2 rounded-xl bg-surface border border-border-main text-right shadow-xs">
                 <p className="text-[10px] uppercase font-bold text-ink-tertiary">Verified Live</p>
                 <p className="text-lg font-bold font-mono text-emerald-600">
                   {completedSitesList.length} / {csvLeads.length}
@@ -551,20 +551,20 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
     const sites = celebratedCampaign.deployedSites || [];
     return (
       <div className="space-y-6 animate-fade-in">
-        <div className="p-6 md:p-8">
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-success-soft via-white to-accent-soft/40 border border-success/30 p-8 md:p-12 shadow-2xl">
+        <div className="p-4 sm:p-6 md:p-8">
+          <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-success-soft via-white to-accent-soft/40 border border-success/30 p-5 sm:p-8 md:p-12 shadow-2xl">
             <div className="absolute top-0 right-0 w-96 h-96 bg-success/10 rounded-full blur-3xl pointer-events-none" />
 
             <div className="relative z-10 max-w-2xl mx-auto text-center space-y-6">
-              <div className="w-20 h-20 rounded-full bg-success-soft border-2 border-success/30 flex items-center justify-center text-success mx-auto shadow-inner animate-bounce">
-                <Check className="w-10 h-10 stroke-[3]" />
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-success-soft border-2 border-success/30 flex items-center justify-center text-success mx-auto shadow-inner animate-bounce">
+                <Check className="w-8 h-8 sm:w-10 sm:h-10 stroke-[3]" />
               </div>
 
               <div className="space-y-2">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-success-soft border border-success/20 text-xs font-bold text-success uppercase tracking-wider">
                   Edge Server Deployment Live
                 </span>
-                <h2 className="text-3xl md:text-4xl font-serif font-bold text-ink">
+                <h2 className="text-2xl sm:text-3xl md:text-4xl font-serif font-bold text-ink">
                   Websites Live on Lunao Servers!
                 </h2>
                 <p className="text-sm md:text-base text-ink-secondary">
@@ -574,36 +574,36 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
 
               {/* Stats Counters Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4">
-                <div className="bg-white/90 border border-border-light rounded-2xl p-4 text-center shadow-xs">
+                <div className="bg-white/90 border border-border-light rounded-2xl p-3 sm:p-4 text-center shadow-xs">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">Total Leads</p>
-                  <p className="text-2xl font-bold text-ink font-mono mt-1">
+                  <p className="text-xl sm:text-2xl font-bold text-ink font-mono mt-1">
                     {celebratedCampaign.totalLeads ?? celebratedCampaign.leadsFound ?? celebratedCampaign.leads?.length ?? 0}
                   </p>
                   <p className="text-[10px] text-ink-tertiary mt-0.5">Processed</p>
                 </div>
-                <div className="bg-white/90 border border-border-light rounded-2xl p-4 text-center shadow-xs">
+                <div className="bg-white/90 border border-border-light rounded-2xl p-3 sm:p-4 text-center shadow-xs">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">Sites Built</p>
-                  <p className="text-2xl font-bold text-accent font-mono mt-1">
+                  <p className="text-xl sm:text-2xl font-bold text-accent font-mono mt-1">
                     {celebratedCampaign.sitesGenerated ?? celebratedCampaign.sites ?? celebratedCampaign.deployedSites?.length ?? 0}
                   </p>
                   <p className="text-[10px] text-ink-tertiary mt-0.5">Compiled</p>
                 </div>
-                <div className="bg-white/90 border border-border-light rounded-2xl p-4 text-center shadow-xs">
+                <div className="bg-white/90 border border-border-light rounded-2xl p-3 sm:p-4 text-center shadow-xs">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">Edge Status</p>
-                  <p className="text-2xl font-bold text-success font-mono mt-1">100%</p>
+                  <p className="text-xl sm:text-2xl font-bold text-success font-mono mt-1">100%</p>
                   <p className="text-[10px] text-ink-tertiary mt-0.5">Global CDN</p>
                 </div>
-                <div className="bg-white/90 border border-border-light rounded-2xl p-4 text-center shadow-xs">
+                <div className="bg-white/90 border border-border-light rounded-2xl p-3 sm:p-4 text-center shadow-xs">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">SSL / HTTPS</p>
-                  <p className="text-2xl font-bold text-emerald-600 font-mono mt-1">Active</p>
+                  <p className="text-xl sm:text-2xl font-bold text-emerald-600 font-mono mt-1">Active</p>
                   <p className="text-[10px] text-ink-tertiary mt-0.5">Auto Encrypted</p>
                 </div>
               </div>
 
               {/* All Deployed Sites list */}
               {sites.length > 0 && (
-                <div className="bg-white border border-border-main rounded-2xl p-5 text-left space-y-3 shadow-sm">
-                  <div className="flex items-center justify-between">
+                <div className="bg-white border border-border-main rounded-2xl p-4 sm:p-5 text-left space-y-3 shadow-sm">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <p className="text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-2">
                       <Globe className="w-4 h-4 text-accent" /> Live Deployed Previews ({sites.length})
                     </p>
@@ -613,8 +613,8 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
                   </div>
                   <div className="max-h-60 overflow-y-auto space-y-2.5 pr-1 scrollbar-thin">
                     {sites.map((s: any, idx: number) => (
-                      <div key={idx} className="flex items-center justify-between text-xs p-3 bg-surface rounded-xl border border-border-main shadow-xs hover:border-accent/40 transition-colors">
-                        <div className="min-w-0 mr-3">
+                      <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs p-3 bg-surface rounded-xl border border-border-main shadow-xs hover:border-accent/40 transition-colors">
+                        <div className="min-w-0 sm:mr-3">
                           <p className="font-bold text-ink truncate">{s.name}</p>
                           <p className="text-[11px] text-ink-secondary">{s.city || 'Local'}</p>
                         </div>
@@ -622,10 +622,10 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
                           href={s.url}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-white font-mono text-[11px] font-semibold hover:bg-accent-hover shrink-0 shadow-xs"
+                          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-white font-mono text-[11px] font-semibold hover:bg-accent-hover shrink-0 shadow-xs max-w-full"
                         >
-                          <span>{s.url.replace(/^https?:\/\//, '')}</span>
-                          <ExternalLink className="w-3 h-3" />
+                          <span className="truncate max-w-[180px] sm:max-w-none">{s.url.replace(/^https?:\/\//, '')}</span>
+                          <ExternalLink className="w-3 h-3 shrink-0" />
                         </a>
                       </div>
                     ))}
@@ -665,7 +665,7 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
   return (
     <div className="space-y-6">
       {/* STEP CONTENT CONTAINER */}
-      <div ref={stepContentRef} id="site-deploy-wizard-content" className="p-6 md:p-8 min-h-[350px] scroll-mt-4">
+      <div ref={stepContentRef} id="site-deploy-wizard-content" className="p-4 sm:p-6 md:p-8 min-h-[350px] scroll-mt-4">
 
         {/* ===================================================================
             STEP 1: SELECT NICHE (100% Copy-Paste Gold Standard from Email)
@@ -673,7 +673,7 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
         {activeStep === 1 && (
           <div className="space-y-6 animate-fade-in">
             <div className="space-y-1">
-              <h3 className="font-serif text-2xl text-ink">Select your niche</h3>
+              <h3 className="font-serif text-xl sm:text-2xl text-ink">Select your niche</h3>
               <p className="text-sm text-ink-secondary">This determines which website templates will be available. Tap a card to select.</p>
             </div>
 
@@ -707,7 +707,7 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
                       <span className="drop-shadow-sm">{niche.emoji}</span>
                     </div>
 
-                    <p className={`relative text-sm font-bold mt-3 leading-tight transition-colors ${
+                    <p className={`relative text-sm font-bold mt-3 leading-tight truncate max-w-full transition-colors ${
                       isSelected ? 'text-accent' : 'text-ink group-hover:text-accent'
                     }`}>
                       {niche.label}
@@ -738,35 +738,35 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
         {activeStep === 2 && (
           <div className="space-y-5 animate-fade-in">
             <div className="space-y-1">
-              <h3 className="font-serif text-2xl text-ink">Choose your businesses</h3>
+              <h3 className="font-serif text-xl sm:text-2xl text-ink">Choose your businesses</h3>
               <p className="text-sm text-ink-secondary">Upload a CSV or load instant sample businesses to generate live sites for.</p>
             </div>
 
             {/* Lead Source Pill Switcher */}
-            <div className="flex gap-2 p-1.5 bg-gradient-to-r from-surface to-off-white rounded-2xl w-fit shadow-inner">
+            <div className="grid grid-cols-2 sm:flex gap-1.5 sm:gap-2 p-1 sm:p-1.5 bg-gradient-to-r from-surface to-off-white rounded-2xl w-full sm:w-fit shadow-inner">
               <button
                 type="button"
                 onClick={() => { playSoftTap(); setLeadSource('csv'); }}
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-300 cursor-pointer ${
+                className={`flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-6 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-300 cursor-pointer ${
                   leadSource === 'csv'
                     ? 'bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30'
                     : 'text-ink-secondary hover:text-ink hover:bg-white/50'
                 }`}
               >
-                <FileSpreadsheet className="w-5 h-5" />
-                Upload CSV
+                <FileSpreadsheet className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                <span className="truncate">Upload CSV</span>
               </button>
               <button
                 type="button"
                 onClick={() => { playSoftTap(); setLeadSource('sample'); }}
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-300 cursor-pointer ${
+                className={`flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-6 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-300 cursor-pointer ${
                   leadSource === 'sample'
                     ? 'bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30'
                     : 'text-ink-secondary hover:text-ink hover:bg-white/50'
                 }`}
               >
-                <Building2 className="w-5 h-5" />
-                Sample Businesses
+                <Building2 className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                <span className="truncate">Sample Businesses</span>
               </button>
             </div>
 
@@ -779,20 +779,20 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
                       <div className="absolute -top-20 -right-20 w-48 h-48 bg-accent/5 rounded-full blur-3xl" />
                       <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-accent/5 rounded-full blur-3xl" />
 
-                      <div className="relative p-12 text-center">
-                        <div className="relative inline-block mb-6">
-                          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-accent to-accent-hover flex items-center justify-center shadow-xl shadow-accent/30 group-hover:scale-110 transition-transform duration-300">
-                            <FileSpreadsheet className="w-10 h-10 text-white" />
+                      <div className="relative p-6 sm:p-12 text-center">
+                        <div className="relative inline-block mb-4 sm:mb-6">
+                          <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-accent to-accent-hover flex items-center justify-center shadow-xl shadow-accent/30 group-hover:scale-110 transition-transform duration-300">
+                            <FileSpreadsheet className="w-7 h-7 sm:w-10 sm:h-10 text-white" />
                           </div>
                         </div>
 
-                        <p className="text-lg font-bold text-ink mb-2">Drop your CSV file here</p>
-                        <p className="text-sm text-ink-secondary mb-4">or click to browse from your computer</p>
-                        <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent text-white font-semibold rounded-xl shadow-lg shadow-accent/30 group-hover:bg-accent-hover transition-colors">
+                        <p className="text-base sm:text-lg font-bold text-ink mb-2">Drop your CSV file here</p>
+                        <p className="text-xs sm:text-sm text-ink-secondary mb-4">or click to browse from your computer</p>
+                        <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent text-white font-semibold rounded-xl shadow-lg shadow-accent/30 group-hover:bg-accent-hover transition-colors text-xs sm:text-sm">
                           <Upload className="w-4 h-4" />
                           Choose File
                         </div>
-                        <p className="text-xs text-ink-tertiary mt-6">Required columns: business_name, city, phone (optional: website)</p>
+                        <p className="text-[11px] sm:text-xs text-ink-tertiary mt-4 sm:mt-6">Required columns: business_name, city, phone (optional: website)</p>
                       </div>
                     </div>
                     <input
@@ -863,12 +863,12 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
             {/* Curated Sample Businesses Mode */}
             {leadSource === 'sample' && (
               <div className="space-y-5">
-                <div className="p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-4 text-center max-w-xl mx-auto">
+                <div className="p-4 sm:p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-4 text-center max-w-xl mx-auto">
                   <div className="w-14 h-14 rounded-2xl bg-accent-soft text-accent flex items-center justify-center mx-auto shadow-inner">
                     <Building2 className="w-7 h-7" />
                   </div>
                   <div>
-                    <h4 className="text-lg font-bold text-ink">Curated {selectedNiche} Business Profiles</h4>
+                    <h4 className="text-base sm:text-lg font-bold text-ink">Curated {selectedNiche} Business Profiles</h4>
                     <p className="text-xs text-ink-secondary mt-1">
                       Load 5 verified local business records pre-configured for {selectedNiche} in Austin, TX.
                     </p>
@@ -876,7 +876,7 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
                   <button
                     type="button"
                     onClick={handleLoadSampleLeads}
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white text-sm font-bold shadow-md shadow-accent/20 active:scale-98 transition-all cursor-pointer"
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-accent hover:bg-accent-hover text-white text-sm font-bold shadow-md shadow-accent/20 active:scale-98 transition-all cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
                     Load 5 Sample Businesses
@@ -934,7 +934,7 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
         {activeStep === 4 && (
           <div className="space-y-6 animate-fade-in">
             <div className="space-y-1">
-              <h3 className="font-serif text-2xl text-ink">Review & deploy sites</h3>
+              <h3 className="font-serif text-xl sm:text-2xl text-ink">Review & deploy sites</h3>
               <p className="text-sm text-ink-secondary">
                 Confirm your campaign parameters before deploying sites across the global edge network.
               </p>
@@ -943,7 +943,7 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Left Column (7/12): Payload Summary */}
               <div className="lg:col-span-7 space-y-5">
-                <div className="p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-4">
+                <div className="p-4 sm:p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-4">
                   <div className="flex items-center justify-between border-b border-border-light pb-3">
                     <span className="text-xs font-bold uppercase tracking-wider text-ink-secondary">Campaign Overview</span>
                     <span className="px-2.5 py-1 rounded-full bg-accent-soft text-accent text-xs font-bold">Site Deploy</span>
@@ -952,7 +952,7 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-[11px] text-ink-secondary font-semibold uppercase">Target Niche</p>
-                      <p className="text-sm font-bold text-ink mt-0.5">{selectedNiche}</p>
+                      <p className="text-sm font-bold text-ink mt-0.5 truncate">{selectedNiche}</p>
                     </div>
                     <div>
                       <p className="text-[11px] text-ink-secondary font-semibold uppercase">Total Businesses</p>
@@ -960,34 +960,34 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
                     </div>
                     <div>
                       <p className="text-[11px] text-ink-secondary font-semibold uppercase">Selected Template</p>
-                      <p className="text-sm font-bold text-accent mt-0.5">
+                      <p className="text-sm font-bold text-accent mt-0.5 truncate">
                         {allTemplates.find((t) => t.id === selectedTemplateId)?.name || 'Custom Template'}
                       </p>
                     </div>
                     <div>
                       <p className="text-[11px] text-ink-secondary font-semibold uppercase">Edge Network</p>
-                      <p className="text-sm font-bold text-emerald-600 mt-0.5">Lunao Global Edge</p>
+                      <p className="text-sm font-bold text-emerald-600 mt-0.5 truncate">Lunao Global Edge</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Businesses preview list */}
-                <div className="p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-3">
-                  <div className="flex items-center justify-between">
+                <div className="p-4 sm:p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-3">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-bold uppercase tracking-wider text-ink">Ready for Edge Deployment ({csvLeads.length})</span>
-                    <span className="text-xs text-ink-secondary">Sample list</span>
+                    <span className="text-xs text-ink-secondary shrink-0">Sample list</span>
                   </div>
 
                   <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
                     {csvLeads.slice(0, 6).map((lead, idx) => {
                       const slug = (lead.name || 'business').toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 20);
                       return (
-                        <div key={idx} className="flex items-center justify-between p-2.5 bg-surface rounded-xl border border-border-light text-xs">
-                          <div>
+                        <div key={idx} className="flex items-center justify-between gap-2 p-2.5 bg-surface rounded-xl border border-border-light text-xs">
+                          <div className="min-w-0 truncate">
                             <span className="font-bold text-ink">{lead.name}</span>
                             <span className="text-ink-secondary ml-2">({lead.city || 'Austin, TX'})</span>
                           </div>
-                          <span className="font-mono text-accent text-[11px]">/{slug}</span>
+                          <span className="font-mono text-accent text-[11px] shrink-0">/{slug}</span>
                         </div>
                       );
                     })}
@@ -997,7 +997,7 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
 
               {/* Right Column (5/12): Cost Summary & Launch Card */}
               <div className="lg:col-span-5 space-y-5">
-                <div className="p-6 rounded-2xl bg-white border border-border-main shadow-lg space-y-5">
+                <div className="p-4 sm:p-6 rounded-2xl bg-white border border-border-main shadow-lg space-y-5">
                   <div className="space-y-1">
                     <h4 className="text-base font-bold text-ink">Deployment Cost Summary</h4>
                     <p className="text-xs text-ink-secondary">1 credit per fully compiled, edge-hosted website.</p>
@@ -1076,7 +1076,7 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
       {/* ===================================================================
           BOTTOM NAVIGATION BAR (Identical to Email Campaign Wizard)
       =================================================================== */}
-      <div className="px-6 py-4 border-t border-border-light flex flex-wrap items-center justify-between gap-3">
+      <div className="px-4 py-3.5 sm:px-6 sm:py-4 border-t border-border-light flex flex-wrap items-center justify-between gap-3">
         <button
           type="button"
           disabled={activeStep === 1 || isLaunching}

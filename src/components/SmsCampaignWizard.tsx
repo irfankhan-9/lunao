@@ -982,9 +982,9 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
       <div
         ref={progressContainerRef}
         id="sms-launch-progress-container"
-        className="p-6 md:p-8 space-y-6 animate-celebrate-in scroll-mt-6"
+        className="p-4 sm:p-6 md:p-8 space-y-6 animate-celebrate-in scroll-mt-6"
       >
-        <div className="bg-white border border-border-main rounded-3xl p-6 md:p-8 text-ink shadow-xl space-y-6 relative overflow-hidden transition-all duration-500">
+        <div className="bg-white border border-border-main rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 text-ink shadow-xl space-y-6 relative overflow-hidden transition-all duration-500">
           <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-blue-500 to-accent animate-pulse" />
           <div className="absolute top-0 right-0 w-96 h-96 bg-accent/5 rounded-full blur-3xl pointer-events-none" />
 
@@ -995,7 +995,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
                 Lunao SMS Outreach Engine Active
               </div>
-              <h3 className="text-2xl font-bold font-serif text-ink">
+              <h3 className="text-xl sm:text-2xl font-bold font-serif text-ink">
                 Autonomous SMS Outreach in Progress
               </h3>
               <p className="text-xs text-ink-secondary">
@@ -1003,16 +1003,16 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="px-4 py-2 rounded-xl bg-surface border border-border-main text-right shadow-xs">
+            <div className="grid grid-cols-2 sm:flex items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
+              <div className="px-3 py-2 sm:px-4 rounded-xl bg-surface border border-border-main text-right shadow-xs">
                 <p className="text-[10px] uppercase font-bold text-ink-tertiary">Verified Live Sites</p>
-                <p className="text-lg font-bold font-mono text-emerald-600">
+                <p className="text-base sm:text-lg font-bold font-mono text-emerald-600">
                   {completedSitesList.length} / {csvLeads.length}
                 </p>
               </div>
-              <div className="px-4 py-2 rounded-xl bg-surface border border-border-main text-right shadow-xs">
+              <div className="px-3 py-2 sm:px-4 rounded-xl bg-surface border border-border-main text-right shadow-xs">
                 <p className="text-[10px] uppercase font-bold text-ink-tertiary">SMS Sent</p>
-                <p className="text-lg font-bold font-mono text-accent">
+                <p className="text-base sm:text-lg font-bold font-mono text-accent">
                   {dispatchedSmsList.length} / {csvLeads.length}
                 </p>
               </div>
@@ -1200,20 +1200,20 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
 
     return (
       <div id="sms-campaign-completion-container" className="space-y-6 animate-celebrate-in scroll-mt-6">
-        <div className="p-6 md:p-8">
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-success-soft via-white to-accent-soft/40 border border-success/30 p-8 md:p-12 shadow-2xl">
+        <div className="p-4 sm:p-6 md:p-8">
+          <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-success-soft via-white to-accent-soft/40 border border-success/30 p-5 sm:p-8 md:p-12 shadow-2xl">
             <div className="absolute top-0 right-0 w-96 h-96 bg-success/10 rounded-full blur-3xl pointer-events-none" />
 
             <div className="relative z-10 max-w-2xl mx-auto text-center space-y-6">
-              <div className="w-20 h-20 rounded-full bg-success-soft border-2 border-success/30 flex items-center justify-center text-success mx-auto shadow-inner animate-bounce">
-                <Check className="w-10 h-10 stroke-[3]" />
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-success-soft border-2 border-success/30 flex items-center justify-center text-success mx-auto shadow-inner animate-bounce">
+                <Check className="w-8 h-8 sm:w-10 sm:h-10 stroke-[3]" />
               </div>
 
               <div className="space-y-2">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-success-soft border border-success/20 text-xs font-bold text-success uppercase tracking-wider">
                   SMS Campaign Completed
                 </span>
-                <h2 className="text-3xl md:text-4xl font-serif font-bold text-ink">
+                <h2 className="text-2xl sm:text-3xl md:text-4xl font-serif font-bold text-ink">
                   Campaign Successfully Completed!
                 </h2>
                 <p className="text-sm md:text-base text-ink-secondary">
@@ -1223,34 +1223,34 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
 
               {/* Stats Counters Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4">
-                <div className="bg-white/90 border border-border-light rounded-2xl p-4 text-center shadow-xs">
+                <div className="bg-white/90 border border-border-light rounded-2xl p-3 sm:p-4 text-center shadow-xs">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">Total Leads</p>
-                  <p className="text-2xl font-bold text-ink font-mono mt-1">{celebratedCampaign.totalLeads}</p>
+                  <p className="text-xl sm:text-2xl font-bold text-ink font-mono mt-1">{celebratedCampaign.totalLeads}</p>
                   <p className="text-[10px] text-ink-tertiary mt-0.5">Processed</p>
                 </div>
-                <div className="bg-white/90 border border-border-light rounded-2xl p-4 text-center shadow-xs">
+                <div className="bg-white/90 border border-border-light rounded-2xl p-3 sm:p-4 text-center shadow-xs">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">SMS Delivered</p>
-                  <p className="text-2xl font-bold text-success font-mono mt-1">
+                  <p className="text-xl sm:text-2xl font-bold text-success font-mono mt-1">
                     {celebratedCampaign.smsLeads?.filter((l: any) => l.status === 'delivered').length ?? celebratedCampaign.smsSent}
                   </p>
                   <p className="text-[10px] text-ink-tertiary mt-0.5">Carrier Confirmed</p>
                 </div>
-                <div className="bg-white/90 border border-border-light rounded-2xl p-4 text-center shadow-xs">
+                <div className="bg-white/90 border border-border-light rounded-2xl p-3 sm:p-4 text-center shadow-xs">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">Sites Built</p>
-                  <p className="text-2xl font-bold text-accent font-mono mt-1">{celebratedCampaign.sitesGenerated}</p>
+                  <p className="text-xl sm:text-2xl font-bold text-accent font-mono mt-1">{celebratedCampaign.sitesGenerated}</p>
                   <p className="text-[10px] text-ink-tertiary mt-0.5">Live Links</p>
                 </div>
-                <div className="bg-white/90 border border-border-light rounded-2xl p-4 text-center shadow-xs">
+                <div className="bg-white/90 border border-border-light rounded-2xl p-3 sm:p-4 text-center shadow-xs">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">Delivery Status</p>
-                  <p className="text-2xl font-bold text-emerald-600 font-mono mt-1">10DLC</p>
+                  <p className="text-xl sm:text-2xl font-bold text-emerald-600 font-mono mt-1">10DLC</p>
                   <p className="text-[10px] text-ink-tertiary mt-0.5">Carrier Verified</p>
                 </div>
               </div>
 
               {/* Deployed Sites & SMS Deliveries list */}
               {sites.length > 0 && (
-                <div className="bg-white border border-border-main rounded-2xl p-5 text-left space-y-3 shadow-xs">
-                  <div className="flex items-center justify-between border-b border-border-light pb-3">
+                <div className="bg-white border border-border-main rounded-2xl p-4 sm:p-5 text-left space-y-3 shadow-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-light pb-3">
                     <span className="text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-1.5 font-mono">
                       <Globe className="w-4 h-4 text-accent" /> Live Deployed Sites & SMS Deliveries
                     </span>
@@ -1336,7 +1336,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
     <div className="space-y-6">
 
       {/* STEP CONTENT CONTAINER */}
-      <div ref={stepContentRef} id="sms-wizard-content" className="p-6 md:p-8 min-h-[350px] scroll-mt-4">
+      <div ref={stepContentRef} id="sms-wizard-content" className="p-4 sm:p-6 md:p-8 min-h-[350px] scroll-mt-4">
 
         {/* ===================================================================
             STEP 1: SELECT NICHE (100% Copy-Paste Gold Standard from Email)
@@ -1344,7 +1344,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
         {activeStep === 1 && (
           <div className="space-y-6 animate-fade-in">
             <div className="space-y-1">
-              <h3 className="font-serif text-2xl text-ink">Select your niche</h3>
+              <h3 className="font-serif text-xl sm:text-2xl text-ink">Select your niche</h3>
               <p className="text-sm text-ink-secondary">This determines which website templates will be available. Tap a card to select.</p>
             </div>
 
@@ -1378,7 +1378,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                       <span className="drop-shadow-sm">{niche.emoji}</span>
                     </div>
 
-                    <p className={`relative text-sm font-bold mt-3 leading-tight transition-colors ${
+                    <p className={`relative text-sm font-bold mt-3 leading-tight truncate max-w-full transition-colors ${
                       isSelected ? 'text-accent' : 'text-ink group-hover:text-accent'
                     }`}>
                       {niche.label}
@@ -1409,36 +1409,36 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
         {activeStep === 2 && (
           <div className="space-y-5 animate-fade-in">
             <div className="space-y-1">
-              <h3 className="font-serif text-2xl text-ink">Choose your leads</h3>
+              <h3 className="font-serif text-xl sm:text-2xl text-ink">Choose your leads</h3>
               <p className="text-sm text-ink-secondary">Upload a CSV or discover verified local businesses in Canada with phone numbers.</p>
             </div>
 
             {/* Pill Tab Switcher */}
-            <div className="flex gap-2 p-1.5 bg-gradient-to-r from-surface to-off-white rounded-2xl w-fit shadow-inner">
+            <div className="grid grid-cols-2 sm:flex gap-1.5 sm:gap-2 p-1 sm:p-1.5 bg-gradient-to-r from-surface to-off-white rounded-2xl w-full sm:w-fit shadow-inner">
               <button
                 type="button"
                 onClick={() => { playSoftTap(); setLeadSource('csv'); }}
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-300 cursor-pointer ${
+                className={`flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-6 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-300 cursor-pointer ${
                   leadSource === 'csv'
                     ? 'bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30'
                     : 'text-ink-secondary hover:text-ink hover:bg-white/50'
                 }`}
               >
-                <FileSpreadsheet className="w-5 h-5" />
+                <FileSpreadsheet className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
                 Upload CSV
               </button>
               <button
                 type="button"
                 onClick={() => { playSoftTap(); setLeadSource('google_maps'); }}
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-300 cursor-pointer ${
+                className={`flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-6 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-300 cursor-pointer ${
                   leadSource === 'google_maps'
                     ? 'bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30'
                     : 'text-ink-secondary hover:text-ink hover:bg-white/50'
                 }`}
               >
-                <MapPin className="w-5 h-5" />
-                Find Leads in Canada
-                <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold">
+                <MapPin className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                <span className="truncate">Find Leads in Canada</span>
+                <span className="hidden sm:inline-block ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold">
                   Google Places
                 </span>
               </button>
@@ -1487,10 +1487,10 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                       <div className="absolute -top-20 -right-20 w-48 h-48 bg-accent/5 rounded-full blur-3xl" />
                       <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-accent/5 rounded-full blur-3xl" />
 
-                      <div className="relative p-12 text-center">
-                        <div className="relative inline-block mb-6">
-                          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-accent to-accent-hover flex items-center justify-center shadow-xl shadow-accent/30 group-hover:scale-110 transition-transform duration-300">
-                            <FileSpreadsheet className="w-10 h-10 text-white" />
+                      <div className="relative p-6 sm:p-12 text-center">
+                        <div className="relative inline-block mb-4 sm:mb-6">
+                          <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-accent to-accent-hover flex items-center justify-center shadow-xl shadow-accent/30 group-hover:scale-110 transition-transform duration-300">
+                            <FileSpreadsheet className="w-7 h-7 sm:w-10 sm:h-10 text-white" />
                           </div>
                         </div>
 
@@ -1560,7 +1560,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
 
             {/* Find Leads in Canada (Google Places) */}
             {leadSource === 'google_maps' && (
-              <div className="rounded-2xl bg-white border border-border-main p-6 shadow-xs">
+              <div className="rounded-2xl bg-white border border-border-main p-4 sm:p-6 shadow-xs">
                 <SmsLeadFinder
                   ownerKey={ownerKey}
                   userPlan={userPlan}
@@ -1623,13 +1623,13 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
         {activeStep === 4 && (
           <div className="space-y-6 animate-fade-in">
             <div className="space-y-1">
-              <h3 className="font-serif text-2xl text-ink">Sender phone & compliance</h3>
+              <h3 className="font-serif text-xl sm:text-2xl text-ink">Sender phone & compliance</h3>
               <p className="text-sm text-ink-secondary">
                 Select your sending phone number and verify 10DLC brand messaging parameters.
               </p>
             </div>
 
-            <div className="rounded-2xl bg-white border border-border-main p-6 shadow-xs">
+            <div className="rounded-2xl bg-white border border-border-main p-4 sm:p-6 shadow-xs">
               <SmsAccountStep
                 ownerKey={ownerKey}
                 userPlan={userPlan}
@@ -1651,7 +1651,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
         {activeStep === 5 && (
           <div className="space-y-6 animate-fade-in">
             <div className="space-y-1">
-              <h3 className="font-serif text-2xl text-ink">Craft your SMS proposal message</h3>
+              <h3 className="font-serif text-xl sm:text-2xl text-ink">Craft your SMS proposal message</h3>
               <p className="text-sm text-ink-secondary">
                 Select high-converting pre-built hook copy or personalize your own. Inspect real-time segment math and per-recipient simulator preview.
               </p>
@@ -1662,8 +1662,8 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
               <div className="lg:col-span-7 space-y-5">
                 
                 {/* Primary SMS Message Template */}
-                <div className="p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-4">
-                  <div className="flex items-center justify-between">
+                <div className="p-4 sm:p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <span className="text-xs font-bold uppercase tracking-wider text-ink block">Base SMS Message Template</span>
                       <span className="text-[11px] text-ink-tertiary">Used for all standard outreach messages</span>
@@ -1761,14 +1761,14 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                 </div>
 
                 {/* 2-Segment Specific Optimizer & Customization Card */}
-                <div className="p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-4">
+                <div className="p-4 sm:p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-light pb-3">
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center shrink-0">
                         <Sliders className="w-4 h-4" />
                       </div>
                       <div>
-                        <h4 className="text-xs font-bold text-ink flex items-center gap-1.5">
+                        <h4 className="text-xs font-bold text-ink flex flex-wrap items-center gap-1.5">
                           <span>2-Segment Message Optimizer</span>
                           <span className="text-[10px] text-ink-tertiary font-normal">(Long URLs Handler)</span>
                         </h4>
@@ -1810,7 +1810,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                         playSoftTap();
                         setEnable2SegOverride((prev) => !prev);
                       }}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center gap-2 ${
+                      className={`w-full sm:w-auto justify-center px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center gap-2 ${
                         enable2SegOverride
                           ? 'bg-emerald-600 text-white shadow-sm'
                           : 'bg-white border border-border-main text-ink hover:bg-off-white'
@@ -1833,7 +1833,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                   {/* 2-Segment Custom Template Editor (When enabled) */}
                   {enable2SegOverride && (
                     <div className="p-4 rounded-xl bg-amber-50/50 border border-amber-200 space-y-3 animate-fade-in">
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
                           <Sliders className="w-3.5 h-3.5 text-amber-600" />
                           Shorter Template for 2-Segment Messages Alone
@@ -1895,7 +1895,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
 
               {/* Right Column (5/12): Live SMS Bubble Preview Card (Brand Consistent: White, Blue, Green) */}
               <div className="lg:col-span-5 space-y-5">
-                <div className="p-5 rounded-2xl bg-white border border-blue-200/80 shadow-xs space-y-4">
+                <div className="p-4 sm:p-5 rounded-2xl bg-white border border-blue-200/80 shadow-xs space-y-4">
                   {/* Preview Header & Recipient Switcher */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-light pb-3">
                     <div className="flex items-center gap-2.5">
@@ -1914,7 +1914,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                     </div>
 
                     {/* Recipient Navigator */}
-                    <div className="flex items-center gap-1.5 bg-surface p-1 rounded-xl border border-border-light">
+                    <div className="flex items-center justify-between sm:justify-start w-full sm:w-auto gap-1.5 bg-surface p-1 rounded-xl border border-border-light">
                       <button
                         type="button"
                         disabled={previewLeadIndex <= 0}
@@ -1934,7 +1934,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                           playSoftTap();
                           setPreviewLeadIndex(Number(e.target.value));
                         }}
-                        className="text-[11px] font-bold text-ink bg-transparent outline-none cursor-pointer px-1 py-0.5 max-w-[140px] truncate"
+                        className="text-[11px] font-bold text-ink bg-transparent outline-none cursor-pointer px-1 py-0.5 flex-1 sm:flex-initial max-w-[180px] sm:max-w-[140px] truncate"
                       >
                         {evaluatedLeads.map((l, i) => (
                           <option key={i} value={i}>
@@ -2067,7 +2067,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
             </div>
 
             {/* All Messages & Segment Inspector */}
-            <div className="p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-5">
+            <div className="p-4 sm:p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-5">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-border-light pb-4">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
@@ -2080,7 +2080,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                 </div>
 
                 {/* Filter Tabs */}
-                <div className="flex items-center gap-1.5 bg-surface p-1 rounded-xl border border-border-light">
+                <div className="flex flex-wrap sm:flex-nowrap items-center gap-1.5 bg-surface p-1 rounded-xl border border-border-light w-full md:w-auto">
                   <button
                     type="button"
                     onClick={() => {
@@ -2136,7 +2136,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
 
               {/* Tip notice when 2-segment messages exist */}
               {twoSegmentCount > 0 && !enable2SegOverride && (
-                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between gap-3">
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
                     <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                     <span>
@@ -2149,7 +2149,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                       playSoftTap();
                       setEnable2SegOverride(true);
                     }}
-                    className="px-3 py-1.5 rounded-lg bg-amber-600 text-white font-bold text-xs shrink-0 hover:bg-amber-700 transition-colors cursor-pointer"
+                    className="w-full sm:w-auto text-center px-3 py-1.5 rounded-lg bg-amber-600 text-white font-bold text-xs shrink-0 hover:bg-amber-700 transition-colors cursor-pointer"
                   >
                     ⚡ Shorten 2-Seg Messages
                   </button>
@@ -2192,7 +2192,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2 shrink-0">
+                          <div className="flex flex-wrap items-center gap-2 shrink-0">
                             {item.isOverriddenFor2Seg && (
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">
                                 ⚡ 2-Seg Shortened
@@ -2343,15 +2343,15 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
         {activeStep === 6 && (
           <div className="space-y-6 animate-fade-in">
             <div className="space-y-1">
-              <h3 className="font-serif text-2xl text-ink">Review & launch outreach</h3>
+              <h3 className="font-serif text-xl sm:text-2xl text-ink">Review & launch outreach</h3>
               <p className="text-sm text-ink-secondary">
                 Comfortably review all campaign details, customize campaign name, and verify carrier segments before autonomous dispatch.
               </p>
             </div>
 
             {/* 1. Campaign Name Customizer */}
-            <div className="p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
+            <div className="p-4 sm:p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <label className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-2">
                   <Edit3 className="w-4 h-4 text-accent" />
                   <span>Campaign Name (Customizable)</span>
@@ -2383,7 +2383,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
             {/* 2. Four Big Core Specifications Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Specification 1: Template Selected */}
-              <div className="p-5 rounded-2xl bg-white border border-border-main shadow-xs space-y-3 flex flex-col justify-between">
+              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-border-main shadow-xs space-y-3 flex flex-col justify-between">
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] uppercase font-bold text-ink-tertiary tracking-wider flex items-center gap-1">
@@ -2415,7 +2415,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
               </div>
 
               {/* Specification 2: Leads Amount */}
-              <div className="p-5 rounded-2xl bg-white border border-border-main shadow-xs space-y-3 flex flex-col justify-between">
+              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-border-main shadow-xs space-y-3 flex flex-col justify-between">
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] uppercase font-bold text-ink-tertiary tracking-wider flex items-center gap-1">
@@ -2450,7 +2450,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
               </div>
 
               {/* Specification 3: Sender Phone & Carrier Route */}
-              <div className="p-5 rounded-2xl bg-white border border-border-main shadow-xs space-y-3 flex flex-col justify-between">
+              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-border-main shadow-xs space-y-3 flex flex-col justify-between">
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] uppercase font-bold text-ink-tertiary tracking-wider flex items-center gap-1">
@@ -2482,7 +2482,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
               </div>
 
               {/* Specification 4: Segment Breakdown (Prominently requested by user!) */}
-              <div className="p-5 rounded-2xl bg-white border border-border-main shadow-xs space-y-3 flex flex-col justify-between">
+              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-border-main shadow-xs space-y-3 flex flex-col justify-between">
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] uppercase font-bold text-ink-tertiary tracking-wider flex items-center gap-1">
@@ -2525,7 +2525,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
             </div>
 
             {/* 3. SMS Message Preview & Snapshot Card */}
-            <div className="p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-4">
+            <div className="p-4 sm:p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-light pb-3">
                 <div className="space-y-0.5">
                   <h4 className="text-sm font-bold text-ink flex items-center gap-2">
@@ -2537,7 +2537,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {enable2SegOverride && (
                     <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200">
                       ⚡ 2-Segment Optimizer Active
@@ -2585,25 +2585,25 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
             </div>
 
             {/* 4. Cost Summary & Final Autonomous Launch Card */}
-            <div className="p-6 md:p-8 rounded-3xl bg-gradient-to-br from-white via-surface to-accent-soft/20 border border-border-main shadow-xl space-y-6">
+            <div className="p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-white via-surface to-accent-soft/20 border border-border-main shadow-xl space-y-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border-light pb-5">
                 <div className="space-y-1">
-                  <h4 className="text-xl font-serif font-bold text-ink">Ready to Launch Outreach</h4>
+                  <h4 className="text-lg sm:text-xl font-serif font-bold text-ink">Ready to Launch Outreach</h4>
                   <p className="text-xs text-ink-secondary">
                     Autonomous pipeline will compile custom pages, rebrand each site for {selectedNiche}, deploy to edge CDN, and dispatch SMS proposals.
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="px-4 py-2 rounded-xl bg-white border border-border-main text-right shadow-xs">
+                <div className="grid grid-cols-2 sm:flex items-center gap-2.5 sm:gap-3 w-full md:w-auto">
+                  <div className="px-3.5 py-2 sm:px-4 rounded-xl bg-white border border-border-main text-right shadow-xs">
                     <p className="text-[10px] uppercase font-bold text-ink-tertiary">Total Required</p>
-                    <p className="text-xl font-bold font-mono text-accent">
+                    <p className="text-lg sm:text-xl font-bold font-mono text-accent">
                       {(csvLeads.length || totalEvaluatedCount) * COST_PER_SMS} credits
                     </p>
                   </div>
-                  <div className="px-4 py-2 rounded-xl bg-white border border-border-main text-right shadow-xs">
+                  <div className="px-3.5 py-2 sm:px-4 rounded-xl bg-white border border-border-main text-right shadow-xs">
                     <p className="text-[10px] uppercase font-bold text-ink-tertiary">Your Balance</p>
-                    <p className={`text-xl font-bold font-mono ${
+                    <p className={`text-lg sm:text-xl font-bold font-mono ${
                       userCredits < (csvLeads.length || totalEvaluatedCount) * COST_PER_SMS ? 'text-danger' : 'text-success'
                     }`}>
                       {userCredits} credits
@@ -2635,7 +2635,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                   type="button"
                   onClick={handleLaunch}
                   disabled={isLaunching || !canProceedFromStep(6)}
-                  className={`w-full py-4 rounded-2xl text-base font-bold uppercase tracking-wider flex items-center justify-center gap-3 transition-all shadow-xl cursor-pointer ${
+                  className={`w-full py-3.5 sm:py-4 rounded-2xl text-sm sm:text-base font-bold uppercase tracking-wider flex items-center justify-center gap-3 transition-all shadow-xl cursor-pointer ${
                     isLaunching || !canProceedFromStep(6)
                       ? 'bg-surface text-ink-tertiary cursor-not-allowed shadow-none'
                       : 'bg-accent hover:bg-accent-hover text-white shadow-accent/25 active:scale-98'
@@ -2681,7 +2681,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
       {/* ===================================================================
           BOTTOM NAVIGATION BAR (Identical Standard)
       =================================================================== */}
-      <div className="px-6 py-4 border-t border-border-light flex flex-wrap items-center justify-between gap-3">
+      <div className="px-4 py-3.5 sm:px-6 sm:py-4 border-t border-border-light flex flex-wrap items-center justify-between gap-3">
         <button
           type="button"
           disabled={activeStep === 1 || isLaunching}

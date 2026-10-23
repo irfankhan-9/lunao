@@ -592,9 +592,9 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
           </p>
         </div>
 
-        <div className="bg-white border-2 border-dashed border-border-main rounded-2xl p-10 text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-blue-100 flex items-center justify-center">
-            <Building2 className="w-8 h-8 text-blue-600" />
+        <div className="bg-white border-2 border-dashed border-border-main rounded-2xl p-6 sm:p-10 text-center">
+          <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto mb-4 rounded-2xl bg-blue-100 flex items-center justify-center">
+            <Building2 className="w-7 h-7 sm:w-8 sm:h-8 text-blue-600" />
           </div>
           <p className="text-base font-bold text-ink mb-1">Connect your Telnyx account</p>
           <p className="text-xs text-ink-secondary mb-6 max-w-md mx-auto leading-relaxed">
@@ -604,7 +604,7 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
             type="button"
             onClick={handleConnect}
             disabled={isConnecting}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg flex items-center gap-2 mx-auto disabled:opacity-50 transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
+            className="w-full sm:w-auto justify-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg flex items-center gap-2 mx-auto disabled:opacity-50 transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
           >
             {isConnecting ? (
               <>
@@ -647,13 +647,13 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
         {reconnectAccts.length === 0 && status.primaryAccount ? (
           // Fallback when the row collection hasn't been hydrated yet but
           // the status snapshot already says we need reconnect.
-          <div className="bg-white border-2 border-warn/40 rounded-xl p-6">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl bg-warn-soft flex items-center justify-center shrink-0">
-                <AlertCircle className="w-6 h-6 text-warn" />
+          <div className="bg-white border-2 border-warn/40 rounded-xl p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-warn-soft flex items-center justify-center shrink-0">
+                <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-warn" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-ink">{status.primaryAccount.email}</p>
+                <p className="text-sm font-bold text-ink truncate">{status.primaryAccount.email}</p>
                 <p className="text-xs text-ink-secondary mt-1">
                   We couldn't validate your access token. Reconnect to refresh it.
                 </p>
@@ -662,7 +662,7 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
                 type="button"
                 onClick={handleConnect}
                 disabled={isConnecting}
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 shrink-0"
+                className="w-full sm:w-auto justify-center px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 shrink-0"
               >
                 {isConnecting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                 Reconnect
@@ -671,13 +671,13 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
           </div>
         ) : (
           reconnectAccts.map((acc) => (
-            <div key={acc.id} className="bg-white border-2 border-warn/40 rounded-xl p-6 animate-fade-in">
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-xl bg-warn-soft flex items-center justify-center shrink-0">
-                  <AlertCircle className="w-6 h-6 text-warn" />
+            <div key={acc.id} className="bg-white border-2 border-warn/40 rounded-xl p-4 sm:p-6 animate-fade-in">
+              <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-warn-soft flex items-center justify-center shrink-0">
+                  <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-warn" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-ink">{acc.account_email}</p>
+                  <p className="text-sm font-bold text-ink truncate">{acc.account_email}</p>
                   <p className="text-xs text-ink-secondary mt-1">
                     {acc.status === 'revoked'
                       ? "You revoked Lunao's access. Reconnect to continue."
@@ -688,7 +688,7 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
                   type="button"
                   onClick={handleConnect}
                   disabled={isConnecting}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 shrink-0"
+                  className="w-full sm:w-auto justify-center px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 shrink-0"
                 >
                   {isConnecting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                   Reconnect
@@ -718,9 +718,9 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
     return (
       <div className="space-y-6 animate-fade-in">
         {/* Live connection badge */}
-        <div className="bg-white border border-border-main rounded-xl p-5 flex items-center gap-4">
-          <div className="relative w-12 h-12 rounded-xl bg-success-soft flex items-center justify-center shrink-0">
-            <ShieldCheck className="w-6 h-6 text-success" />
+        <div className="bg-white border border-border-main rounded-xl p-4 sm:p-5 flex items-center gap-3 sm:gap-4">
+          <div className="relative w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-success-soft flex items-center justify-center shrink-0">
+            <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-success" />
             {/* green pulse ring */}
             <span className="absolute inset-0 rounded-xl bg-success/15 animate-ping" />
           </div>
@@ -743,20 +743,20 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
         </div>
 
         {/* Buy your first number — premium CTA */}
-        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-100 rounded-2xl p-10 text-center">
-          <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-white border border-blue-100 flex items-center justify-center shadow-sm">
-            <Phone className="w-7 h-7 text-blue-600" />
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-100 rounded-2xl p-6 sm:p-10 text-center">
+          <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto mb-4 sm:mb-5 rounded-2xl bg-white border border-blue-100 flex items-center justify-center shadow-sm">
+            <Phone className="w-6 h-6 sm:w-7 sm:h-7 text-blue-600" />
           </div>
           <p className="text-base font-bold text-ink mb-1">Buy your first number</p>
           <p className="text-xs text-ink-secondary mb-6 max-w-md mx-auto leading-relaxed">
             Pick a number with the country area code your customers dial. SMS-eligible numbers start at <span className="font-semibold text-ink">$1/mo</span>. It takes about a minute in Telnyx Mission Control.
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-2">
+          <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-2">
             <a
               href="https://portal.telnyx.com/#/app/numbers/buy"
               target="_blank"
               rel="noreferrer"
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg flex items-center gap-2 transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
+              className="w-full sm:w-auto justify-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg flex items-center gap-2 transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
             >
               <Plus className="w-4 h-4" />
               Buy a number in Telnyx
@@ -769,7 +769,7 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
                 loadAccounts(true);
               }}
               disabled={isStatusLoading || isLoading}
-              className="px-5 py-3 bg-white hover:bg-off-white border border-border-main text-ink text-xs font-semibold rounded-lg flex items-center gap-2 transition-all disabled:opacity-50"
+              className="w-full sm:w-auto justify-center px-5 py-3 bg-white hover:bg-off-white border border-border-main text-ink text-xs font-semibold rounded-lg flex items-center gap-2 transition-all disabled:opacity-50"
             >
               {isStatusLoading || isLoading ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -793,8 +793,8 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
       {/* Live connection badge — top-level reassurance that Lunao is
           currently authenticated against Telnyx. Token expiry surfaces
           here so the user sees it before they pick a number. */}
-      <div className="bg-white border border-border-main rounded-xl p-4 flex items-center gap-4">
-        <div className="relative w-11 h-11 rounded-xl bg-success-soft flex items-center justify-center shrink-0">
+      <div className="bg-white border border-border-main rounded-xl p-3.5 sm:p-4 flex items-center gap-3 sm:gap-4">
+        <div className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-success-soft flex items-center justify-center shrink-0">
           <ShieldCheck className="w-5 h-5 text-success" />
           <span className="absolute inset-0 rounded-xl bg-success/15 animate-ping" />
         </div>
@@ -825,9 +825,9 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
       </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-serif text-ink">Select Phone Number</h2>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="text-lg sm:text-xl font-serif text-ink">Select Phone Number</h2>
           <p className="text-xs text-ink-secondary mt-0.5">
             {targetCountries.length > 0
               ? `Checking SMS eligibility for ${targetCountries.length} country destination(s)`
@@ -835,7 +835,7 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
             }
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {isCheckingEligibility && (
             <span className="text-xs text-ink-secondary flex items-center gap-1">
               <Loader2 className="w-3 h-3 animate-spin" /> Checking...
@@ -857,7 +857,7 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
       </div>
 
       {/* Status Summary */}
-      <div className="flex items-center gap-4 text-xs">
+      <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-success" />
           <span className="text-ink-secondary">{readyNumbers.length} ready</span>
@@ -880,20 +880,20 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
           early-return was somehow bypassed). State D above is the canonical
           "Buy your first number" CTA; this is a defensive fallback. */}
       {readyNumbers.length === 0 && needsConfigNumbers.length === 0 && noProfileNumbers.length === 0 && !isLoading && (
-        <div className="bg-white border-2 border-dashed border-border-main rounded-xl p-12 text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-blue-100 flex items-center justify-center">
-            <MessageSquare className="w-8 h-8 text-blue-600" />
+        <div className="bg-white border-2 border-dashed border-border-main rounded-xl p-6 sm:p-12 text-center">
+          <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto mb-4 rounded-2xl bg-blue-100 flex items-center justify-center">
+            <MessageSquare className="w-7 h-7 sm:w-8 sm:h-8 text-blue-600" />
           </div>
           <p className="text-base font-bold text-ink mb-2">No phone numbers yet</p>
           <p className="text-xs text-ink-secondary mb-6 max-w-md mx-auto">
             Buy or port a phone number in Telnyx Mission Control, then click Sync. Numbers must be assigned to a messaging profile.
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-2">
+          <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-2">
             <a
               href="https://portal.telnyx.com/#/app/numbers/buy"
               target="_blank"
               rel="noreferrer"
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-colors"
+              className="w-full sm:w-auto justify-center px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
               Buy a number in Telnyx
@@ -905,7 +905,7 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
                 loadAccounts(true);
               }}
               disabled={isLoading || isStatusLoading}
-              className="px-5 py-2 bg-white hover:bg-off-white border border-border-main text-ink text-xs font-bold rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50"
+              className="w-full sm:w-auto justify-center px-5 py-2 bg-white hover:bg-off-white border border-border-main text-ink text-xs font-bold rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50"
             >
               {isLoading || isStatusLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
               Sync

@@ -346,7 +346,7 @@ export const UnifiedRecentCampaigns: React.FC<UnifiedRecentCampaignsProps> = ({
     <section
       id="rcard-section"
       ref={sectionRef as React.RefObject<HTMLElement>}
-      className={`bg-white border border-border-main rounded-xl shadow-sm p-5 sm:p-6 space-y-4 ${sectionVisible ? 'section-animate-in' : ''}`}
+      className={`bg-white border border-border-main rounded-xl shadow-sm p-4 sm:p-6 space-y-4 ${sectionVisible ? 'section-animate-in' : ''}`}
       style={compact ? { maxHeight: '520px', overflowY: 'auto' } : undefined}
     >
       {/* Header row — title + filter tabs + bulk-action button */}
@@ -364,7 +364,7 @@ export const UnifiedRecentCampaigns: React.FC<UnifiedRecentCampaignsProps> = ({
 
         <div className="flex items-center gap-2 flex-wrap">
           {/* Filter tabs */}
-          <div className="flex bg-off-white border border-border-light p-1 rounded-md shrink-0">
+          <div className="flex bg-off-white border border-border-light p-1 rounded-md shrink-0 overflow-x-auto no-scrollbar max-w-full">
             {([
               { id: 'all', label: 'All', count: campaigns.length },
               { id: 'site-deploy', label: 'Site Deploy', count: sdCount, color: 'text-accent' },
@@ -1171,12 +1171,15 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-ink/45 z-[80] flex items-start justify-center p-4 overflow-y-auto backdrop-blur-xs animate-fade-in"
+      className="fixed inset-0 bg-ink/45 z-[80] flex items-center justify-center p-2.5 sm:p-4 backdrop-blur-xs animate-fade-in"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white border border-border-main rounded-2xl shadow-2xl w-full max-w-2xl my-6 flex flex-col overflow-hidden animate-slide-up">
+      <div 
+        className="bg-white border border-border-main rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-y-auto animate-slide-up"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="relative px-6 pt-6 pb-5 bg-gradient-to-br from-accent-soft/60 to-white border-b border-border-light">
+        <div className="relative px-4 pt-4 pb-4 sm:px-6 sm:pt-6 sm:pb-5 bg-gradient-to-br from-accent-soft/60 to-white border-b border-border-light">
           <div className="absolute top-0 right-0 w-32 h-32 bg-accent/5 rounded-full blur-2xl pointer-events-none" />
           <div className="absolute top-4 right-4">
             <button
@@ -1188,8 +1191,8 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
             </button>
           </div>
 
-          <div className="flex items-start gap-4 pr-10">
-            <div className="w-20 h-14 rounded-xl overflow-hidden border-2 border-accent/20 shadow-sm shrink-0 bg-surface flex items-center justify-center">
+          <div className="flex items-start gap-3 sm:gap-4 pr-10">
+            <div className="w-16 h-12 sm:w-20 sm:h-14 rounded-xl overflow-hidden border-2 border-accent/20 shadow-sm shrink-0 bg-surface flex items-center justify-center">
               {tpl ? (
                 <TemplateSimPreview id={tpl.id} name={tpl.name} niche={tpl.niche} badge="" isMostUsed={tpl.isMostUsed} />
               ) : isEmail ? (
@@ -1273,7 +1276,7 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
         </div>
 
         {/* Stats strip */}
-        <div className={`grid ${isEmail ? 'grid-cols-5' : isSms ? 'grid-cols-4' : 'grid-cols-3'} divide-x divide-border-light border-b border-border-light`}>
+        <div className={`grid ${isEmail ? 'grid-cols-3 sm:grid-cols-5' : isSms ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'} divide-x divide-y sm:divide-y-0 divide-border-light border-b border-border-light`}>
           {isEmail ? (
             <>
               <StatBlock label="Leads" value={loadingLeads ? (camp.leadsFound || 0) : (emailLeads.length || camp.leadsFound || 0)} icon={<Users className="w-4 h-4" />} color="text-blue-600" />
@@ -1316,7 +1319,7 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-border-light bg-off-white flex items-center justify-between gap-3 shrink-0">
+        <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-border-light bg-off-white flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2 text-[11px] text-ink-secondary min-w-0">
             {isEmail ? <Mail className="w-4 h-4 shrink-0" /> : camp.type === 'sms' ? <Send className="w-4 h-4 shrink-0" /> : <Globe className="w-4 h-4 shrink-0" />}
             <span className="truncate">
@@ -1451,7 +1454,7 @@ const SmsBody: React.FC<{
   }
 
   return (
-    <div className="px-6 py-4 space-y-4">
+    <div className="px-3.5 py-3.5 sm:px-6 sm:py-4 space-y-4">
       {/* ── Summary strip & Actions ── */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -1530,7 +1533,7 @@ const SmsBody: React.FC<{
 
         <div className="flex items-center gap-2">
           {/* Search Input */}
-          <div className="relative min-w-[180px]">
+          <div className="relative flex-1 sm:flex-initial min-w-0 sm:min-w-[180px]">
             <Search className="w-3.5 h-3.5 text-ink-tertiary absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
@@ -1747,16 +1750,16 @@ const SiteDeployBody: React.FC<{
     );
   }
   return (
-    <div className="px-6 py-4 space-y-3">
-      <div className="flex items-center justify-between mb-1">
+    <div className="px-3.5 py-3.5 sm:px-6 sm:py-4 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
         <div className="flex items-center gap-2">
-          <Globe className="w-4 h-4 text-accent" />
+          <Globe className="w-4 h-4 text-accent shrink-0" />
           <h4 className="text-sm font-bold text-ink">Deployed Sites & Lead Details ({liveSites.length})</h4>
         </div>
         <button
           type="button"
           onClick={handleDownloadCsv}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/10 hover:bg-accent/20 text-accent text-xs font-bold transition-all cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/10 hover:bg-accent/20 text-accent text-xs font-bold transition-all cursor-pointer shrink-0"
           title="Download all deployment details and live URLs as CSV"
         >
           <FileText className="w-3.5 h-3.5" />
@@ -1887,7 +1890,7 @@ const EmailBody: React.FC<{
   const leadsWithSite = displayRows.filter(l => l.siteUrl).length;
 
   return (
-    <div className="px-6 py-5 space-y-5">
+    <div className="px-3.5 py-4 sm:px-6 sm:py-5 space-y-5">
 
       {/* ── Summary strip ── */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -1929,7 +1932,7 @@ const EmailBody: React.FC<{
               const total = acc.sent + acc.failed;
               const pct = total > 0 ? Math.round((acc.sent / total) * 100) : 0;
               return (
-                <div key={acc.accountEmail + i} className="px-4 py-3 flex items-center gap-4 hover:bg-off-white/40 transition-colors">
+                <div key={acc.accountEmail + i} className="px-3 py-2.5 sm:px-4 sm:py-3 flex flex-wrap sm:flex-nowrap items-center gap-2.5 sm:gap-4 hover:bg-off-white/40 transition-colors">
                   <div className="w-8 h-8 rounded-lg bg-accent-soft text-accent flex items-center justify-center shrink-0">
                     <Mail className="w-4 h-4" />
                   </div>
@@ -1997,7 +2000,7 @@ const EmailBody: React.FC<{
               const Icon = isSent ? CheckCircle : isQueued ? Activity : X;
 
               return (
-                <div key={`${row.leadId ?? row.email ?? row.name}-${i}`} className="px-4 py-3 hover:bg-off-white/30 transition-colors">
+                <div key={`${row.leadId ?? row.email ?? row.name}-${i}`} className="px-3 py-3 sm:px-4 hover:bg-off-white/30 transition-colors">
                   <div className="flex items-start gap-3">
                     {/* Status icon */}
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${iconBg}`}>

@@ -1,0 +1,714 @@
+================================================================================
+LUNAO — LAUNCH SECTION & CAMPAIGNS COMPLETE MOBILE UI CONSISTENCY PLAN
+================================================================================
+Target Area:      Launch Section (`Campaigns.tsx`), All 3 Campaign Wizards
+                  (`EmailCampaignWizard.tsx`, `SmsCampaignWizard.tsx`,
+                  `SiteDeployCampaignWizard.tsx`), Shared Step Sub-Components
+                  (`CampaignTemplateStep.tsx`, `CsvPreview.tsx`,
+                  `SmsAccountStep.tsx`, `SmsLeadFinder.tsx`), and Recent
+                  Campaigns Cards + Detail Modal (`UnifiedRecentCampaigns.tsx`,
+                  `RecentCampaignsBits.tsx`).
+Scope:            MOBILE UI ONLY (`< 640px` / `< 768px` viewports).
+Strict Guardrail: ZERO DESKTOP CHANGES. Every existing `sm:`, `md:`, `lg:`, and
+                  `xl:` layout, spacing, font size, grid column count, and
+                  interactive behavior on Desktop (`>= 768px`) MUST remain
+                  100% untouched and identical.
+
+================================================================================
+1. ZERO-DESKTOP-REGRESSION ARCHITECTURAL MANDATE
+================================================================================
+
+1.1 Responsive Breakpoint Rule (How Mobile-Only Changes Work in Tailwind CSS)
+- In Tailwind CSS, unprefixed utility classes apply from `0px` upward, and
+  prefixed classes (`sm:`, `md:`, `lg:`) override them at `640px+`, `768px+`,
+  and `1024px+`.
+- RULE FOR EVERY EDIT IN THIS PLAN:
+  Whenever a base class is adjusted for mobile (e.g. changing `p-6` to `p-4` or
+  `px-6 py-3` to `px-3 py-2.5`), the original desktop value MUST be explicitly
+  locked at `sm:` or `md:` (e.g. `p-4 sm:p-6`, `px-3 py-2.5 sm:px-6 sm:py-3`).
+- Where a mobile-specific flex/grid behavior is needed (such as stacking a row
+  on mobile while keeping a horizontal row on desktop), use:
+  `flex-col sm:flex-row` or `grid-cols-1 sm:grid-cols-3` while preserving the
+  exact desktop alignment (`sm:items-center sm:justify-between`).
+
+1.2 Sacred Functional & Data Guardrails
+- Zero changes to state hooks, API calls, credit calculations, OAuth flows,
+  CSV parsing, Google Dork SSE streaming, Telnyx eligibility checks, or
+  Cloudflare deployment pipelines.
+- Raw HTML templates in `/public/templates-raw/` are never touched.
+- Audio feedback triggers (`playSoftTap`, `playGentleChime`, etc.) remain
+  untouched.
+
+================================================================================
+2. CANONICAL MOBILE UI DESIGN TOKENS (LAUNCH SECTION STANDARD)
+================================================================================
+
+Every card, step, header, button, and modal inside the Launch section will obey
+these unified mobile tokens on `< 640px` screens while restoring desktop tokens
+at `sm:` / `md:`:
+
+- Outer Wizard / Section Card Padding:
+  Mobile: `p-4` (`16px`) | Tablet/Desktop: `sm:p-6 md:p-8` (`24px` / `32px`)
+- Inner Feature / Specification Card Padding:
+  Mobile: `p-3.5` or `p-4` | Desktop: `sm:p-5` or `sm:p-6`
+- Section Titles (`h2` / `h3` Serif Headings):
+  Mobile: `text-xl` (`20px`) | Desktop: `sm:text-2xl` (`24px`)
+- Page Main Title ("Launch"):
+  Mobile: `text-2xl` (`24px`) | Desktop: `sm:text-4xl` (`36px`)
+- Segmented Tab / Lead-Source Pill Switchers:
+  Mobile: `w-full grid grid-cols-2` (or `flex w-full overflow-x-auto no-scrollbar`)
+          with `px-3 py-2.5 text-xs justify-center`
+  Desktop: `sm:w-fit sm:flex sm:px-6 sm:py-3 sm:text-sm`
+- CSV Upload Dropzones:
+  Mobile: `p-6` with `w-14 h-14` icon container
+  Desktop: `sm:p-12` with `sm:w-20 sm:h-20` icon container
+- Wizard Bottom Navigation Bar (`Back` / `Next Step` / `Launch`):
+  Mobile: `px-4 py-3.5` with touch-friendly `min-h-[42px]` buttons
+  Desktop: `sm:px-6 sm:py-4`
+- Modal Overlays (`CampaignDetailModal`, `DorkConfirmModal`, `CreateNicheModal`):
+  Mobile: `p-2.5 sm:p-4`, inner card `max-h-[92vh] sm:max-h-[90vh] rounded-2xl`
+  with `onMouseDown={(e) => e.stopPropagation()}` so scrolling/dragging never
+  accidentally closes the modal.
+
+================================================================================
+3. PART-BY-PART, STEP-BY-STEP IMPLEMENTATION BLUEPRINT
+================================================================================
+
+--------------------------------------------------------------------------------
+PART 1: LAUNCH SHELL, CAMPAIGN ENGINE SWITCHER & HORIZONTAL STEPPER
+File: `src/components/Campaigns.tsx`
+--------------------------------------------------------------------------------
+
+1.1 Launch Page Outer Container & Header (Lines 1869–1944)
+- Current Desktop/Mobile State:
+  - Container uses `space-y-8 pb-20`.
+  - Top row `flex flex-col md:flex-row md:items-end justify-between gap-4`.
+  - Heading `h2` uses `text-4xl font-serif text-ink tracking-tight`.
+  - Campaign Engine Switcher (`Email Outreach`, `SMS Campaign`, `Site Deploy`)
+    uses `flex items-center gap-1.5 bg-surface p-1 rounded-xl border border-border-light shadow-2xs`
+    and buttons use `px-3.5 py-2 ... text-xs` with nested credit badges
+    (`2 credits/lead`, `1 credit/site`).
+- Mobile Issue:
+  - On `320px–390px` screens, the 3 engine buttons + icons + credit badges
+    exceed the viewport width (`~460px` intrinsic width), causing horizontal
+    clipping or cramped wrapping.
+- Mobile-Only Fix (Preserving Desktop 100%):
+  - Outer spacing: `space-y-5 sm:space-y-8 pb-16 sm:pb-20`.
+  - Heading `h2`: `text-2xl sm:text-4xl font-serif text-ink tracking-tight`.
+  - Subtitle `p`: `text-xs sm:text-sm text-ink-secondary`.
+  - Campaign Engine Switcher wrapper:
+    Change `flex items-center gap-1.5 bg-surface p-1 rounded-xl`
+    to `grid grid-cols-3 sm:flex items-center gap-1 sm:gap-1.5 bg-surface p-1 rounded-xl w-full md:w-auto`.
+  - Engine Switcher Buttons (`Email Outreach`, `SMS Campaign`, `Site Deploy`):
+    On mobile (`< 640px`), stack icon/label cleanly or compact padding:
+    `px-2 py-2 sm:px-3.5 sm:py-2 rounded-lg text-[11px] sm:text-xs font-semibold flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 text-center`.
+  - Credit Pill inside each Engine Button (`2 credits/lead`, `1 credit/site`):
+    Keep visible on both mobile and desktop, scaled cleanly on mobile:
+    `text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-full whitespace-nowrap`.
+
+1.2 Horizontal Wizard Stepper Track (Lines 1950–2070)
+- Current State:
+  - Stepper container uses `bg-white rounded-2xl border border-border-main shadow-xs overflow-hidden`.
+  - Step buttons use `pl-6 pr-6 py-5 ... min-w-[140px]`.
+  - Step number badge uses `w-9 h-9 rounded-xl`.
+  - Step title uses `text-sm font-bold`.
+- Mobile Issue:
+  - `min-w-[140px]` with `pl-6 pr-6 py-5` only shows ~2.2 steps at a time on a
+    `375px` phone screen and takes up too much vertical height (`84px`).
+- Mobile-Only Fix (Preserving Desktop 100%):
+  - Step button padding & width:
+    `pl-3.5 pr-3.5 py-3.5 sm:pl-6 sm:pr-6 sm:py-5 min-w-[118px] sm:min-w-[140px]`.
+  - Step number badge:
+    `w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl text-xs sm:text-sm`.
+  - Step label & sublabel:
+    Step title `text-xs sm:text-sm font-bold whitespace-nowrap`,
+    Step subtitle (`Step X of Y`) `text-[9px] sm:text-[10px]`.
+  - Diagonal chevron separator svg:
+    `w-3 sm:w-4` so mobile steps fit more compactly while keeping the exact
+    chevron breadcrumb look.
+
+1.3 Create Custom Niche Modal (`Campaigns.tsx`, `EmailCampaignWizard.tsx`, `SmsCampaignWizard.tsx`, `SiteDeployCampaignWizard.tsx`)
+- Current State:
+  - Modal uses `p-4`, inner card `p-6 rounded-2xl max-w-md w-full`.
+  - Icon picker grid uses `grid-cols-6 gap-2`.
+- Mobile-Only Fix:
+  - Inner card padding: `p-4 sm:p-6 max-h-[90vh] overflow-y-auto`.
+  - Icon picker grid: `grid-cols-5 sm:grid-cols-6 gap-1.5 sm:gap-2` so touch
+    targets are comfortable and never overflow narrow `320px` screens.
+
+--------------------------------------------------------------------------------
+PART 2: CAMPAIGN 1 — EMAIL OUTREACH WIZARD (ALL 5 STEPS + LIVE PROGRESS + COMPLETION)
+File: `src/components/EmailCampaignWizard.tsx`
+--------------------------------------------------------------------------------
+
+2.1 Wizard Outer Card & Step Content Container (Lines 1295, 1468)
+- Current State:
+  - Outer wrapper: `bg-white rounded-2xl border border-border-main shadow-xs overflow-hidden`.
+  - Step content wrapper: `p-6 md:p-8`.
+- Mobile-Only Fix:
+  - Step content wrapper: `p-4 sm:p-6 md:p-8` (gives `16px` breathing room on
+    mobile instead of `24px`, preventing nested cards from feeling squeezed).
+
+2.2 Live Progress Screen (`isLaunching && !campaignComplete`, Lines 1299–1348)
+- Current State:
+  - Wrapper `p-8 space-y-6`.
+  - Header `flex items-center justify-between` with `w-12 h-12` icon + `text-xl`
+    title + `text-3xl` percentage on the right.
+  - Status feed `max-h-60 overflow-y-auto p-4`.
+- Mobile-Only Fix:
+  - Wrapper: `p-4 sm:p-8 space-y-4 sm:space-y-6`.
+  - Header: `flex items-start sm:items-center justify-between gap-3`, icon
+    `w-10 h-10 sm:w-12 sm:h-12`, title `text-lg sm:text-xl`, percentage
+    `text-2xl sm:text-3xl shrink-0`.
+  - Status log items: add `break-words min-w-0` so long business names or URLs
+    never cause horizontal scroll inside the live progress box.
+
+2.3 Campaign Complete Screen (`campaignComplete && campaignStats`, Lines 1351–1462)
+- Current State:
+  - Wrapper `p-8 space-y-6`.
+  - Top icon `w-16 h-16`, heading `text-2xl`.
+  - Stats grid: `grid grid-cols-3 gap-4 max-w-md mx-auto` with `p-4` cards and
+    `text-2xl` numbers (`Emails Sent`, `Failed`, `Sites Deployed`).
+  - Deployed sites list items: `p-2` row with `text-sm font-medium` and
+    `text-xs text-accent flex items-center gap-1` full URL string.
+  - Bottom CTA buttons: `flex justify-center gap-3 pt-4`.
+- Mobile Issue:
+  - In the deployed sites list, `site.url` is printed in full next to
+    `site.name` without `truncate`, overflowing horizontally on mobile.
+  - The 3 stat cards (`Emails Sent`, `Failed`, `Sites Deployed`) have long
+    uppercase labels (`Sites Deployed`) that wrap awkwardly in `p-4` on `320px`.
+  - Bottom CTA buttons (`Launch Another Campaign`, `View All Campaigns`) side-by-side
+    squeeze on narrow screens.
+- Mobile-Only Fix:
+  - Wrapper: `p-4 sm:p-8 space-y-5 sm:space-y-6`.
+  - Stats grid: `grid grid-cols-3 gap-2 sm:gap-4 max-w-md mx-auto`, card padding
+    `p-2.5 sm:p-4`, number `text-xl sm:text-2xl`, label `text-[9px] sm:text-[10px]`.
+  - Deployed sites list row:
+    `flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 p-2.5 sm:p-2 bg-white rounded-lg border border-border-light`
+    with `truncate` on both `site.name` and `site.url`.
+  - Bottom CTA buttons:
+    `flex flex-col sm:flex-row justify-center gap-2.5 sm:gap-3 pt-2 sm:pt-4`
+    with `w-full sm:w-auto justify-center`.
+
+2.4 Step 1: Select Niche (Lines 1471–1545)
+- Current State:
+  - Heading `text-2xl` (`Choose a target niche`).
+  - Grid `grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4`.
+  - Cards `p-4 sm:p-5 rounded-2xl`, squircle `w-14 h-14 sm:w-16 sm:h-16`,
+    title `text-sm sm:text-base font-bold`, subtitle `text-[11px] sm:text-xs`.
+- Mobile-Only Fix:
+  - Section heading: `text-xl sm:text-2xl`.
+  - Card title: add `truncate max-w-full` and card `min-h-[132px] sm:min-h-0`
+    so every niche card in the 2-column mobile grid has identical height even if
+    a custom niche name is long.
+  - Delete button on custom niches: `opacity-100 sm:opacity-0 sm:group-hover:opacity-100`
+    so mobile touch users (who don't have `:hover`) can see and tap the remove
+    button on custom niches.
+
+2.5 Step 2: Choose Leads — Tab Switcher, CSV Upload & Auto Email Sender (Lines 1548–2099)
+- Current State:
+  - Heading `text-2xl` (`Choose your leads`).
+  - Pill switcher container (Line 1554):
+    `flex gap-2 p-1.5 bg-surface rounded-2xl border border-border-light w-fit`.
+    Contains 3 buttons (`Auto Email Sender` [hidden], `Upload CSV`,
+    `Auto Email Sender` [dork]) each with `px-6 py-3 rounded-xl text-sm font-semibold`.
+  - CSV Dropzone (Line 1605): `p-12 text-center`, icon `w-20 h-20`.
+  - Auto Email Sender (`leadSource === 'leads'`, Line 1675):
+    - Hero explainer card (Line 1679): `p-6` with `flex items-start gap-4`,
+      `w-14 h-14` icon, and 3 feature pills.
+    - Search control card (Line 1711): `p-5 space-y-4`, city input `py-3`,
+      count pills `grid-cols-4 gap-2`, Find Leads CTA `py-3.5`.
+    - Live Dork Results Table (Line 1882):
+      Header `px-4 py-3 flex items-center justify-between gap-2 flex-wrap`.
+      Lead rows (Line 1925): `px-4 py-3 flex items-center gap-3` with checkbox,
+      business name + city + phone, and right-aligned email pill `max-w-[220px]`.
+- Mobile Issues:
+  - Pill switcher with `w-fit` and `px-6 py-3 text-sm` overflows narrow mobile
+    screens (`Upload CSV` + `Auto Email Sender` side-by-side).
+  - CSV Dropzone `p-12` is excessively tall and cramped horizontally on mobile.
+  - Auto Email Sender explainer card `p-6` with `w-14 h-14` left icon leaves
+    only ~200px for text on a `360px` phone.
+  - Dork Results Lead Rows: having business name + city + phone on the left AND
+    a `max-w-[220px]` email badge on the right in a single horizontal flex row
+    crushes the business name to 4–5 characters on mobile!
+- Mobile-Only Fixes (Preserving Desktop 100%):
+  - Section heading: `text-xl sm:text-2xl`.
+  - Pill switcher container:
+    `grid grid-cols-2 sm:flex gap-1.5 sm:gap-2 p-1 sm:p-1.5 bg-surface rounded-2xl border border-border-light w-full sm:w-fit`.
+  - Pill switcher buttons:
+    `px-3 py-2.5 sm:px-6 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 sm:gap-2.5 whitespace-nowrap`.
+  - CSV Dropzone:
+    `p-6 sm:p-12 text-center`, icon box `w-14 h-14 sm:w-20 sm:h-20 mb-3 sm:mb-4`,
+    icon `w-7 h-7 sm:w-10 sm:h-10`, title `text-base sm:text-lg`.
+  - Auto Email Sender Explainer Card (Line 1679):
+    `p-4 sm:p-6`, inner flex `flex-col sm:flex-row items-start gap-3 sm:gap-4`,
+    icon `w-11 h-11 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl`.
+  - Search Control Card (Line 1711):
+    `p-3.5 sm:p-5 space-y-3.5 sm:space-y-4`.
+    Target count buttons (`5, 10, 15, 20`): `py-2 sm:py-2.5 text-xs sm:text-sm`.
+  - Dork Results Lead Row (Line 1925):
+    Change inner layout so on mobile the email pill stacks cleanly underneath
+    the business name/city while remaining right-aligned on `sm:`:
+    Wrap business info + email badge in `flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3`.
+    Email badge: `self-start sm:self-auto max-w-full sm:max-w-[220px] truncate`.
+
+2.6 Step 3: Select Template (Lines 2103–2111 -> `CampaignTemplateStep.tsx`)
+- Handled in Part 5 (`CampaignTemplateStep.tsx`) so all 3 wizards inherit the
+  exact same mobile template cards and header.
+
+2.7 Step 4: Connect Accounts & Email Content Editor (Lines 2114–2347)
+- Current State:
+  - Heading `text-2xl` (`Choose sending accounts`).
+  - Verification status banner (Line 2145): `flex items-center justify-between gap-3 px-3 py-2`.
+  - Connected Account Card (Line 2210): `p-4 rounded-xl`, stats row
+    `flex items-center gap-4 mt-2 text-xs` (`X sent today · Y remaining · Cap: Z/day`).
+  - Reconnect alert box inside card (Line 2268): `flex items-start gap-3` with
+    inline `Reconnect` button.
+  - Email Preview Editor (Line 2306):
+    `flex items-center justify-between mb-1` with `Message` label on left and
+    3 token pills (`{{business_name}}`, `{{city}}`, `{{site_url}}`) on right.
+- Mobile Issues:
+  - Account card stats row (`gap-4`) wraps awkwardly on `320px–375px` screens.
+  - Reconnect alert box inside an expired account card puts icon + long email +
+    error description + Reconnect button in a single horizontal row, squishing
+    the error text on mobile.
+  - Email Editor `Message` label + 3 token buttons (`{{business_name}}`,
+    `{{city}}`, `{{site_url}}`) on a single row overflows narrow mobile screens.
+- Mobile-Only Fixes (Preserving Desktop 100%):
+  - Heading: `text-xl sm:text-2xl`.
+  - Account card stats row (Line 2250):
+    `flex flex-wrap items-center gap-x-2.5 gap-y-1 sm:gap-4 mt-2 text-[11px] sm:text-xs text-ink-secondary`.
+  - Reconnect alert box (Line 2268):
+    `mt-3 rounded-lg bg-danger/10 border border-danger/30 p-3 flex flex-col sm:flex-row items-start gap-2.5 sm:gap-3`
+    and Reconnect button `w-full sm:w-auto justify-center`.
+  - Email Editor Message Header + Token Pills (Line 2321):
+    `flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-1 mb-1.5 sm:mb-1`
+    and token pills wrapper `flex flex-wrap gap-1`.
+
+2.8 Step 5: Review & Launch (Lines 2350–2531)
+- Current State:
+  - Primary summary row (Line 2359):
+    `grid gap-3 ${leadSource === 'leads' ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-3'}`
+    with `p-4` cards and `text-2xl` values (`Leads`, `Niche`, `Target City`, `Accounts`).
+  - Website Template summary card (Line 2395): `p-4 flex items-center gap-4`
+    with `w-28 h-20` preview thumbnail.
+  - Sending Accounts list row (Line 2456): `flex items-center justify-between px-4 py-3`
+    with account email on left and count on right.
+- Mobile Issues:
+  - When `leadSource === 'csv'`, `grid-cols-3` on a `320px–375px` phone crushes
+    the `Niche` card (e.g. `"Real Estate"` or `"Landscaping"` in `text-2xl`
+    overflows a 95px column!).
+  - Long Gmail/Outlook addresses in the Sending Accounts list row (`px-4 py-3`)
+    collide with the right-hand email count if `min-w-0` + `truncate` is missing.
+- Mobile-Only Fixes (Preserving Desktop 100%):
+  - Primary summary row (Line 2359):
+    When `leadSource !== 'leads'`, use `grid-cols-1 sm:grid-cols-3` (or
+    `grid-cols-2 sm:grid-cols-3` with the 3rd card `col-span-2 sm:col-span-1`),
+    and scale card values to `text-lg sm:text-2xl truncate` with `p-3 sm:p-4`.
+  - Website Template summary row (Line 2402):
+    `p-3 sm:p-4 flex items-center gap-3 sm:gap-4`, thumbnail `w-20 h-16 sm:w-28 sm:h-20`.
+  - Sending Accounts list row (Line 2456):
+    Add `min-w-0 flex-1` to the left flex container and `truncate` to the email
+    paragraph `text-xs font-semibold text-ink truncate` so long email addresses
+    never push the email counter off-screen.
+
+2.9 Bottom Navigation Bar (Lines 2535–2614)
+- Current State:
+  - `px-6 py-4 border-t border-border-light flex flex-wrap items-center justify-between gap-3`.
+- Mobile-Only Fix:
+  - `px-4 py-3.5 sm:px-6 sm:py-4 border-t border-border-light flex items-center justify-between gap-2 sm:gap-3`.
+
+--------------------------------------------------------------------------------
+PART 3: CAMPAIGN 2 — SMS OUTREACH WIZARD (ALL 6 STEPS + 2-SEG OPTIMIZER + BUBBLE SIMULATOR)
+Files: `src/components/SmsCampaignWizard.tsx`, `src/components/SmsAccountStep.tsx`,
+       `src/components/SmsLeadFinder.tsx`
+--------------------------------------------------------------------------------
+
+3.1 Wizard Outer Card & Live Progress / Completion Screens (`SmsCampaignWizard.tsx` Lines 1140–1318)
+- Current State:
+  - Step content wrapper (Line 1321): `p-6 md:p-8`.
+  - Live Progress Screen (Line 1145): `p-8 space-y-6`, header `text-xl`, percentage `text-3xl`.
+  - Completion Screen (Line 1196):
+    - Wrapper `p-8 space-y-6`.
+    - Stats grid (Line 1212): `grid grid-cols-3 gap-4 max-w-md mx-auto` (`SMS Sent`, `Failed`, `Sites Deployed`).
+    - Deployed sites list (Line 1236): `p-2` rows with `site.name` and full `site.url`.
+    - Action buttons (Line 1283): `flex justify-center gap-3 pt-4`.
+- Mobile-Only Fixes (Preserving Desktop 100%):
+  - Step content wrapper: `p-4 sm:p-6 md:p-8`.
+  - Live Progress & Completion Screen: Apply the exact same mobile responsive
+    classes as Email (`p-4 sm:p-8`, `grid-cols-3 gap-2 sm:gap-4`, `p-2.5 sm:p-4`,
+    `text-xl sm:text-2xl`, `truncate` on deployed site URLs, and stacked
+    `flex-col sm:flex-row` action buttons on mobile).
+
+3.2 Step 1: Select Niche (`SmsCampaignWizard.tsx` Lines 1327–1406)
+- Mobile-Only Fixes:
+  - Heading `text-xl sm:text-2xl`.
+  - Niche cards: add `truncate max-w-full` on title and make custom niche delete
+    button visible on touch screens (`opacity-100 sm:opacity-0 sm:group-hover:opacity-100`).
+
+3.3 Step 2: Choose Leads (`SmsCampaignWizard.tsx` Lines 1411–1530 + `SmsLeadFinder.tsx`)
+- Current State:
+  - Lead source pill switcher (Line 1417):
+    `flex gap-2 p-1.5 bg-surface rounded-2xl border border-border-light w-fit`
+    with buttons (`Upload CSV`, `Find Leads in Canada`) using `px-6 py-3 rounded-xl text-sm`.
+  - CSV Dropzone (Line 1471): `p-12 text-center`, icon `w-20 h-20`.
+  - `SmsLeadFinder.tsx`:
+    - Loading card (Line 189): `p-12`.
+    - Discover CTA button (Line 299): `px-6 py-4 text-sm`.
+    - Lead row cards (Line 388): `p-4 rounded-xl ... flex items-start gap-3`.
+- Mobile-Only Fixes (Preserving Desktop 100%):
+  - Lead source pill switcher:
+    `grid grid-cols-2 sm:flex gap-1.5 sm:gap-2 p-1 sm:p-1.5 bg-surface rounded-2xl border border-border-light w-full sm:w-fit`
+    and buttons `px-3 py-2.5 sm:px-6 sm:py-3 text-xs sm:text-sm justify-center whitespace-nowrap`.
+  - CSV Dropzone: `p-6 sm:p-12`, icon `w-14 h-14 sm:w-20 sm:h-20`.
+  - `SmsLeadFinder.tsx`:
+    - Loading card: `p-6 sm:p-12`.
+    - Discover CTA button: `px-4 py-3.5 sm:px-6 sm:py-4 text-xs sm:text-sm text-center`.
+    - Lead row address/city text: add `break-words` so long Canadian addresses
+      wrap cleanly without pushing the right phone icon off-card.
+
+3.4 Step 3: Select Template (`SmsCampaignWizard.tsx` Lines 1534–1542)
+- Shared `CampaignTemplateStep.tsx` (detailed in Part 5).
+
+3.5 Step 4: Phone Setup (`src/components/SmsAccountStep.tsx`)
+- Current State:
+  - Automated Mode shared sender card (Line 157): `p-5 flex items-center gap-4`.
+  - Connect Telnyx dashed card (Line 595): `p-10 text-center`.
+  - Reconnect Telnyx cards (Lines 650, 674): `p-6` with `flex items-start gap-4`
+    and right-aligned `Reconnect` button.
+  - Buy First Number CTA card (Line 746): `p-10 text-center`.
+  - Header row (Line 828): `flex items-center justify-between` with `Sync` button.
+  - Needs-Config Number Cards (Line 995): `p-4 ... flex items-start gap-3` with
+    number + error badges + right-side `Fix Now` button.
+- Mobile Issues:
+  - `p-10` on empty/CTA cards squeezes text into a narrow column on `320px–375px`
+    phones.
+  - Reconnect card (`flex items-start gap-4`) and Needs-Config number card put
+    icon + email/number + multi-line warning + action button in a single
+    horizontal row, cramping the text on mobile.
+- Mobile-Only Fixes (Preserving Desktop 100%):
+  - Connect / Buy First Number CTA cards (Lines 595, 746, 883):
+    `p-5 sm:p-10 text-center` (and `p-6 sm:p-12` on fallback card).
+  - Reconnect cards (Lines 650, 674):
+    `p-4 sm:p-6`, inner layout `flex flex-col sm:flex-row items-start gap-3 sm:gap-4`,
+    Reconnect button `w-full sm:w-auto justify-center`.
+  - Needs-Config Number Cards (Line 995):
+    Ensure inner action button wraps cleanly on mobile (`flex-col sm:flex-row`
+    or `flex-wrap`) so `Fix Now` is full-width tappable on mobile while staying
+    inline on desktop.
+
+3.6 Step 5: Compose SMS, 2-Segment Optimizer & Live Bubble Simulator (`SmsCampaignWizard.tsx` Lines 1560–2338)
+- Current State:
+  - Top 2-column grid (Line 1571): `grid grid-cols-1 lg:grid-cols-12 gap-6 items-start`.
+  - Left Column (`lg:col-span-7`):
+    - Composer Card (`p-6 rounded-2xl`):
+      - Header + Tone Preset Switcher (`Casual Friend`, `Warm Referral`, `No-Catch Direct`).
+      - Dynamic Personalization Token Bar (`+ Business Name`, `+ City`, `+ Niche`, `+ Live Site URL`).
+      - Footer stats bar (`Characters: X / 160` + `1 Credit / SMS · Carrier 10DLC`).
+      - Embedded 2-Segment Optimizer Header + Toggle + Custom Template Editor.
+  - Right Column (`lg:col-span-5`):
+    - Live SMS Bubble Preview Card (`p-5 rounded-2xl`):
+      - Header + Recipient Navigator (`<`, `<select>`, `>`).
+      - Smartphone Canvas (`p-4 rounded-2xl`) + Message Bubble + Live Website Card Attachment.
+      - Functionality Action Strip (`Copy Sample SMS` + `Target URL`).
+  - Bottom Full-Width Card: `All Messages & Segment Inspector` (Line 2070):
+    - Card `p-6 rounded-2xl`.
+    - Filter Tabs (`All Messages`, `1 Segment`, `2 Segments`) in `flex items-center gap-1.5 bg-surface p-1 rounded-xl`.
+    - 2-Segment Tip Notice (Line 2139): `flex items-center justify-between gap-3`.
+    - Individual Lead Message Cards (Line 2172): header + badges (`2-Seg Shortened`,
+      `Custom Edited`, `X chars`, `1 Segment`) + message preview + `Preview` / `Customize` buttons.
+- Mobile Issues:
+  - Composer Card `p-6` and Inspector Card `p-6` take too much horizontal padding
+    on mobile (`p-4 sm:p-6`).
+  - In the 2-Segment Optimizer (Line 1836), the header row
+    `flex items-center justify-between` has `Shorter Template for 2-Segment Messages Alone`
+    on the left and `✓ 100% converted to 1 segment!` badge on the right — on
+    mobile this overflows or wraps awkwardly without `flex-wrap gap-1.5`.
+  - In `All Messages & Segment Inspector` (Line 2083), the 3 filter tabs
+    (`All Messages (20)`, `1 Segment 18`, `2 Segments 2`) overflow narrow
+    `320px–375px` viewports if they don't wrap or scroll horizontally.
+  - The 2-Segment Tip Notice (Line 2139) has `flex items-center justify-between gap-3`
+    without `flex-col sm:flex-row`, squishing the warning text next to the
+    `⚡ Shorten 2-Seg Messages` button on mobile.
+  - In each Lead Message Card (Line 2195), the badge strip
+    (`flex items-center gap-2 shrink-0`) needs `flex-wrap` on mobile when both
+    `⚡ 2-Seg Shortened` and `✏️ Custom Edited` badges are active.
+- Mobile-Only Fixes (Preserving Desktop 100%):
+  - Composer Card, Bubble Preview Card, and Inspector Card padding:
+    `p-4 sm:p-6` (and `p-4 sm:p-5` on Bubble Preview Card).
+  - 2-Segment Optimizer inner header (Line 1836):
+    `flex flex-wrap items-center justify-between gap-1.5`.
+  - Recipient Navigator in Bubble Preview (Line 1917):
+    `w-full sm:w-auto justify-between sm:justify-start`, select `flex-1 sm:flex-initial max-w-none sm:max-w-[140px]`.
+  - Bubble status row (Line 2011):
+    `flex flex-wrap items-center justify-between gap-1 text-[10px] px-1`.
+  - All Messages & Segment Inspector Filter Tabs (Line 2083):
+    `flex flex-wrap sm:flex-nowrap items-center gap-1 sm:gap-1.5 bg-surface p-1 rounded-xl border border-border-light w-full md:w-auto`
+    with buttons `flex-1 sm:flex-initial justify-center px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs whitespace-nowrap`.
+  - 2-Segment Tip Notice (Line 2139):
+    `flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3`
+    and button `w-full sm:w-auto text-center`.
+  - Lead Message Card badge strip (Line 2195):
+    `flex flex-wrap items-center gap-1.5 sm:gap-2 shrink-0`.
+
+3.7 Step 6: Review & Launch (`SmsCampaignWizard.tsx` Lines 2343–2677)
+- Current State:
+  - Campaign Name Customizer Card (Line 2353): `p-6 rounded-2xl`, header
+    `flex items-center justify-between` with `Used in analytics, logs & reports`
+    on the right.
+  - 4 Core Specification Cards (Line 2384): `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4`
+    with `p-5`.
+  - SMS Message Preview & Snapshot Card (Line 2528): `p-6 rounded-2xl`.
+  - Cost Summary & Final Autonomous Launch Card (Line 2588):
+    `p-6 md:p-8 rounded-3xl`, credits boxes `flex items-center gap-3`
+    (`Total Required`, `Your Balance`), big launch button `py-4 rounded-2xl text-base`.
+- Mobile-Only Fixes (Preserving Desktop 100%):
+  - Campaign Name Customizer Card: `p-4 sm:p-6`, header `flex flex-wrap items-center justify-between gap-1`.
+  - 4 Core Specification Cards: `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4`, card padding `p-4 sm:p-5`.
+  - SMS Message Preview Card: `p-4 sm:p-6`, header badge/button strip `flex flex-wrap items-center gap-2`.
+  - Cost Summary & Final Launch Card:
+    `p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl space-y-4 sm:space-y-6`.
+    Credits boxes wrapper (Line 2597): `grid grid-cols-2 sm:flex items-center gap-2.5 sm:gap-3 w-full md:w-auto`,
+    each box `px-3 py-2 sm:px-4 sm:py-2 text-center sm:text-right` with
+    `text-lg sm:text-xl` credit numbers.
+    Big Launch Button (Line 2638): `py-3.5 sm:py-4 text-xs sm:text-base px-4 text-center`.
+
+--------------------------------------------------------------------------------
+PART 4: CAMPAIGN 3 — SITE DEPLOY WIZARD (ALL 4 STEPS + LIVE PROGRESS + COMPLETION)
+File: `src/components/SiteDeployCampaignWizard.tsx`
+--------------------------------------------------------------------------------
+
+4.1 Wizard Outer Card, Live Progress & Completion Screen (Lines 529–733)
+- Current State:
+  - Step content wrapper (Line 666): `p-6 md:p-8`.
+  - Live Progress Screen (Line 534): `p-8 space-y-6`.
+  - Completion Screen (Line 580): `p-8 space-y-6`, stats grid `grid-cols-2 gap-4`,
+    deployed sites list `p-2`, bottom buttons `flex justify-center gap-3 pt-4`.
+- Mobile-Only Fixes (Preserving Desktop 100%):
+  - Step content wrapper: `p-4 sm:p-6 md:p-8`.
+  - Live Progress & Completion Screen: `p-4 sm:p-8 space-y-4 sm:space-y-6`,
+    truncate long URLs in deployed sites list, stack bottom CTA buttons on
+    mobile (`flex-col sm:flex-row w-full sm:w-auto`).
+
+4.2 Step 1: Select Niche (Lines 669–738)
+- Mobile-Only Fixes:
+  - Heading `text-xl sm:text-2xl`.
+  - Niche cards: `truncate max-w-full` on title, touch-visible delete button on
+    custom niches (`opacity-100 sm:opacity-0 sm:group-hover:opacity-100`).
+
+4.3 Step 2: Choose Leads — CSV Upload & Auto Lead Finder (Lines 741–974)
+- Current State:
+  - Lead source pill switcher (Line 746):
+    `flex gap-2 p-1.5 bg-surface rounded-2xl border border-border-light w-fit`
+    with buttons (`Upload CSV`, `Auto Lead Finder`) using `px-6 py-3 rounded-xl text-sm`.
+  - CSV Dropzone (Line 778): `p-12 text-center`, icon `w-20 h-20`.
+  - Auto Lead Finder card (Line 832):
+    - Explainer card `p-6` with `w-14 h-14` icon.
+    - Controls card `p-5` with city input + `grid-cols-4` count buttons.
+- Mobile-Only Fixes (Preserving Desktop 100%):
+  - Pill switcher: `grid grid-cols-2 sm:flex gap-1.5 sm:gap-2 p-1 sm:p-1.5 ... w-full sm:w-fit`,
+    buttons `px-3 py-2.5 sm:px-6 sm:py-3 text-xs sm:text-sm justify-center whitespace-nowrap`.
+  - CSV Dropzone: `p-6 sm:p-12`, icon `w-14 h-14 sm:w-20 sm:h-20`.
+  - Auto Lead Finder explainer card: `p-4 sm:p-6`, `flex-col sm:flex-row`, icon `w-11 h-11 sm:w-14 sm:h-14`.
+  - Controls card: `p-3.5 sm:p-5`.
+
+4.4 Step 3: Select Template (Lines 977–985)
+- Shared `CampaignTemplateStep.tsx` (Part 5).
+
+4.5 Step 4: Review & Deploy (Lines 988–1077)
+- Current State:
+  - Summary cards grid (Line 995): `grid grid-cols-1 md:grid-cols-3 gap-4` with `p-5` cards.
+  - Sample Leads Preview card (Line 1043): `p-5` with lead rows
+    `flex items-center justify-between text-xs p-2` showing `lead.name` on left
+    and `lead.city` + `Will deploy site` badge on right.
+- Mobile-Only Fixes (Preserving Desktop 100%):
+  - Heading `text-xl sm:text-2xl`.
+  - Summary cards: `p-4 sm:p-5` with `text-2xl sm:text-3xl` numbers.
+  - Sample Leads Preview rows (Line 1049):
+    Add `min-w-0 gap-2` and `truncate` on `lead.name` (`font-medium text-ink truncate`)
+    and `shrink-0` on the right container so long business names never crush
+    the `Will deploy site` badge on mobile.
+
+--------------------------------------------------------------------------------
+PART 5: SHARED WIZARD SUB-COMPONENTS (`CampaignTemplateStep.tsx`, `CsvPreview.tsx`, `TemplatePreviewModal.tsx`)
+--------------------------------------------------------------------------------
+
+5.1 `src/components/CampaignTemplateStep.tsx` (Used by All 3 Wizards in Step 3)
+- Current State:
+  - Header banner (Line 111): `p-6 md:p-8`, title `text-2xl md:text-3xl`,
+    search input `max-w-xs w-full`.
+  - Template Grid (Line 160): `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6`.
+  - Template Card:
+    - Image container `aspect-[16/10]`.
+    - Center Eye Preview button (`w-14 h-14 rounded-full`) shown when `isSelected`.
+    - Bottom info bar `p-4 bg-white flex items-center justify-between gap-3`.
+- Mobile-Only Fixes (Preserving Desktop 100%):
+  - Header banner: `p-4 sm:p-6 md:p-8 rounded-2xl`, title `text-xl sm:text-2xl md:text-3xl`.
+  - Search input wrapper: `w-full md:max-w-xs` so search bar spans full width on
+    mobile and stays `max-w-xs` on desktop.
+  - Template Grid: `gap-4 sm:gap-6`.
+  - Template Card Bottom Info Bar: `p-3.5 sm:p-4`, add `min-w-0 flex-1` around
+    the template title + niche pill so long custom template names truncate
+    cleanly without squeezing the `Selected` / `Select` button.
+
+5.2 `src/components/CsvPreview.tsx` (Used by All 3 Wizards in Step 2)
+- Current State:
+  - Top header bar (Line 168): `px-5 py-4 flex items-center justify-between`
+    with file icon + `fileName` + row/column summary on left, and `validCount`
+    badge + `X` remove button on right.
+  - Horizontal Scroll Slider Bar (Line 228): `px-5 py-2.5 flex items-center gap-3`
+    with `Scroll table` label + range slider + `← →` buttons + `Scroll right for more` hint.
+  - Data Table (Line 257): 6 columns (`#`, `Business`, `Contact`, `Location`, `Rating`, `Status`)
+    with `px-4 py-3`.
+- Mobile Issues:
+  - Long CSV filenames (e.g. `sydney-barbers-leads-2026-export.csv`) in the top
+    header bar push the `valid` badge and `X` button off-screen on mobile.
+  - On mobile touch screens, native horizontal swipe on `overflow-x-auto` is
+    natural, whereas the `Scroll right for more` text label crowds the range
+    slider on `320px` screens.
+- Mobile-Only Fixes (Preserving Desktop 100%):
+  - Top header bar (Line 168):
+    `px-3.5 py-3 sm:px-5 sm:py-4 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2`.
+    Add `min-w-0 flex-1` to the left group and `truncate` to the filename `<p>`.
+  - Horizontal Scroll Slider Bar (Line 228):
+    `px-3.5 py-2 sm:px-5 sm:py-2.5`, hide the secondary `Scroll right for more`
+    text on very small screens (`hidden sm:inline`) so the slider has plenty of
+    room.
+  - Table cells: `px-3 py-2.5 sm:px-4 sm:py-3 whitespace-nowrap` so columns stay
+    cleanly aligned when swiping horizontally on mobile.
+
+--------------------------------------------------------------------------------
+PART 6: RECENT CAMPAIGNS SECTION, CARDS & RESULTS DETAIL MODAL
+Files: `src/components/UnifiedRecentCampaigns.tsx`, `src/components/RecentCampaignsBits.tsx`
+--------------------------------------------------------------------------------
+
+6.1 Recent Campaigns Section Header & Filter Pills (`UnifiedRecentCampaigns.tsx` Lines 795–895)
+- Current State:
+  - Section wrapper `pt-8 border-t border-border-light space-y-5`.
+  - Header row `flex flex-col sm:flex-row sm:items-center justify-between gap-3`.
+  - Filter tabs (`All`, `Email`, `SMS`, `Site Deploy`) + Search Input + Refresh button.
+- Mobile-Only Fixes (Preserving Desktop 100%):
+  - Filter tabs bar: ensure horizontal scroll or clean wrap on mobile
+    (`flex items-center gap-1 overflow-x-auto no-scrollbar max-w-full`) so all
+    4 filter tabs fit on `320px–375px` screens without clipping.
+  - Search input on mobile: `w-full sm:w-56` so it spans cleanly across mobile
+    width while staying `w-56` on desktop.
+
+6.2 Recent Campaign Cards Grid & Individual Card Layout (`UnifiedRecentCampaigns.tsx` Lines 940–1155 & `RecentCampaignsBits.tsx`)
+- Current State:
+  - Grid: `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6`.
+  - Card top preview area (`aspect-[16/10]`):
+    - Top-left: Campaign Type Pill (`Email Outreach`, `SMS Outreach`, `Site Deploy`).
+    - Top-right: Status Badge (`Live`, `Completed`, `Sending`, `Failed`).
+    - Bottom-left/right overlay: Niche Pill + Relative Time (`2h ago`).
+  - Card body (`p-5 space-y-4`):
+    - Campaign Title + Template name.
+    - 3-Column Metrics Strip (`RecentCampaignsBits.tsx` / `UnifiedRecentCampaigns.tsx`):
+      `grid grid-cols-3 gap-2` (`Sent/Sites`, `Leads`, `Status/Route`).
+    - Card Footer: `View Results` CTA button + Delete icon button.
+- Mobile-Only Fixes (Preserving Desktop 100%):
+  - Grid gap: `gap-4 sm:gap-6`.
+  - Card body padding: `p-4 sm:p-5 space-y-3.5 sm:space-y-4`.
+  - 3-Column Metrics Strip inside card:
+    Ensure every metric cell has `min-w-0 overflow-hidden px-1.5 sm:px-2.5 py-2`
+    and `truncate` on values/labels so long route strings or 4-digit counts
+    never overflow on `320px` screens.
+
+6.3 Campaign Results Detail Modal (`CampaignDetailModal` in `UnifiedRecentCampaigns.tsx` Lines 1170–2112)
+- Note on Scrollbar Fix Already Applied:
+  - The modal backdrop/card interaction (`onMouseDown={(e) => e.stopPropagation()}`
+    and `max-h-[90vh] overflow-y-auto` on the inner card) is already active and
+    MUST be preserved 100% so clicking or dragging the scrollbar never closes
+    the modal.
+- Current State Inside Modal:
+  - Modal Header (Line 1181): `px-6 py-4` with `w-11 h-11` icon, campaign title,
+    meta pills (`type`, `niche`, `template`, `timestamp`), and `X` close button.
+  - Live Progress Banner (when campaign is active, Line 1236): `px-6 py-3`.
+  - Stats Strip (Line 1272):
+    - For SMS: `grid-cols-5` (`SMS Delivered`, `SMS Queued`, `Live Sites`, `SMS Failed`, `Route`).
+    - For Email: `grid-cols-4` (`Emails Sent`, `Sites Deployed`, `Leads`, `Failed`).
+    - For Site Deploy: `grid-cols-3` (`Sites Deployed`, `Leads`, `Failed`).
+  - Modal Body (`SmsBody`, `SiteDeployBody`, `EmailBody`, Lines 1380–2111):
+    - Body padding `px-6 py-4` (or `px-6 py-5`).
+    - `SmsBody`: status filter pills + search input (`min-w-[180px]`) + `CSV`
+      download button; lead cards (`p-3.5`) with business name, phone, status
+      badge, deployed website row, and personalized SMS proposal box.
+    - `SiteDeployBody`: header (`flex items-center justify-between`) with
+      `Deployed Sites & Lead Details (N)` + `Download CSV` button; site rows (`p-3`).
+    - `EmailBody`: summary pills + `Email Accounts Used` table + `Prospect Details`
+      rows (`px-4 py-3`).
+  - Modal Footer (Line 1322): `px-6 py-4` with campaign type/template summary
+    on left and `Done` button on right.
+- Mobile Issues Inside `CampaignDetailModal`:
+  - **SMS 5-Column Stats Strip (`grid-cols-5`, Line 1274)**:
+    On a `320px–375px` mobile screen, 5 columns in a single row gives each stat
+    cell only `~62px` of width! Labels like `SMS Delivered`, `SMS Queued`, and
+    `Live Sites` get truncated to `SMS Del...` and numbers feel cramped.
+  - **Email 4-Column Stats Strip (`grid-cols-4`, Line 1274)**:
+    On `320px–360px` screens, 4 columns with `Sites Deployed` and `Emails Sent`
+    also clip labels.
+  - **Modal Header (`px-6 py-4`) & Body (`px-6 py-4`) & Footer (`px-6 py-4`)**:
+    `px-6` (`24px` left/right) wastes `48px` of horizontal space inside an
+    already-padded mobile modal.
+  - **`SiteDeployBody` Header (Line 1754)**:
+    `Deployed Sites & Lead Details (20)` + `Download CSV` button on a single row
+    wraps tightly on narrow mobile screens.
+  - **`EmailBody` Account Breakdown Row (Line 1935)**:
+    `px-4 py-3 flex items-center gap-4` with icon + email + progress bar +
+    sent/failed badges in one row squeezes the email address on mobile.
+- Mobile-Only Fixes Inside `CampaignDetailModal` (Preserving Desktop 100%):
+  - Modal Outer Overlay (Line 1173): `p-2.5 sm:p-4`.
+  - Modal Header (Line 1181): `px-4 py-3.5 sm:px-6 sm:py-4`.
+  - Stats Strip (Line 1272):
+    - For SMS (`isSms`):
+      Change `grid-cols-5` to `grid-cols-3 sm:grid-cols-5` on mobile (so the top
+      3 metrics sit cleanly on row 1 and the remaining 2 sit on row 2 with a
+      subtle top border on mobile, while `sm:grid-cols-5` keeps the exact
+      5-column single strip on tablet/desktop!).
+    - For Email (`isEmail`):
+      Change `grid-cols-4` to `grid-cols-2 sm:grid-cols-4` on mobile (2x2 grid
+      on mobile, 4-column single strip on `sm:`+).
+    - For Site Deploy (`isSiteDeploy`):
+      Keep `grid-cols-3` with `py-2.5 sm:py-3.5`.
+  - `SmsBody` (Line 1457):
+    - Container padding: `px-3.5 py-3.5 sm:px-6 sm:py-4`.
+    - Search + CSV row (Line 1534): `flex items-center gap-2 w-full sm:w-auto`,
+      search wrapper `relative flex-1 sm:min-w-[180px]`.
+    - Lead card header (Line 1574): `flex flex-col xs:flex-row items-start justify-between gap-2 sm:gap-3`.
+  - `SiteDeployBody` (Line 1753):
+    - Container padding: `px-3.5 py-3.5 sm:px-6 sm:py-4`.
+    - Header row (Line 1754): `flex flex-wrap items-center justify-between gap-2 mb-1`.
+  - `EmailBody` (Line 1893):
+    - Container padding: `px-3.5 py-4 sm:px-6 sm:py-5 space-y-4 sm:space-y-5`.
+    - Account Breakdown Row (Line 1935):
+      `px-3 py-2.5 sm:px-4 sm:py-3 flex flex-wrap sm:flex-nowrap items-center gap-2.5 sm:gap-4`.
+    - Prospect Details Row (Line 2003):
+      `px-3 py-2.5 sm:px-4 sm:py-3`.
+  - Modal Footer (Line 1322):
+    `px-4 py-3 sm:px-6 sm:py-4`.
+
+================================================================================
+4. EXECUTION SEQUENCE & QA VERIFICATION CHECKLIST
+================================================================================
+
+Step 1: Update `src/components/Campaigns.tsx`
+        - Mobile-consistent Launch header, 3-column mobile Campaign Engine
+          Switcher, compact mobile Horizontal Stepper Track, and Niche modal.
+Step 2: Update Shared Sub-Components (`src/components/CampaignTemplateStep.tsx`,
+        `src/components/CsvPreview.tsx`, `src/components/SmsAccountStep.tsx`,
+        `src/components/SmsLeadFinder.tsx`)
+        - Mobile-consistent Step 3 template header/cards, Step 2 CSV preview
+          header/table, Step 4 Telnyx cards, and Canada Lead Finder cards.
+Step 3: Update All 3 Campaign Wizards (`src/components/EmailCampaignWizard.tsx`,
+        `src/components/SmsCampaignWizard.tsx`,
+        `src/components/SiteDeployCampaignWizard.tsx`)
+        - Mobile-consistent Step 1–6 containers, pill switchers, dropzones,
+          Auto Email/Lead Finder rows, 2-Segment Optimizer, Live SMS Bubble
+          Simulator, Review & Launch grids, Live Progress, and Completion screens.
+Step 4: Update `src/components/UnifiedRecentCampaigns.tsx` &
+        `src/components/RecentCampaignsBits.tsx`
+        - Mobile-consistent filter bar, Recent Campaign cards, and
+          `CampaignDetailModal` (preserving the scrollbar click/drag fix).
+Step 5: Compile & Lint Verification (`compile_applet` & `lint_applet`)
+        - Verify 0 TypeScript or build errors and 0 desktop layout changes.
+================================================================================

@@ -1866,10 +1866,10 @@ The Lunao Team`);
       )}
 
       {/* Top Title Bar */}
-      <header id="campaigns-view-header" className="flex items-center justify-between pb-6 border-b border-border-main">
+      <header id="campaigns-view-header" className="flex items-center justify-between pb-4 sm:pb-6 border-b border-border-main">
         <div id="campaigns-titles-area" className="space-y-1">
-          <h1 id="campaigns-top-heading" className="text-4xl font-serif text-ink tracking-tight font-normal">Campaigns</h1>
-          <p id="campaigns-sub-heading" className="text-sm text-ink-secondary">Generate stunning websites and send automated SMS proposals.</p>
+          <h1 id="campaigns-top-heading" className="text-2xl sm:text-4xl font-serif text-ink tracking-tight font-normal">Campaigns</h1>
+          <p id="campaigns-sub-heading" className="text-xs sm:text-sm text-ink-secondary">Generate stunning websites and send automated SMS proposals.</p>
         </div>
       </header>
 
@@ -1880,27 +1880,29 @@ The Lunao Team`);
         <div id="campaigns-wizard-header-collapse-container" className={`transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-hidden ${
           campaignCreated || isLaunching || sdCampaignCreated || sdIsLaunching
             ? 'max-h-0 opacity-0 pointer-events-none border-b-transparent'
-            : 'max-h-[300px] opacity-100 border-b border-border-main'
+            : 'max-h-[420px] sm:max-h-[300px] opacity-100 border-b border-border-main'
         }`}>
           {/* Campaign type tab selector */}
-          <div className="p-5 pb-0 bg-gradient-to-b from-white to-off-white overflow-hidden border-b border-border-light">
-            <div className="flex flex-wrap items-center justify-between gap-4 pb-4">
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-ink-secondary">Campaign Engine:</span>
-                <div className="flex items-center gap-1.5 p-1 bg-surface/80 border border-border-main rounded-2xl shadow-inner backdrop-blur-sm">
+          <div className="p-3.5 sm:p-5 pb-0 sm:pb-0 bg-gradient-to-b from-white to-off-white overflow-hidden border-b border-border-light">
+            <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 pb-3.5 sm:pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-ink-secondary">Campaign Engine:</span>
+                <div className="grid grid-cols-3 sm:flex items-stretch sm:items-center gap-1 sm:gap-1.5 p-1 bg-surface/80 border border-border-main rounded-2xl shadow-inner backdrop-blur-sm w-full sm:w-auto">
                   {/* 1. Email Campaign (First) */}
                   <button
                     type="button"
                     onClick={() => { playSoftBubble(); setActiveCampaignType('email'); }}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold font-sans transition-all duration-200 cursor-pointer ${
+                    className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-2 py-2 sm:px-4 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-semibold font-sans transition-all duration-200 cursor-pointer text-center ${
                       activeCampaignType === 'email'
                         ? 'bg-white text-accent shadow-sm border border-accent/20 ring-1 ring-accent/10 font-bold'
                         : 'text-ink-secondary hover:text-ink hover:bg-white/60'
                     }`}
                   >
-                    <Mail className="w-3.5 h-3.5" />
-                    <span>Email Outreach</span>
-                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <Mail className="w-3.5 h-3.5 shrink-0" />
+                      <span className="whitespace-nowrap">Email Outreach</span>
+                    </div>
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold whitespace-nowrap ${
                       activeCampaignType === 'email' ? 'bg-accent/15 text-accent' : 'bg-surface text-ink-tertiary'
                     }`}>2 credits/lead</span>
                   </button>
@@ -1909,15 +1911,17 @@ The Lunao Team`);
                   <button
                     type="button"
                     onClick={() => { playSoftBubble(); setActiveCampaignType('sms'); }}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold font-sans transition-all duration-200 cursor-pointer ${
+                    className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-2 py-2 sm:px-4 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-semibold font-sans transition-all duration-200 cursor-pointer text-center ${
                       activeCampaignType === 'sms'
                         ? 'bg-white text-accent shadow-sm border border-accent/20 ring-1 ring-accent/10 font-bold'
                         : 'text-ink-secondary hover:text-ink hover:bg-white/60'
                     }`}
                   >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span>SMS Campaign</span>
-                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                      <span className="whitespace-nowrap">SMS Campaign</span>
+                    </div>
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold whitespace-nowrap ${
                       activeCampaignType === 'sms' ? 'bg-accent/15 text-accent' : 'bg-surface text-ink-tertiary'
                     }`}>3 credits/lead</span>
                   </button>
@@ -1926,15 +1930,17 @@ The Lunao Team`);
                   <button
                     type="button"
                     onClick={() => { playSoftBubble(); setActiveCampaignType('site-deploy'); }}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold font-sans transition-all duration-200 cursor-pointer ${
+                    className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-2 py-2 sm:px-4 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-semibold font-sans transition-all duration-200 cursor-pointer text-center ${
                       activeCampaignType === 'site-deploy'
                         ? 'bg-white text-accent shadow-sm border border-accent/20 ring-1 ring-accent/10 font-bold'
                         : 'text-ink-secondary hover:text-ink hover:bg-white/60'
                     }`}
                   >
-                    <Globe className="w-3.5 h-3.5" />
-                    <span>Site Deploy</span>
-                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <Globe className="w-3.5 h-3.5 shrink-0" />
+                      <span className="whitespace-nowrap">Site Deploy</span>
+                    </div>
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold whitespace-nowrap ${
                       activeCampaignType === 'site-deploy' ? 'bg-accent/15 text-accent' : 'bg-surface text-ink-tertiary'
                     }`}>1 credit/lead</span>
                   </button>
@@ -1947,18 +1953,18 @@ The Lunao Team`);
               `min-w-max` per step group prevents the names from being
               truncated; `scroll-smooth` + `snap-x` makes the auto-scroll
               land cleanly on the active step. */}
-          <div id="wizard-steps-horizontal-track" ref={emailStepTrackRef} className="pl-6 pr-6 py-5 bg-white flex flex-nowrap items-stretch overflow-x-auto scrollbar-thin gap-3 md:gap-4 snap-x snap-mandatory scroll-smooth [scroll-padding-left:1.5rem]">
+          <div id="wizard-steps-horizontal-track" ref={emailStepTrackRef} className="pl-3.5 pr-3.5 py-3.5 sm:pl-6 sm:pr-6 sm:py-5 bg-white flex flex-nowrap items-stretch overflow-x-auto scrollbar-thin gap-2.5 sm:gap-3 md:gap-4 snap-x snap-mandatory scroll-smooth [scroll-padding-left:1rem] sm:[scroll-padding-left:1.5rem]">
             {activeCampaignType === 'email' ? (
               [ { step: 1, name: 'Select Niche' }, { step: 2, name: 'Choose Leads' }, { step: 3, name: 'Choose Template' }, { step: 4, name: 'Connected Accounts' }, { step: 5, name: 'Review & Launch' } ].map((item) => (
                 <React.Fragment key={item.step}>
-                  <div ref={el => { emailStepRefs.current[item.step] = el; }} className="flex items-center gap-3 shrink-0 snap-start min-w-[140px]">
+                  <div ref={el => { emailStepRefs.current[item.step] = el; }} className="flex items-center gap-2 sm:gap-3 shrink-0 snap-start min-w-[120px] sm:min-w-[140px]">
                     {/* Circle wrapper for breathing ring + transition */}
                     <div className="relative">
                       {emailActiveStep === item.step && (
                         <span className="absolute inset-0 rounded-full border-2 border-accent/40 animate-[step-ring_2s_ease-in-out_infinite]" />
                       )}
                       <div className={`
-                        relative w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm
+                        relative w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-semibold text-xs sm:text-sm
                         transition-all duration-300 ease-out
                         ${emailActiveStep === item.step
                           ? 'bg-accent text-white shadow-[0_0_0_3px_rgba(99,102,241,0.15)] scale-105'
@@ -1967,12 +1973,12 @@ The Lunao Team`);
                             : 'bg-surface text-ink-secondary border border-border-main'
                         }
                       `}>
-                        {emailActiveStep > item.step ? <Check className="w-4 h-4" /> : item.step}
+                        {emailActiveStep > item.step ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : item.step}
                       </div>
                     </div>
                     <div className="flex flex-col">
-                      <span className={`text-[11px] uppercase tracking-wider font-semibold transition-colors duration-300 ${emailActiveStep === item.step ? 'text-accent' : 'text-ink-secondary'}`}>Step 0{item.step}</span>
-                      <span className={`text-xs font-medium leading-tight whitespace-nowrap transition-colors duration-300 ${emailActiveStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
+                      <span className={`text-[10px] sm:text-[11px] uppercase tracking-wider font-semibold transition-colors duration-300 ${emailActiveStep === item.step ? 'text-accent' : 'text-ink-secondary'}`}>Step 0{item.step}</span>
+                      <span className={`text-[11px] sm:text-xs font-medium leading-tight whitespace-nowrap transition-colors duration-300 ${emailActiveStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
                     </div>
                   </div>
                   {item.step < 5 && (
@@ -1999,13 +2005,13 @@ The Lunao Team`);
                 { step: 6, name: 'Review & Launch' },
               ].map((item) => (
                 <React.Fragment key={item.step}>
-                  <div ref={el => { stepRefs.current[item.step] = el; }} className="flex items-center gap-3 shrink-0 snap-start min-w-[140px]">
+                  <div ref={el => { stepRefs.current[item.step] = el; }} className="flex items-center gap-2 sm:gap-3 shrink-0 snap-start min-w-[120px] sm:min-w-[140px]">
                     <div className="relative">
                       {activeStep === item.step && (
                         <span className="absolute inset-0 rounded-full border-2 border-accent/40 animate-[step-ring_2s_ease-in-out_infinite]" />
                       )}
                       <div className={`
-                        relative w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm
+                        relative w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-semibold text-xs sm:text-sm
                         transition-all duration-300 ease-out
                         ${activeStep === item.step
                           ? 'bg-accent text-white shadow-[0_0_0_3px_rgba(99,102,241,0.15)] scale-105'
@@ -2014,12 +2020,12 @@ The Lunao Team`);
                             : 'bg-surface text-ink-secondary border border-border-main'
                         }
                       `}>
-                        {activeStep > item.step ? <Check className="w-4 h-4" /> : item.step}
+                        {activeStep > item.step ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : item.step}
                       </div>
                     </div>
                     <div className="flex flex-col">
-                      <span className={`text-[11px] uppercase tracking-wider font-semibold transition-colors duration-300 ${activeStep === item.step ? 'text-accent' : 'text-ink-secondary'}`}>Step 0{item.step}</span>
-                      <span className={`text-xs font-medium leading-tight whitespace-nowrap transition-colors duration-300 ${activeStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
+                      <span className={`text-[10px] sm:text-[11px] uppercase tracking-wider font-semibold transition-colors duration-300 ${activeStep === item.step ? 'text-accent' : 'text-ink-secondary'}`}>Step 0{item.step}</span>
+                      <span className={`text-[11px] sm:text-xs font-medium leading-tight whitespace-nowrap transition-colors duration-300 ${activeStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
                     </div>
                   </div>
                   {item.step < 6 && (
@@ -2034,13 +2040,13 @@ The Lunao Team`);
             ) : (
               [ { step: 1, name: 'Select Niche' }, { step: 2, name: 'Choose Leads' }, { step: 3, name: 'Choose Template' }, { step: 4, name: 'Review & Deploy' } ].map((item) => (
                 <React.Fragment key={item.step}>
-                  <div ref={el => { sdStepRefs.current[item.step] = el; }} className="flex items-center gap-3 shrink-0 snap-start min-w-[140px]">
+                  <div ref={el => { sdStepRefs.current[item.step] = el; }} className="flex items-center gap-2 sm:gap-3 shrink-0 snap-start min-w-[120px] sm:min-w-[140px]">
                     <div className="relative">
                       {sdActiveStep === item.step && (
                         <span className="absolute inset-0 rounded-full border-2 border-accent/40 animate-[step-ring_2s_ease-in-out_infinite]" />
                       )}
                       <div className={`
-                        relative w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm
+                        relative w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-semibold text-xs sm:text-sm
                         transition-all duration-300 ease-out
                         ${sdActiveStep === item.step
                           ? 'bg-accent text-white shadow-[0_0_0_3px_rgba(99,102,241,0.15)] scale-105'
@@ -2049,12 +2055,12 @@ The Lunao Team`);
                             : 'bg-surface text-ink-secondary border border-border-main'
                         }
                       `}>
-                        {sdActiveStep > item.step ? <Check className="w-4 h-4" /> : item.step}
+                        {sdActiveStep > item.step ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : item.step}
                       </div>
                     </div>
                     <div className="flex flex-col">
-                      <span className={`text-[11px] uppercase tracking-wider font-semibold transition-colors duration-300 ${sdActiveStep === item.step ? 'text-accent' : 'text-ink-secondary'}`}>Step 0{item.step}</span>
-                      <span className={`text-xs font-medium leading-tight whitespace-nowrap transition-colors duration-300 ${sdActiveStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
+                      <span className={`text-[10px] sm:text-[11px] uppercase tracking-wider font-semibold transition-colors duration-300 ${sdActiveStep === item.step ? 'text-accent' : 'text-ink-secondary'}`}>Step 0{item.step}</span>
+                      <span className={`text-[11px] sm:text-xs font-medium leading-tight whitespace-nowrap transition-colors duration-300 ${sdActiveStep === item.step ? 'font-semibold text-ink' : 'text-ink-secondary'}`}>{item.name}</span>
                     </div>
                   </div>
                   {item.step < 4 && (

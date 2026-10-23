@@ -69,29 +69,29 @@ export const CsvPreview: React.FC<CsvPreviewProps> = ({
       <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-accent/6 rounded-full blur-3xl pointer-events-none" />
 
       {/* Header */}
-      <div className="relative px-5 py-4 border-b border-border-light/80 bg-gradient-to-r from-accent-soft/20 to-transparent">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
+      <div className="relative px-3.5 py-3 sm:px-5 sm:py-4 border-b border-border-light/80 bg-gradient-to-r from-accent-soft/20 to-transparent">
+        <div className="flex items-start justify-between gap-2.5 sm:gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
             {/* Animated file icon */}
-            <div className="relative">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent to-accent-hover flex items-center justify-center shadow-lg shadow-accent/30">
-                <FileSpreadsheet className="w-6 h-6 text-white" />
+            <div className="relative shrink-0">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-accent to-accent-hover flex items-center justify-center shadow-lg shadow-accent/30">
+                <FileSpreadsheet className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
               {/* Success pulse ring */}
               <span className="absolute inset-0 rounded-xl border-2 border-accent/40 animate-ping" />
-              <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-success rounded-full flex items-center justify-center shadow-sm border-2 border-white">
-                <CheckCircle2 className="w-3 h-3 text-white" />
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-success rounded-full flex items-center justify-center shadow-sm border-2 border-white">
+                <CheckCircle2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
               </div>
             </div>
 
-            <div>
-              <div className="flex items-center gap-2">
-                <h4 className="text-sm font-bold text-ink">{fileName}</h4>
-                <span className="px-2 py-0.5 bg-success/15 text-success text-[10px] font-bold rounded-full">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                <h4 className="text-xs sm:text-sm font-bold text-ink truncate max-w-[170px] sm:max-w-none">{fileName}</h4>
+                <span className="px-2 py-0.5 bg-success/15 text-success text-[9px] sm:text-[10px] font-bold rounded-full shrink-0">
                   Validated & Editable
                 </span>
               </div>
-              <div className="flex items-center gap-3 mt-1">
+              <div className="flex items-center gap-2 sm:gap-3 mt-1 flex-wrap">
                 <span className="inline-flex items-center gap-1 text-[11px] text-ink-secondary">
                   <span className="font-bold text-ink">{totalCount.toLocaleString()}</span> leads parsed
                 </span>
@@ -108,7 +108,7 @@ export const CsvPreview: React.FC<CsvPreviewProps> = ({
           <button
             type="button"
             onClick={onClear}
-            className="group p-2 rounded-lg hover:bg-danger/10 transition-all cursor-pointer"
+            className="group p-2 rounded-lg hover:bg-danger/10 transition-all cursor-pointer shrink-0"
             title="Remove all leads"
           >
             <ClearIcon className="w-4 h-4 text-ink-tertiary group-hover:text-danger transition-colors" />
@@ -119,12 +119,14 @@ export const CsvPreview: React.FC<CsvPreviewProps> = ({
       {/* Scrollable Data Container */}
       <div className="relative">
         {/* Scroll controls */}
-        <div className="px-5 py-2.5 flex items-center justify-between bg-gradient-to-r from-surface/80 to-transparent border-b border-border-light/50">
-          <div className="flex items-center gap-2">
-            <Table2 className="w-4 h-4 text-ink-secondary" />
-            <span className="text-[11px] font-semibold text-ink-secondary">Lead Data Preview (Click Edit to modify details)</span>
+        <div className="px-3.5 py-2 sm:px-5 sm:py-2.5 flex items-center justify-between gap-2 bg-gradient-to-r from-surface/80 to-transparent border-b border-border-light/50">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+            <Table2 className="w-4 h-4 text-ink-secondary shrink-0" />
+            <span className="text-[10px] sm:text-[11px] font-semibold text-ink-secondary truncate">
+              Lead Data Preview <span className="hidden sm:inline">(Click Edit to modify details)</span>
+            </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {/* Auto-scroll toggle */}
             <button
               type="button"
@@ -144,20 +146,20 @@ export const CsvPreview: React.FC<CsvPreviewProps> = ({
         {/* Data Table with Scroll */}
         <div
           ref={scrollRef}
-          className={`max-h-[380px] overflow-y-auto scrollbar-thin scrollbar-thumb-accent/30 scrollbar-track-transparent transition-all duration-300 ${
+          className={`max-h-[380px] overflow-x-auto overflow-y-auto scrollbar-thin scrollbar-thumb-accent/30 scrollbar-track-transparent transition-all duration-300 ${
             isAutoScroll ? 'scroll-smooth' : 'scroll-auto'
           }`}
         >
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10 bg-surface/95 backdrop-blur-sm">
               <tr className="border-b border-border-light/80">
-                <th className="px-4 py-2.5 text-left text-[10px] uppercase tracking-wider font-bold text-ink-secondary bg-surface">
+                <th className="px-3 sm:px-4 py-2.5 text-left text-[10px] uppercase tracking-wider font-bold text-ink-secondary bg-surface whitespace-nowrap">
                   #
                 </th>
                 {columns.slice(0, 6).map((col) => (
                   <th
                     key={col}
-                    className="px-4 py-2.5 text-left text-[10px] uppercase tracking-wider font-bold text-ink-secondary bg-surface"
+                    className="px-3 sm:px-4 py-2.5 text-left text-[10px] uppercase tracking-wider font-bold text-ink-secondary bg-surface whitespace-nowrap"
                   >
                     <span className="inline-flex items-center gap-1">
                       {col.replace(/_/g, ' ')}
@@ -165,12 +167,12 @@ export const CsvPreview: React.FC<CsvPreviewProps> = ({
                   </th>
                 ))}
                 {columns.length > 6 && (
-                  <th className="px-4 py-2.5 text-left text-[10px] uppercase tracking-wider font-bold text-ink-tertiary bg-surface">
+                  <th className="px-3 sm:px-4 py-2.5 text-left text-[10px] uppercase tracking-wider font-bold text-ink-tertiary bg-surface whitespace-nowrap">
                     +{columns.length - 6} more
                   </th>
                 )}
                 {(onRemoveLead || onUpdateLead) && (
-                  <th className="px-3 py-2.5 text-right text-[10px] uppercase tracking-wider font-bold text-ink-secondary bg-surface">
+                  <th className="px-3 py-2.5 text-right text-[10px] uppercase tracking-wider font-bold text-ink-secondary bg-surface whitespace-nowrap">
                     Actions
                   </th>
                 )}

@@ -1216,9 +1216,9 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       <div
         ref={progressContainerRef}
         id="email-launch-progress-container"
-        className="p-6 md:p-8 space-y-6 animate-celebrate-in scroll-mt-6"
+        className="p-4 sm:p-6 md:p-8 space-y-6 animate-celebrate-in scroll-mt-6"
       >
-        <div className="bg-white border border-border-main rounded-3xl p-6 md:p-8 text-ink shadow-xl space-y-6 relative overflow-hidden transition-all duration-500">
+        <div className="bg-white border border-border-main rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 text-ink shadow-xl space-y-6 relative overflow-hidden transition-all duration-500">
           <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-blue-500 to-accent animate-pulse" />
           <div className="absolute top-0 right-0 w-96 h-96 bg-accent/5 rounded-full blur-3xl pointer-events-none" />
 
@@ -1229,7 +1229,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
                 Lunao Email Outreach Engine Active
               </div>
-              <h3 className="text-2xl font-bold font-serif text-ink">
+              <h3 className="text-xl sm:text-2xl font-bold font-serif text-ink">
                 Autonomous Email Outreach in Progress
               </h3>
               <p className="text-xs text-ink-secondary">
@@ -1237,16 +1237,16 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="px-4 py-2 rounded-xl bg-surface border border-border-main text-right shadow-xs">
+            <div className="grid grid-cols-2 sm:flex items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
+              <div className="px-3 py-2 sm:px-4 rounded-xl bg-surface border border-border-main text-right shadow-xs">
                 <p className="text-[10px] uppercase font-bold text-ink-tertiary">Verified Live Sites</p>
-                <p className="text-lg font-bold font-mono text-emerald-600">
+                <p className="text-base sm:text-lg font-bold font-mono text-emerald-600">
                   {completedSitesList.length} / {totalLeadsCount}
                 </p>
               </div>
-              <div className="px-4 py-2 rounded-xl bg-surface border border-border-main text-right shadow-xs">
+              <div className="px-3 py-2 sm:px-4 rounded-xl bg-surface border border-border-main text-right shadow-xs">
                 <p className="text-[10px] uppercase font-bold text-ink-tertiary">Emails Sent</p>
-                <p className="text-lg font-bold font-mono text-accent">
+                <p className="text-base sm:text-lg font-bold font-mono text-accent">
                   {sentEmailsList.length} / {totalLeadsCount}
                 </p>
               </div>
@@ -1366,20 +1366,20 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
 
     return (
       <div id="email-campaign-completion-container" className="space-y-6 animate-celebrate-in scroll-mt-6">
-        <div className="p-6 md:p-8">
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-success-soft via-white to-accent-soft/40 border border-success/30 p-8 md:p-12 shadow-2xl">
+        <div className="p-4 sm:p-6 md:p-8">
+          <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-success-soft via-white to-accent-soft/40 border border-success/30 p-5 sm:p-8 md:p-12 shadow-2xl">
             <div className="absolute top-0 right-0 w-96 h-96 bg-success/10 rounded-full blur-3xl pointer-events-none" />
 
             <div className="relative z-10 max-w-2xl mx-auto text-center space-y-6">
-              <div className="w-20 h-20 rounded-full bg-success-soft border-2 border-success/30 flex items-center justify-center text-success mx-auto shadow-inner animate-bounce">
-                <Check className="w-10 h-10 stroke-[3]" />
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-success-soft border-2 border-success/30 flex items-center justify-center text-success mx-auto shadow-inner animate-bounce">
+                <Check className="w-8 h-8 sm:w-10 sm:h-10 stroke-[3]" />
               </div>
 
               <div className="space-y-2">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-success-soft border border-success/20 text-xs font-bold text-success uppercase tracking-wider">
                   Active Email Campaign Stream
                 </span>
-                <h2 className="text-3xl md:text-4xl font-serif font-bold text-ink">
+                <h2 className="text-2xl sm:text-3xl md:text-4xl font-serif font-bold text-ink">
                   Campaign Successfully Live!
                 </h2>
                 <p className="text-sm md:text-base text-ink-secondary">
@@ -1389,32 +1389,32 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
 
               {/* Stats Counters Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4">
-                <div className="bg-white/90 border border-border-light rounded-2xl p-4 text-center shadow-xs">
+                <div className="bg-white/90 border border-border-light rounded-2xl p-3 sm:p-4 text-center shadow-xs">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">Total Leads</p>
-                  <p className="text-2xl font-bold text-ink font-mono mt-1">{celebratedCampaign.totalLeads}</p>
+                  <p className="text-xl sm:text-2xl font-bold text-ink font-mono mt-1">{celebratedCampaign.totalLeads}</p>
                   <p className="text-[10px] text-ink-tertiary mt-0.5">Queued</p>
                 </div>
-                <div className="bg-white/90 border border-border-light rounded-2xl p-4 text-center shadow-xs">
+                <div className="bg-white/90 border border-border-light rounded-2xl p-3 sm:p-4 text-center shadow-xs">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">Emails Sent</p>
-                  <p className="text-2xl font-bold text-success font-mono mt-1">{celebratedCampaign.emailsSent}</p>
+                  <p className="text-xl sm:text-2xl font-bold text-success font-mono mt-1">{celebratedCampaign.emailsSent}</p>
                   <p className="text-[10px] text-ink-tertiary mt-0.5">Delivered</p>
                 </div>
-                <div className="bg-white/90 border border-border-light rounded-2xl p-4 text-center shadow-xs">
+                <div className="bg-white/90 border border-border-light rounded-2xl p-3 sm:p-4 text-center shadow-xs">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">Sites Built</p>
-                  <p className="text-2xl font-bold text-accent font-mono mt-1">{celebratedCampaign.sitesGenerated}</p>
+                  <p className="text-xl sm:text-2xl font-bold text-accent font-mono mt-1">{celebratedCampaign.sitesGenerated}</p>
                   <p className="text-[10px] text-ink-tertiary mt-0.5">Live Links</p>
                 </div>
-                <div className="bg-white/90 border border-border-light rounded-2xl p-4 text-center shadow-xs">
+                <div className="bg-white/90 border border-border-light rounded-2xl p-3 sm:p-4 text-center shadow-xs">
                   <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">Delivery Status</p>
-                  <p className="text-2xl font-bold text-emerald-600 font-mono mt-1">Verified</p>
+                  <p className="text-xl sm:text-2xl font-bold text-emerald-600 font-mono mt-1">Verified</p>
                   <p className="text-[10px] text-ink-tertiary mt-0.5">Inbox Verified</p>
                 </div>
               </div>
 
               {/* Deployed Sites & Email Deliveries list */}
               {sites.length > 0 && (
-                <div className="bg-white border border-border-main rounded-2xl p-5 text-left space-y-3 shadow-xs">
-                  <div className="flex items-center justify-between border-b border-border-light pb-3">
+                <div className="bg-white border border-border-main rounded-2xl p-4 sm:p-5 text-left space-y-3 shadow-xs">
+                  <div className="flex items-center justify-between gap-2 flex-wrap border-b border-border-light pb-3">
                     <span className="text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-1.5 font-mono">
                       <Globe className="w-4 h-4 text-accent" /> Live Deployed Sites & Email Deliveries
                     </span>
@@ -1478,12 +1478,12 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   return (
     <div className="space-y-6">
       {/* Step Content */}
-      <div ref={stepContentRef} id="email-wizard-content" className="p-6 md:p-8 min-h-[350px] scroll-mt-4">
+      <div ref={stepContentRef} id="email-wizard-content" className="p-4 sm:p-6 md:p-8 min-h-[350px] scroll-mt-4">
         {/* Step 1: Select Niche */}
         {activeStep === 1 && (
           <div className="space-y-6 animate-fade-in">
             <div className="space-y-1">
-              <h3 className="font-serif text-2xl text-ink">Select your niche</h3>
+              <h3 className="font-serif text-xl sm:text-2xl text-ink">Select your niche</h3>
               <p className="text-sm text-ink-secondary">This determines which website templates will be available. Tap a card to select.</p>
             </div>
 
@@ -1517,7 +1517,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                       <span className="drop-shadow-sm">{niche.emoji}</span>
                     </div>
 
-                    <p className={`relative text-sm font-bold mt-3 leading-tight transition-colors ${
+                    <p className={`relative text-sm font-bold mt-3 leading-tight truncate max-w-full transition-colors ${
                       isSelected ? 'text-accent' : 'text-ink group-hover:text-accent'
                     }`}>
                       {niche.label}
@@ -1546,47 +1546,47 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         {activeStep === 2 && (
           <div className="space-y-5 animate-fade-in">
             <div className="space-y-1">
-              <h3 className="font-serif text-2xl text-ink">Choose your leads</h3>
+              <h3 className="font-serif text-xl sm:text-2xl text-ink">Choose your leads</h3>
               <p className="text-sm text-ink-secondary">Upload a CSV or use Auto Email Sender to find businesses.</p>
             </div>
             
             {/* Lead Source Tabs */}
-            <div className="flex gap-2 p-1.5 bg-gradient-to-r from-surface to-off-white rounded-2xl w-fit shadow-inner">
+            <div className="flex flex-wrap sm:flex-nowrap gap-1.5 sm:gap-2 p-1 sm:p-1.5 bg-gradient-to-r from-surface to-off-white rounded-2xl w-full sm:w-fit shadow-inner">
               <button
                 type="button"
                 onClick={() => { playSoftTap(); setLeadSource('leads'); }}
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-6 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-300 ${
                   leadSource === 'leads'
                     ? 'bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30'
                     : 'text-ink-secondary hover:text-ink hover:bg-white/50'
                 }`}
               >
-                <Globe className="w-5 h-5" />
-                Auto Email Sender
+                <Globe className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                <span className="truncate">Auto Email Sender</span>
               </button>
               <button
                 type="button"
                 onClick={() => { playSoftTap(); setLeadSource('csv'); }}
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-6 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-300 ${
                   leadSource === 'csv'
                     ? 'bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30'
                     : 'text-ink-secondary hover:text-ink hover:bg-white/50'
                 }`}
               >
-                <Upload className="w-5 h-5" />
-                Upload CSV
+                <Upload className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                <span className="truncate">Upload CSV</span>
               </button>
               <button
                 type="button"
                 onClick={() => { playSoftTap(); setLeadSource('dork'); }}
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-6 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-300 ${
                   leadSource === 'dork'
                     ? 'bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30'
                     : 'text-ink-secondary hover:text-ink hover:bg-white/50'
                 }`}
               >
-                <Globe className="w-5 h-5" />
-                Auto Email Sender
+                <Globe className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                <span className="truncate">Auto Email Sender</span>
                 {dorkSelected.size > 0 && (
                   <span className="ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent text-white text-[10px] font-black shadow-sm">
                     {dorkSelected.size > 99 ? '99+' : dorkSelected.size}
@@ -1606,21 +1606,21 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                       <div className="absolute -top-20 -right-20 w-48 h-48 bg-accent/5 rounded-full blur-3xl" />
                       <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-accent/5 rounded-full blur-3xl" />
                       
-                      <div className="relative p-12 text-center">
+                      <div className="relative p-6 sm:p-12 text-center">
                         {/* Animated icon */}
-                        <div className="relative inline-block mb-6">
-                          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-accent to-accent-hover flex items-center justify-center shadow-xl shadow-accent/30 group-hover:scale-110 transition-transform duration-300">
-                            <FileSpreadsheet className="w-10 h-10 text-white" />
+                        <div className="relative inline-block mb-4 sm:mb-6">
+                          <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-accent to-accent-hover flex items-center justify-center shadow-xl shadow-accent/30 group-hover:scale-110 transition-transform duration-300">
+                            <FileSpreadsheet className="w-7 h-7 sm:w-10 sm:h-10 text-white" />
                           </div>
                         </div>
                         
-                        <p className="text-lg font-bold text-ink mb-2">Drop your CSV file here</p>
-                        <p className="text-sm text-ink-secondary mb-4">or click to browse from your computer</p>
-                        <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent text-white font-semibold rounded-xl shadow-lg shadow-accent/30 group-hover:bg-accent-hover transition-colors">
+                        <p className="text-base sm:text-lg font-bold text-ink mb-2">Drop your CSV file here</p>
+                        <p className="text-xs sm:text-sm text-ink-secondary mb-4">or click to browse from your computer</p>
+                        <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent text-white font-semibold rounded-xl shadow-lg shadow-accent/30 group-hover:bg-accent-hover transition-colors text-xs sm:text-sm">
                           <Upload className="w-4 h-4" />
                           Choose File
                         </div>
-                        <p className="text-xs text-ink-tertiary mt-6">Required columns: business_name, email, phone, city</p>
+                        <p className="text-[11px] sm:text-xs text-ink-tertiary mt-4 sm:mt-6">Required columns: business_name, email, phone, city</p>
                       </div>
                     </div>
                     <input
@@ -1675,15 +1675,15 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             {leadSource === 'leads' && (
               <div className="space-y-5">
                 {/* Branded descriptive card */}
-                <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-accent/30 bg-gradient-to-br from-accent-soft/30 via-white to-accent-soft/10 p-6 transition-all duration-300 shadow-sm">
+                <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-accent/30 bg-gradient-to-br from-accent-soft/30 via-white to-accent-soft/10 p-4 sm:p-6 transition-all duration-300 shadow-sm">
                   {/* Decorative elements */}
                   <div className="absolute -top-16 -right-16 w-40 h-40 bg-accent/8 rounded-full blur-3xl pointer-events-none" />
                   <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-accent/6 rounded-full blur-2xl pointer-events-none" />
-                  <div className="relative flex items-start gap-4">
+                  <div className="relative flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
                     {/* Icon */}
                     <div className="relative shrink-0">
-                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-accent to-accent-hover flex items-center justify-center shadow-xl shadow-accent/30">
-                        <Globe className="w-7 h-7 text-white" />
+                      <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-accent to-accent-hover flex items-center justify-center shadow-xl shadow-accent/30">
+                        <Globe className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
                       </div>
                     </div>
                     <div className="flex-1 min-w-0">
@@ -1723,7 +1723,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-border-light bg-white p-5 shadow-sm space-y-5">
+                <div className="rounded-2xl border border-border-light bg-white p-3.5 sm:p-5 shadow-sm space-y-5">
                   {/* City input */}
                   <div>
                     <label className="block text-xs font-semibold text-ink-secondary mb-1.5">
@@ -2114,7 +2114,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         {activeStep === 4 && (
           <div className="space-y-5 animate-fade-in">
             <div className="space-y-1">
-              <h3 className="font-serif text-2xl text-ink">Choose sending accounts</h3>
+              <h3 className="font-serif text-xl sm:text-2xl text-ink">Choose sending accounts</h3>
               <p className="text-sm text-ink-secondary">Select which email accounts to send from. Emails are distributed across selected accounts.</p>
             </div>
             
@@ -2169,7 +2169,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                     type="button"
                     onClick={() => probeAllTokens()}
                     disabled={isProbingTokens}
-                    className="px-2.5 py-1 rounded-md border border-current/20 hover:bg-white/40 font-semibold disabled:opacity-50 flex items-center gap-1"
+                    className="px-2.5 py-1 rounded-md border border-current/20 hover:bg-white/40 font-semibold disabled:opacity-50 flex items-center gap-1 shrink-0"
                   >
                     <RefreshCw className="w-3 h-3" />
                     Re-check
@@ -2210,7 +2210,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                     <div
                       key={account.id}
                       onClick={() => { if (!showReconnect) toggleAccount(account.id); }}
-                      className={`p-4 rounded-xl border transition-all ${
+                      className={`p-3.5 sm:p-4 rounded-xl border transition-all ${
                         showReconnect
                           ? 'bg-danger/5 border-danger/30 cursor-default'
                           : isSelected
@@ -2218,7 +2218,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                             : 'bg-white border-border-main hover:border-accent/30 cursor-pointer'
                       }`}
                     >
-                      <div className="flex items-start gap-4">
+                      <div className="flex items-start gap-3 sm:gap-4">
                         <div className={`w-6 h-6 rounded-md border flex items-center justify-center shrink-0 mt-0.5 ${
                           showReconnect
                             ? 'border-danger/40 bg-white'
@@ -2232,9 +2232,9 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                         </div>
 
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-semibold text-ink">{account.displayName}</p>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-semibold text-ink truncate">{account.displayName}</p>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
                               showReconnect ? 'bg-danger/15 text-danger' :
                               account.status === 'healthy' ? 'bg-success-soft text-success' :
                               account.status === 'warming_up' ? 'bg-blue-50 text-blue-700' :
@@ -2245,9 +2245,9 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                                account.status === 'warming_up' ? 'Warming up' : 'Needs attention'}
                             </span>
                           </div>
-                          <p className="text-xs text-ink-secondary">{account.email}</p>
+                          <p className="text-xs text-ink-secondary truncate">{account.email}</p>
 
-                          <div className="flex items-center gap-4 mt-2 text-xs text-ink-secondary">
+                          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 sm:gap-4 mt-2 text-xs text-ink-secondary">
                             <span>{account.sendsToday} sent today</span>
                             <span>·</span>
                             <span className={account.remainingToday <= 0 ? 'text-amber-700 font-semibold' : account.remainingToday < 5 ? 'text-amber-600' : ''}>
@@ -2259,26 +2259,28 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
 
                           {capacityWarning && (
                             <div className="mt-2 flex items-center gap-1.5 text-amber-600">
-                              <AlertTriangle className="w-3.5 h-3.5" />
+                              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                               <span className="text-xs">{capacityWarning}</span>
                             </div>
                           )}
 
                           {showReconnect && (
-                            <div className="mt-3 rounded-lg bg-danger/10 border border-danger/30 p-3 flex items-start gap-3">
-                              <ShieldAlert className="w-4 h-4 text-danger shrink-0 mt-0.5" />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-semibold text-danger">
-                                  {account.email} — token expired or revoked
-                                </p>
-                                <p className="text-[11px] text-danger/80 mt-0.5">
-                                  {probe?.error || 'Google no longer accepts this refresh token. Reconnect to keep sending.'}
-                                </p>
+                            <div className="mt-3 rounded-lg bg-danger/10 border border-danger/30 p-3 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                              <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                                <ShieldAlert className="w-4 h-4 text-danger shrink-0 mt-0.5" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-semibold text-danger truncate">
+                                    {account.email} — token expired or revoked
+                                  </p>
+                                  <p className="text-[11px] text-danger/80 mt-0.5">
+                                    {probe?.error || 'Google no longer accepts this refresh token. Reconnect to keep sending.'}
+                                  </p>
+                                </div>
                               </div>
                               <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); initiateOAuthFlow(account.provider); }}
-                                className="shrink-0 px-3 py-1.5 bg-danger hover:bg-danger-hover text-white text-[11px] font-semibold rounded-lg flex items-center gap-1"
+                                className="w-full sm:w-auto justify-center shrink-0 px-3 py-1.5 bg-danger hover:bg-danger-hover text-white text-[11px] font-semibold rounded-lg flex items-center gap-1"
                               >
                                 <RefreshCw className="w-3 h-3" />
                                 Reconnect
@@ -2318,9 +2320,9 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               </div>
               
               <div>
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-1.5">
                   <label className="text-xs font-semibold text-ink-secondary">Message</label>
-                  <div className="flex gap-1">
+                  <div className="flex flex-wrap gap-1">
                     {['{{business_name}}', '{{city}}', '{{site_url}}'].map(token => (
                       <button
                         key={token}
@@ -2351,42 +2353,42 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
           <div className="space-y-6 animate-fade-in">
             {/* Section header */}
             <div className="space-y-0.5">
-              <h3 className="font-serif text-2xl text-ink">Ready to launch</h3>
+              <h3 className="font-serif text-xl sm:text-2xl text-ink">Ready to launch</h3>
               <p className="text-sm text-ink-secondary">Everything looks great — review below and hit launch when ready.</p>
             </div>
 
             {/* Primary summary row */}
-            <div className={`grid gap-3 ${leadSource === 'leads' ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-3'}`}>
-              <div className="bg-white rounded-2xl border border-border-light p-4 text-center shadow-sm">
+            <div className={`grid gap-3 ${leadSource === 'leads' ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2 sm:grid-cols-3'}`}>
+              <div className="bg-white rounded-2xl border border-border-light p-3.5 sm:p-4 text-center shadow-sm">
                 <div className="w-10 h-10 bg-accent-soft rounded-xl flex items-center justify-center mx-auto mb-2">
                   <Users className="w-5 h-5 text-accent" />
                 </div>
-                <p className="text-2xl font-bold text-accent font-mono">{reviewLeadCount}</p>
+                <p className="text-xl sm:text-2xl font-bold text-accent font-mono">{reviewLeadCount}</p>
                 <p className="text-[10px] uppercase tracking-widest text-ink-tertiary font-semibold mt-0.5">Leads</p>
               </div>
-              <div className="bg-white rounded-2xl border border-border-light p-4 text-center shadow-sm">
+              <div className="bg-white rounded-2xl border border-border-light p-3.5 sm:p-4 text-center shadow-sm">
                 <div className="w-10 h-10 bg-success-soft rounded-xl flex items-center justify-center mx-auto mb-2">
                   <Globe className="w-5 h-5 text-success" />
                 </div>
-                <p className="text-2xl font-bold text-success font-mono">{selectedNiche}</p>
+                <p className="text-xl sm:text-2xl font-bold text-success font-mono truncate">{selectedNiche}</p>
                 <p className="text-[10px] uppercase tracking-widest text-ink-tertiary font-semibold mt-0.5">Niche</p>
               </div>
               {leadSource === 'leads' && (
-                <div className="bg-white rounded-2xl border border-border-light p-4 text-center shadow-sm">
+                <div className="bg-white rounded-2xl border border-border-light p-3.5 sm:p-4 text-center shadow-sm">
                   <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center mx-auto mb-2">
                     <MapPin className="w-5 h-5 text-amber-600" />
                   </div>
-                  <p className="text-2xl font-bold text-amber-600 font-mono truncate">
+                  <p className="text-xl sm:text-2xl font-bold text-amber-600 font-mono truncate">
                     {dorkCityConfirmed || (dorkCity ? dorkCity : '—')}
                   </p>
                   <p className="text-[10px] uppercase tracking-widest text-ink-tertiary font-semibold mt-0.5">Target City</p>
                 </div>
               )}
-              <div className="bg-white rounded-2xl border border-border-light p-4 text-center shadow-sm">
+              <div className={`bg-white rounded-2xl border border-border-light p-3.5 sm:p-4 text-center shadow-sm ${leadSource !== 'leads' ? 'col-span-2 sm:col-span-1' : ''}`}>
                 <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center mx-auto mb-2">
                   <Send className="w-5 h-5 text-blue-600" />
                 </div>
-                <p className="text-2xl font-bold text-blue-600 font-mono">{selectedAccountIds.size}</p>
+                <p className="text-xl sm:text-2xl font-bold text-blue-600 font-mono">{selectedAccountIds.size}</p>
                 <p className="text-[10px] uppercase tracking-widest text-ink-tertiary font-semibold mt-0.5">Accounts</p>
               </div>
             </div>
@@ -2399,8 +2401,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 </div>
                 <p className="text-[11px] uppercase tracking-widest text-ink-secondary font-bold">Website Template</p>
               </div>
-              <div className="p-4 flex items-center gap-4">
-                <div className="w-28 h-20 rounded-xl bg-surface overflow-hidden shadow-inner shrink-0">
+              <div className="p-3.5 sm:p-4 flex items-center gap-3 sm:gap-4">
+                <div className="w-20 h-16 sm:w-28 sm:h-20 rounded-xl bg-surface overflow-hidden shadow-inner shrink-0">
                   <TemplateSimPreview
                     id={selectedTemplateId}
                     name={templates.find(t => t.id === selectedTemplateId)?.name || 'Template'}
@@ -2411,8 +2413,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                   />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-serif text-base font-bold text-ink">{templates.find(t => t.id === selectedTemplateId)?.name}</p>
-                  <p className="text-xs text-ink-secondary capitalize mt-0.5">{selectedNiche} · AI personalized per lead</p>
+                  <p className="font-serif text-sm sm:text-base font-bold text-ink truncate">{templates.find(t => t.id === selectedTemplateId)?.name}</p>
+                  <p className="text-xs text-ink-secondary capitalize mt-0.5 truncate">{selectedNiche} · AI personalized per lead</p>
                 </div>
                 <CheckCircle2 className="w-5 h-5 text-success shrink-0" />
               </div>
@@ -2453,8 +2455,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                     const isLast = idx === selectedAccountIds.size - 1;
                     const adjustedCount = isLast ? reviewLeadCount - (accountCount * idx) : accountCount;
                     return (
-                      <div key={id} className="flex items-center justify-between px-4 py-3">
-                        <div className="flex items-center gap-3">
+                      <div key={id} className="flex items-center justify-between gap-2 px-4 py-3">
+                        <div className="flex items-center gap-3 min-w-0">
                           <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
                             acc?.provider === 'gmail'
                               ? 'bg-[#EA4335]/10 text-[#EA4335]'
@@ -2462,12 +2464,12 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                           }`}>
                             {acc?.email?.[0]?.toUpperCase() || id[0].toUpperCase()}
                           </div>
-                          <div>
-                            <p className="text-xs font-semibold text-ink">{acc?.email || id}</p>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-ink truncate">{acc?.email || id}</p>
                             <p className="text-[10px] text-ink-tertiary capitalize">{acc?.provider === 'gmail' ? 'Google Gmail' : 'Microsoft Outlook'}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 shrink-0">
                           <div className="text-right">
                             <p className="text-sm font-bold text-ink font-mono">{adjustedCount}</p>
                             <p className="text-[9px] text-ink-tertiary">emails</p>
@@ -2490,7 +2492,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 <p className="text-[11px] uppercase tracking-widest text-ink-secondary font-bold">Email Subject</p>
               </div>
               <div className="px-4 py-3.5">
-                <p className="text-sm text-ink font-medium">
+                <p className="text-sm text-ink font-medium break-words">
                   {emailSubject
                     ? emailSubject
                     : `Personalized {FIRST_NAME} — {CITY} Business Inquiry`}
@@ -2500,7 +2502,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
 
             {/* Launch CTA banner */}
             {selectedAccountIds.size > 0 ? (
-              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-accent via-indigo-600 to-blue-600 p-5 text-center shadow-lg">
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-accent via-indigo-600 to-blue-600 p-4 sm:p-5 text-center shadow-lg">
                 {/* Decorative orbs */}
                 <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
                 <div className="absolute -bottom-8 -left-8 w-24 h-24 bg-white/10 rounded-full blur-2xl" />
@@ -2532,7 +2534,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       </div>
       
       {/* Navigation */}
-      <div className="px-6 py-4 border-t border-border-light flex flex-wrap items-center justify-between gap-3">
+      <div className="px-4 py-3.5 sm:px-6 sm:py-4 border-t border-border-light flex flex-wrap items-center justify-between gap-3">
         <button
           type="button"
           disabled={activeStep === 1}
