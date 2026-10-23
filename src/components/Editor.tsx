@@ -554,20 +554,20 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto shrink-0">
             {/* TEMPORARY TEST BUTTON - TO BE REMOVED BEFORE PRODUCTION */}
             <button
               onClick={() => { sfx.open(); setPwaPreviewOpen(true); }}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold font-sans shadow-sm active:scale-[0.98] transition-all cursor-pointer"
+              className="flex-1 sm:flex-initial justify-center inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-semibold font-sans shadow-sm active:scale-[0.98] transition-all cursor-pointer"
               title="Preview the real mobile Owner PWA"
             >
-              <Smartphone className="w-4 h-4" /> <span>📱 Preview Owner PWA</span>
+              <Smartphone className="w-4 h-4 shrink-0" /> <span>📱 Preview Owner PWA</span>
             </button>
 
             <button
               onClick={() => { sfx.primary(); loadList(); }}
               disabled={listLoading}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-border-main text-ink text-sm font-semibold font-sans hover:bg-off-white active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-border-main text-ink text-xs sm:text-sm font-semibold font-sans hover:bg-off-white active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
             >
               <RefreshCw className={`w-4 h-4 ${listLoading ? 'animate-spin' : ''}`} />
               Refresh
@@ -735,21 +735,21 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
       {toast && <ToastBanner toast={toast} onClose={() => setToast(null)} />}
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
+      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-4">
         <button
           onClick={backToList}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-border-main text-ink-secondary hover:text-ink text-sm font-medium font-sans active:scale-[0.98] transition-all"
+          className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg bg-white border border-border-main text-ink-secondary hover:text-ink text-xs sm:text-sm font-medium font-sans active:scale-[0.98] transition-all"
         >
           <ArrowLeft className="w-4 h-4" /> <span className="hidden sm:inline">Sites</span>
         </button>
 
         <div className="flex flex-col min-w-0 mr-auto">
-          <span className="text-sm font-bold font-sans text-ink truncate max-w-[40vw] sm:max-w-xs">{selected?.title}</span>
+          <span className="text-sm font-bold font-sans text-ink truncate max-w-[44vw] sm:max-w-xs">{selected?.title}</span>
           <span className="text-[11px] text-ink-secondary font-sans truncate">{'/' + selected?.slug + '/' + (dirty ? ' · unsaved' : '')}</span>
         </div>
 
         {/* device toggle */}
-        <div className="hidden sm:flex items-center bg-white border border-border-main rounded-lg p-0.5">
+        <div className="flex items-center bg-white border border-border-main rounded-lg p-0.5">
           <button
             onClick={() => { sfx.toggle(); setDevice('desktop'); }}
             className={`p-1.5 rounded-md transition-all ${device === 'desktop' ? 'bg-accent-soft text-accent' : 'text-ink-secondary hover:text-ink'}`}
@@ -768,7 +768,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
 
         <button
           onClick={toggleEditMode}
-          className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium font-sans active:scale-[0.98] transition-all border ${
+          className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium font-sans active:scale-[0.98] transition-all border ${
             editMode ? 'bg-accent text-white border-accent' : 'bg-white text-ink-secondary border-border-main hover:text-ink'
           }`}
           title="Click text to edit it, click images to replace them"
@@ -778,7 +778,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
 
         <button
           onClick={() => { sfx.open(); setAddonsPanel(true); }}
-          className={`relative inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium font-sans active:scale-[0.98] transition-all border ${
+          className={`relative inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium font-sans active:scale-[0.98] transition-all border ${
             addons.chatbot ? 'bg-accent-soft text-accent border-accent/30' : 'bg-white text-ink-secondary border-border-main hover:text-ink'
           }`}
           title="Add a booking chatbot to this site"
@@ -793,7 +793,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
 
         <button
           onClick={() => { sfx.open(); setInviteOpen(true); }}
-          className={`relative inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium font-sans active:scale-[0.98] transition-all border ${
+          className={`relative inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium font-sans active:scale-[0.98] transition-all border ${
             activeInviteCount > 0 ? 'bg-accent-soft text-accent border-accent/30' : 'bg-white text-ink-secondary border-border-main hover:text-ink'
           }`}
           title="Generate an Owner PWA access code for this business"
@@ -809,16 +809,16 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
         {/* TEMPORARY TEST BUTTON - TO BE REMOVED BEFORE PRODUCTION */}
         <button
           onClick={() => { sfx.open(); setPwaPreviewOpen(true); }}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold font-sans shadow-sm active:scale-[0.98] transition-all cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-semibold font-sans shadow-sm active:scale-[0.98] transition-all cursor-pointer"
           title="Preview the real mobile Owner PWA for this business"
         >
-          <Smartphone className="w-4 h-4" /> <span>📱 Preview Owner PWA</span>
+          <Smartphone className="w-4 h-4" /> <span className="hidden sm:inline">📱 Preview </span><span>Owner PWA</span>
         </button>
 
         <button
           onClick={handleSave}
           disabled={saving || deploying}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-border-main text-ink hover:bg-off-white text-sm font-semibold font-sans active:scale-[0.98] transition-all disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg bg-white border border-border-main text-ink hover:bg-off-white text-xs sm:text-sm font-semibold font-sans active:scale-[0.98] transition-all disabled:opacity-60"
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} <span className="hidden sm:inline">Save</span>
         </button>
@@ -826,7 +826,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
         <button
           onClick={handleDeploy}
           disabled={deploying || saving}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent text-white text-sm font-semibold font-sans shadow-sm hover:bg-accent/90 active:scale-[0.98] transition-all disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg bg-accent text-white text-xs sm:text-sm font-semibold font-sans shadow-sm hover:bg-accent/90 active:scale-[0.98] transition-all disabled:opacity-60"
         >
           {deploying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />} Redeploy
         </button>
@@ -836,7 +836,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
       <div className="flex flex-col gap-4 h-[calc(100dvh-250px)] min-h-[440px] lg:h-[calc(100vh-170px)] lg:min-h-[440px] lg:max-h-[760px]">
 
         {/* Preview panel — always full width, no chat sidebar */}
-        <div className="flex-1 bg-white rounded-xl border border-border-main overflow-hidden flex-col relative lg:flex">
+        <div className="flex-1 bg-white rounded-xl border border-border-main overflow-hidden flex flex-col relative">
           {editMode && (
             <div className="flex items-center gap-2 px-4 py-2 bg-accent-soft/60 border-b border-accent/15 text-[11px] font-sans text-accent font-medium">
               <Pencil className="w-3.5 h-3.5" />
@@ -1168,11 +1168,11 @@ const TemplateLabBanner: React.FC<{
   onBrowseTemplates: () => void;
   onOpenStudio: () => void;
 }> = ({ aiEnabled, onBrowseTemplates, onOpenStudio }) => (
-  <div className="relative mb-8 rounded-2xl overflow-hidden bg-gradient-to-br from-accent-soft/60 via-white to-accent-soft/20 border border-accent/15 p-6 sm:p-7 animate-sparkle-in">
+  <div className="relative mb-6 sm:mb-8 rounded-2xl overflow-hidden bg-gradient-to-br from-accent-soft/60 via-white to-accent-soft/20 border border-accent/15 p-4 sm:p-7 animate-sparkle-in">
     {/* Ambient glow — subtle accent diffusion */}
     <div className="pointer-events-none absolute -top-16 -right-16 w-64 h-64 bg-accent/8 rounded-full blur-3xl" />
 
-    <div className="relative flex flex-col sm:flex-row sm:items-center gap-5">
+    <div className="relative flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-5">
       {/* Left — icon + copy */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2.5 mb-2">
@@ -1193,7 +1193,7 @@ const TemplateLabBanner: React.FC<{
       <div className="flex flex-col sm:flex-row gap-2.5 shrink-0">
         <button
           onClick={onOpenStudio}
-          className="inline-flex items-center justify-center gap-3 px-8 py-3.5 rounded-2xl bg-accent text-white text-base font-bold font-sans shadow-md hover:bg-accent/90 active:scale-[0.98] transition-all transform hover:-translate-y-0.5"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-3 px-6 sm:px-8 py-3 sm:py-3.5 rounded-2xl bg-accent text-white text-sm sm:text-base font-bold font-sans shadow-md hover:bg-accent/90 active:scale-[0.98] transition-all transform hover:-translate-y-0.5"
         >
           <Sparkles className="w-5 h-5 animate-pulse text-amber-200" />
           Open AI Studio
@@ -1625,7 +1625,7 @@ const CreateTemplateModal: React.FC<{
                     Template is saved with AI placeholders — ready for campaigns.
                   </p>
                 </div>
-                <div className="flex gap-2 shrink-0">
+                <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto shrink-0">
                   <button
                     onClick={() => {
                       const blob = new Blob([previewHtml], { type: 'text/html' });
@@ -1637,20 +1637,20 @@ const CreateTemplateModal: React.FC<{
                       URL.revokeObjectURL(url);
                       sfx.copy();
                     }}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white border border-border-main text-ink text-sm font-semibold font-sans hover:bg-off-white active:scale-[0.98] transition-all"
+                    className="justify-center inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg bg-white border border-border-main text-ink text-xs sm:text-sm font-semibold font-sans hover:bg-off-white active:scale-[0.98] transition-all"
                   >
-                    <Download className="w-4 h-4" />
-                    Download HTML
+                    <Download className="w-4 h-4 shrink-0" />
+                    <span className="truncate">Download HTML</span>
                   </button>
                   <button
                     onClick={() => {
                       sfx.confirmSuccess();
                       onGenerated(generatedTemplate!);
                     }}
-                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-lg bg-accent text-white text-sm font-semibold font-sans shadow-sm hover:bg-accent/90 active:scale-[0.98] transition-all"
+                    className="justify-center inline-flex items-center gap-1.5 px-4 sm:px-5 py-2 rounded-lg bg-accent text-white text-xs sm:text-sm font-semibold font-sans shadow-sm hover:bg-accent/90 active:scale-[0.98] transition-all"
                   >
-                    <CheckCircle2 className="w-4 h-4" />
-                    Save Template
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span className="truncate">Save Template</span>
                   </button>
                 </div>
               </div>
@@ -1923,7 +1923,7 @@ const BrowseTemplatesSheet: React.FC<{
                           ) : (
                             <button
                               onClick={(e) => { e.stopPropagation(); sfx.tap(); setDeleteConfirmId(t.id); }}
-                              className="w-7 h-7 rounded-full opacity-0 group-hover:opacity-100 bg-danger/10 text-danger flex items-center justify-center transition-all hover:bg-danger/20"
+                              className="w-7 h-7 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 bg-danger/10 text-danger flex items-center justify-center transition-all hover:bg-danger/20"
                               title="Delete template"
                             >
                               <Trash2 className="w-3.5 h-3.5" />

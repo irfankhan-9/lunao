@@ -1446,15 +1446,15 @@ export const TemplateLabPage: React.FC<{
   const isActive = mode === 'active';
 
   return (
-    <div ref={workspaceRef} className={embedded ? "w-full min-h-[750px] h-[calc(100vh-130px)] flex flex-col bg-white text-slate-900 select-none relative rounded-2xl border border-slate-200 shadow-sm overflow-hidden" : "w-full h-full bg-white flex flex-col text-slate-900 select-none overflow-hidden"}>
+    <div ref={workspaceRef} className={embedded ? "w-full min-h-[540px] sm:min-h-[750px] h-[calc(100dvh-135px)] sm:h-[calc(100vh-130px)] flex flex-col bg-white text-slate-900 select-none relative rounded-xl sm:rounded-2xl border border-slate-200 shadow-sm overflow-hidden" : "w-full h-full bg-white flex flex-col text-slate-900 select-none overflow-hidden"}>
 
       {/* TOP HEADER BAR - White & Blue Brand Consistent */}
-      <div className="flex items-center justify-between gap-3 px-6 py-3.5 bg-white border-b border-slate-200 shrink-0 shadow-sm">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-3 px-3.5 py-2.5 sm:px-6 sm:py-3.5 bg-white border-b border-slate-200 shrink-0 shadow-sm">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 sm:flex-initial">
           {!isActive ? (
             <button
               onClick={onClose}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-200 text-sm font-medium font-sans active:scale-[0.98] transition-all shrink-0 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-200 text-xs sm:text-sm font-medium font-sans active:scale-[0.98] transition-all shrink-0 cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
               Back to Editor
@@ -1462,7 +1462,7 @@ export const TemplateLabPage: React.FC<{
           ) : (
             <button
               onClick={goToStudioLanding}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 border border-slate-200 text-slate-700 text-xs sm:text-sm font-semibold font-sans active:scale-[0.98] transition-all shrink-0 shadow-xs cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 border border-slate-200 text-slate-700 text-xs sm:text-sm font-semibold font-sans active:scale-[0.98] transition-all shrink-0 shadow-xs cursor-pointer"
               title="Return to Studio landing page to give new prompts"
             >
               <ArrowLeft className="w-4 h-4 text-blue-600" />
@@ -1470,13 +1470,13 @@ export const TemplateLabPage: React.FC<{
             </button>
           )}
 
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0">
-              <Code2 className="w-5 h-5 text-blue-600" />
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0">
+              <Code2 className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-base font-bold font-sans text-slate-900 leading-none truncate">AI Web Studio</h1>
-              <p className="text-[11px] text-slate-500 font-sans mt-0.5 truncate">
+              <h1 className="text-sm sm:text-base font-bold font-sans text-slate-900 leading-none truncate">AI Web Studio</h1>
+              <p className={`${isActive ? 'hidden sm:block' : 'block'} text-[11px] text-slate-500 font-sans mt-0.5 truncate`}>
                 {isActive ? title || 'Vibe Coding Session' : 'Powered by Google AI Studio Gemini 2.5 Flash'}
               </p>
             </div>
@@ -1485,13 +1485,13 @@ export const TemplateLabPage: React.FC<{
 
         {/* Top Header Buttons: Test Rebrand and Save Template */}
         {isActive && (
-          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          <div className="flex items-center justify-end gap-1.5 sm:gap-2.5 w-full sm:w-auto shrink-0 pt-1.5 sm:pt-0 border-t border-slate-100 sm:border-t-0">
 
             {/* Test Rebrand Button */}
             <button
               onClick={handleTestRebrand}
               disabled={streaming || isTestingRebrand}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs active:scale-[0.98] cursor-pointer bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 ${
+              className={`flex-1 sm:flex-initial justify-center inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold transition-all shadow-xs active:scale-[0.98] cursor-pointer bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 ${
                 (streaming || isTestingRebrand) ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''
               }`}
               title="Test rebranding across multiple business profiles to verify instant personalization"
@@ -1504,7 +1504,7 @@ export const TemplateLabPage: React.FC<{
             <button
               onClick={handleOpenSaveTemplate}
               disabled={streaming || isTestingRebrand}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold shadow-md hover:shadow-lg active:scale-[0.98] transition-all shrink-0 cursor-pointer ${
+              className={`flex-1 sm:flex-initial justify-center inline-flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold shadow-md hover:shadow-lg active:scale-[0.98] transition-all shrink-0 cursor-pointer ${
                 (isTemplateValidated || hasRunTestRebrand || hasLoadedPreviousTemplate)
                   ? 'bg-blue-600 hover:bg-blue-700 text-white'
                   : 'bg-slate-200 text-slate-500 hover:bg-slate-300 hover:text-slate-700 border border-slate-300'
@@ -1518,19 +1518,73 @@ export const TemplateLabPage: React.FC<{
         )}
       </div>
 
+      {/* MOBILE WORKSPACE MODE BAR (< 768px only) — Enables 1-tap switching between AI Chat, Live Preview & Code View on mobile without touching desktop split-view */}
+      {isActive && (
+        <div className="flex md:hidden items-center justify-between gap-1.5 px-3 py-2 bg-slate-50 border-b border-slate-200 shrink-0">
+          <div className="grid grid-cols-3 gap-1 flex-1 bg-slate-200/70 p-1 rounded-xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => { sfx.toggle(); setSidebarCollapsed(false); }}
+              className={`inline-flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                !sidebarCollapsed
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Terminal className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">AI Vibe Chat</span>
+              {streaming && (
+                <span className={`w-1.5 h-1.5 rounded-full animate-ping shrink-0 ${!sidebarCollapsed ? 'bg-white' : 'bg-blue-600'}`} />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                sfx.toggle();
+                setSidebarCollapsed(true);
+                if (device === 'code') setDevice('desktop');
+              }}
+              className={`inline-flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                sidebarCollapsed && device !== 'code'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Monitor className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Live Preview</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                sfx.toggle();
+                setSidebarCollapsed(true);
+                setDevice('code');
+              }}
+              className={`inline-flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                sidebarCollapsed && device === 'code'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Code2 className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">HTML Code</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* MAIN WORKSPACE */}
       <div className="flex flex-1 overflow-hidden min-h-0">
 
         {/* LEFT SIDEBAR (Active chat / controls) - Roomy, Large, Luxury UI */}
         <div className={`shrink-0 flex flex-col overflow-hidden bg-slate-50 border-r border-slate-200 transition-all duration-300 ${
-          !isActive ? 'w-[0px] md:w-[0px] overflow-hidden' : sidebarCollapsed ? 'w-0 border-0' : 'w-[420px] lg:w-[460px] xl:w-[480px]'
+          !isActive ? 'w-[0px] md:w-[0px] overflow-hidden' : sidebarCollapsed ? 'w-0 border-0' : 'w-full md:w-[420px] lg:w-[460px] xl:w-[480px]'
         }`}>
           {isActive && !sidebarCollapsed && (
             <div className="flex flex-col h-full overflow-hidden bg-slate-50">
               
               {/* Chat Header & LLM Engine Selector */}
-              <div className="px-5 py-4 border-b border-slate-200 bg-white space-y-3 shrink-0 shadow-xs">
+              <div className="px-3.5 py-3 sm:px-5 sm:py-4 border-b border-slate-200 bg-white space-y-2.5 sm:space-y-3 shrink-0 shadow-xs">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
@@ -1584,7 +1638,7 @@ export const TemplateLabPage: React.FC<{
               </div>
 
               {/* Chat messages list - Spacious & Highly readable */}
-              <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-4 min-h-0 bg-slate-50 scroll-smooth">
+              <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-3.5 py-3 sm:px-5 sm:py-4 space-y-3 sm:space-y-4 min-h-0 bg-slate-50 scroll-smooth">
                 {hasLoadedPreviousTemplate && !hasGivenAiPrompt ? (
                   <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2.5">
                     <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">
@@ -1731,7 +1785,7 @@ export const TemplateLabPage: React.FC<{
               </div>
 
               {/* Prompt input - Generous height & clear buttons */}
-              <div className="p-4 sm:p-5 border-t border-slate-200 bg-white shrink-0 shadow-lg space-y-3">
+              <div className="p-3 sm:p-5 border-t border-slate-200 bg-white shrink-0 shadow-lg space-y-2.5 sm:space-y-3">
                 {!isPlanEligible ? (
                   <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 flex flex-col gap-2 shadow-xs animate-fade-in">
                     <div className="flex items-start gap-3">
@@ -1768,7 +1822,7 @@ export const TemplateLabPage: React.FC<{
                         placeholder="Describe edits… e.g. 'Add a clean pricing section with 3 tiers and monthly billing toggle'"
                         rows={3}
                         disabled={streaming}
-                        className="w-full resize-none rounded-2xl border border-slate-300 bg-white p-3.5 text-sm font-sans text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition-all leading-relaxed shadow-inner"
+                        className="w-full resize-none rounded-2xl border border-slate-300 bg-white p-3 sm:p-3.5 text-sm font-sans text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition-all leading-relaxed shadow-inner"
                       />
                     </div>
                     <button
@@ -1787,39 +1841,39 @@ export const TemplateLabPage: React.FC<{
         </div>
 
         {/* MAIN CONTENT AREA */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-slate-50 min-h-0">
+        <div className={`${isActive && !sidebarCollapsed ? 'hidden md:flex' : 'flex'} flex-1 flex-col overflow-hidden bg-slate-50 min-h-0 min-w-0`}>
 
           {!isActive ? (
             /* ================= IDLE: AI VIBE STUDIO LANDING (White & Blue) ================= */
-            <div ref={idleContainerRef} className="flex-1 overflow-y-auto min-h-0 px-4 sm:px-8 py-8 flex justify-center items-start transition-opacity duration-500">
-              <div className="w-full max-w-4xl space-y-8">
+            <div ref={idleContainerRef} className="flex-1 overflow-y-auto min-h-0 px-3 sm:px-8 py-4 sm:py-8 flex justify-center items-start transition-opacity duration-500">
+              <div className="w-full max-w-4xl space-y-5 sm:space-y-8">
 
                 {/* Hero Header & Single Prompt Section */}
-                <div className="relative rounded-3xl overflow-hidden bg-white border border-slate-200 p-8 sm:p-12 shadow-xl">
+                <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-white border border-slate-200 p-4 sm:p-12 shadow-xl">
                   <div className="absolute top-0 right-0 w-96 h-96 bg-blue-50/80 rounded-full blur-3xl pointer-events-none" />
-                  <div className="relative z-10 space-y-8">
+                  <div className="relative z-10 space-y-5 sm:space-y-8">
                     
                     {/* Top Row: Title + Compact Model Selector */}
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-100 pb-6">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6 border-b border-slate-100 pb-4 sm:pb-6">
                       <div>
-                        <h2 className="text-3xl sm:text-4xl font-serif font-bold text-slate-900 tracking-tight">
+                        <h2 className="text-2xl sm:text-4xl font-serif font-bold text-slate-900 tracking-tight">
                           AI Web Studio
                         </h2>
-                        <p className="text-sm text-slate-600 max-w-lg mt-1.5 leading-relaxed">
+                        <p className="text-xs sm:text-sm text-slate-600 max-w-lg mt-1.5 leading-relaxed">
                           Describe any local service business in natural language. Instantly synthesize high-converting responsive websites optimized for client acquisition.
                         </p>
                       </div>
 
                       {/* Sleek Compact Model Picker */}
-                      <div className="shrink-0">
+                      <div className="shrink-0 w-full sm:w-auto">
                         <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-widest mb-2">LLM Engine</label>
-                        <div className="inline-flex bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1 text-xs">
+                        <div className="flex sm:inline-flex w-full sm:w-auto bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1 text-xs">
                           {(['Gemini 2.5 Flash', 'Gemini 3.8 Flash', 'Gemini 3.1 Pro'] as const).map(model => (
                             <button
                               key={model}
                               disabled={streaming}
                               onClick={() => { if (!streaming) { sfx.toggle(); setSelectedModel(model); } }}
-                              className={`py-1.5 px-3 rounded-lg transition-all text-xs font-medium ${
+                              className={`flex-1 sm:flex-initial py-1.5 px-2 sm:px-3 rounded-lg transition-all text-[11px] sm:text-xs font-medium text-center truncate ${
                                 selectedModel === model
                                   ? 'bg-blue-600 text-white shadow-sm font-semibold'
                                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
@@ -1843,7 +1897,7 @@ export const TemplateLabPage: React.FC<{
                           id="custom-vibe-textarea"
                           rows={4}
                           placeholder="e.g. A luxury vintage barber lounge in Austin, TX with dark mahogany aesthetics, chair booking form, pricing menu, and Google reviews badge."
-                          className="w-full rounded-2xl border border-slate-300 bg-white p-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 transition-all shadow-inner"
+                          className="w-full rounded-2xl border border-slate-300 bg-white p-3.5 sm:p-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 transition-all shadow-inner"
                         />
                       </div>
 
@@ -1899,7 +1953,7 @@ export const TemplateLabPage: React.FC<{
                           handleStartVibeCode(val, val.slice(0, 30) + ' Site');
                         }}
                         disabled={streaming}
-                        className={`w-full inline-flex items-center justify-center gap-2 py-4 rounded-2xl text-base font-bold shadow-md active:scale-[0.99] transition-all mt-2 cursor-pointer ${
+                        className={`w-full inline-flex items-center justify-center gap-2 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl text-sm sm:text-base font-bold shadow-md active:scale-[0.99] transition-all mt-2 cursor-pointer ${
                           !isPlanEligible
                             ? 'bg-slate-800 hover:bg-slate-900 text-white'
                             : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20'
@@ -1914,7 +1968,7 @@ export const TemplateLabPage: React.FC<{
                 </div>
 
                 {/* Recent Previous Vibe Coded Templates Section */}
-                <div className="rounded-3xl bg-white border border-slate-200 p-6 sm:p-8 shadow-sm">
+                <div className="rounded-2xl sm:rounded-3xl bg-white border border-slate-200 p-4 sm:p-8 shadow-sm">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                       <Layers className="w-4 h-4 text-blue-600" />
@@ -1933,7 +1987,7 @@ export const TemplateLabPage: React.FC<{
                         <button
                           key={entry.id}
                           onClick={() => loadEntry(entry)}
-                          className="text-left p-4 rounded-2xl bg-slate-50 border border-slate-200 hover:border-blue-500 hover:bg-blue-50/50 transition-all group"
+                          className="text-left p-3.5 sm:p-4 rounded-2xl bg-slate-50 border border-slate-200 hover:border-blue-500 hover:bg-blue-50/50 transition-all group"
                         >
                           <p className="text-xs font-bold text-slate-900 group-hover:text-blue-600 truncate mb-1">
                             {entry.title || entry.snapshotLabel || 'Untitled Vibe'}
@@ -1954,7 +2008,7 @@ export const TemplateLabPage: React.FC<{
             /* ================= ACTIVE PREVIEW MODE ================= */
             <>
               {/* Preview toolbar - Large, Spacious & High-Status */}
-              <div className="flex items-center gap-2 sm:gap-4 px-4 sm:px-6 py-3 bg-white border-b border-slate-200 shrink-0 shadow-xs overflow-x-auto no-scrollbar">
+              <div className="flex items-center gap-2 sm:gap-4 px-3 sm:px-6 py-2 sm:py-3 bg-white border-b border-slate-200 shrink-0 shadow-xs overflow-x-auto no-scrollbar">
                 
                 {/* Desktop, Mobile & Code View Toggle */}
                 <div className="flex items-center gap-1 bg-slate-100 p-1.5 rounded-xl border border-slate-200 shadow-inner shrink-0">
@@ -2096,8 +2150,8 @@ export const TemplateLabPage: React.FC<{
                     />
                   </div>
                 ) : device === 'mobile' ? (
-                  <div className="w-full h-full flex-1 min-h-0 flex items-center justify-center p-4 overflow-hidden relative">
-                    <div className="w-full max-w-[390px] h-full max-h-[820px] bg-white rounded-3xl border-4 border-slate-800 shadow-2xl flex flex-col overflow-hidden relative">
+                  <div className="w-full h-full flex-1 min-h-0 flex items-center justify-center p-2 sm:p-4 overflow-hidden relative">
+                    <div className="w-full max-w-[390px] h-full max-h-[820px] bg-white rounded-2xl sm:rounded-3xl border-2 sm:border-4 border-slate-800 shadow-2xl flex flex-col overflow-hidden relative">
                       <div className="h-6 bg-slate-800 flex items-center justify-center shrink-0">
                         <div className="w-16 h-3 bg-slate-700 rounded-full" />
                       </div>
@@ -2117,13 +2171,13 @@ export const TemplateLabPage: React.FC<{
                     </div>
                   </div>
                 ) : (
-                  <div className="w-full h-full flex-1 min-h-0 flex flex-col bg-slate-900 p-4 sm:p-6 overflow-hidden">
-                    <div className="flex items-center justify-between mb-3 shrink-0">
-                      <div className="flex items-center gap-2">
-                        <Code2 className="w-4 h-4 text-blue-400" />
-                        <span className="text-xs font-mono font-bold text-white">Generated Single-File HTML / CSS Source Code</span>
+                  <div className="w-full h-full flex-1 min-h-0 flex flex-col bg-slate-900 p-3 sm:p-6 overflow-hidden">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3 shrink-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Code2 className="w-4 h-4 text-blue-400 shrink-0" />
+                        <span className="text-xs font-mono font-bold text-white truncate">Generated Single-File HTML / CSS Source Code</span>
                         {streaming && (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] font-mono">
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] font-mono shrink-0">
                             <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping" /> Streaming live
                           </span>
                         )}
@@ -2133,7 +2187,7 @@ export const TemplateLabPage: React.FC<{
                           navigator.clipboard.writeText(previewHtml || (html !== BLANK_CANVAS ? html : '') || BLANK_CANVAS);
                           flashToast({ type: 'success', text: 'HTML source code copied to clipboard!' });
                         }}
-                        className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all"
+                        className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shrink-0"
                       >
                         Copy HTML Code
                       </button>
@@ -2141,7 +2195,7 @@ export const TemplateLabPage: React.FC<{
                     <textarea
                       readOnly
                       value={previewHtml || (html !== BLANK_CANVAS ? html : '') || BLANK_CANVAS}
-                      className="w-full flex-1 font-mono text-xs text-emerald-400 bg-slate-950 p-4 rounded-xl border border-slate-800 focus:outline-none resize-none leading-relaxed shadow-inner"
+                      className="w-full flex-1 font-mono text-xs text-emerald-400 bg-slate-950 p-3 sm:p-4 rounded-xl border border-slate-800 focus:outline-none resize-none leading-relaxed shadow-inner"
                     />
                   </div>
                 )}
@@ -2155,26 +2209,26 @@ export const TemplateLabPage: React.FC<{
       {/* ================= TURN INTO TEMPLATE MODAL (White & Blue) ================= */}
       {saveOpen && (
         <div
-          className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-editor-fade"
+          className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-sm animate-editor-fade"
           onClick={e => { if (e.target === e.currentTarget) setSaveOpen(false); }}
         >
           <div
-            className="w-full max-w-lg bg-white border border-slate-200 rounded-3xl shadow-2xl p-6 text-slate-900 animate-editor-rise"
+            className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-6 max-h-[92dvh] overflow-y-auto text-slate-900 animate-editor-rise"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between mb-5">
+            <div className="flex items-start justify-between mb-4 sm:mb-5">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center">
-                  <BookmarkPlus className="w-6 h-6 text-blue-600" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0">
+                  <BookmarkPlus className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900">Turn into Template</h3>
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900">Turn into Template</h3>
                   <p className="text-xs text-slate-500">Instantly publish to Templates Gallery & Campaigns</p>
                 </div>
               </div>
               <button
                 onClick={() => setSaveOpen(false)}
-                className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-900 transition-all"
+                className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-900 transition-all shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -2187,7 +2241,7 @@ export const TemplateLabPage: React.FC<{
                   value={saveName}
                   onChange={e => setSaveName(e.target.value)}
                   placeholder="e.g. Austin Luxury Barbershop"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-300 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 transition-all"
+                  className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-slate-300 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 transition-all"
                   autoFocus
                 />
               </div>
@@ -2199,11 +2253,11 @@ export const TemplateLabPage: React.FC<{
                   onChange={e => setSaveDescription(e.target.value)}
                   placeholder="Brief description of the target niche and features…"
                   rows={2}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-300 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 transition-all resize-none"
+                  className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-slate-300 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 transition-all resize-none"
                 />
               </div>
 
-                            <div>
+              <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-xs font-semibold text-slate-700">Select Niche Industry *</label>
                   <span className="text-[11px] text-slate-500">{(allNiches || []).length} Niches Synced</span>
@@ -2214,7 +2268,7 @@ export const TemplateLabPage: React.FC<{
                       key={n.id}
                       type="button"
                       onClick={() => { setSelectedSaveNiche(n.id); setShowNewCat(false); }}
-                      className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all border flex items-center gap-1.5 ${
+                      className={`px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-bold transition-all border flex items-center gap-1.5 ${
                         selectedSaveNiche === n.id ? 'bg-blue-600 text-white border-blue-600 shadow-sm scale-105' : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
                       }`}
                     >
@@ -2225,7 +2279,7 @@ export const TemplateLabPage: React.FC<{
                   <button
                     type="button"
                     onClick={() => { setShowNewCat(!showNewCat); }}
-                    className="px-3.5 py-1.5 rounded-full text-xs font-bold bg-slate-100 border border-dashed border-slate-300 text-blue-600 hover:text-blue-700 flex items-center gap-1 hover:bg-blue-50 transition-all"
+                    className="px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-bold bg-slate-100 border border-dashed border-slate-300 text-blue-600 hover:text-blue-700 flex items-center gap-1 hover:bg-blue-50 transition-all"
                   >
                     <Plus className="w-3 h-3" /> Create New Niche
                   </button>
@@ -2276,14 +2330,14 @@ export const TemplateLabPage: React.FC<{
               <div className="pt-3 flex gap-3">
                 <button
                   onClick={() => setSaveOpen(false)}
-                  className="flex-1 py-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-200 transition-all"
+                  className="flex-1 py-2.5 sm:py-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-200 transition-all"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={saving || !saveName.trim()}
-                  className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-md active:scale-[0.98] transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+                  className="flex-1 py-2.5 sm:py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold shadow-md active:scale-[0.98] transition-all disabled:opacity-40 flex items-center justify-center gap-2"
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                   {saving ? 'Publishing…' : 'Publish Template'}
@@ -2295,8 +2349,8 @@ export const TemplateLabPage: React.FC<{
       )}
 
       {pendingNicheMove && (
-        <div className="fixed inset-0 z-[190] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-editor-fade">
-          <div className="w-full max-w-md bg-white border border-slate-200 rounded-[2rem] shadow-2xl p-8 text-slate-900 animate-editor-rise text-center space-y-5 relative">
+        <div className="fixed inset-0 z-[190] flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-sm animate-editor-fade">
+          <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl sm:rounded-[2rem] shadow-2xl p-5 sm:p-8 text-slate-900 animate-editor-rise text-center space-y-5 relative">
             <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 mx-auto">
               <AlertCircle className="w-8 h-8" />
             </div>
@@ -2328,8 +2382,8 @@ export const TemplateLabPage: React.FC<{
       )}
 
       {successMsg && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-lg bg-white border border-green-100 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] p-10 text-center space-y-6 animate-celebrate-in relative">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg bg-white border border-green-100 rounded-2xl sm:rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] p-6 sm:p-10 text-center space-y-5 sm:space-y-6 animate-celebrate-in relative">
             <button
               onClick={() => setSuccessMsg(null)}
               className="absolute top-5 right-5 w-9 h-9 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-800 transition-all cursor-pointer"
@@ -2383,8 +2437,8 @@ export const TemplateLabPage: React.FC<{
       )}
 
       {generatingNewSite && (
-        <div className="fixed inset-0 z-[220] flex items-center justify-center bg-slate-900/40 backdrop-blur-md animate-editor-fade p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white border border-slate-200/90 p-8 shadow-2xl text-center space-y-6 animate-editor-rise">
+        <div className="fixed inset-0 z-[220] flex items-center justify-center bg-slate-900/40 backdrop-blur-md animate-editor-fade p-3 sm:p-4">
+          <div className="w-full max-w-md rounded-2xl sm:rounded-3xl bg-white border border-slate-200/90 p-5 sm:p-8 shadow-2xl text-center space-y-5 sm:space-y-6 animate-editor-rise">
             <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center mx-auto text-blue-600 relative">
               <div className="absolute inset-0 rounded-2xl bg-blue-500/10 animate-ping" />
               <Code2 className="w-8 h-8 text-blue-600 relative z-10" />
@@ -2425,31 +2479,31 @@ export const TemplateLabPage: React.FC<{
 
       {/* Rebranding Tests & Readiness Inspection Modal */}
       {showRebrandModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-editor-fade">
-          <div className="w-full max-w-4xl max-h-[92vh] flex flex-col bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden animate-editor-rise">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-editor-fade">
+          <div className="w-full max-w-4xl max-h-[94dvh] sm:max-h-[92vh] flex flex-col bg-white border border-slate-200 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden animate-editor-rise">
             
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
+            <div className="flex items-start sm:items-center justify-between gap-2 px-4 py-3 sm:px-6 sm:py-4 bg-white border-b border-slate-200 shrink-0">
+              <div className="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0">
+                <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 ${
                   isTemplateValidated ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-purple-50 text-purple-600 border border-purple-200'
                 }`}>
                   <ShieldCheck className="w-5 h-5" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-slate-900">Automated Rebranding & Readiness Suite</h3>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900">Automated Rebranding & Readiness Suite</h3>
                     {isTemplateValidated ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] sm:text-xs font-semibold">
                         <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[2.5]" /> Approved for Saving
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-semibold">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[11px] sm:text-xs font-semibold">
                         <AlertCircle className="w-3.5 h-3.5 text-amber-600" /> Verification Pending
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
                     Verify complete dynamic rebranding fidelity, multi-market adaptability, and seamless client personalization.
                   </p>
                 </div>
@@ -2463,14 +2517,14 @@ export const TemplateLabPage: React.FC<{
                   setReadinessScan(null);
                   setTestRebrandMobileView(false);
                 }}
-                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-all cursor-pointer"
+                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-all cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4 sm:space-y-6">
               
               {/* Readiness Score Card */}
               {readinessScan && (
@@ -2562,16 +2616,16 @@ export const TemplateLabPage: React.FC<{
               )}
 
               {/* Editable Test Business Details Form */}
-              <div className="p-5 rounded-2xl bg-blue-50/50 border border-blue-100 space-y-4">
-                <div className="flex items-center justify-between">
+              <div className="p-3.5 sm:p-5 rounded-2xl bg-blue-50/50 border border-blue-100 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
                   <div>
                     <h4 className="text-xs font-bold uppercase tracking-wider text-blue-900">Configurable Test Business Profiles</h4>
                     <p className="text-[11px] text-slate-500">Edit business info below and click Run Rebrand Test to verify dynamic rebranding.</p>
                   </div>
-                  <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-blue-200">
+                  <div className="grid grid-cols-2 sm:flex items-center gap-1 bg-white p-1 rounded-xl border border-blue-200 w-full sm:w-auto">
                     <button
                       onClick={() => setActiveRebrandTab('biz1')}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      className={`px-2.5 sm:px-3 py-1.5 sm:py-1 rounded-lg text-xs font-bold transition-all cursor-pointer truncate text-center ${
                         activeRebrandTab === 'biz1' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
                       }`}
                     >
@@ -2579,7 +2633,7 @@ export const TemplateLabPage: React.FC<{
                     </button>
                     <button
                       onClick={() => setActiveRebrandTab('biz2')}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      className={`px-2.5 sm:px-3 py-1.5 sm:py-1 rounded-lg text-xs font-bold transition-all cursor-pointer truncate text-center ${
                         activeRebrandTab === 'biz2' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
                       }`}
                     >
@@ -2695,7 +2749,7 @@ export const TemplateLabPage: React.FC<{
                 {(() => {
                   const currentRebrandResult = activeRebrandTab === 'biz1' ? rebrandResultBiz1 : rebrandResultBiz2;
                   return (
-                    <div className="flex items-center justify-between pt-1">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
                       <span className="text-xs text-slate-500">
                         {currentRebrandResult ? (
                           <span className="inline-flex items-center gap-1.5 font-bold text-emerald-700">
@@ -2708,7 +2762,7 @@ export const TemplateLabPage: React.FC<{
                       <button
                         onClick={handleRunRebrandTests}
                         disabled={isTestingRebrand}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                        className="w-full sm:w-auto justify-center inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                       >
                         {isTestingRebrand ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <Play className="w-4 h-4" />}
                         <span>
@@ -2886,7 +2940,7 @@ export const TemplateLabPage: React.FC<{
                       <div className="space-y-1.5 flex flex-col items-center">
                         <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider self-start">Live Rebranded Output Simulation ({currentTest.business.name}):</span>
                         <div className={`transition-all duration-300 border border-slate-200 rounded-2xl overflow-hidden bg-slate-50 relative shadow-inner ${
-                          testRebrandMobileView ? 'w-[375px] h-[600px] shadow-2xl border-slate-400 ring-8 ring-slate-900/10 my-2' : 'w-full h-80'
+                          testRebrandMobileView ? 'w-full max-w-[375px] sm:w-[375px] h-[480px] sm:h-[600px] shadow-2xl border-slate-400 ring-4 sm:ring-8 ring-slate-900/10 my-2' : 'w-full h-80'
                         }`}>
                           {testRebrandMobileView && (
                             <div className="w-full bg-slate-900 text-white text-[10px] py-1 px-3 flex items-center justify-between font-mono shrink-0">
@@ -2910,19 +2964,19 @@ export const TemplateLabPage: React.FC<{
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-between px-6 py-4 bg-slate-50 border-t border-slate-200 shrink-0">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 px-4 py-3.5 sm:px-6 sm:py-4 bg-slate-50 border-t border-slate-200 shrink-0">
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleRunRebrandTests}
                   disabled={isTestingRebrand}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-50 border border-blue-300 text-blue-700 hover:bg-blue-100 text-xs font-bold transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="w-full sm:w-auto justify-center inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-50 border border-blue-300 text-blue-700 hover:bg-blue-100 text-xs font-bold transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {isTestingRebrand ? <Loader2 className="w-4 h-4 animate-spin text-blue-600" /> : <RefreshCw className="w-4 h-4 text-blue-600" />}
                   <span>{isTestingRebrand ? 'AI Rebranding in Progress…' : 'Re-test Both Businesses'}</span>
                 </button>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="grid grid-cols-2 sm:flex items-center gap-2">
                 <button
                   onClick={() => {
                     setShowRebrandModal(false);
@@ -2932,7 +2986,7 @@ export const TemplateLabPage: React.FC<{
                     setReadinessScan(null);
                     setTestRebrandMobileView(false);
                   }}
-                  className="px-4 py-2.5 rounded-xl bg-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-300 transition-all cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl bg-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-300 transition-all cursor-pointer text-center"
                 >
                   Close
                 </button>
@@ -2947,14 +3001,14 @@ export const TemplateLabPage: React.FC<{
                     openSave();
                   }}
                   disabled={!isTemplateValidated}
-                  className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer ${
+                  className={`justify-center inline-flex items-center gap-2 px-3 sm:px-5 py-2.5 rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer ${
                     isTemplateValidated
                       ? 'bg-blue-600 hover:bg-blue-700 text-white'
                       : 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-60'
                   }`}
                 >
-                  {!isTemplateValidated && <Lock className="w-3.5 h-3.5" />}
-                  <span>Publish to Templates</span>
+                  {!isTemplateValidated && <Lock className="w-3.5 h-3.5 shrink-0" />}
+                  <span className="truncate">Publish to Templates</span>
                 </button>
               </div>
             </div>
