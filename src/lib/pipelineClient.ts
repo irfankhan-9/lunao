@@ -1129,12 +1129,17 @@ export async function listSiteHistory(parentSlug?: string): Promise<SiteHistoryE
     // ignore
   }
 
-  // Merge server and local, deduplicating by id
+  // Merge server and local, deduplicating by templateId or title
   const map = new Map<string, SiteHistoryEntry>();
   for (const entry of [...serverEntries, ...localEntries]) {
     if (entry && entry.id) {
-      if (!map.has(entry.id) || (entry.createdAt || 0) > (map.get(entry.id)?.createdAt || 0)) {
-        map.set(entry.id, entry);
+      const normTitle = (entry.title || '').toLowerCase().trim();
+      const normTmpl = (entry.templateId || '').toLowerCase().trim();
+      const normSlug = (entry.parentSlug || '').toLowerCase().trim();
+      const key = normTmpl || normTitle || normSlug || entry.id;
+
+      if (!map.has(key) || (entry.createdAt || 0) > (map.get(key)?.createdAt || 0)) {
+        map.set(key, entry);
       }
     }
   }
@@ -1169,11 +1174,19 @@ export async function createSiteHistory(params: {
     createdAt: Date.now(),
   };
 
-  // Save to localStorage cache immediately
+  // Save to localStorage cache immediately, replacing existing entry for the same site/template/title
   try {
     const raw = localStorage.getItem('lunao_site_history_cache');
     let existing: SiteHistoryEntry[] = raw ? JSON.parse(raw) : [];
-    existing = existing.filter(e => e.id !== entryId);
+    const normTitle = (params.title || '').toLowerCase().trim();
+    existing = existing.filter(e => {
+      if (!e) return false;
+      if (entryId && e.id === entryId) return false;
+      if (params.templateId && e.templateId === params.templateId) return false;
+      if (params.parentSlug && e.parentSlug === params.parentSlug) return false;
+      if (normTitle && e.title && e.title.toLowerCase().trim() === normTitle) return false;
+      return true;
+    });
     existing.unshift(nowEntry);
     localStorage.setItem('lunao_site_history_cache', JSON.stringify(existing.slice(0, 50)));
   } catch {
