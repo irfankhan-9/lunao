@@ -1584,35 +1584,35 @@ export const TemplateLabPage: React.FC<{
             <div className="flex flex-col h-full overflow-hidden bg-slate-50">
               
               {/* Chat Header & LLM Engine Selector */}
-              <div className="px-3.5 py-3 sm:px-5 sm:py-4 border-b border-slate-200 bg-white space-y-2.5 sm:space-y-3 shrink-0 shadow-xs">
+              <div className="px-2.5 py-2 sm:px-5 sm:py-4 border-b border-slate-200 bg-white space-y-1.5 sm:space-y-3 shrink-0 shadow-xs">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
-                      <Terminal className="w-4 h-4" />
+                  <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                    <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-md sm:rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 shrink-0">
+                      <Terminal className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     </div>
-                    <div>
-                      <span className="text-sm font-bold font-sans text-slate-900 block leading-tight">
+                    <div className="min-w-0">
+                      <span className="text-xs sm:text-sm font-bold font-sans text-slate-900 block leading-tight truncate">
                         Vibe Design Assistant
                       </span>
-                      <span className="text-[11px] text-slate-500 font-sans">
+                      <span className="hidden sm:block text-[11px] text-slate-500 font-sans">
                         Real-time AI Synthesis & Interactive Design
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-[11px] font-semibold text-blue-700">
+                  <div className="flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-blue-50 border border-blue-200 text-[10px] sm:text-[11px] font-semibold text-blue-700 shrink-0">
                     <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
                     Active
                   </div>
                 </div>
 
-                {/* Brand consistent model selector toggle - Large & Spacious */}
-                <div className={`flex items-center bg-slate-100 p-1.5 rounded-xl border border-slate-200 gap-1 text-xs font-medium text-slate-700 transition-all ${streaming ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}>
+                {/* Brand consistent model selector toggle */}
+                <div className={`flex items-center bg-slate-100 p-1 sm:p-1.5 rounded-lg sm:rounded-xl border border-slate-200 gap-0.5 sm:gap-1 text-[10px] sm:text-xs font-medium text-slate-700 transition-all ${streaming ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}>
                   {(['Gemini 2.5 Flash', 'Gemini 3.8 Flash', 'Gemini 3.1 Pro'] as const).map(model => (
                     <button
                       key={model}
                       disabled={streaming}
                       onClick={() => { if (!streaming) { sfx.toggle(); setSelectedModel(model); } }}
-                      className={`flex-1 py-1.5 px-2 rounded-lg transition-all truncate text-center text-xs font-semibold ${
+                      className={`flex-1 py-1 sm:py-1.5 px-1 sm:px-2 rounded-md sm:rounded-lg transition-all truncate text-center text-[10px] sm:text-xs font-semibold ${
                         selectedModel === model
                           ? 'bg-blue-600 text-white shadow-xs'
                           : 'hover:text-slate-900 hover:bg-slate-200/60 text-slate-600'
@@ -1623,37 +1623,38 @@ export const TemplateLabPage: React.FC<{
                   ))}
                 </div>
 
-                {/* Security Architecture & Direct Compilation Notice */}
-                <div className="mt-2 p-2 rounded-lg bg-slate-50 border border-slate-200/80 text-slate-800 flex items-center gap-2 shadow-2xs">
-                  <div className="w-4 h-4 rounded bg-blue-50 border border-blue-200/60 flex items-center justify-center shrink-0 text-blue-600">
-                    <ShieldCheck className="w-3 h-3" />
+                {/* Security Architecture Notice - Ultra-compact on mobile */}
+                <div className="mt-1 sm:mt-2 p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-slate-50 border border-slate-200/80 text-slate-800 flex items-center gap-1.5 sm:gap-2 shadow-2xs">
+                  <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded bg-blue-50 border border-blue-200/60 flex items-center justify-center shrink-0 text-blue-600">
+                    <ShieldCheck className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                   </div>
-                  <div className="text-[10px] leading-tight flex-1">
-                    <span className="font-semibold text-slate-900">Security Notice: </span>
-                    <span className="text-slate-600">
+                  <div className="text-[10px] leading-tight flex-1 min-w-0">
+                    <span className="font-semibold text-slate-900">Notice: </span>
+                    <span className="text-slate-600 sm:hidden">Direct code compilation active.</span>
+                    <span className="text-slate-600 hidden sm:inline">
                       Conversational chat is disabled to protect AI servers and maximize generation speed. Design instructions compile directly into production code in real-time.
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Chat messages list - Spacious & Highly readable */}
-              <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-3.5 py-3 sm:px-5 sm:py-4 space-y-3 sm:space-y-4 min-h-0 bg-slate-50 scroll-smooth">
+              {/* Chat messages list - Generous height on mobile */}
+              <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-2.5 py-2 sm:px-5 sm:py-4 space-y-2 sm:space-y-4 min-h-0 bg-slate-50 scroll-smooth">
                 {hasLoadedPreviousTemplate && !hasGivenAiPrompt ? (
-                  <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2.5">
-                    <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white border border-slate-200 shadow-xs space-y-1.5 sm:space-y-2.5">
+                    <p className="text-[10px] sm:text-xs font-bold text-slate-800 uppercase tracking-wider">
                       Quick Vibe Edits
                     </p>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      Click any prompt to instantly instruct the AI model to update the code in real-time:
+                    <p className="text-[11px] sm:text-xs text-slate-600 leading-snug">
+                      Tap any prompt to instruct AI to update code in real-time:
                     </p>
-                    <div className="flex flex-wrap gap-1.5 pt-1">
+                    <div className="flex flex-wrap gap-1 sm:gap-1.5 pt-0.5">
                       {[
                         'Add a 3-tier pricing table',
-                        'Make the hero section bolder with dark mahogany theme',
-                        'Add approved booking section (Name, Email, Phone, Service)',
-                        'Add customer review stars badge',
-                        'Change main button color to royal emerald',
+                        'Make hero bolder with dark theme',
+                        'Add booking form section',
+                        'Add review stars badge',
+                        'Change button to emerald',
                         'Add FAQ accordion section'
                       ].map((promptSnippet, idx) => (
                         <button
@@ -1663,7 +1664,7 @@ export const TemplateLabPage: React.FC<{
                             setInput(promptSnippet);
                             sfx.tap();
                           }}
-                          className="text-left text-xs px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 border border-slate-200 text-slate-700 transition-all font-sans"
+                          className="text-left text-[11px] sm:text-xs px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md sm:rounded-lg bg-slate-100 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 border border-slate-200 text-slate-700 transition-all font-sans"
                         >
                           + {promptSnippet}
                         </button>
@@ -1681,7 +1682,7 @@ export const TemplateLabPage: React.FC<{
                       if (m.isError) {
                         return (
                           <div key={i} className="flex justify-start animate-editor-fade">
-                            <div className="max-w-[90%] rounded-xl px-3.5 py-2.5 bg-red-50 border border-red-200 text-red-700 rounded-bl-xs shadow-2xs space-y-1">
+                            <div className="max-w-[92%] sm:max-w-[90%] rounded-xl px-2.5 py-2 sm:px-3.5 sm:py-2.5 bg-red-50 border border-red-200 text-red-700 rounded-bl-xs shadow-2xs space-y-1">
                               <div className="flex items-center gap-1.5 font-bold text-xs text-red-700">
                                 <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0" />
                                 <span>Prompt Not Responded</span>
@@ -1698,12 +1699,12 @@ export const TemplateLabPage: React.FC<{
                         const isCopied = copiedPromptIndex === i;
                         return (
                           <div key={i} className="flex flex-col items-end">
-                            <div className="max-w-[88%] rounded-2xl px-4 py-3 text-sm font-sans leading-relaxed shadow-md bg-blue-600 text-white rounded-br-sm">
+                            <div className="max-w-[90%] sm:max-w-[88%] rounded-xl sm:rounded-2xl px-3 py-2 sm:px-4 sm:py-3 text-xs sm:text-sm font-sans leading-relaxed shadow-md bg-blue-600 text-white rounded-br-sm">
                               {m.content}
                             </div>
-                            <div className="flex items-center gap-1.5 justify-end mt-1.5 pr-1">
+                            <div className="flex items-center gap-1.5 justify-end mt-1 pr-1">
                               {isCopied && (
-                                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 shadow-2xs animate-editor-fade transition-all">
+                                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-200 shadow-2xs animate-editor-fade transition-all">
                                   Copied!
                                 </span>
                               )}
@@ -1719,13 +1720,13 @@ export const TemplateLabPage: React.FC<{
                                     }, 1000);
                                   } catch {}
                                 }}
-                                className="p-1 rounded-md bg-slate-800/80 hover:bg-slate-900 text-white shadow-2xs transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-700/60"
+                                className="p-0.5 sm:p-1 rounded-md bg-slate-800/80 hover:bg-slate-900 text-white shadow-2xs transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-700/60"
                                 title="Copy prompt"
                               >
                                 {isCopied ? (
-                                  <Check className="w-3 h-3 text-white stroke-[2.5]" />
+                                  <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white stroke-[2.5]" />
                                 ) : (
-                                  <Copy className="w-3 h-3 text-white" />
+                                  <Copy className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
                                 )}
                               </button>
                             </div>
@@ -1736,8 +1737,8 @@ export const TemplateLabPage: React.FC<{
                       const displayContent = sanitizeUserFacingText(m.content);
                       return (
                         <div key={i} className="flex justify-start">
-                          <div className="max-w-[88%] rounded-2xl px-4 py-3 text-sm font-sans leading-relaxed shadow-xs bg-white border border-slate-200 text-slate-800 rounded-bl-sm">
-                            {displayContent || <span className="inline-flex items-center gap-1.5 text-slate-500"><Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" /> Synthesizing website updates…</span>}
+                          <div className="max-w-[90%] sm:max-w-[88%] rounded-xl sm:rounded-2xl px-3 py-2 sm:px-4 sm:py-3 text-xs sm:text-sm font-sans leading-relaxed shadow-xs bg-white border border-slate-200 text-slate-800 rounded-bl-sm">
+                            {displayContent || <span className="inline-flex items-center gap-1.5 text-slate-500"><Loader2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 animate-spin text-blue-600" /> Synthesizing website updates…</span>}
                           </div>
                         </div>
                       );
@@ -1745,13 +1746,13 @@ export const TemplateLabPage: React.FC<{
 
                     {streaming && (
                       <div className="flex justify-start">
-                        <div className="max-w-[88%] rounded-2xl px-4 py-3 bg-white border border-blue-200 rounded-bl-sm shadow-md space-y-1.5">
-                          <div className="flex items-center gap-2">
+                        <div className="max-w-[90%] sm:max-w-[88%] rounded-xl sm:rounded-2xl px-3 py-2 sm:px-4 sm:py-3 bg-white border border-blue-200 rounded-bl-sm shadow-md space-y-1">
+                          <div className="flex items-center gap-1.5">
                             <div className="w-2 h-2 rounded-full bg-blue-600 animate-ping" />
-                            <span className="text-xs text-blue-600 font-bold">{selectedModel} Designing in Real-Time</span>
+                            <span className="text-[11px] sm:text-xs text-blue-600 font-bold">{selectedModel} Designing in Real-Time</span>
                           </div>
-                          <p className="text-xs text-slate-600 leading-relaxed italic">
-                            {thinkingAcc ? sanitizeUserFacingText(thinkingAcc.slice(-220)) : 'Crafting clean, responsive layout and tailored presentation…'}
+                          <p className="text-[11px] sm:text-xs text-slate-600 leading-relaxed italic">
+                            {thinkingAcc ? sanitizeUserFacingText(thinkingAcc.slice(-220)) : 'Crafting clean layout and tailored presentation…'}
                           </p>
                         </div>
                       </div>
@@ -1759,10 +1760,10 @@ export const TemplateLabPage: React.FC<{
 
                     {labError && (
                       <div className="flex justify-start animate-fade-in">
-                        <div className="max-w-[95%] rounded-2xl p-4 bg-red-50 border border-red-200 text-red-800 shadow-sm space-y-1">
+                        <div className="max-w-[95%] rounded-xl sm:rounded-2xl p-3 sm:p-4 bg-red-50 border border-red-200 text-red-800 shadow-sm space-y-1">
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1.5 font-bold text-xs text-red-700">
-                              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                              <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-600 shrink-0" />
                               <span>AI Servers Notice</span>
                             </div>
                             <button
@@ -1784,8 +1785,8 @@ export const TemplateLabPage: React.FC<{
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Prompt input - Generous height & clear buttons */}
-              <div className="p-3 sm:p-5 border-t border-slate-200 bg-white shrink-0 shadow-lg space-y-2.5 sm:space-y-3">
+              {/* Prompt input composer - Compact on mobile */}
+              <div className="p-2.5 sm:p-5 border-t border-slate-200 bg-white shrink-0 shadow-lg space-y-1.5 sm:space-y-3">
                 {!isPlanEligible ? (
                   <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 flex flex-col gap-2 shadow-xs animate-fade-in">
                     <div className="flex items-start gap-3">

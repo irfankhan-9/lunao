@@ -1887,22 +1887,22 @@ The Lunao Team`);
             <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 pb-3.5 sm:pb-4">
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
                 <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-ink-secondary">Campaign Engine:</span>
-                <div className="grid grid-cols-3 sm:flex items-stretch sm:items-center gap-1 sm:gap-1.5 p-1 bg-surface/80 border border-border-main rounded-2xl shadow-inner backdrop-blur-sm w-full sm:w-auto">
+                <div className="grid grid-cols-3 sm:flex items-stretch sm:items-center gap-1 sm:gap-1.5 p-1 bg-surface/80 border border-border-main rounded-2xl shadow-inner backdrop-blur-sm w-full sm:w-auto min-w-0 overflow-hidden">
                   {/* 1. Email Campaign (First) */}
                   <button
                     type="button"
                     onClick={() => { playSoftBubble(); setActiveCampaignType('email'); }}
-                    className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-2 py-2 sm:px-4 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-semibold font-sans transition-all duration-200 cursor-pointer text-center ${
+                    className={`flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 px-1 py-1.5 sm:px-4 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-semibold font-sans transition-all duration-200 cursor-pointer text-center min-w-0 overflow-hidden ${
                       activeCampaignType === 'email'
                         ? 'bg-white text-accent shadow-sm border border-accent/20 ring-1 ring-accent/10 font-bold'
                         : 'text-ink-secondary hover:text-ink hover:bg-white/60'
                     }`}
                   >
-                    <div className="flex items-center gap-1.5 sm:gap-2">
+                    <div className="flex items-center justify-center gap-1 sm:gap-2 max-w-full min-w-0">
                       <Mail className="w-3.5 h-3.5 shrink-0" />
-                      <span className="whitespace-nowrap">Email Outreach</span>
+                      <span className="truncate sm:whitespace-nowrap max-w-full text-[10px] sm:text-xs">Email Outreach</span>
                     </div>
-                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold whitespace-nowrap ${
+                    <span className={`inline-flex items-center px-1 sm:px-1.5 py-0.5 rounded-full text-[8px] sm:text-[9px] font-bold truncate max-w-full ${
                       activeCampaignType === 'email' ? 'bg-accent/15 text-accent' : 'bg-surface text-ink-tertiary'
                     }`}>2 credits/lead</span>
                   </button>
@@ -1911,17 +1911,17 @@ The Lunao Team`);
                   <button
                     type="button"
                     onClick={() => { playSoftBubble(); setActiveCampaignType('sms'); }}
-                    className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-2 py-2 sm:px-4 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-semibold font-sans transition-all duration-200 cursor-pointer text-center ${
+                    className={`flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 px-1 py-1.5 sm:px-4 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-semibold font-sans transition-all duration-200 cursor-pointer text-center min-w-0 overflow-hidden ${
                       activeCampaignType === 'sms'
                         ? 'bg-white text-accent shadow-sm border border-accent/20 ring-1 ring-accent/10 font-bold'
                         : 'text-ink-secondary hover:text-ink hover:bg-white/60'
                     }`}
                   >
-                    <div className="flex items-center gap-1.5 sm:gap-2">
+                    <div className="flex items-center justify-center gap-1 sm:gap-2 max-w-full min-w-0">
                       <MessageSquare className="w-3.5 h-3.5 shrink-0" />
-                      <span className="whitespace-nowrap">SMS Campaign</span>
+                      <span className="truncate sm:whitespace-nowrap max-w-full text-[10px] sm:text-xs">SMS Campaign</span>
                     </div>
-                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold whitespace-nowrap ${
+                    <span className={`inline-flex items-center px-1 sm:px-1.5 py-0.5 rounded-full text-[8px] sm:text-[9px] font-bold truncate max-w-full ${
                       activeCampaignType === 'sms' ? 'bg-accent/15 text-accent' : 'bg-surface text-ink-tertiary'
                     }`}>3 credits/lead</span>
                   </button>
@@ -1930,17 +1930,17 @@ The Lunao Team`);
                   <button
                     type="button"
                     onClick={() => { playSoftBubble(); setActiveCampaignType('site-deploy'); }}
-                    className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-2 py-2 sm:px-4 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-semibold font-sans transition-all duration-200 cursor-pointer text-center ${
+                    className={`flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 px-1 py-1.5 sm:px-4 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-semibold font-sans transition-all duration-200 cursor-pointer text-center min-w-0 overflow-hidden ${
                       activeCampaignType === 'site-deploy'
                         ? 'bg-white text-accent shadow-sm border border-accent/20 ring-1 ring-accent/10 font-bold'
                         : 'text-ink-secondary hover:text-ink hover:bg-white/60'
                     }`}
                   >
-                    <div className="flex items-center gap-1.5 sm:gap-2">
+                    <div className="flex items-center justify-center gap-1 sm:gap-2 max-w-full min-w-0">
                       <Globe className="w-3.5 h-3.5 shrink-0" />
-                      <span className="whitespace-nowrap">Site Deploy</span>
+                      <span className="truncate sm:whitespace-nowrap max-w-full text-[10px] sm:text-xs">Site Deploy</span>
                     </div>
-                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold whitespace-nowrap ${
+                    <span className={`inline-flex items-center px-1 sm:px-1.5 py-0.5 rounded-full text-[8px] sm:text-[9px] font-bold truncate max-w-full ${
                       activeCampaignType === 'site-deploy' ? 'bg-accent/15 text-accent' : 'bg-surface text-ink-tertiary'
                     }`}>1 credit/lead</span>
                   </button>
