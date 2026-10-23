@@ -1,4 +1,5 @@
 import React, { Component, useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Code2, ArrowLeft, Save, UploadCloud, Image as ImageIcon,
   Monitor, Smartphone, Wand2, Loader2, ExternalLink, X,
@@ -93,16 +94,13 @@ interface StudioErrorBoundaryState {
   error: Error | null;
 }
 
-class StudioErrorBoundary extends (Component as unknown as {
-  new (props: StudioErrorBoundaryProps): {
-    props: StudioErrorBoundaryProps;
-    state: StudioErrorBoundaryState;
-    setState: (s: Partial<StudioErrorBoundaryState>) => void;
-  };
-}) {
+class StudioErrorBoundary extends Component<StudioErrorBoundaryProps, StudioErrorBoundaryState> {
+  state: StudioErrorBoundaryState = { hasError: false, error: null };
+  props!: StudioErrorBoundaryProps;
+  setState!: (s: Partial<StudioErrorBoundaryState>) => void;
+
   constructor(props: StudioErrorBoundaryProps) {
     super(props);
-    this.state = { hasError: false, error: null };
   }
   static getDerivedStateFromError(error: Error): StudioErrorBoundaryState {
     return { hasError: true, error };
@@ -484,17 +482,21 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   };
 
   // ===========================================================================
-  // LAB VIEW — embedded AI Vibe Studio
+  // LAB VIEW — AI Vibe Studio (Native dedicated section, single clean scrollbar)
   // ===========================================================================
 
   if (view === 'lab') {
-    return (
-      <div key="editor-lab" className="w-full min-h-[750px] flex-1 flex flex-col animate-editor-rise -mt-2 -mx-4 sm:-mx-6 lg:-mx-8">
+    if (!active) return null;
+    const labContent = (
+      <div
+        key="editor-lab"
+        className="fixed inset-0 md:left-[260px] z-40 bg-white flex flex-col overflow-hidden animate-editor-rise"
+      >
         {toast && <ToastBanner toast={toast} onClose={() => setToast(null)} />}
         <StudioErrorBoundary onClose={() => { sfx.close(); setView('list'); }}>
           <TemplateLabPage
             aiEnabled={aiEnabled}
-            embedded={true}
+            embedded={false}
             onClose={() => { sfx.close(); setView('list'); }}
             onBrowseTemplates={() => { sfx.open(); setBrowseOpen(true); }}
             flashToast={flashToast}
@@ -511,6 +513,8 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
         />
       </div>
     );
+
+    return typeof document !== 'undefined' ? createPortal(labContent, document.body) : labContent;
   }
 
   // ===========================================================================

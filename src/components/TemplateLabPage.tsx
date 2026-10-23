@@ -1339,7 +1339,7 @@ export const TemplateLabPage: React.FC<{
   const isActive = mode === 'active';
 
   return (
-    <div ref={workspaceRef} className={embedded ? "w-full min-h-[750px] h-[calc(100vh-130px)] flex flex-col bg-white text-slate-900 select-none relative rounded-2xl border border-slate-200 shadow-sm overflow-hidden" : "fixed inset-0 z-[60] bg-white flex flex-col text-slate-900 select-none overflow-hidden"}>
+    <div ref={workspaceRef} className={embedded ? "w-full min-h-[750px] h-[calc(100vh-130px)] flex flex-col bg-white text-slate-900 select-none relative rounded-2xl border border-slate-200 shadow-sm overflow-hidden" : "w-full h-full bg-white flex flex-col text-slate-900 select-none overflow-hidden"}>
 
       {/* TOP HEADER BAR - White & Blue Brand Consistent */}
       <div className="flex items-center justify-between gap-3 px-6 py-3.5 bg-white border-b border-slate-200 shrink-0 shadow-sm">
