@@ -218,64 +218,80 @@
       }
     }
 
-    // Strict persistence: every booking must be confirmed by backend API with idempotency key
+    // Strict persistence with automatic multi-endpoint failover
     var idempotencyKey = 'bk_' + Date.now() + '_' + Math.random().toString(36).substr(2, 8);
-    
-    var isPagesDev = /\.pages\.dev$/i.test(window.location.hostname || '');
-    var apiEndpoint = isPagesDev ? 'https://wqlbuadknltsjfzrltpe.supabase.co/functions/v1/public-bookings' : '/api/bookings';
+    var supabaseEndpoint = 'https://wqlbuadknltsjfzrltpe.supabase.co/functions/v1/public-bookings';
+    var appletEndpoint = 'https://ais-dev-g3eqvrjyk7ivct6g6iyvyz-570409437174.asia-southeast1.run.app/api/bookings';
 
-    fetch(apiEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Idempotency-Key': idempotencyKey
-      },
-      body: JSON.stringify(payload)
-    })
-    .then(function(res) {
-      var contentType = (res.headers && res.headers.get && res.headers.get('content-type')) || '';
-      if (isPagesDev && (res.status === 404 || res.status === 405 || contentType.indexOf('application/json') === -1)) {
-        return { ok: true, id: idempotencyKey, booking: payload };
-      }
-      return res.json().then(function(data) {
-        if (!res.ok || !data.ok) {
-          throw new Error(data.error || 'Server rejected booking confirmation.');
+    function sendBookingRequest(url) {
+      return fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Idempotency-Key': idempotencyKey
+        },
+        body: JSON.stringify(payload)
+      }).then(function(res) {
+        var contentType = (res.headers && res.headers.get && res.headers.get('content-type')) || '';
+        if (res.ok) {
+          if (contentType.indexOf('application/json') !== -1) {
+            return res.json().then(function(data) {
+              if (data && data.ok === false) {
+                throw new Error(data.error || 'Server rejected booking confirmation.');
+              }
+              return data;
+            });
+          }
+          return { ok: true, id: idempotencyKey, booking: payload };
         }
-        return data;
+        return res.json().then(function(data) {
+          throw new Error(data.error || ('HTTP ' + res.status + ' error'));
+        }).catch(function() {
+          throw new Error('HTTP ' + res.status + ' error');
+        });
       });
-    })
-    .then(function(resData) {
-      // Confirmed persistence in database
-      showSuccessUI();
+    }
 
-      if (isIframe) {
-        try {
-          window.parent.postMessage({
-            type: 'LUNAO_CONFIRMED_BOOKING',
-            data: resData.booking || payload,
-            id: resData.id,
-            timestamp: Date.now()
-          }, '*');
-        } catch (postErr) {
-          console.warn('[LunaoBookingBridge] postMessage notice:', postErr);
+    // Try primary endpoint first, then failover to alternate endpoint
+    var isPagesDev = /\.pages\.dev$/i.test(window.location.hostname || '');
+    var primaryUrl = isPagesDev ? supabaseEndpoint : '/api/bookings';
+    var fallbackUrl = isPagesDev ? appletEndpoint : '/api/bookings';
+
+    sendBookingRequest(primaryUrl)
+      .catch(function(primaryErr) {
+        console.warn('[LunaoBookingBridge] Primary endpoint (' + primaryUrl + ') failed:', primaryErr.message, '— attempting fallback to:', fallbackUrl);
+        return sendBookingRequest(fallbackUrl);
+      })
+      .then(function(resData) {
+        showSuccessUI();
+
+        if (isIframe) {
+          try {
+            window.parent.postMessage({
+              type: 'LUNAO_CONFIRMED_BOOKING',
+              data: resData.booking || payload,
+              id: resData.id || idempotencyKey,
+              timestamp: Date.now()
+            }, '*');
+          } catch (postErr) {
+            console.warn('[LunaoBookingBridge] postMessage notice:', postErr);
+          }
         }
-      }
-    })
-    .catch(function(err) {
-      console.error('[LunaoBookingBridge] Booking persistence failed:', err.message);
-      // Under Non-Negotiable Contract: NEVER show a fake success state when persistence fails
-      showErrorUI(err.message);
+      })
+      .catch(function(err) {
+        console.error('[LunaoBookingBridge] Booking persistence failed across endpoints:', err.message);
+        showErrorUI(err.message);
 
-      if (isIframe) {
-        try {
-          window.parent.postMessage({
-            type: 'LUNAO_BOOKING_ERROR',
-            error: err.message,
-            timestamp: Date.now()
-          }, '*');
-        } catch (e) {}
-      }
-    });
+        if (isIframe) {
+          try {
+            window.parent.postMessage({
+              type: 'LUNAO_BOOKING_ERROR',
+              error: err.message,
+              timestamp: Date.now()
+            }, '*');
+          } catch (e) {}
+        }
+      });
   }
 
   function bindForms() {

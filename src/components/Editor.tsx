@@ -204,9 +204,14 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   const lastPreviewPush = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const flashToast = (t: Toast) => {
+  const toastTimeoutRef = useRef<any>(null);
+  const flashToast = (t: Toast, duration?: number) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     setToast(t);
-    if (t) setTimeout(() => setToast(null), 3500);
+    const ms = duration || (t?.text?.toLowerCase().includes('copied') ? 1000 : 2500);
+    if (t) {
+      toastTimeoutRef.current = setTimeout(() => setToast(null), ms);
+    }
   };
 
   // ---- list loading --------------------------------------------------------
@@ -1122,16 +1127,17 @@ const AddonToggle: React.FC<{
 
 // Brand-consistent toast
 const ToastBanner: React.FC<{ toast: NonNullable<Toast>; onClose: () => void }> = ({ toast, onClose }) => {
+  const isCopied = toast.text?.toLowerCase().includes('copied');
   const styles = {
-    success: 'bg-success-soft text-success border-success/20',
+    success: 'bg-emerald-50 text-emerald-800 border-emerald-200',
     error: 'bg-red-50 text-red-700 border-red-200',
-    info: 'bg-accent-soft text-accent border-accent/20',
+    info: isCopied ? 'bg-slate-900 text-white border-slate-800' : 'bg-blue-50 text-blue-700 border-blue-200',
   }[toast.type];
-  const Icon = toast.type === 'success' ? CheckCircle2 : toast.type === 'error' ? AlertCircle : Loader2;
+  const Icon = toast.type === 'success' || isCopied ? CheckCircle2 : toast.type === 'error' ? AlertCircle : CheckCircle2;
   return (
-    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] animate-editor-rise">
-      <div className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl border shadow-lg text-sm font-medium font-sans ${styles}`}>
-        <Icon className={`w-4 h-4 shrink-0 ${toast.type === 'info' ? 'animate-spin' : ''}`} />
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] animate-editor-rise">
+      <div className={`flex items-center gap-2.5 px-4 py-2 rounded-xl border shadow-lg text-xs font-semibold font-sans transition-all ${styles}`}>
+        <Icon className="w-4 h-4 shrink-0" />
         <span>{toast.text}</span>
         <button onClick={() => { sfx.close(); onClose(); }} className="ml-1 opacity-60 hover:opacity-100">
           <X className="w-3.5 h-3.5" />

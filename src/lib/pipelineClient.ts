@@ -515,6 +515,7 @@ export async function createBooking(data: {
 export interface AiChatMessage {
   role: 'user' | 'assistant';
   content: string;
+  isError?: boolean;
 }
 
 // ---- Credits + Campaigns (server-side source of truth) ------------------

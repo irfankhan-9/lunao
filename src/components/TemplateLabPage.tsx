@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   ArrowLeft, Key, ChevronDown, Loader2, AlertCircle, Play, CheckCircle2, Cpu,
   FlaskConical, Layout, Monitor, Smartphone, Upload, Copy,
@@ -341,6 +341,11 @@ function sanitizeCheckLabel(label: string): string {
     .replace(/\bplaceholders?\b/gi, 'Dynamic Branding')
     .trim();
 }
+const BookingNoticeCard = () => (
+  <div className="inline-flex items-center px-2.5 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-900 text-[11px] font-semibold tracking-tight shadow-2xs shrink-0 select-none">
+    <span>Owner PWA & Bookings coming soon in AI Web Studio, Lunao.</span>
+  </div>
+);
 
 export const TemplateLabPage: React.FC<{
   aiEnabled: boolean;
@@ -608,6 +613,19 @@ export const TemplateLabPage: React.FC<{
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const idleContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const [copiedPromptIndex, setCopiedPromptIndex] = useState<number | null>(null);
+
+  // Smooth auto-scroll with fluid animation to keep newest chat updates visible
+  const scrollToBottom = useCallback((smooth = true) => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({
+        behavior: smooth ? 'smooth' : 'auto',
+        block: 'end',
+      });
+    }
+  }, []);
+
 
   // Save/Template Dialog States
   const [saveOpen, setSaveOpen] = useState(false);
@@ -844,7 +862,7 @@ export const TemplateLabPage: React.FC<{
       if (hasBookingForm(result)) {
         console.warn('[AIStudioBookingGuard] Booking form detected in AI Studio generation. Replacing with telephone CTA.');
         result = replaceBookingWithPhoneCta(result);
-        bookingNotice = '\n\nNote: Bookings coming soon to Lunao AI Website Studio. Booking forms have been replaced with a direct phone inquiry CTA.';
+        bookingNotice = '';
       }
 
       const finalCompiled = compilePreview(result);
@@ -904,7 +922,7 @@ export const TemplateLabPage: React.FC<{
     }
     setHasGivenAiPrompt(true);
     sfx.magic();
-    const history_msgs = messages.slice(-6);
+    const history_msgs = messages.filter(m => !m.isError).slice(-6);
     setMessages(prev => {
       const last = prev[prev.length - 1];
       if (last && last.role === 'user' && last.content.trim().toLowerCase() === instruction.toLowerCase()) {
@@ -916,6 +934,7 @@ export const TemplateLabPage: React.FC<{
     setStreaming(true);
     setLabError(null);
     setThinkingAcc('');
+    setTimeout(() => scrollToBottom(true), 30);
 
     try {
       const base = html || BLANK_CANVAS;
@@ -930,12 +949,17 @@ export const TemplateLabPage: React.FC<{
         throw err;
       }
 
+      // Hard-coded validation: AI must write valid code and cannot return empty or unchanged markup
+      if (!result || typeof result !== 'string' || result.trim().length < 50 || result.trim() === base.trim()) {
+        throw new Error('AI servers down: No response received or no website code was written.');
+      }
+
       // Enforce AI Website Studio temporary booking restriction:
       let bookingEditNotice = '';
       if (hasBookingForm(result)) {
         console.warn('[AIStudioBookingGuard] Booking form detected in AI Studio edit. Replacing with phone CTA.');
         result = replaceBookingWithPhoneCta(result);
-        bookingEditNotice = '\n\nNote: Bookings coming soon to Lunao AI Website Studio. Booking forms have been replaced with a direct phone inquiry CTA.';
+        bookingEditNotice = '';
       }
 
       const finalCompiled = compilePreview(result);
@@ -1018,12 +1042,16 @@ export const TemplateLabPage: React.FC<{
     } catch (err: any) {
       sfx.error();
       setThinkingAcc('');
-      const errText = 'AI servers are currently busy or unavailable. Please try again in a moment.';
-      setLabError(errText);
-      flashToast({ type: 'error', text: errText });
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 50);
+      const errText = 'AI servers down. This prompt was not responded to or applied because of a server issue. No code was updated.';
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: errText,
+          isError: true,
+        }
+      ]);
+      flashToast({ type: 'error', text: 'AI servers down: Prompt was not processed.' });
     } finally {
       setStreaming(false);
     }
@@ -1076,6 +1104,20 @@ export const TemplateLabPage: React.FC<{
       setTurnedTemplateId(null);
       setTurnedTemplateNiche(null);
     }
+
+    // Auto-scroll the user up to the very top and ensure the editor starts from the top
+    const resetScrollsToTop = () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.getElementById('main-content-flow')?.scrollTo({ top: 0, behavior: 'smooth' });
+      idleContainerRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+      workspaceRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTo({ top: 0, behavior: 'instant' });
+      }
+    };
+    resetScrollsToTop();
+    setTimeout(resetScrollsToTop, 40);
+    setTimeout(resetScrollsToTop, 120);
   };
 
   const handleResetBookingToApproved = () => {
@@ -1369,14 +1411,6 @@ export const TemplateLabPage: React.FC<{
         )}
       </div>
 
-      {/* Informational Booking Banner */}
-      <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 sm:px-6 py-2 flex items-center justify-between text-xs text-amber-900 select-none shrink-0">
-        <div className="flex items-center gap-2">
-          <Info className="w-4 h-4 text-amber-600 shrink-0" />
-          <span className="font-semibold">{AI_STUDIO_BOOKING_BANNER_TEXT}</span>
-        </div>
-        <span className="text-[11px] text-amber-700/80 hidden sm:inline">Approved standard templates support live bookings.</span>
-      </div>
 
       {/* MAIN WORKSPACE */}
       <div className="flex flex-1 overflow-hidden min-h-0">
@@ -1428,22 +1462,22 @@ export const TemplateLabPage: React.FC<{
                   ))}
                 </div>
 
-                {/* Security Architecture & Direct AST Compilation Notice */}
-                <div className="mt-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 flex items-start gap-2.5 shadow-2xs">
-                  <div className="w-5 h-5 rounded-md bg-blue-50 border border-blue-200/70 flex items-center justify-center shrink-0 text-blue-600 mt-0.5">
-                    <ShieldCheck className="w-3.5 h-3.5" />
+                {/* Security Architecture & Direct Compilation Notice */}
+                <div className="mt-2 p-2 rounded-lg bg-slate-50 border border-slate-200/80 text-slate-800 flex items-center gap-2 shadow-2xs">
+                  <div className="w-4 h-4 rounded bg-blue-50 border border-blue-200/60 flex items-center justify-center shrink-0 text-blue-600">
+                    <ShieldCheck className="w-3 h-3" />
                   </div>
-                  <div className="text-[11px] leading-relaxed">
-                    <span className="font-bold text-slate-900">Security Architecture Notice: </span>
+                  <div className="text-[10px] leading-tight flex-1">
+                    <span className="font-semibold text-slate-900">Security Notice: </span>
                     <span className="text-slate-600">
-                      Conversational chat history is disabled to protect AI servers and maximize generation speed. Design instructions compile directly into production code in real-time.
+                      Conversational chat is disabled to protect AI servers and maximize generation speed. Design instructions compile directly into production code in real-time.
                     </span>
                   </div>
                 </div>
               </div>
 
               {/* Chat messages list - Spacious & Highly readable */}
-              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 min-h-0 bg-slate-50">
+              <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-4 min-h-0 bg-slate-50 scroll-smooth">
                 {hasLoadedPreviousTemplate && !hasGivenAiPrompt ? (
                   <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2.5">
                     <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">
@@ -1482,14 +1516,66 @@ export const TemplateLabPage: React.FC<{
                       if (i > 0 && m.role === 'user' && messages[i - 1]?.role === 'user' && messages[i - 1]?.content?.trim().toLowerCase() === m.content?.trim().toLowerCase()) {
                         return null;
                       }
-                      const displayContent = m.role === 'assistant' ? sanitizeUserFacingText(m.content) : m.content;
+
+                      if (m.isError) {
+                        return (
+                          <div key={i} className="flex justify-start animate-editor-fade">
+                            <div className="max-w-[90%] rounded-xl px-3.5 py-2.5 bg-red-50 border border-red-200 text-red-700 rounded-bl-xs shadow-2xs space-y-1">
+                              <div className="flex items-center gap-1.5 font-bold text-xs text-red-700">
+                                <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                                <span>Prompt Not Responded</span>
+                              </div>
+                              <p className="text-[11px] text-red-600 leading-relaxed font-sans">
+                                {m.content || 'AI servers down. This prompt was not responded to or applied because of a server issue. No code was updated.'}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      if (m.role === 'user') {
+                        const isCopied = copiedPromptIndex === i;
+                        return (
+                          <div key={i} className="flex flex-col items-end">
+                            <div className="max-w-[88%] rounded-2xl px-4 py-3 text-sm font-sans leading-relaxed shadow-md bg-blue-600 text-white rounded-br-sm">
+                              {m.content}
+                            </div>
+                            <div className="flex items-center gap-1.5 justify-end mt-1.5 pr-1">
+                              {isCopied && (
+                                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 shadow-2xs animate-editor-fade transition-all">
+                                  Copied!
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  try {
+                                    navigator.clipboard.writeText(m.content);
+                                    sfx.copy();
+                                    setCopiedPromptIndex(i);
+                                    setTimeout(() => {
+                                      setCopiedPromptIndex(prev => (prev === i ? null : prev));
+                                    }, 1000);
+                                  } catch {}
+                                }}
+                                className="p-1 rounded-md bg-slate-800/80 hover:bg-slate-900 text-white shadow-2xs transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-700/60"
+                                title="Copy prompt"
+                              >
+                                {isCopied ? (
+                                  <Check className="w-3 h-3 text-white stroke-[2.5]" />
+                                ) : (
+                                  <Copy className="w-3 h-3 text-white" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      const displayContent = sanitizeUserFacingText(m.content);
                       return (
-                        <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm font-sans leading-relaxed shadow-xs ${
-                            m.role === 'user'
-                              ? 'bg-blue-600 text-white rounded-br-sm shadow-md'
-                              : 'bg-white border border-slate-200 text-slate-800 rounded-bl-sm'
-                          }`}>
+                        <div key={i} className="flex justify-start">
+                          <div className="max-w-[88%] rounded-2xl px-4 py-3 text-sm font-sans leading-relaxed shadow-xs bg-white border border-slate-200 text-slate-800 rounded-bl-sm">
                             {displayContent || <span className="inline-flex items-center gap-1.5 text-slate-500"><Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" /> Synthesizing website updates…</span>}
                           </div>
                         </div>
@@ -1813,7 +1899,7 @@ export const TemplateLabPage: React.FC<{
                 </button>
 
                 {/* Website Title Editor */}
-                <div className="flex items-center min-w-0 shrink">
+                <div className="flex items-center min-w-0 max-w-[140px] sm:max-w-[200px] shrink overflow-hidden">
                   {editingTitle ? (
                     <input
                       autoFocus
@@ -1821,23 +1907,23 @@ export const TemplateLabPage: React.FC<{
                       onChange={e => setTitleDraft(e.target.value)}
                       onBlur={commitTitle}
                       onKeyDown={e => { if (e.key === 'Enter') commitTitle(); }}
-                      className="px-2.5 sm:px-3 py-1.5 rounded-xl border-2 border-blue-600 bg-white text-xs sm:text-sm font-bold text-slate-900 focus:outline-none shadow-sm max-w-[140px] sm:max-w-[200px]"
+                      className="px-2.5 sm:px-3 py-1.5 rounded-xl border-2 border-blue-600 bg-white text-xs sm:text-sm font-bold text-slate-900 focus:outline-none shadow-sm max-w-full"
                     />
                   ) : (
                     <button
                       onClick={startEditTitle}
-                      className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-bold text-slate-800 hover:text-blue-600 px-2 sm:px-3 py-1.5 rounded-xl hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-all min-w-0"
+                      className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-bold text-slate-800 hover:text-blue-600 px-2 sm:px-3 py-1.5 rounded-xl hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-all min-w-0 max-w-full overflow-hidden"
                       title="Click to rename website"
                     >
                       <FlaskConical className="w-4 h-4 text-blue-600 shrink-0" />
-                      <span className="max-w-[120px] sm:max-w-[220px] truncate">{title || 'Vibe Website'}</span>
+                      <span className="truncate">{title || 'Vibe Website'}</span>
                       <span className="text-slate-400 text-xs font-normal shrink-0">✎</span>
                     </button>
                   )}
                 </div>
 
                 {/* Right Action Controls - Guaranteed shrink-0 to prevent clipping */}
-                <div className="ml-auto flex items-center gap-2 sm:gap-3 shrink-0">
+                <div className="ml-auto flex items-center gap-2 sm:gap-3 shrink-0 relative z-10">
                   <button
                     onClick={refreshPreview}
                     className="p-2 sm:p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 hover:text-slate-900 transition-all shrink-0"
@@ -1846,14 +1932,7 @@ export const TemplateLabPage: React.FC<{
                     <RefreshCw className="w-4 h-4" />
                   </button>
 
-                  <div
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 text-xs font-semibold shrink-0 select-none cursor-default"
-                    title="Bookings coming soon to Lunao AI Website Studio"
-                  >
-                    <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="hidden sm:inline">Bookings Coming Soon</span>
-                    <span className="sm:hidden">Bookings Soon</span>
-                  </div>
+                  <BookingNoticeCard />
 
                   <button
                     onClick={() => { sfx.open(); setFullScreenPreview(true); }}
