@@ -1,0 +1,3126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
+  <title>Elite Real Estate Brokerage | Test RealEstate Beverly Hills, CA</title>
+  <meta name="description" content="Sell your home faster and buy smarter with Test RealEstate, the premier real estate brokerage in Beverly Hills, CA. Local experts, custom valuations, and exceptional service.">
+  <meta name="robots" content="index, follow">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Elite Real Estate Brokerage | Test RealEstate">
+  <meta property="og:description" content="Sell faster, buy smarter, and move with unmatched confidence in Beverly Hills, CA with our bespoke concierge brokerage.">
+  <meta property="og:type" content="website">
+
+  <!-- Google Fonts: Playfair Display & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+
+  <!-- Local Schema Markup -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "RealEstateAgent",
+    "name": "Test RealEstate",
+    "image": "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80",
+    "telephone": "3105550123",
+    "priceRange": "$$$$",
+    "address": {
+      "@type": "PostalAddress",
+      "addressLocality": "Beverly Hills, CA",
+      "addressCountry": "US"
+    }
+  }
+  </script>
+
+  <style>
+    :root {
+      /* Charcoal, Warm White, Gold color scheme */
+      --primary: #111111;
+      --secondary: #FAFAF8;
+      --accent: #C9A86A;
+      --accent-hover: #B89759;
+      --success: #2E7D32;
+      --muted: #777777;
+      --border: rgba(0,0,0,0.08);
+      --border-light: rgba(255,255,255,0.08);
+      --font-serif: 'Playfair Display', Georgia, serif;
+      --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+      --r-md: 16px;
+      --r-lg: 24px;
+      --transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: var(--font-sans);
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background-color: var(--secondary);
+      color: var(--primary);
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+
+    h1, h2, h3, h4, .font-serif {
+      font-family: var(--font-serif);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    a {
+      text-decoration: none;
+      color: inherit;
+      transition: var(--transition);
+    }
+
+    button {
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: inherit;
+      transition: var(--transition);
+    }
+
+    /* Elegant separator line constraint */
+    section {
+      border-top: 1px solid var(--border);
+      position: relative;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 80px 24px;
+    }
+
+    @media (max-width: 768px) {
+      .container {
+        padding: 50px 20px;
+      }
+    }
+
+    /* ------------------------------
+       SECTION 01 - TOP AUTHORITY BAR
+    ------------------------------ */
+    .top-bar {
+      background-color: var(--primary);
+      color: var(--secondary);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 10px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 1001;
+      position: relative;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .top-bar-items {
+      display: flex;
+      gap: 24px;
+    }
+
+    .top-bar-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .top-bar-item span {
+      color: var(--accent);
+    }
+
+    @media (max-width: 768px) {
+      .top-bar {
+        justify-content: center;
+      }
+      .top-bar-items {
+        display: none;
+      }
+    }
+
+    /* ------------------------------
+       SECTION 02 - HEADER
+    ------------------------------ */
+    header {
+      background: rgba(250, 250, 248, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      border-bottom: 1px solid var(--border);
+      transition: var(--transition);
+    }
+
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo-mark {
+      width: 30px;
+      height: 30px;
+      background: var(--primary);
+      color: var(--accent);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 16px;
+    }
+
+    nav {
+      display: flex;
+      gap: 32px;
+      align-items: center;
+    }
+
+    nav a {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+      letter-spacing: 0.03em;
+    }
+
+    nav a:hover, nav a.active {
+      color: var(--primary);
+    }
+
+    .nav-cta {
+      background-color: var(--primary);
+      color: var(--secondary);
+      padding: 10px 18px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .nav-cta:hover {
+      background-color: var(--accent);
+      color: var(--primary);
+    }
+
+    .menu-toggle {
+      display: none;
+      flex-direction: column;
+      gap: 5px;
+      width: 24px;
+    }
+
+    .menu-toggle span {
+      display: block;
+      height: 2px;
+      width: 100%;
+      background: var(--primary);
+      border-radius: 2px;
+      transition: var(--transition);
+    }
+
+    /* Mobile Drawer */
+    .mobile-drawer {
+      position: fixed;
+      top: 0;
+      right: -100%;
+      width: 80%;
+      max-width: 320px;
+      height: 100vh;
+      background: var(--secondary);
+      z-index: 2000;
+      box-shadow: -10px 0 30px rgba(0,0,0,0.1);
+      transition: var(--transition);
+      padding: 40px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+
+    .mobile-drawer.open {
+      right: 0;
+    }
+
+    .mobile-drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .close-drawer {
+      font-size: 24px;
+      color: var(--primary);
+    }
+
+    .mobile-nav-links {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .mobile-nav-links a {
+      font-size: 18px;
+      font-family: var(--font-serif);
+      color: var(--primary);
+    }
+
+    .backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      backdrop-filter: blur(4px);
+      z-index: 1999;
+      opacity: 0;
+      pointer-events: none;
+      transition: var(--transition);
+    }
+
+    .backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    @media (max-width: 1024px) {
+      nav {
+        display: none;
+      }
+      .menu-toggle {
+        display: flex;
+      }
+    }
+
+    /* ------------------------------
+       SECTION 03 - HERO SECTION
+    ------------------------------ */
+    .hero {
+      border-top: none;
+      min-height: 90vh;
+      position: relative;
+      background-image: linear-gradient(rgba(17,17,17,0.55), rgba(17,17,17,0.75)), url('https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80');
+      background-size: cover;
+      background-position: center;
+      display: flex;
+      align-items: center;
+      color: var(--secondary);
+      padding: 100px 0;
+    }
+
+    .hero-content {
+      max-width: 800px;
+      z-index: 2;
+    }
+
+    .hero h1 {
+      font-size: clamp(2.5rem, 5vw, 4.5rem);
+      line-height: 1.1;
+      margin-bottom: 24px;
+      color: #FFFFFF;
+    }
+
+    .hero p {
+      font-size: clamp(1.1rem, 2vw, 1.3rem);
+      color: rgba(255,255,255,0.9);
+      margin-bottom: 40px;
+      font-weight: 300;
+      max-width: 645px;
+    }
+
+    .hero-ctas {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 60px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 16px 32px;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+
+    .btn-accent {
+      background-color: var(--accent);
+      color: #111111;
+    }
+
+    .btn-accent:hover {
+      background-color: var(--accent-hover);
+      transform: translateY(-2px);
+    }
+
+    .btn-outline {
+      border: 1px solid rgba(255,255,255,0.4);
+      background: rgba(255,255,255,0.06);
+      color: var(--secondary);
+    }
+
+    .btn-outline:hover {
+      border-color: var(--secondary);
+      background: rgba(255,255,255,0.15);
+      transform: translateY(-2px);
+    }
+
+    .hero-trust-indicators {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 24px;
+      border-top: 1px solid rgba(255,255,255,0.15);
+      padding-top: 32px;
+    }
+
+    .hero-trust-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .hero-trust-val {
+      font-family: var(--font-serif);
+      font-size: 24px;
+      color: var(--accent);
+    }
+
+    .hero-trust-lbl {
+      font-size: 12px;
+      color: rgba(255,255,255,0.7);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-top: 4px;
+    }
+
+    /* ------------------------------
+       SECTION 04 - TRUST & CREDIBILITY
+    ------------------------------ */
+    .trust-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 32px;
+      margin-top: 40px;
+    }
+
+    .trust-card {
+      background: var(--secondary);
+      border: 1px solid var(--border);
+      padding: 32px;
+      border-radius: 8px;
+      transition: var(--transition);
+    }
+
+    .trust-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.04);
+      border-color: var(--accent);
+    }
+
+    .trust-icon {
+      font-size: 28px;
+      color: var(--accent);
+      margin-bottom: 20px;
+    }
+
+    .trust-card h3 {
+      font-size: 18px;
+      margin-bottom: 12px;
+    }
+
+    .trust-card p {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    /* SECTION TITLE STYLING */
+    .section-title-wrap {
+      max-width: 700px;
+      margin-bottom: 50px;
+    }
+
+    .section-subtitle {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: var(--accent);
+      letter-spacing: 0.15em;
+      display: block;
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+
+    .section-title {
+      font-size: clamp(2rem, 3.5vw, 2.75rem);
+      line-height: 1.2;
+    }
+
+    /* ------------------------------
+       SECTION 05 - FEATURED SERVICES
+    ------------------------------ */
+    .services-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 32px;
+    }
+
+    .service-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #FFFFFF;
+      transition: var(--transition);
+    }
+
+    .service-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 16px 40px rgba(0,0,0,0.06);
+    }
+
+    .service-img-h {
+      height: 240px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .service-img-h img {
+      width: 100%;
+      height: 100%;
+      object-cover: cover;
+      transition: var(--transition);
+    }
+
+    .service-card:hover .service-img-h img {
+      transform: scale(1.05);
+    }
+
+    .service-badge {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      background: var(--primary);
+      color: var(--secondary);
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      border-radius: 4px;
+    }
+
+    .service-body {
+      padding: 32px;
+    }
+
+    .service-body h3 {
+      font-size: 22px;
+      margin-bottom: 16px;
+    }
+
+    .service-bullets {
+      list-style-type: none;
+      margin-bottom: 24px;
+    }
+
+    .service-bullets li {
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .service-bullets li::before {
+      content: '✓';
+      color: var(--accent);
+      font-weight: bold;
+    }
+
+    .service-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--primary);
+      border-bottom: 1px solid var(--accent);
+      padding-bottom: 4px;
+    }
+
+    .service-cta:hover {
+      color: var(--accent);
+    }
+
+    /* ------------------------------
+       SECTION 06 - WHY CHOOSE
+    ------------------------------ */
+    .why-block {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      align-items: center;
+    }
+
+    @media (max-width: 991px) {
+      .why-block {
+        grid-template-columns: 1fr;
+        gap: 40px;
+      }
+    }
+
+    .why-visual {
+      position: relative;
+      height: 500px;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .why-visual img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .why-badge-overlay {
+      position: absolute;
+      bottom: 30px;
+      left: 30px;
+      background: var(--primary);
+      color: var(--secondary);
+      padding: 24px 32px;
+      border-radius: 8px;
+      border-left: 4px solid var(--accent);
+    }
+
+    .why-badge-overlay div:first-child {
+      font-size: 40px;
+      font-family: var(--font-serif);
+      color: var(--accent);
+    }
+
+    .why-badge-overlay div:last-child {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: rgba(255,255,255,0.7);
+    }
+
+    .metrics-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      margin-top: 40px;
+    }
+
+    .metric-card {
+      border: 1px solid var(--border);
+      padding: 24px;
+      border-radius: 8px;
+    }
+
+    .metric-num {
+      font-size: 44px;
+      color: var(--primary);
+      margin-bottom: 8px;
+    }
+
+    .metric-lbl {
+      font-size: 13px;
+      text-transform: uppercase;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+    }
+
+    /* ------------------------------
+       SECTION 07 - HOW IT WORKS
+    ------------------------------ */
+    .timeline {
+      position: relative;
+      max-width: 900px;
+      margin: 50px auto 0;
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 32px;
+      width: 2px;
+      background: var(--border);
+      z-index: 0;
+    }
+
+    .timeline-progress-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 32px;
+      width: 2px;
+      background: var(--accent);
+      transform-origin: top;
+      transform: scaleY(0);
+      transition: transform 0.1s ease-out;
+      z-index: 1;
+    }
+
+    .timeline-item {
+      position: relative;
+      padding-left: 80px;
+      margin-bottom: 54px;
+      opacity: 0.6;
+      transform: translateY(20px);
+      transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .timeline-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .timeline-item.active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .timeline-dot {
+      position: absolute;
+      left: 20px;
+      top: 4px;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--primary);
+      border: 4px solid var(--border);
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), background-color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
+    }
+
+    .timeline-item.active .timeline-dot {
+      background: var(--accent);
+      border-color: var(--primary);
+      transform: scale(1.25);
+      box-shadow: 0 0 0 6px rgba(201, 168, 106, 0.15);
+    }
+
+    .timeline-dot::after {
+      content: '';
+      width: 6px;
+      height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      transition: background-color 0.4s ease;
+    }
+
+    .timeline-item.active .timeline-dot::after {
+      background: #FAFAF8;
+    }
+
+    .timeline-card {
+      background: #FFFFFF;
+      border: 1px solid var(--border);
+      padding: 32px;
+      border-radius: 12px;
+      transition: border-color 0.4s ease, box-shadow 0.4s ease, transform 0.4s ease;
+    }
+
+    .timeline-item.active .timeline-card {
+      border-color: var(--accent);
+      box-shadow: 0 16px 36px rgba(201, 168, 106, 0.08), 0 1px 3px rgba(0, 0, 0, 0.02);
+      transform: scale(1.015);
+    }
+
+    .timeline-step {
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.12em;
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    .timeline-card h3 {
+      font-size: 20px;
+      margin-bottom: 12px;
+      font-family: var(--font-serif);
+      transition: color 0.4s ease;
+    }
+
+    .timeline-item.active .timeline-card h3 {
+      color: var(--primary);
+    }
+
+    .timeline-card p {
+      color: var(--muted);
+      font-size: 14.5px;
+      line-height: 1.6;
+    }
+
+    /* ------------------------------
+       SECTION 08 - MARKET INSIGHTS
+    ------------------------------ */
+    .insights-dashboard {
+      background: var(--primary);
+      color: var(--secondary);
+      border-radius: 12px;
+      padding: 48px;
+      margin-top: 40px;
+    }
+
+    .insights-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 32px;
+    }
+
+    .insight-card {
+      border-left: 2px solid var(--accent);
+      padding-left: 24px;
+    }
+
+    .insight-val {
+      font-family: var(--font-serif);
+      font-size: 36px;
+      color: var(--secondary);
+      margin-bottom: 8px;
+    }
+
+    .insight-lbl {
+      font-size: 12px;
+      color: rgba(255,255,255,0.6);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* ------------------------------
+       SECTION 09 - TESTIMONIALS
+    ------------------------------ */
+    .testimonials-carousel-container {
+      position: relative;
+      overflow: hidden;
+      margin-top: 40px;
+    }
+
+    .testimonials-track {
+      display: flex;
+      gap: 32px;
+      transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .testimonial-card {
+      min-width: calc(33.333% - 22px);
+      background: #FFFFFF;
+      border: 1px solid var(--border);
+      padding: 40px;
+      border-radius: 8px;
+      box-sizing: border-box;
+    }
+
+    @media (max-width: 1024px) {
+      .testimonial-card {
+         min-width: calc(50% - 16px);
+      }
+    }
+    @media (max-width: 768px) {
+      .testimonial-card {
+         min-width: 100%;
+      }
+    }
+
+    .stars {
+      color: var(--accent);
+      font-size: 16px;
+      margin-bottom: 20px;
+    }
+
+    .testimonial-text {
+      font-size: 15px;
+      color: var(--primary);
+      margin-bottom: 24px;
+      font-style: italic;
+    }
+
+    .testimonial-author {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .testimonial-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
+    .author-info h4 {
+      font-size: 14px;
+      margin-bottom: 2px;
+    }
+
+    .author-info span {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .carousel-nav {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-top: 32px;
+    }
+
+    .carousel-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--primary);
+      background: #FFFFFF;
+    }
+
+    .carousel-btn:hover {
+      background: var(--primary);
+      color: #FFFFFF;
+    }
+
+    /* Modern Carousel Pagination Dots */
+    .carousel-dots {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .carousel-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(17, 17, 17, 0.15);
+      cursor: pointer;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .carousel-dot:hover {
+      background: rgba(17, 17, 17, 0.35);
+    }
+
+    .carousel-dot.active {
+      width: 24px;
+      border-radius: 4px;
+      background: var(--accent);
+    }
+
+    /* ------------------------------
+       SECTION 10 - LEAD FORM
+    ------------------------------ */
+    .lead-form-section {
+      background: var(--primary);
+      color: var(--secondary);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      align-items: center;
+    }
+
+    @media (max-width: 991px) {
+      .form-grid {
+        grid-template-columns: 1fr;
+        gap: 40px;
+      }
+    }
+
+    .form-intro h2 {
+      color: #FFFFFF;
+      font-size: clamp(2rem, 3.5vw, 2.75rem);
+      margin-bottom: 24px;
+    }
+
+    .form-intro p {
+      color: rgba(255,255,255,0.7);
+      margin-bottom: 32px;
+    }
+
+    .form-features {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .form-feature-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+    }
+
+    .form-feature-icon {
+      color: var(--accent);
+      font-size: 20px;
+    }
+
+    .form-feature-text h4 {
+      font-size: 15px;
+      color: #FFFFFF;
+      margin-bottom: 4px;
+    }
+
+    .form-feature-text p {
+      font-size: 13px;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 0;
+    }
+
+    .lead-card {
+      background: #FFFFFF;
+      color: var(--primary);
+      padding: 48px;
+      border-radius: 12px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.15);
+    }
+
+    @media (max-width: 576px) {
+      .lead-card {
+        padding: 30px 20px;
+      }
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+      color: var(--primary);
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 576px) {
+      .field-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 14px;
+      background: var(--secondary);
+      color: var(--primary);
+      transition: var(--transition);
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      background: #FFFFFF;
+    }
+
+    .submit-btn {
+      width: 100%;
+      background: var(--primary);
+      color: var(--secondary);
+      padding: 16px;
+      font-weight: 600;
+      border-radius: 4px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-size: 13px;
+      margin-top: 10px;
+    }
+
+    .submit-btn:hover {
+      background: var(--accent);
+      color: var(--primary);
+    }
+
+    .form-success-message {
+      display: none;
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .form-success-icon {
+      font-size: 48px;
+      color: var(--success);
+      margin-bottom: 20px;
+    }
+
+    /* ------------------------------
+       SECTION 11 - FAQ
+    ------------------------------ */
+    .faq-container {
+      max-width: 800px;
+      margin: 40px auto 0;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .faq-item {
+      border: 1px solid var(--border);
+      background: #FFFFFF;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .faq-trigger {
+      width: 100%;
+      padding: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      text-align: left;
+      font-size: 16px;
+      font-weight: 600;
+      background: #FFFFFF;
+    }
+
+    .faq-trigger:hover {
+      color: var(--accent);
+    }
+
+    .faq-indicator {
+      font-size: 20px;
+      transition: var(--transition);
+      color: var(--muted);
+    }
+
+    .faq-item.active .faq-indicator {
+      transform: rotate(45deg);
+      color: var(--accent);
+    }
+
+    .faq-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .faq-content-inner {
+      padding: 0 24px 24px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    /* ------------------------------
+       SECTION 12 - BLOG COVERAGE
+    ------------------------------ */
+    .blog-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 32px;
+      margin-top: 40px;
+    }
+
+    .blog-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #FFFFFF;
+      transition: var(--transition);
+    }
+
+    .blog-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 16px 40px rgba(0,0,0,0.06);
+    }
+
+    .blog-meta {
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    .blog-card h3 {
+      font-size: 22px;
+      line-height: 1.3;
+      margin-bottom: 16px;
+    }
+
+    .open-blog {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    .open-blog:hover {
+      color: var(--accent);
+    }
+
+    /* ------------------------------
+       SECTION 13 - SERVICE AREA
+    ------------------------------ */
+    .map-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      align-items: center;
+    }
+
+    @media (max-width: 991px) {
+      .map-grid {
+        grid-template-columns: 1fr;
+        gap: 40px;
+      }
+    }
+
+    .map-placeholder {
+      aspect-ratio: 16/10;
+      background-color: #E2E8F0;
+      border-radius: 12px;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .map-svg-mockup {
+      width: 100%;
+      height: 100%;
+      background-image: radial-gradient(circle, #CBD5E1 1px, transparent 1px);
+      background-size: 20px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .map-pin {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      background: var(--accent);
+      border: 3px solid #FFFFFF;
+      border-radius: 50%;
+      animation: pulse-pin 2s infinite;
+    }
+
+    @keyframes pulse-pin {
+      0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(201,168,106, 0.7); }
+      70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(201,168,106, 0); }
+      100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(201,168,106, 0); }
+    }
+
+    .chips-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 32px;
+    }
+
+    .area-chip {
+      background: var(--secondary);
+      border: 1px solid var(--border);
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .area-chip:hover {
+      border-color: var(--accent);
+      background: #FFFFFF;
+    }
+
+    /* ------------------------------
+       SECTION 14 - AGENT SPOTLIGHT
+    ------------------------------ */
+    .agent-grid {
+      display: grid;
+      grid-template-columns: 2fr 3fr;
+      gap: 80px;
+      align-items: center;
+    }
+
+    @media (max-width: 991px) {
+      .agent-grid {
+        grid-template-columns: 1fr;
+        gap: 40px;
+      }
+    }
+
+    .agent-img-wrap {
+      border-radius: 12px;
+      overflow: hidden;
+      height: 480px;
+      border: 1px solid var(--border);
+    }
+
+    .agent-img-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .agent-bio h3 {
+      font-size: clamp(1.8rem, 3vw, 2.5rem);
+      margin-bottom: 20px;
+    }
+
+    .agent-creds {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      margin-bottom: 30px;
+    }
+
+    .agent-cred-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .agent-cred-val {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+    }
+
+    .agent-cred-lbl {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .agent-bio p {
+      color: var(--muted);
+      margin-bottom: 32px;
+    }
+
+    /* ------------------------------
+       SECTION 15 - FINAL CTA
+    ------------------------------ */
+    .final-cta-section {
+      background: var(--primary);
+      color: var(--secondary);
+      text-align: center;
+      padding: 100px 24px;
+    }
+
+    .final-cta-inner {
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .final-cta-inner h2 {
+      font-size: clamp(2.2rem, 4vw, 3.5rem);
+      margin-bottom: 24px;
+      color: #FFFFFF;
+    }
+
+    .final-cta-inner p {
+      color: rgba(255,255,255,0.7);
+      margin-bottom: 40px;
+    }
+
+    .final-cta-buttons {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    /* ------------------------------
+       SECTION 16 - FOOTER
+    ------------------------------ */
+    footer {
+      background-color: var(--primary);
+      color: rgba(255,255,255,0.6);
+      border-top: 1px solid var(--border-light);
+      padding: 80px 24px 120px;
+      font-size: 13px;
+    }
+
+    .footer-grid {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 2fr;
+      gap: 60px;
+      margin-bottom: 60px;
+    }
+
+    @media (max-width: 991px) {
+      .footer-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 40px;
+      }
+    }
+
+    @media (max-width: 576px) {
+      .footer-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .footer-col h4 {
+      color: #FFFFFF;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 24px;
+    }
+
+    .footer-links {
+      list-style-type: none;
+    }
+
+    .footer-links li {
+      margin-bottom: 12px;
+    }
+
+    .footer-links a:hover {
+      color: var(--accent);
+    }
+
+    .footer-logo {
+      color: #FFFFFF;
+      font-size: 24px;
+      margin-bottom: 16px;
+    }
+
+    .footer-desc {
+      margin-bottom: 24px;
+      line-height: 1.6;
+    }
+
+    .equal-housing-logos {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-top: 24px;
+    }
+
+    .housing-logo-box {
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 4px;
+      width: 38px;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.7);
+    }
+
+    .footer-bottom {
+      max-width: 1200px;
+      margin: 0 auto;
+      border-top: 1px solid var(--border-light);
+      padding-top: 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    /* ------------------------------
+       STICKY MOBILE CTA
+    ------------------------------ */
+    .sticky-cta-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #FFFFFF;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+      display: none;
+      grid-template-columns: repeat(3, 1fr);
+      z-index: 999;
+      border-top: 1px solid var(--border);
+    }
+
+    .sticky-cta-btn {
+      padding: 14px 10px;
+      text-align: center;
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      color: var(--primary);
+      border-right: 1px solid var(--border);
+    }
+
+    .sticky-cta-btn:last-child {
+      border-right: none;
+      background: var(--accent);
+      color: var(--primary);
+    }
+
+    .sticky-cta-btn span {
+      font-size: 16px;
+    }
+
+    @media (max-width: 768px) {
+      .sticky-cta-bar {
+        display: grid;
+      }
+    }
+
+    /* ------------------------------
+       PREMIUM MODAL SYSTEM FOR BLOGS
+    ------------------------------ */
+    .blog-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 3000;
+      opacity: 0;
+      pointer-events: none;
+      transition: var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .blog-modal.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .blog-modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(17,17,17,0.75);
+      backdrop-filter: blur(8px);
+    }
+
+    .blog-modal-wrap {
+      position: relative;
+      background: #FFFFFF;
+      width: 100%;
+      max-width: 800px;
+      max-height: 85vh;
+      border-radius: 12px;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.25);
+      overflow-y: auto;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      transform: translateY(20px);
+      transition: var(--transition);
+    }
+
+    .blog-modal.open .blog-modal-wrap {
+      transform: translateY(0);
+    }
+
+    .blog-progress-container {
+      position: sticky;
+      top: 0;
+      width: 100%;
+      height: 4px;
+      background: var(--secondary);
+      z-index: 10;
+    }
+
+    .blog-progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+    }
+
+    .blog-modal-header {
+      padding: 32px 40px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 20px;
+    }
+
+    .blog-modal-close-btn {
+      background: var(--secondary);
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .blog-modal-close-btn:hover {
+      background: var(--primary);
+      color: var(--secondary);
+    }
+
+    .blog-modal-body {
+      padding: 40px;
+      overflow-y: auto;
+      font-size: 16px;
+      line-height: 1.8;
+      color: #333333;
+    }
+
+    .blog-modal-body h4 {
+      font-size: 20px;
+      margin: 32px 0 16px;
+      color: var(--primary);
+    }
+
+    .blog-modal-body p {
+      margin-bottom: 24px;
+    }
+
+    @media (max-width: 576px) {
+      .blog-modal-header {
+        padding: 24px 20px;
+      }
+      .blog-modal-body {
+        padding: 24px 20px;
+      }
+    }
+
+    /* LUXURY PREMIUM ENHANCEMENTS */
+    @keyframes goldShimmer {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    .shimmer-badge {
+      background: linear-gradient(90deg, #FAFAF8 0%, #FAFAFA 40%, #E6C587 50%, #FAFAFA 60%, #FAFAF8 100%);
+      background-size: 200% auto;
+      animation: goldShimmer 3.5s linear infinite;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: #EAEAE6;
+      height: 6px;
+      border-radius: 3px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid var(--primary);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      cursor: pointer;
+      transition: transform 0.1s ease;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:active {
+      transform: scale(1.25);
+    }
+
+    /* Input & Select fields elegant styles */
+    input[type="text"], input[type="email"], input[type="tel"], select, textarea {
+      transition: var(--transition);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 6px;
+      padding: 12px 16px;
+      background-color: #FAFAF8;
+    }
+
+    input[type="text"]:focus, input[type="email"]:focus, input[type="tel"]:focus, select:focus, textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px rgba(201,168,106,0.15);
+      background-color: #FFFFFF;
+      outline: none;
+    }
+
+    /* Premium Button Hover FX */
+    .btn, .submit-btn, .carousel-btn, .nav-cta {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn::after, .submit-btn::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+      transition: 0.5s;
+    }
+
+    .btn:hover::after, .submit-btn:hover::after {
+      left: 100%;
+    }
+
+    /* Floating luxury trust badges hover effect */
+    .trust-card:hover, .service-card:hover, .testimonial-card:hover {
+      box-shadow: 0 20px 40px rgba(201,168,106,0.06), 0 1px 3px rgba(0,0,0,0.02);
+      transform: translateY(-6px);
+      border-color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SECTION 01 - TOP AUTHORITY BAR -->
+  <div class="top-bar">
+    <div style="font-family: var(--font-serif); font-size:12px; letter-spacing:0.02em;">★ 4.9 Rated Brokerage</div>
+    <div class="top-bar-items">
+      <div class="top-bar-item">🏆 Outstanding Local Service</div>
+      <div class="top-bar-item">📍 Serving Beverly Hills, CA</div>
+      <div class="top-bar-item">☎ (310) 555-0123</div>
+    </div>
+  </div>
+
+  <!-- SECTION 02 - HEADER -->
+  <header id="main-header">
+    <div class="header-inner">
+      <a href="#" class="logo" onclick="playAudio('soft-click')">
+        <div class="logo-mark">A</div>
+        <div style="font-family: var(--font-serif); font-weight:700;">Test RealEstate</div>
+      </a>
+      <nav>
+        <a href="#properties" onmouseenter="playAudio('hover-pluck')" onclick="playAudio('luxury-tap')">Properties</a>
+        <a href="#sell" onmouseenter="playAudio('hover-pluck')" onclick="playAudio('luxury-tap')">Sell</a>
+        <a href="#buy" onmouseenter="playAudio('hover-pluck')" onclick="playAudio('luxury-tap')">Buy</a>
+        <a href="#about" onmouseenter="playAudio('hover-pluck')" onclick="playAudio('luxury-tap')">About</a>
+        <a href="#reviews" onmouseenter="playAudio('hover-pluck')" onclick="playAudio('luxury-tap')">Reviews</a>
+        <a href="#contact" onmouseenter="playAudio('hover-pluck')" onclick="playAudio('luxury-tap')">Contact</a>
+        <a href="#home-valuation" class="nav-cta" onmouseenter="playAudio('hover-pluck')" onclick="playAudio('soft-click')">Free Valuation</a>
+      </nav>
+      <button class="menu-toggle" id="menuToggle" onclick="toggleDrawer(true)">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MOBILE NAVIGATION DRAWER -->
+  <div class="backdrop" id="backdrop" onclick="toggleDrawer(false)"></div>
+  <div class="mobile-drawer" id="mobileDrawer">
+    <div class="mobile-drawer-header">
+      <div class="logo">
+        <div class="logo-mark">A</div>
+        <div style="font-family: var(--font-serif); font-weight:700;">Test RealEstate</div>
+      </div>
+      <button class="close-drawer" onclick="toggleDrawer(false)">×</button>
+    </div>
+    <div class="mobile-nav-links">
+      <a href="#properties" onclick="toggleDrawer(false)">Properties</a>
+      <a href="#sell" onclick="toggleDrawer(false)">Sell</a>
+      <a href="#buy" onclick="toggleDrawer(false)">Buy</a>
+      <a href="#about" onclick="toggleDrawer(false)">About</a>
+      <a href="#reviews" onclick="toggleDrawer(false)">Reviews</a>
+      <a href="#contact" onclick="toggleDrawer(false)">Contact</a>
+      <div style="border-top: 1px dashed var(--border); margin: 12px 0 6px 0;"></div>
+      <a href="#home-valuation" class="btn btn-accent shimmer-badge" style="display: block; text-align: center; padding: 14px 20px; font-weight: 700; border-radius: 8px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--primary); box-shadow: 0 4px 15px rgba(201,168,106,0.25); font-size: 14px;" onclick="playAudio('soft-click'); toggleDrawer(false)">
+        📅 Book Appointment
+      </a>
+    </div>
+  </div>
+
+  <!-- SECTION 03 - HERO SECTION -->
+  <section class="hero" id="home">
+    <div class="container">
+      <div class="hero-content">
+        <h1>Sell Faster. Buy Smarter. Move With Confidence.</h1>
+        <p>Bespoke residential sales and professional advisory in Beverly Hills, CA. We secure the highest-value transaction for your physical assets cleanly, with outstanding personal representation.</p>
+        <div class="hero-ctas">
+          <a href="#home-valuation" class="btn btn-accent" onclick="playAudio('soft-click')">🏠 Free Home Valuation</a>
+          <a href="tel:3105550123" class="btn btn-outline" onclick="playAudio('soft-click')">📞 Call (310) 555-0123</a>
+        </div>
+        <div class="hero-trust-indicators">
+          <div class="hero-trust-item">
+            <span class="hero-trust-val">★★★★★</span>
+            <span class="hero-trust-lbl">Top Rated Local Brokerage</span>
+          </div>
+          <div class="hero-trust-item">
+            <span class="hero-trust-val">NATE Certified</span>
+            <span class="hero-trust-lbl">Local Area Experts</span>
+          </div>
+          <div class="hero-trust-item">
+            <span class="hero-trust-val">Premier Service</span>
+            <span class="hero-trust-lbl">Unmatched Discretion</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 04 - TRUST & CREDIBILITY -->
+  <section id="trust">
+    <div class="container">
+      <div class="section-title-wrap">
+        <span class="section-subtitle">Excellence Guaranteed</span>
+        <h2 class="section-title">The Standard of Professional representation</h2>
+      </div>
+      <div class="trust-grid">
+        <div class="trust-card" onmouseenter="playAudio('hover-tone')">
+          <div class="trust-icon">✔</div>
+          <h3>Licensed Brokerage</h3>
+          <p>Fully compliant with regional and state requirements. Our operations carry complete fiduciary insurance and consumer protection alignment.</p>
+        </div>
+        <div class="trust-card" onmouseenter="playAudio('hover-tone')">
+          <div class="trust-icon">✔</div>
+          <h3>Local Market Experts</h3>
+          <p>We analyze street-level micro-trends in Beverly Hills, CA to discover hidden property valuations and negotiate structural advantages before listing.</p>
+        </div>
+        <div class="trust-card" onmouseenter="playAudio('hover-tone')">
+          <div class="trust-icon">✔</div>
+          <h3>Buyer &amp; Seller Representation</h3>
+          <p>Balanced, client-centric guidance from property valuation, professional staging, private custom architectural marketing, to a clean legal closing.</p>
+        </div>
+        <div class="trust-card" onmouseenter="playAudio('hover-tone')">
+          <div class="trust-icon">✔</div>
+          <h3>Negotiation Excellence</h3>
+          <p>Equipped with elite negotiation skills to ensure you receive peak values for listings and robust structural concessions when buying.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 05 - FEATURED SERVICES -->
+  <section id="properties">
+    <div class="container">
+      <div class="section-title-wrap">
+        <span class="section-subtitle">Core Specialites</span>
+        <h2 class="section-title">Luxury Real Estate Services in Beverly Hills, CA</h2>
+      </div>
+      <div class="services-grid">
+        <!-- Service 1 -->
+        <div class="service-card">
+          <div class="service-img-h">
+            <img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=600&q=80" alt="Buying a Home" loading="lazy" decoding="async">
+            <span class="service-badge">Buying</span>
+          </div>
+          <div class="service-body">
+            <h3>Buying a Home</h3>
+            <ul class="service-bullets">
+              <li>Off-market curated list access</li>
+              <li>Surgical market pricing comparisons</li>
+              <li>Complete local escrow negotiation</li>
+            </ul>
+            <a href="#home-valuation" class="service-cta" onclick="playAudio('luxury-tap')">Schedule Consultation &rarr;</a>
+          </div>
+        </div>
+        <!-- Service 2 -->
+        <div class="service-card">
+          <div class="service-img-h">
+            <img src="https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=600&q=80" alt="Selling a Home" loading="lazy" decoding="async">
+            <span class="service-badge">Selling</span>
+          </div>
+          <div class="service-body">
+            <h3>Selling a Home</h3>
+            <ul class="service-bullets">
+              <li>Comprehensive high-end styling advisory</li>
+              <li>HDR architecture video shoot</li>
+              <li>Maximum exposure syndication engine</li>
+            </ul>
+            <a href="#home-valuation" class="service-cta" onclick="playAudio('luxury-tap')">Get Custom Valuation &rarr;</a>
+          </div>
+        </div>
+        <!-- Service 3 -->
+        <div class="service-card">
+          <div class="service-img-h">
+            <img src="https://images.unsplash.com/photo-1600573472591-ee6b68d14c68?auto=format&fit=crop&w=600&q=80" alt="Investments" loading="lazy" decoding="async">
+            <span class="service-badge">Investments</span>
+          </div>
+          <div class="service-body">
+            <h3>Investment Properties</h3>
+            <ul class="service-bullets">
+              <li>Multi-family compound identification</li>
+              <li>Cashflow yield simulation dashboard</li>
+              <li>Commercial tax optimization pathways</li>
+            </ul>
+            <a href="#home-valuation" class="service-cta" onclick="playAudio('luxury-tap')">Discuss Investment &rarr;</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 06 - WHY CHOOSE -->
+  <section id="about">
+    <div class="container">
+      <div class="why-block">
+        <div class="why-visual">
+          <img src="https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=800&q=80" alt="Premium brokerage interior sketch" loading="lazy" decoding="async">
+          <div class="why-badge-overlay">
+            <div>1,000+</div>
+            <div>Properties Sold Successfully</div>
+          </div>
+        </div>
+        <div>
+          <span class="section-subtitle">Local Market Authority</span>
+          <h2 class="font-serif" style="font-size: clamp(2rem, 3.5vw, 2.75rem); line-height:1.2; margin-bottom: 24px;">Our Performance is Your Guarantee.</h2>
+          <p style="color: var(--muted); margin-bottom: 30px;">For many families, selling or buying residential property is their single most significant financial transaction. At Test RealEstate, we provide deep advisory, flawless legal execution, and creative luxury marketing strategy to maximize your upside.</p>
+          <div class="metrics-row">
+            <div class="metric-card">
+              <div class="metric-num">98.4%</div>
+              <div class="metric-lbl">List-to-Sale Value Ratio</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-num">★ 4.9</div>
+              <div class="metric-lbl">Average Google Rating</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 07 - THE PROCESS -->
+  <section id="process">
+    <div class="container">
+      <div class="section-title-wrap" style="margin: 0 auto 50px; text-align: center;">
+        <span class="section-subtitle">Seamless Journey</span>
+        <h2 class="section-title">Your 5-Step Transition Map</h2>
+      </div>
+      <div class="timeline">
+        <div class="timeline-progress-line" id="timelineProgressLine"></div>
+        <!-- Step 1 -->
+        <div class="timeline-item">
+          <div class="timeline-dot"></div>
+          <div class="timeline-card">
+            <span class="timeline-step">Step 01</span>
+            <h3>Schedule Private Consultation</h3>
+            <p>We host a quiet session to evaluate your current portfolio goals, financial target structures, and ideal relocation timeline expectations.</p>
+          </div>
+        </div>
+        <!-- Step 2 -->
+        <div class="timeline-item">
+          <div class="timeline-dot"></div>
+          <div class="timeline-card">
+            <span class="timeline-step">Step 02</span>
+            <h3>Discuss Clear Valuation Goals</h3>
+            <p>Our research desk computes a bespoke market assessment of comparable local estates to reveal hidden value opportunities.</p>
+          </div>
+        </div>
+        <!-- Step 3 -->
+        <div class="timeline-item">
+          <div class="timeline-dot"></div>
+          <div class="timeline-card">
+            <span class="timeline-step">Step 03</span>
+            <h3>Strategic Market Analysis</h3>
+            <p>We compile active inventory statistics, local buyer demand multipliers, and custom pricing models to structure your strategy.</p>
+          </div>
+        </div>
+        <!-- Step 4 -->
+        <div class="timeline-item">
+          <div class="timeline-dot"></div>
+          <div class="timeline-card">
+            <span class="timeline-step">Step 04</span>
+            <h3>Launch Property listing or Curated Search</h3>
+            <p>We deploy high-exposure architectural storytelling campaigns or curate a bespoke collection of off-market private homes.</p>
+          </div>
+        </div>
+        <!-- Step 5 -->
+        <div class="timeline-item">
+          <div class="timeline-dot"></div>
+          <div class="timeline-card">
+            <span class="timeline-step">Step 05</span>
+            <h3>Successful &amp; Flawless Closing</h3>
+            <p>We manage all closing escrow guidelines, coordinates, legal contract compliance, and key transfers with complete precision.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 08 - MARKET INSIGHTS DASHBOARD -->
+  <section id="insights">
+    <div class="container">
+      <div class="insights-dashboard">
+        <div class="section-title-wrap" style="margin-bottom: 40px;">
+          <span class="section-subtitle" style="color: var(--accent);">Live Analytics</span>
+          <h2 style="color: #FFFFFF; font-size: 28px;">Beverly Hills, CA Real Estate Performance</h2>
+        </div>
+        <div class="insights-grid">
+          <div class="insight-card">
+            <div class="insight-val" data-target="18">0</div>
+            <div class="insight-lbl">Avg. Days on Market</div>
+          </div>
+          <div class="insight-card">
+            <div class="insight-val" data-target="1200000" data-format="currency">0</div>
+            <div class="insight-lbl">Median Home Price</div>
+          </div>
+          <div class="insight-card">
+            <div class="insight-val" data-target="14">0</div>
+            <div class="insight-lbl">Active Inventory (Mo.)</div>
+          </div>
+          <div class="insight-card">
+            <div class="insight-val" data-target="99" data-format="percent">0</div>
+            <div class="insight-lbl">Ask-to-Sold Success</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 09 - FEATURED TESTIMONIALS -->
+  <section id="reviews">
+    <div class="container">
+      <div class="section-title-wrap">
+        <span class="section-subtitle">Client Stories</span>
+        <h2 class="section-title">Outstanding Local Success</h2>
+      </div>
+      <div class="testimonials-carousel-container">
+        <div class="testimonials-track" id="testimonialTrack">
+          <!-- Card 1 -->
+          <div class="testimonial-card">
+            <div class="stars">★★★★★</div>
+            <p class="testimonial-text">"The entire selling strategy designed by Test RealEstate was magnificent. They hosted exclusive private tours and highlighted our customized structural concrete components expertly."</p>
+            <div class="testimonial-author">
+              <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80" alt="Sarah Miller" class="testimonial-avatar" loading="lazy" decoding="async">
+              <div class="author-info">
+                <h4>Sarah Miller</h4>
+                <span>Home Seller in Beverly Hills, CA</span>
+              </div>
+            </div>
+          </div>
+          <!-- Card 2 -->
+          <div class="testimonial-card">
+            <div class="stars">★★★★★</div>
+            <p class="testimonial-text">"Negotiations were flawless. They secured major contract concessions and identified secret street level structural factors we would have never spotted. Unbeatable representation."</p>
+            <div class="testimonial-author">
+              <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80" alt="Marcus Thompson" class="testimonial-avatar" loading="lazy" decoding="async">
+              <div class="author-info">
+                <h4>Marcus Thompson</h4>
+                <span>Portfolio Buyer</span>
+              </div>
+            </div>
+          </div>
+          <!-- Card 3 -->
+          <div class="testimonial-card">
+            <div class="stars">★★★★★</div>
+            <p class="testimonial-text">"As an investor, speed is crucial. Their curated multi-family property recommendations and immediate valuation numbers allowed us to secure two robust assets smoothly."</p>
+            <div class="testimonial-author">
+              <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80" alt="Elena Rostova" class="testimonial-avatar" loading="lazy" decoding="async">
+              <div class="author-info">
+                <h4>Elena Rostova</h4>
+                <span>Real Estate Investor</span>
+              </div>
+            </div>
+          </div>
+          <!-- Card 4 -->
+          <div class="testimonial-card">
+            <div class="stars">★★★★★</div>
+            <p class="testimonial-text">"Professional, discreet, and highly competent. Their team staged our property in local mid-town beautifully, and we received multiple cash offers within 5 days."</p>
+            <div class="testimonial-author">
+              <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80" alt="David Sterling" class="testimonial-avatar" loading="lazy" decoding="async">
+              <div class="author-info">
+                <h4>David Sterling</h4>
+                <span>Lakeside Estate Seller</span>
+              </div>
+            </div>
+          </div>
+          <!-- Card 5 -->
+          <div class="testimonial-card">
+            <div class="stars">★★★★★</div>
+            <p class="testimonial-text">"Their local expertise made our relocation to Beverly Hills, CA completely seamless. Complete market insight with detailed historical neighborhood data. We felt backed."</p>
+            <div class="testimonial-author">
+              <img src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80" alt="Clara Vance" class="testimonial-avatar" loading="lazy" decoding="async">
+              <div class="author-info">
+                <h4>Clara Vance</h4>
+                <span>Relocated Home Buyer</span>
+              </div>
+            </div>
+          </div>
+          <!-- Card 6 -->
+          <div class="testimonial-card">
+            <div class="stars">★★★★★</div>
+            <p class="testimonial-text">"Outstanding client representation from valuation to closing escrow. I highly recommend working with Test RealEstate for buying high-end real estate."</p>
+            <div class="testimonial-author">
+              <img src="https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=150&q=80" alt="Philip Henderson" class="testimonial-avatar" loading="lazy" decoding="async">
+              <div class="author-info">
+                <h4>Philip Henderson</h4>
+                <span>Luxury Estate Buyer</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="carousel-nav" style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: 32px;">
+        <div class="carousel-dots" id="carouselDots"></div>
+        <div style="display: flex; gap: 12px;">
+          <button class="carousel-btn" aria-label="Previous Success Story" onclick="slideTestimonials(-1); playAudio('soft-click')">&larr;</button>
+          <button class="carousel-btn" aria-label="Next Success Story" onclick="slideTestimonials(1); playAudio('soft-click')">&rarr;</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 10 - HOME VALUATION LEAD FORM -->
+  <section class="lead-form-section" id="home-valuation">
+    <div class="container">
+      <div class="form-grid">
+        <div class="form-intro">
+          <h2>Determine the True Value of Your Property</h2>
+          <p>We do not rely on standard automated algorithms. Our experienced analysts compile real-time micro-market listings, pricing comparisons, and structural asset modifications manually.</p>
+          
+          <!-- Dynamic Luxury Equity Boost Calculator -->
+          <div class="luxury-calculator" style="margin: 32px 0 32px 0; background: rgba(201,168,106,0.06); padding: 24px; border-radius: var(--r-md); border: 1px solid rgba(201,168,106,0.2);">
+            <h4 style="font-family: var(--font-serif); font-size: 18px; margin-bottom: 8px; color: var(--accent); display: flex; align-items: center; gap: 8px;">✨ Concierge Equity Booster Calculator</h4>
+            <p style="font-size: 13px; color: var(--muted); margin-bottom: 20px;">Slide your estimated home value to preview added equity net gains achieved through our premium presentation & professional staging programs.</p>
+            <div class="calculator-slider-wrap" style="margin-bottom: 20px;">
+              <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 8px;">
+                <span>Estimated Home Value:</span>
+                <span id="calc-value-display" style="color: var(--accent); font-family: var(--font-serif); font-size: 16px; font-weight: 700;">$1,500,000</span>
+              </div>
+              <input type="range" id="calculator-range" min="500000" max="5000000" step="50000" value="1500000" style="width: 100%; accent-color: var(--accent); cursor: pointer;" oninput="updateEquityCalculator(this.value)">
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; border-top: 1px dashed rgba(201,168,106,0.25); padding-top: 16px;">
+              <div>
+                <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight:600;">Est. Equity Gain (5%)</div>
+                <div id="calc-net-gain" style="font-family: var(--font-serif); font-size: 20px; font-weight: bold; color: var(--primary);">+$75,000</div>
+              </div>
+              <div>
+                <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight:600;">Est. Days Saved</div>
+                <div style="font-family: var(--font-serif); font-size: 20px; font-weight: bold; color: var(--success); display: flex; align-items: center; gap: 4px;">⚡ -18 Days</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-features">
+            <div class="form-feature-item">
+              <div class="form-feature-icon">✓</div>
+              <div class="form-feature-text">
+                <h4>Dynamic Micro-Market Mapping</h4>
+                <p>We contrast active listings and local historical transactions directly on your specific block.</p>
+              </div>
+            </div>
+            <div class="form-feature-item">
+              <div class="form-feature-icon">✓</div>
+              <div class="form-feature-text">
+                <h4>Accurate Premium Positioning</h4>
+                <p>Understand the precise emotional parameters and pricing targets of high-intent cash buyers.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="lead-card" id="leadFormCard">
+            <form id="valuationForm" onsubmit="handleFormSubmit(event)">
+              <div class="form-group">
+                <label for="fullName">Full Name</label>
+                <input type="text" id="fullName" required placeholder="John Doe">
+              </div>
+              <div class="field-row">
+                <div class="form-group">
+                  <label for="phone">Phone Number</label>
+                  <input type="tel" id="phone" required placeholder="(555) 000-0000">
+                </div>
+                <div class="form-group">
+                  <label for="email">Email Address</label>
+                  <input type="email" id="email" required placeholder="john@example.com">
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="address">Property Address</label>
+                <input type="text" id="address" required placeholder="123 Luxury Lane, Beverly Hills, CA">
+              </div>
+              <div class="field-row">
+                <div class="form-group">
+                  <label for="propertyType">Property Type</label>
+                  <select id="propertyType">
+                    <option>Single Family</option>
+                    <option>Condo/Townhome</option>
+                    <option>Multi-Family</option>
+                    <option>Vacant Land</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="timeline">Selling Timeline</label>
+                  <select id="timeline">
+                    <option>Immediately</option>
+                    <option>Within 3 Months</option>
+                    <option>3 - 6 Months</option>
+                    <option>Just Curious</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="message">Message</label>
+                <textarea id="message" rows="3" placeholder="Tell us more about your property (e.g. recent updates)..."></textarea>
+              </div>
+              <button type="submit" class="submit-btn">Get My Free Home Valuation</button>
+            </form>
+            <div class="form-success-message" id="successMessage">
+              <div class="form-success-icon">✓</div>
+              <h3 class="font-serif" style="font-size:24px; margin-bottom:12px;">Valuation Request Received</h3>
+              <p style="color:var(--muted); font-size:14px;">An expert analyst will compile your Micro-Market valuation within 24 hours. We will reach out to schedule your private review.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 11 - FAQ -->
+  <section id="faq">
+    <div class="container">
+      <div class="section-title-wrap" style="text-align:center; margin: 0 auto 50px;">
+        <span class="section-subtitle">Common Inquiries</span>
+        <h2 class="section-title">Answers from the Experts in Beverly Hills, CA</h2>
+      </div>
+      <div class="faq-container">
+        <!-- FAQ 1 -->
+        <div class="faq-item">
+          <button class="faq-trigger" onclick="toggleFaq(this)">
+            <span>How is my property valuation calculated?</span>
+            <span class="faq-indicator">+</span>
+          </button>
+          <div class="faq-content">
+            <div class="faq-content-inner">
+              We compile micro-local comparable sales, active trends, target buyer profiles, physical adjustments, and structural features in Beverly Hills, CA manually rather than using automated algorithms.
+            </div>
+          </div>
+        </div>
+        <!-- FAQ 2 -->
+        <div class="faq-item">
+          <button class="faq-trigger" onclick="toggleFaq(this)">
+            <span>What are the closing costs associated with selling?</span>
+            <span class="faq-indicator">+</span>
+          </button>
+          <div class="faq-content">
+            <div class="faq-content-inner">
+              Closing costs in Beverly Hills, CA generally include agent commissions, escrow fees, transfer taxes, title insurance, and outstanding legal coordinates. Sellers typically expect 5% to 8% total.
+            </div>
+          </div>
+        </div>
+        <!-- FAQ 3 -->
+        <div class="faq-item">
+          <button class="faq-trigger" onclick="toggleFaq(this)">
+            <span>How long does the selling process typically take?</span>
+            <span class="faq-indicator">+</span>
+          </button>
+          <div class="faq-content">
+            <div class="faq-content-inner">
+              With our comprehensive staging and direct exposure marketing engine, homes list and close roughly 15-25% faster than average local municipal indices.
+            </div>
+          </div>
+        </div>
+        <!-- FAQ 4 -->
+        <div class="faq-item">
+          <button class="faq-trigger" onclick="toggleFaq(this)">
+            <span>How should I prep my property before listing?</span>
+            <span class="faq-indicator">+</span>
+          </button>
+          <div class="faq-content">
+            <div class="faq-content-inner">
+              We guide you thoroughly on minor renovations, clean decluttering guidelines, and high-end styling tweaks that directly multiply emotional buyer interest.
+            </div>
+          </div>
+        </div>
+        <!-- FAQ 5 -->
+        <div class="faq-item">
+          <button class="faq-trigger" onclick="toggleFaq(this)">
+            <span>What commission models do you offer?</span>
+            <span class="faq-indicator">+</span>
+          </button>
+          <div class="faq-content">
+            <div class="faq-content-inner">
+              We operate standard competitive commissions structured fairly to reflect your specific property Tier, listing complexity, and targeted exposure package.
+            </div>
+          </div>
+        </div>
+        <!-- FAQ 6 -->
+        <div class="faq-item">
+          <button class="faq-trigger" onclick="toggleFaq(this)">
+            <span>Are you a licensed brokerage?</span>
+            <span class="faq-indicator">+</span>
+          </button>
+          <div class="faq-content">
+            <div class="faq-content-inner">
+              Yes, Test RealEstate is fully licensed, carrying deep liability insurance and expert legal compliance backing every transaction.
+            </div>
+          </div>
+        </div>
+        <!-- FAQ 7 -->
+        <div class="faq-item">
+          <button class="faq-trigger" onclick="toggleFaq(this)">
+            <span>Can you support multi-family or commercial assets?</span>
+            <span class="faq-indicator">+</span>
+          </button>
+          <div class="faq-content">
+            <div class="faq-content-inner">
+              Yes, our investment desk has structured multiple commercial transactions, syndications, and high-yield multi-family acquisitions.
+            </div>
+          </div>
+        </div>
+        <!-- FAQ 8 -->
+        <div class="faq-item">
+          <button class="faq-trigger" onclick="toggleFaq(this)">
+            <span>Do you offer private buyer representation?</span>
+            <span class="faq-indicator">+</span>
+          </button>
+          <div class="faq-content">
+            <div class="faq-content-inner">
+              Absolutely. We provide highly discreet concierge buyer search support, ensuring you avoid market competition with off-market access.
+            </div>
+          </div>
+        </div>
+        <!-- FAQ 9 -->
+        <div class="faq-item">
+          <button class="faq-trigger" onclick="toggleFaq(this)">
+            <span>Should I buy first or sell first?</span>
+            <span class="faq-indicator">+</span>
+          </button>
+          <div class="faq-content">
+            <div class="faq-content-inner">
+              This depends on your specific financial structures and local micro-market timing. We can draft an customized timeline balance program.
+            </div>
+          </div>
+        </div>
+        <!-- FAQ 10 -->
+        <div class="faq-item">
+          <button class="faq-trigger" onclick="toggleFaq(this)">
+            <span>Why choose Test RealEstate over tech portals?</span>
+            <span class="faq-indicator">+</span>
+          </button>
+          <div class="faq-content">
+            <div class="faq-content-inner">
+               portals rely on generic mass averages. We provide highly customized street-level negotiations, local staging assets, and elite client shielding.
+            </div>
+          </div>
+        </div>
+        <!-- FAQ 11 -->
+        <div class="faq-item">
+          <button class="faq-trigger" onclick="toggleFaq(this)">
+            <span>Can you help with local financing options?</span>
+            <span class="faq-indicator">+</span>
+          </button>
+          <div class="faq-content">
+            <div class="faq-content-inner">
+              We pair buyers with premier vetted regional lenders to secure rapid mortgage reviews, low interest profiles, and flexible compound structures.
+            </div>
+          </div>
+        </div>
+        <!-- FAQ 12 -->
+        <div class="faq-item">
+          <button class="faq-trigger" onclick="toggleFaq(this)">
+            <span>Is neighborhood safety information trackable?</span>
+            <span class="faq-indicator">+</span>
+          </button>
+          <div class="faq-content">
+            <div class="faq-content-inner">
+              We compile regional census indicators, school performance indices, and neighborhood growth factors to map out your long-term value profile.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 12 - THREE FULL BLOG ARTICLES -->
+  <section id="blog">
+    <div class="container">
+      <div class="section-title-wrap">
+        <span class="section-subtitle">Authoritative Insights</span>
+        <h2 class="section-title">Knowledge is Power in Real Estate</h2>
+      </div>
+      <div class="blog-grid">
+        <!-- Blog 1 -->
+        <div class="blog-card">
+          <div style="padding: 32px;">
+            <span class="blog-meta">Premium Strategy &bull; 5 Min Read</span>
+            <h3>How to Sell Your Home Faster in Beverly Hills, CA</h3>
+            <p style="color:var(--muted); font-size:14px; margin-bottom:20px;">Unlock the exact staging frameworks, physical listing launch structures, and premium pricing models that cash buyers search for...</p>
+            <button class="open-blog" onclick="openBlogModal('blog1')">Read Article &rarr;</button>
+          </div>
+        </div>
+        <!-- Blog 2 -->
+        <div class="blog-card">
+          <div style="padding: 32px;">
+            <span class="blog-meta">Buyer Advice &bull; 6 Min Read</span>
+            <h3>Top Mistakes Home Buyers Make in Beverly Hills, CA</h3>
+            <p style="color:var(--muted); font-size:14px; margin-bottom:20px;">Avoid toxic overbids, poorly executed escrow coordination guides, and hidden physical structure deficiencies by reviewing our buyer handbook...</p>
+            <button class="open-blog" onclick="openBlogModal('blog2')">Read Article &rarr;</button>
+          </div>
+        </div>
+        <!-- Blog 3 -->
+        <div class="blog-card">
+          <div style="padding: 32px;">
+            <span class="blog-meta">Broker Advantage &bull; 4 Min Read</span>
+            <h3>How Test RealEstate Helps Clients Win</h3>
+            <p style="color:var(--muted); font-size:14px; margin-bottom:20px;">Discover our local syndication engine, hidden negotiation algorithms, and concierge styling assets that have generated millions in client value...</p>
+            <button class="open-blog" onclick="openBlogModal('blog3')">Read Article &rarr;</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 13 - SERVICE AREA -->
+  <section id="service-area">
+    <div class="container">
+      <div class="map-grid">
+        <div>
+          <span class="section-subtitle">Hyperlocal Coverage</span>
+          <h2 class="font-serif" style="font-size: clamp(2rem, 3.5vw, 2.75rem); line-height:1.2; margin-bottom: 24px;">Proudly Serving Beverly Hills, CA &amp; Surrounding Enclaves</h2>
+          <p style="color: var(--muted);">We act with extreme geographical focus. Our regional brokerage coverage is mapped exactly to allow rapid site audits and local property representation within 30 minutes of notification.</p>
+          <div class="chips-container">
+            <span class="area-chip">Downtown Beverly Hills, CA</span>
+            <span class="area-chip">Midtown District</span>
+            <span class="area-chip">Lakeside Enclave</span>
+            <span class="area-chip">Riverside Village</span>
+            <span class="area-chip">North Ridge Heights</span>
+          </div>
+        </div>
+        <div class="map-placeholder">
+          <div class="map-svg-mockup">
+            <div class="map-pin" style="top:45%; left:48%;"></div>
+            <div class="map-pin" style="top:30%; left:25%; animation-delay:0.5s;"></div>
+            <div class="map-pin" style="top:60%; left:70%; animation-delay:1s;"></div>
+            <span style="font-family:var(--font-serif); font-size:14px; color:var(--muted); font-weight:600; text-shadow:0 1px 1px #fff; z-index:1;">Beverly Hills, CA Regional Map</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 14 - AGENT SPOTLIGHT -->
+  <section id="agent">
+    <div class="container">
+      <div class="agent-grid">
+        <div class="agent-img-wrap">
+          <img src="https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=600&q=80" alt="Executive Broker" loading="lazy" decoding="async">
+        </div>
+        <div class="agent-bio">
+          <span class="section-subtitle">Expert Advisory</span>
+          <h3>Richard Sterling</h3>
+          <div class="agent-creds">
+            <div class="agent-cred-item">
+              <span class="agent-cred-val">Principal Broker</span>
+              <span class="agent-cred-lbl">License #9431A2</span>
+            </div>
+            <div class="agent-cred-item">
+              <span class="agent-cred-val">15+ Years</span>
+              <span class="agent-cred-lbl">Active Experience</span>
+            </div>
+          </div>
+          <p>"Real estate is not about standard square footage. It has always been about custom spaces matched cleanly to family legacies and robust wealth diversification targets. We protect your asset transaction flawlessly."</p>
+          <a href="#home-valuation" class="btn btn-accent" onclick="playAudio('soft-click')">Schedule Private Interview</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 15 - FINAL CTA -->
+  <section class="final-cta-section" id="final-cta">
+    <div class="final-cta-inner">
+      <h2>Ready to Buy, Sell, or Invest in Beverly Hills, CA?</h2>
+      <p>Contact our concierge desk today to initiate a micro-market valuation study or schedule a private off-market property viewing.</p>
+      <div class="final-cta-buttons">
+        <a href="tel:3105550123" class="btn btn-accent" onclick="playAudio('soft-click')">📞 Speak to Our Desk</a>
+        <a href="#home-valuation" class="btn btn-outline" onclick="playAudio('soft-click')">🏠 Request House Valuation</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 16 - FOOTER -->
+  <footer>
+    <div class="footer-grid">
+      <div class="footer-col">
+        <div class="footer-logo font-serif" style="font-weight:700;">Test RealEstate</div>
+        <p class="footer-desc">Premium concierge real estate brokerage and modern property advisory operating across Beverly Hills, CA and neighboring luxury enclaves.</p>
+        <div class="equal-housing-logos">
+          <div class="housing-logo-box">EHO</div>
+          <div class="housing-logo-box">NAR</div>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h4>Navigation</h4>
+        <ul class="footer-links">
+          <li><a href="#home">Home</a></li>
+          <li><a href="#properties">Properties</a></li>
+          <li><a href="#sell">Sell</a></li>
+          <li><a href="#buy">Buy</a></li>
+          <li><a href="#about">About</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Trust Partners</h4>
+        <ul class="footer-links">
+          <li>NATE Certified</li>
+          <li>EPA Compliant</li>
+          <li>Licensed &amp; Covered</li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Direct Contact</h4>
+        <p style="margin-bottom:12px;">Office Address: Midtown Plaza, Suite 900</p>
+        <p style="margin-bottom:12px;">Call Desk: (310) 555-0123</p>
+        <p>Email: contacts@Test RealEstate.io</p>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div>&copy; 2026 Test RealEstate Brokerage. All rights reserved. Equal Housing Opportunity.</div>
+      <div>Broker License #9431A2</div>
+    </div>
+  </footer>
+
+  <!-- STICKY MOBILE CTA BAR -->
+  <div class="sticky-cta-bar">
+    <a href="tel:3105550123" class="sticky-cta-btn" onclick="playAudio('soft-click')">
+      <span>📞</span>
+      Call Desk
+    </a>
+    <a href="#home-valuation" class="sticky-cta-btn" onclick="playAudio('soft-click')">
+      <span>🏠</span>
+      valuation
+    </a>
+    <a href="#contact" class="sticky-cta-btn" onclick="playAudio('soft-click')">
+      <span>📅</span>
+      appointment
+    </a>
+  </div>
+
+  <!-- STUNNING BLOG MODALS -->
+  <!-- Blog 1 Modal -->
+  <div class="blog-modal" id="blog1Modal">
+    <div class="blog-modal-backdrop" onclick="closeBlogModal('blog1')"></div>
+    <div class="blog-modal-wrap">
+      <div class="blog-progress-container">
+        <div class="blog-progress-bar" id="blog1Progress"></div>
+      </div>
+      <div class="blog-modal-header">
+        <div>
+          <span class="blog-meta">Premium Strategy &bull; 5 Min Read</span>
+          <h3 class="font-serif" style="font-size:24px; margin-top:8px;">How to Sell Your Home Faster in Beverly Hills, CA</h3>
+        </div>
+        <button class="blog-modal-close-btn" onclick="closeBlogModal('blog1')">×</button>
+      </div>
+      <div class="blog-modal-body" onscroll="trackBlogProgress('blog1')">
+        <p>Selling a premium asset starts with understanding how modern cash buyer groups filter opportunities. Here are the core structural strategies to guarantee a higher list-to-sold ratio in Beverly Hills, CA:</p>
+        
+        <h4>1. Establish Flawless Staging Presentation</h4>
+        <p>Buyers create emotional alignment with physical structures within 10 seconds of entry. Implement neat decluttering guidelines, replace personal photos with high-end minimal abstract artwork, and guarantee custom accent lighting is active throughout.</p>
+
+        <h4>2. HDR Architecture Imagery &amp; Video Shoots</h4>
+        <p>Over 95% of prospective relocations start directly on secondary search indices. High-contrast, beautifully framed aerial cinematography and professional 4K walk-throughs act as your key marketing filters, multiplying premium listing views dramatically.</p>
+
+        <h4>3. Upfront Physical Home Audits</h4>
+        <p>Avoid late-stage buyer withdrawal by commissioning an expert certified structural check before listing. Addressing minor foundational or HVAC updates upfront projects outstanding corporate security and keeps negotiations highly structured.</p>
+
+        <h4>4. The Micro-Market Pricing Algorithm</h4>
+        <p>Avoid broad municipal index traps. We calculate recent comp indexes by evaluating historic performance strictly on your block. Positioning your property slightly below threshold multipliers spurs competitive bidding loops among active local family networks, maximizing the ultimate sold count.</p>
+        
+        <p>To implement standard luxury staging frameworks, schedule a complete valuation discussion with our Sterling principal advisor today.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Blog 2 Modal -->
+  <div class="blog-modal" id="blog2Modal">
+    <div class="blog-modal-backdrop" onclick="closeBlogModal('blog2')"></div>
+    <div class="blog-modal-wrap">
+      <div class="blog-progress-container">
+        <div class="blog-progress-bar" id="blog2Progress"></div>
+      </div>
+      <div class="blog-modal-header">
+        <div>
+          <span class="blog-meta">Buyer Advice &bull; 6 Min Read</span>
+          <h3 class="font-serif" style="font-size:24px; margin-top:8px;">Top Mistakes Home Buyers Make in Beverly Hills, CA</h3>
+        </div>
+        <button class="blog-modal-close-btn" onclick="closeBlogModal('blog2')">×</button>
+      </div>
+      <div class="blog-modal-body" onscroll="trackBlogProgress('blog2')">
+        <p>Buying residential real estate in high-demand markets like Beverly Hills, CA can be incredibly rewarding, but simple procedural missteps can lead to massive long-term financial holding friction:</p>
+
+        <h4>1. Relying Strictly on Generic Portals</h4>
+        <p>Public aggregators show outdated metrics and trailing sales. Many premier enclaves trade completely off-market via direct brokerage networks. Engaging an expert concierge broker yields exclusive access to quiet pocket listings before they trade.</p>
+
+        <h4>2. Overlooking Structural Heating &amp; AC Inspections</h4>
+        <p>Many homebuyers focus heavily on structural marble updates or modern paint hues. But a failing physical climate system or poor foundation can carry thousands in immediate repair liabilities. Always demand certified inspections before funding closing escrow.</p>
+
+        <h4>3. Poor Relocation Escrow Buffers</h4>
+        <p>Acquiring residential property requires adjusting for state transfer indices, multi-unit tax allocations, and legal contract compliance overheads. Maintain at least a 2.5% structural financial reserve above your baseline deposit targets to smoothly handle closing costs.</p>
+
+        <h4>4. Neglecting Long-Term Neighborhood Adaptations</h4>
+        <p>The immediate curb appeal of a home shouldn't shield you from municipal zoning adjustments. Research future commercial overlays, school performance indexes, and transit road frameworks to guarantee your residential investment matures securely.</p>
+        
+        <p>Reach out to discuss customized buyer shielding protocols during your neighborhood search journey.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Blog 3 Modal -->
+  <div class="blog-modal" id="blog3Modal">
+    <div class="blog-modal-backdrop" onclick="closeBlogModal('blog3')"></div>
+    <div class="blog-modal-wrap">
+      <div class="blog-progress-container">
+        <div class="blog-progress-bar" id="blog3Progress"></div>
+      </div>
+      <div class="blog-modal-header">
+        <div>
+          <span class="blog-meta">Broker Advantage &bull; 4 Min Read</span>
+          <h3 class="font-serif" style="font-size:24px; margin-top:8px;">How Test RealEstate Helps Clients Win</h3>
+        </div>
+        <button class="blog-modal-close-btn" onclick="closeBlogModal('blog3')">×</button>
+      </div>
+      <div class="blog-modal-body" onscroll="trackBlogProgress('blog3')">
+        <p>At Test RealEstate, we built our reputation on an absolute performance obsession. We reject old generic templates and focus directly on high-yield client shielding:</p>
+
+        <h4>1. Micro-Market Analytics Intelligence</h4>
+        <p>We compile street-by-street transaction datasets manually. Our clients obtain custom cashflow projections and true comparable valuations that public tech portals simply cannot output.</p>
+
+        <h4>2. The Concierge Staging Vault</h4>
+        <p>We invest directly in your listing. By supplying custom high-end furniture, landscape design adjustments, and drone cinematography, we elevate physical listings to stand as premium luxury assets.</p>
+
+        <h4>3. Elite shield Negotiation</h4>
+        <p>We manage all buyer communications, lender checks, and seller coordination scripts with high discretion, matching your physical real estate values cleanly with market targets.</p>
+        
+        <p>When you work with Test RealEstate, you secure robust representation that protects your legacy assets unconditionally. Experience the elite standard of brokerage performance.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- NATIVE WEB AUDIO API SYNTH SYSTEM -->
+  <script>
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
+    function playAudio(type, customPitch = null) {
+      try {
+        initAudio();
+        if (!audioCtx) return;
+        
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+
+        const now = audioCtx.currentTime;
+
+        if (type === 'slider-click') {
+          // Micro mechanical slide clicking with pitch feedback
+          const osc = audioCtx.createOscillator();
+          const gainNode = audioCtx.createGain();
+          osc.connect(gainNode);
+          gainNode.connect(audioCtx.destination);
+          
+          osc.type = 'sine';
+          const freq = customPitch ? customPitch : 800;
+          osc.frequency.setValueAtTime(freq, now);
+          osc.frequency.exponentialRampToValueAtTime(freq / 2, now + 0.012);
+          
+          gainNode.gain.setValueAtTime(0.012, now);
+          gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.012);
+          osc.start(now);
+          osc.stop(now + 0.012);
+          return;
+        }
+
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        if (type === 'soft-click') {
+          // Luxury woodblock key click
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(540, now);
+          osc.frequency.exponentialRampToValueAtTime(120, now + 0.08);
+          gainNode.gain.setValueAtTime(0.04, now);
+          gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+          osc.start(now);
+          osc.stop(now + 0.08);
+        } else if (type === 'luxury-tap') {
+          // Rich, layered vintage physical pluck
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(659.25, now); // E5
+          osc.frequency.exponentialRampToValueAtTime(220, now + 0.14);
+          gainNode.gain.setValueAtTime(0.03, now);
+          gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+          osc.start(now);
+          osc.stop(now + 0.14);
+        } else if (type === 'hover-pluck') {
+          // Microscopic light visual hover pluck
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(880, now);
+          osc.frequency.exponentialRampToValueAtTime(440, now + 0.02);
+          gainNode.gain.setValueAtTime(0.008, now);
+          gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.02);
+          osc.start(now);
+          osc.stop(now + 0.02);
+        } else if (type === 'hover-tone') {
+          // Low-frequency velvet highlight accent
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(320, now);
+          gainNode.gain.setValueAtTime(0.012, now);
+          gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+          osc.start(now);
+          osc.stop(now + 0.06);
+        } else if (type === 'drawer-toggle') {
+          // Dynamic synthesized frequency sweep
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(160, now);
+          osc.frequency.exponentialRampToValueAtTime(480, now + 0.16);
+          gainNode.gain.setValueAtTime(0.04, now);
+          gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+          osc.start(now);
+          osc.stop(now + 0.16);
+        } else if (type === 'success-chime') {
+          // God-level luxury chord sweep (Major 7th Triad)
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(523.25, now); // C5
+          gainNode.gain.setValueAtTime(0.04, now);
+          gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+          osc.start(now);
+          osc.stop(now + 0.22);
+
+          const osc2 = audioCtx.createOscillator();
+          const gain2 = audioCtx.createGain();
+          osc2.type = 'sine';
+          osc2.connect(gain2);
+          gain2.connect(audioCtx.destination);
+          osc2.frequency.setValueAtTime(659.25, now + 0.06); // E5
+          gain2.gain.setValueAtTime(0.03, now + 0.06);
+          gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+          osc2.start(now + 0.06);
+          osc2.stop(now + 0.28);
+
+          const osc3 = audioCtx.createOscillator();
+          const gain3 = audioCtx.createGain();
+          osc3.type = 'sine';
+          osc3.connect(gain3);
+          gain3.connect(audioCtx.destination);
+          osc3.frequency.setValueAtTime(783.99, now + 0.12); // G5
+          gain3.gain.setValueAtTime(0.03, now + 0.12);
+          gain3.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
+          osc3.start(now + 0.12);
+          osc3.stop(now + 0.34);
+
+          const osc4 = audioCtx.createOscillator();
+          const gain4 = audioCtx.createGain();
+          osc4.type = 'sine';
+          osc4.connect(gain4);
+          gain4.connect(audioCtx.destination);
+          osc4.frequency.setValueAtTime(1046.50, now + 0.18); // C6
+          gain4.gain.setValueAtTime(0.04, now + 0.18);
+          gain4.gain.exponentialRampToValueAtTime(0.001, now + 0.44);
+          osc4.start(now + 0.18);
+          osc4.stop(now + 0.44);
+        } else if (type === 'accordion') {
+          // Acoustic toggle tap
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(260, now);
+          osc.frequency.exponentialRampToValueAtTime(130, now + 0.12);
+          gainNode.gain.setValueAtTime(0.03, now);
+          gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+          osc.start(now);
+          osc.stop(now + 0.12);
+        }
+      } catch (err) {
+        console.warn('Audio contexts disabled by frame sandbox restrictions');
+      }
+    }
+
+    // ----------------------------------------
+    // LUXURY CALCULATOR REAL-TIME UPDATE
+    // ----------------------------------------
+    function updateEquityCalculator(value) {
+      const parsedVal = parseInt(value);
+      
+      const displayVal = document.getElementById('calc-value-display');
+      if (displayVal) {
+        displayVal.textContent = '$' + parsedVal.toLocaleString();
+      }
+
+      // Calculate 5% added equity yield via gorgeous staging
+      const addedEquity = Math.round(parsedVal * 0.05);
+      const displayGain = document.getElementById('calc-net-gain');
+      if (displayGain) {
+        displayGain.textContent = '+$' + addedEquity.toLocaleString();
+      }
+
+      // Generate a scaling tactile sweep pitch directly corresponding to slider state [300Hz - 900Hz]
+      const sliderFreq = 300 + ((parsedVal - 500000) / 4500000) * 600;
+      playAudio('slider-click', sliderFreq);
+    }
+
+    // ----------------------------------------
+    // CORE UI ACTIONS AND TRANSITIONS
+    // ----------------------------------------
+    function toggleDrawer(open) {
+      const drawer = document.getElementById('mobileDrawer');
+      const backdrop = document.getElementById('backdrop');
+      playAudio('drawer-toggle');
+      if (open) {
+        drawer.classList.add('open');
+        backdrop.classList.add('open');
+      } else {
+        drawer.classList.remove('open');
+        backdrop.classList.remove('open');
+      }
+    }
+
+    // ----------------------------------------
+    // LIVE MARKET COUNTERS SYSTEM
+    // ----------------------------------------
+    function animateCounters() {
+      const elements = document.querySelectorAll('.insight-val');
+      elements.forEach(el => {
+        const target = parseFloat(el.getAttribute('data-target'));
+        const isCurrency = el.getAttribute('data-format') === 'currency';
+        const isPercent = el.getAttribute('data-format') === 'percent';
+        let count = 0;
+        const speed = target / 50;
+        const timer = setInterval(() => {
+          count += speed;
+          if (count >= target) {
+            count = target;
+            clearInterval(timer);
+          }
+          if (isCurrency) {
+            el.textContent = '$' + Math.floor(count).toLocaleString();
+          } else if (isPercent) {
+            el.textContent = Math.floor(count) + '%';
+          } else if (target % 1 !== 0) {
+            el.textContent = count.toFixed(1);
+          } else {
+            el.textContent = Math.floor(count).toLocaleString();
+          }
+        }, 20);
+      });
+    }
+
+    // Trigger counters animation on scroll reveal
+    let observerTriggered = false;
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting && !observerTriggered) {
+          animateCounters();
+          observerTriggered = true;
+        }
+      });
+    }, { threshold: 0.1 });
+
+    const insightsSec = document.getElementById('insights');
+    if (insightsSec) {
+      observer.observe(insightsSec);
+    }
+
+    // ----------------------------------------
+    // TESTIMONIALS SLIDER WITH ACTIVE DOTS & SWIPE
+    // ----------------------------------------
+    let currentSlide = 0;
+    let swipeStartX = 0;
+    let swipeCurrentX = 0;
+    let isSwiping = false;
+
+    function initCarousel() {
+      const track = document.getElementById('testimonialTrack');
+      const dotsContainer = document.getElementById('carouselDots');
+      const cards = document.querySelectorAll('.testimonial-card');
+      if (!track || !dotsContainer || cards.length === 0) return;
+
+      // Clean existing dots
+      dotsContainer.innerHTML = '';
+
+      // Determine visible cards based on CSS styles
+      const viewportWidth = window.innerWidth;
+      let visibleCount = 1; // mobile default
+      if (viewportWidth > 1024) {
+        visibleCount = 3;
+      } else if (viewportWidth > 768) {
+        visibleCount = 2;
+      }
+
+      // Calculate total steps / dots needed
+      const maxSteps = Math.max(1, cards.length - visibleCount + 1);
+
+      // Create dots
+      for (let i = 0; i < maxSteps; i++) {
+        const dot = document.createElement('div');
+        dot.className = 'carousel-dot' + (i === currentSlide ? ' active' : '');
+        dot.setAttribute('data-index', i);
+        dot.addEventListener('click', () => {
+          goToSlide(i);
+          playAudio('soft-click');
+        });
+        dotsContainer.appendChild(dot);
+      }
+
+      // Cap current slide index to available max steps
+      if (currentSlide >= maxSteps) {
+        currentSlide = maxSteps - 1;
+      }
+      if (currentSlide < 0) currentSlide = 0;
+
+      updateCarouselPosition();
+
+      // Configure touch swipe handlers
+      track.addEventListener('touchstart', (e) => {
+        isSwiping = true;
+        swipeStartX = e.touches[0].clientX;
+        track.style.transition = 'none'; // pause transition during active swipe
+      }, { passive: true });
+
+      track.addEventListener('touchmove', (e) => {
+        if (!isSwiping) return;
+        swipeCurrentX = e.touches[0].clientX;
+        const diffX = swipeCurrentX - swipeStartX;
+        const cardWidth = cards[0].offsetWidth + 32; // card + gap
+        const baseOffset = -currentSlide * cardWidth;
+        // Limit resistance boundaries
+        const resistedOffset = baseOffset + diffX;
+        track.style.transform = `translateX(${resistedOffset}px)`;
+      }, { passive: true });
+
+      track.addEventListener('touchend', (e) => {
+        if (!isSwiping) return;
+        isSwiping = false;
+        track.style.transition = 'transform 0.5s cubic-bezier(0.16, 1, 0.3, 1)';
+        const diffX = swipeCurrentX - swipeStartX;
+        const threshold = 60; // minimum pixel swipe length
+
+        if (diffX > threshold) {
+          // Swipe Right -> Previous card
+          slideTestimonials(-1);
+        } else if (diffX < -threshold) {
+          // Swipe Left -> Next card
+          slideTestimonials(1);
+        } else {
+          // Slide back to position
+          updateCarouselPosition();
+        }
+      });
+    }
+
+    function slideTestimonials(dir) {
+      const cards = document.querySelectorAll('.testimonial-card');
+      const viewportWidth = window.innerWidth;
+      let visibleCount = 1;
+      if (viewportWidth > 1024) {
+        visibleCount = 3;
+      } else if (viewportWidth > 768) {
+        visibleCount = 2;
+      }
+      const maxSteps = Math.max(1, cards.length - visibleCount + 1);
+
+      currentSlide += dir;
+      if (currentSlide < 0) currentSlide = 0;
+      if (currentSlide >= maxSteps) currentSlide = maxSteps - 1;
+
+      updateCarouselPosition();
+    }
+
+    function goToSlide(index) {
+      currentSlide = index;
+      updateCarouselPosition();
+    }
+
+    function updateCarouselPosition() {
+      const track = document.getElementById('testimonialTrack');
+      const cards = document.querySelectorAll('.testimonial-card');
+      if (!track || cards.length === 0) return;
+
+      const cardWidth = cards[0].offsetWidth + 32; // plus gap
+      track.style.transform = `translateX(-${currentSlide * cardWidth}px)`;
+
+      // Update active dots
+      const dots = document.querySelectorAll('.carousel-dot');
+      dots.forEach((dot, index) => {
+        if (index === currentSlide) {
+          dot.classList.add('active');
+        } else {
+          dot.classList.remove('active');
+        }
+      });
+    }
+
+    // Attach listeners for resize to recalculate carousel state automatically
+    window.addEventListener('resize', () => {
+      // Small debounce to avoid rapid rebuild computation
+      clearTimeout(window.carouselResizeTimer);
+      window.carouselResizeTimer = setTimeout(initCarousel, 150);
+    });
+
+    // Initialize immediately when page scripts run
+    setTimeout(initCarousel, 100);
+
+    // ----------------------------------------
+    // PRIVATE LEAD FORM HANDLE
+    // ----------------------------------------
+    function handleFormSubmit(event) {
+      event.preventDefault();
+      playAudio('success-chime');
+      
+      const form = document.getElementById('valuationForm');
+      const success = document.getElementById('successMessage');
+      
+      form.style.display = 'none';
+      success.style.display = 'block';
+    }
+
+    // ----------------------------------------
+    // ACCORDION SYSTEM FOR FAQ
+    // ----------------------------------------
+    function toggleFaq(button) {
+      const item = button.parentElement;
+      const content = item.querySelector('.faq-content');
+      const isActive = item.classList.contains('active');
+      
+      // Close all first
+      document.querySelectorAll('.faq-item').forEach(el => {
+        el.classList.remove('active');
+        el.querySelector('.faq-content').style.maxHeight = null;
+      });
+
+      playAudio('accordion');
+
+      if (!isActive) {
+        item.classList.add('active');
+        content.style.maxHeight = content.scrollHeight + 'px';
+      }
+    }
+
+    // ----------------------------------------
+    // BLOG MODALS
+    // ----------------------------------------
+    function openBlogModal(id) {
+      const modal = document.getElementById(id + 'Modal');
+      playAudio('success-chime');
+      if (modal) {
+        modal.classList.add('open');
+        document.body.style.overflow = 'hidden';
+      }
+    }
+
+    // ----------------------------------------
+    // BLOG CLOSE
+    // ----------------------------------------
+    function closeBlogModal(id) {
+      const modal = document.getElementById(id + 'Modal');
+      playAudio('soft-click');
+      if (modal) {
+        modal.classList.remove('open');
+        document.body.style.overflow = '';
+      }
+    }
+
+    function trackBlogProgress(id) {
+      const modal = document.getElementById(id + 'Modal');
+      const body = modal.querySelector('.blog-modal-body');
+      const progress = document.getElementById(id + 'Progress');
+      const percentage = (body.scrollTop / (body.scrollHeight - body.clientHeight)) * 100;
+      progress.style.width = percentage + '%';
+    }
+
+    // ----------------------------------------
+    // HIGH-FIDELITY TIMELINE PROGRESS TRACKER
+    // ----------------------------------------
+    function trackTimelineProgress() {
+      const progressLine = document.getElementById('timelineProgressLine');
+      const timelineItems = document.querySelectorAll('.timeline-item');
+      if (!progressLine || timelineItems.length === 0) return;
+
+      const timelineContainer = document.querySelector('.timeline');
+      if (!timelineContainer) return;
+
+      const rect = timelineContainer.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+
+      // Start highlighting when top of timeline box reaches middle section of viewport
+      const startPoint = viewportHeight * 0.75;
+      const endPoint = viewportHeight * 0.25;
+
+      const containerTotalHeight = rect.height;
+      const containerTopOffset = rect.top;
+
+      let scrollFraction = 0;
+      if (containerTopOffset < startPoint) {
+        const scrolledDistance = startPoint - containerTopOffset;
+        const activeTrackHeight = containerTotalHeight;
+        scrollFraction = scrolledDistance / activeTrackHeight;
+      }
+
+      scrollFraction = Math.max(0, Math.min(1, scrollFraction));
+      progressLine.style.transform = `scaleY(${scrollFraction})`;
+
+      // Smart activation threshold triggers
+      timelineItems.forEach((item) => {
+        const itemRect = item.getBoundingClientRect();
+        if (itemRect.top < viewportHeight * 0.7) {
+          if (!item.classList.contains('active')) {
+            item.classList.add('active');
+            playAudio('hover-pluck');
+          }
+        } else {
+          item.classList.remove('active');
+        }
+      });
+    }
+
+    // Bind elegant viewport interaction triggers
+    window.addEventListener('scroll', trackTimelineProgress, { passive: true });
+    window.addEventListener('resize', trackTimelineProgress, { passive: true });
+    
+    // Initialize interaction loops immediately
+    setTimeout(trackTimelineProgress, 120);
+  </script>
+</body>
+</html>

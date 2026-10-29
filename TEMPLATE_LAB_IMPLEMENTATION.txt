@@ -1,0 +1,38 @@
+================================================================================
+LUNAO AI STUDIO & VIBE CODING SECTION REDESIGN — IMPLEMENTATION SPECIFICATION
+================================================================================
+
+Target Section: AI Studio / Template Lab / Vibe Coding (`src/components/TemplateLabPage.tsx` & `src/components/Editor.tsx`)
+Brand Palette: Luxury Dark Mode + Warm Amber/Gold Accents (#D97706, #F59E0B, #B45309), Deep Charcoal (#090D16, #0F172A), Frosted Glass (backdrop-blur-md, border-white/10).
+Typography & Icons: Lucide React icons exclusively. ZERO AI emojis, zero generic placeholders.
+
+--------------------------------------------------------------------------------
+1. CORE USER EXPERIENCE & FLOW
+--------------------------------------------------------------------------------
+1. Landing View ("AI Vibe Studio"):
+   - When entering the AI Studio / Template Lab section, users land directly on the pristine, high-end "AI Vibe Coding" prompt interface.
+   - Top area features an elegant Prompt Toggle (Quick Prompt library vs. Custom Natural Language Vibe Prompt).
+   - Main central area features a gorgeous, immersive Vibe Coding input box ("Describe any niche website template in plain English... e.g., 'A high-end luxury barber lounge in downtown Austin with online booking and VIP membership tiers'").
+   - Underneath the active vibe prompt area, display "Recent Vibe Coded Templates" with sleek interactive preview cards, instant loading, and timestamp tags.
+
+2. Zero Code Files Visibility:
+   - Inside the Vibe Coding / Live Preview workspace, **do not show code file trees, tabs for CSS/JS separately, or raw code editors**.
+   - Everything is compiled into a single pristine HTML file with CSS, JavaScript, and fonts built-in inline.
+   - Users never feel like they are "managing code files" — they only experience pure, high-end **Vibe Coding** and real-time interactive previewing.
+
+3. One-Click "Turn Into Template":
+   - Prominently featured action button: **"Turn into Template"**.
+   - Clicking this instantly opens a gorgeous modal where the user can:
+     a. Select an existing business niche (e.g., Barbershop, Dentist, HVAC, Roofer, Gym, Salon, Real Estate) OR create a brand new custom niche.
+     b. Name the template (required).
+     c. Provide an optional professional description.
+   - Upon confirming, the new template is **instantly saved and synchronized**:
+     - Immediately added to the **Templates Gallery section** (`/src/components/Templates.tsx`).
+     - Immediately available in **both Outreach Campaign sections** (Email Campaign Wizard & SMS Campaign Wizard) for live outreach sending.
+
+--------------------------------------------------------------------------------
+2. TECHNICAL ARCHITECTURE & STATE SYNCHRONIZATION
+--------------------------------------------------------------------------------
+- Shared state passed from `App.tsx` (`templates` and `setTemplates`) ensures that any newly converted template from the AI Vibe Studio immediately appears across all downstream modules without page reloads.
+- Local storage fallback ensures offline resilience when backend endpoints are unavailable.
+- Sound feedback (`playSoftTap()`, `playTiktokLike()`, `playVictoryCelebration()`) triggers on successful template conversion and generation milestones.

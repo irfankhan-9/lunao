@@ -1,0 +1,8 @@
+{
+  "name": "Lunao",
+  "description": "SaaS dashboard for automated local website generation and SMS outreach campaigns.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

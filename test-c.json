@@ -1,0 +1,18 @@
+{
+  "ownerKey": "test_owner_001",
+  "niche": "Barber",
+  "templateKey": "barber-dark-luxury",
+  "leadSource": "csv",
+  "targetVolume": 1,
+  "city": "Sydney",
+  "emailSubject": "Quick question about {{business_name}}",
+  "emailBody": "Hi, I built a site for you.",
+  "leads": [
+    {
+      "name": "Sydney Barbers",
+      "email": "info@sydneybarbers.com.au",
+      "phone": "61280213371",
+      "city": "Sydney"
+    }
+  ]
+}

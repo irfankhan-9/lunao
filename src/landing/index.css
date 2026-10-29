@@ -1,0 +1,136 @@
+/* Section-scoped overrides for the landing page.
+   Imports the global tokens (which are loaded by main.tsx via index.css). */
+
+/* Make the whole landing page scroll smoothly within its own scroller. */
+html, body, #root {
+  background-color: var(--off-white);
+}
+
+/* The landing page is a self-contained scroller — it must not inherit the
+   dashboard's `h-screen overflow-hidden` shell. */
+.landing-root {
+  min-height: 100vh;
+  background-color: var(--off-white);
+  color: var(--ink);
+  overflow-x: hidden;
+}
+
+/* Section spacing rhythm: 96px desktop, 64px mobile. */
+.landing-section {
+  padding-top: 64px;
+  padding-bottom: 64px;
+  position: relative;
+}
+
+@media (min-width: 768px) {
+  .landing-section {
+    padding-top: 96px;
+    padding-bottom: 96px;
+  }
+}
+
+/* Container max-width with comfortable side padding. */
+.landing-container {
+  width: 100%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+@media (min-width: 768px) {
+  .landing-container {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .landing-container {
+    padding-left: 48px;
+    padding-right: 48px;
+  }
+}
+
+/* Section eyebrow label (mono uppercase). */
+.landing-eyebrow {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-tertiary);
+  font-weight: 600;
+}
+
+/* Scroll-triggered fade-up. The IntersectionObserver in Landing.tsx toggles
+   data-visible on the parent, and CSS handles the transition. */
+.landing-fade {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+.landing-fade[data-visible="true"] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-fade {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* Hero preview row highlight loop. Six rows, six seconds, no JS interval. */
+.landing-hero-preview {
+  position: relative;
+}
+
+@keyframes hero-row-pulse {
+  0%, 90%, 100% { background-color: transparent; }
+  3%, 8% { background-color: var(--accent-soft); }
+}
+
+.landing-hero-row {
+  animation: hero-row-pulse 12s ease-in-out infinite;
+}
+.landing-hero-row[data-row="0"] { animation-delay: 0s; }
+.landing-hero-row[data-row="1"] { animation-delay: 2s; }
+.landing-hero-row[data-row="2"] { animation-delay: 4s; }
+.landing-hero-row[data-row="3"] { animation-delay: 6s; }
+.landing-hero-row[data-row="4"] { animation-delay: 8s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-hero-row { animation: none; }
+}
+
+/* Mobile hamburger slide-down. */
+@keyframes landing-sheet-down {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.landing-mobile-sheet {
+  animation: landing-sheet-down 180ms ease-out forwards;
+}
+
+/* The "skinny line" at the top of every section. */
+.landing-skelin {
+  height: 1px;
+  width: 100%;
+  background-color: var(--border);
+}
+
+/* Sticky-nav opaque state. */
+.landing-nav {
+  background-color: transparent;
+  transition: background-color 200ms ease, border-color 200ms ease;
+}
+.landing-nav[data-stuck="true"] {
+  background-color: rgba(248, 247, 245, 0.92);
+  backdrop-filter: saturate(140%) blur(10px);
+  -webkit-backdrop-filter: saturate(140%) blur(10px);
+  border-bottom: 1px solid var(--border);
+}

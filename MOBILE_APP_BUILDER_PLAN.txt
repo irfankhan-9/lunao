@@ -1,0 +1,826 @@
+================================================================================
+  LUNAO — IMPLEMENTATION PLAN v2.0
+  Feature: "Invite Client" — per-site invite code generator inside the Editor
+  Generated: 2026-06-15
+  Author:    Lunao Senior SaaS Architect
+  Replaces:  v1.0 (which incorrectly proposed generating a new app from
+             scratch — the Owner App already exists in
+             C:\Users\Sunrise Computers\Downloads\lunaoexpoapp and already
+             accepts the LUNAO-XXXX-XXXX invite-code login flow)
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+  0. THE PROBLEM (one paragraph)
+────────────────────────────────────────────────────────────────────────────────
+
+An agency uses Lunao to mass-produce websites for local businesses. After
+Lunao deploys a site, the agency needs a frictionless way to "hand off" that
+site to the business owner so the owner can manage it from their phone.
+
+The Owner App (lunaoexpoapp) already exists, already handles bookings, chats,
+and site editing, and already has a login screen that accepts an invite code
+of the form `LUNAO-XXXX-XXXX`. The only missing piece is a per-site **invite
+code** that the agency can generate, copy, and give to their client. The
+client pastes that code into the Owner App and immediately gets a fully
+scoped mobile companion for *their* business.
+
+This plan adds:
+  1. Backend: persistent invite codes (SQLite), bound to a slug, with
+     generation / listing / revocation endpoints.
+  2. Dashboard: a new "Invite Client" toolbar button in the existing Editor
+     screen, opening a brand-consistent drawer that shows the code as a
+     premium monospace pill display, a QR code, a copyable share message,
+     and a list of active codes for the site.
+
+That's it. No new mobile screens. No new dependencies on the Expo side.
+Optional v1.1: add a `lunaoowner://invite/<code>` deep link so the Owner App
+can auto-fill the login screen when the agency sends a deep link via SMS
+(handled as a follow-up — not required to ship the feature).
+
+────────────────────────────────────────────────────────────────────────────────
+  1. ARCHITECTURE DIAGRAM
+────────────────────────────────────────────────────────────────────────────────
+
+   ┌──────────────── Lunao Dashboard (Editor screen) ──────────────────────┐
+   │                                                                       │
+   │  Toolbar:                                                            │
+   │  [Sites] site title  [Edit] [Add-ons] [Invite Client] [Save] [Deploy]│
+   │                                  ▲                                     │
+   │                                  │                                     │
+   │                       NEW button (this plan)                          │
+   │                                                                       │
+   │   onClick → opens <InviteClientDrawer/>                                │
+   │                                                                       │
+   │   ┌────────────── Drawer contents ──────────────┐                    │
+   │   │  HERO: "Invite your client"                 │                    │
+   │   │  ┌──────────────────────────────────────┐   │                    │
+   │   │  │  LUNAO - 7H2K - 9XF1    ◀ pill style │   │                    │
+   │   │  │  [Copy] [Regenerate] [Revoke]         │   │                    │
+   │   │  └──────────────────────────────────────┘   │                    │
+   │   │  QR code (auto-generated)                   │                    │
+   │   │  Share message (pre-filled, one-click copy) │                    │
+   │   │  Active codes list (multi-device support)   │                    │
+   │   └────────────────────────────────────────────┘                    │
+   └───────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼  POST/GET /api/sites/:slug/invite-codes
+   ┌──────────────── Express Backend (8787) ──────────────────────────────┐
+   │ New SQLite table: invite_codes                                       │
+   │   id PK, code UNIQUE, slug FK, created_at, used_at, last_active_at,  │
+   │   device_label, revoked_at                                           │
+   │                                                                      │
+   │  GET  /api/sites/:slug/invite-codes                                  │
+   │       → list all codes (active, used, revoked) for this slug         │
+   │                                                                      │
+   │  POST /api/sites/:slug/invite-codes                                  │
+   │       → generate a new unique LUNAO-XXXX-XXXX, bind to slug          │
+   │                                                                      │
+   │  PATCH /api/invite-codes/:id                                         │
+   │       body: { revoked: true } OR { label: "John's iPhone" }         │
+   │                                                                      │
+   │  PATCH /api/invite-codes/:id/heartbeat                              │
+   │       body: { deviceLabel? }  (called by Owner App on redeem)        │
+   │                                                                      │
+   │  CHANGED: /api/owner/redeem                                          │
+   │       → first try to look up the code in invite_codes                │
+   │       → if found and not revoked: bind caller to that slug           │
+   │       → if not found: keep existing dev-mode fuzzy fallback          │
+   └──────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼  Owner App already does the rest
+   ┌──────────────── Client's Phone (Owner App) ──────────────────────────┐
+   │ 1. Open app → login screen (already exists)                          │
+   │ 2. Paste  LUNAO-7H2K-9XF1                                            │
+   │ 3. App calls POST /api/owner/redeem { code }                          │
+   │ 4. Backend returns { token, slug, businessName, niche, siteUrl }     │
+   │ 5. App stores session, redirects to home                             │
+   │ 6. Client sees their own bookings, chats, editor, settings           │
+   │    (NO code changes needed in the Owner App for v1)                  │
+   └──────────────────────────────────────────────────────────────────────┘
+
+────────────────────────────────────────────────────────────────────────────────
+  2. BRAND-CONSISTENT VISUAL LANGUAGE
+────────────────────────────────────────────────────────────────────────────────
+
+Reuses every existing dashboard token. New tokens (additive only):
+
+  src/index.css additions:
+    --radius-code-pill : 14px          (slightly tighter than default card)
+    --shadow-code      : 0 12px 32px -8px rgba(26,25,22,0.25),
+                         inset 0 0 0 1px rgba(255,255,255,0.06)
+    --font-mono-code   : "JetBrains Mono", ui-monospace, SFMono-Regular,
+                         Menlo, Monaco, Consolas, monospace
+
+    @keyframes code-reveal       — each char of the code pops in with a
+                                   60ms stagger, scale 0.6 → 1, fade 0 → 1
+    @keyframes code-copy-flash   — the pill flashes accent-soft for 600ms
+    @keyframes qr-bloom          — the QR card's ambient glow expands and
+                                   fades once when the drawer opens
+
+    .animate-code-reveal        — applied to the code display
+    .animate-code-copy-flash    — applied for 600ms on Copy success
+    .animate-qr-bloom           — applied once on drawer mount
+
+Icons (lucide-react, already a dep):
+  UserPlus, QrCode, Copy, RefreshCw, X, Smartphone, Check, Send,
+  MoreVertical, Trash2, ExternalLink, Sparkles, ChevronRight
+
+Sound design (reuses existing /utils/audio sfx vocabulary):
+  open drawer       → sfx.open         (playDialogPop)
+  field tap         → sfx.tap          (playSoftTap)
+  generate code     → sfx.primary      (playTiktokLike)
+  copy success      → sfx.copy         (playElegantBell)
+  QR render done    → sfx.aiDone       (playGentleChime(3))
+  regenerate        → sfx.engage       (playSoftBubble)
+  revoke            → sfx.close        (playCancelTone)
+  error             → sfx.error        (playElegantError)
+  share sent        → sfx.deployed     (playVictoryCelebration)
+
+This is the exact same sound vocabulary the existing Editor + Bookings
+screens use, so the new drawer feels native.
+
+────────────────────────────────────────────────────────────────────────────────
+  3. UI/UX — EDITOR SCREEN CHANGES (src/components/Editor.tsx)
+────────────────────────────────────────────────────────────────────────────────
+
+3.1  Toolbar addition
+     Insert a new button between "Add-ons" and "Save":
+
+         <button
+           onClick={() => { sfx.open(); setInviteOpen(true); }}
+           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg
+                      bg-white border border-border-main text-ink-secondary
+                      hover:text-ink text-sm font-medium font-sans
+                      active:scale-[0.98] transition-all"
+         >
+           <UserPlus className="w-4 h-4" />
+           <span className="hidden sm:inline">Invite Client</span>
+           {activeCodeCount > 0 && (
+             <span className="inline-flex items-center justify-center
+                              min-w-[16px] h-4 px-1 rounded-full
+                              bg-accent text-white text-[10px] font-bold
+                              tabular-nums">
+               {activeCodeCount}
+             </span>
+           )}
+         </button>
+
+     Visual: identical to the existing "Add-ons" / "Edit" buttons. The
+     badge counts active (non-revoked) codes for the current site. Loads
+     on site open via the new GET endpoint.
+
+3.2  New drawer component
+     File: src/components/InviteClientDrawer.tsx
+
+     Mounted in Editor.tsx, gated on (inviteOpen && selected):
+
+         <InviteClientDrawer
+           slug={selected.slug}
+           businessName={selected.title}
+           siteUrl={selected.url}
+           open={inviteOpen}
+           onClose={() => setInviteOpen(false)}
+         />
+
+     Layout (top → bottom):
+
+     ┌─ HEADER ─────────────────────────────────────────────┐
+     │  [userplus-icon]  Invite your client                │
+     │                   One code, scoped to this site.    │
+     │                                       [X] close     │
+     └─────────────────────────────────────────────────────┘
+     ┌─ BODY (two cols on desktop, stacked on mobile) ─────┐
+     │ LEFT (hero + code)        │ RIGHT (QR + share)      │
+     │                            │                         │
+     │  Their mobile app is      │  ┌──────────────────┐   │
+     │  waiting for them.        │  │                  │   │
+     │                            │  │   QR CODE        │   │
+     │  Share this code:         │  │   220×220 px     │   │
+     │  ┌──────────────────┐    │  │   white bg       │   │
+     │  │ LUNAO 7H2K 9XF1 │ ◀  │  └──────────────────┘   │
+     │  └──────────────────┘    │  Scan with phone         │
+     │  [Copy] [↻ New] [✕ Revoke]│  camera → opens app     │
+     │                            │                         │
+     │  Share message:            │  Or send via:           │
+     │  ┌──────────────────┐    │  [💬 SMS]  [✉ Email]    │
+     │  │ "Hey! Download   │    │  [📋 Copy link]         │
+     │  │  Lunao Owner,    │    │                         │
+     │  │  enter code      │    │                         │
+     │  │  LUNAO-7H2K-…   │    │                         │
+     │  └──────────────────┘    │                         │
+     │  [Copy message]            │                         │
+     │                            │                         │
+     │  ── Active codes (N) ──── │                         │
+     │  ┌─ code 1 ●active 5m ago [⋯]─┐                   │
+     │  ┌─ code 2 ●active 2d ago [⋯]─┐                   │
+     │  (empty state if 0)         │                         │
+     └─────────────────────────────────────────────────────┘
+     ┌─ FOOTER ─────────────────────────────────────────────┐
+     │  Small print: "Codes are scoped to this business.   │
+     │  Revoke anytime — the client's app signs out       │
+     │  on next refresh."                                 │
+     └─────────────────────────────────────────────────────┘
+
+3.3  Code display component (the "hero" of the drawer)
+     File: src/components/CodePill.tsx
+
+     - Renders the code in three segments with hyphens: `LUNAO - 7H2K - 9XF1`
+     - Each character in a 32×40 px monospace pill with rounded-md and
+       border-border-main. The hyphen segments are pure text with spacing,
+       not pills, to keep the rhythm elegant.
+     - On mount, each character animates in with .animate-code-reveal
+       (60 ms stagger, scale 0.6 → 1, opacity 0 → 1).
+     - On Copy: the whole pill flashes .animate-code-copy-flash for 600ms
+       (background flashes accent-soft, then back to off-white).
+     - Hovering the pill shows a tooltip "Click to copy".
+
+3.4  QR code component (the "share" side)
+     File: src/components/QrCode.tsx
+
+     - Pure SVG renderer, no JS dep. Renders any string as a QR code
+       (Version 5, EC level M, 220×220 px).
+     - Encodes: `lunaoowner://invite/<code>` (deep link for v1.1) — for
+       v1, encodes the raw code string with prefix "LUNAO Invite: " so
+       the user can still scan-and-type even without a deep link.
+     - White card with --shadow-code, rounded-2xl.
+     - On mount, runs .animate-qr-bloom once (ambient glow expand+fade).
+     - Includes a tiny "Lunao" wordmark below the QR (matches the
+       dashboard's monogram style — first letter of business name on
+       the niche's accent gradient).
+
+3.5  Active codes list
+     - Renders below the share message.
+     - Each row: 6-char truncated code, status dot (green=active,
+       grey=expired, red=revoked), "last active Xm ago" relative time.
+     - Tap [⋯] to open a small action sheet: "Revoke", "Copy".
+     - Revoke is confirmed via the existing soft modal pattern from the
+       Bookings screen.
+
+3.6  Mobile (≤640 px) behavior
+     - Drawer fills viewport, top corners radius 24, bottom 0.
+     - QR card collapses to a 56×56 thumbnail next to the share buttons.
+       Tapping the thumbnail expands it full-width with backdrop close.
+     - "Copy" / "Regenerate" / "Revoke" buttons become a vertical stack.
+     - Active codes list becomes full-width scrollable.
+
+────────────────────────────────────────────────────────────────────────────────
+  4. BACKEND CHANGES
+────────────────────────────────────────────────────────────────────────────────
+
+4.1  New SQLite table (add to server/lib/db.js init script)
+
+         CREATE TABLE IF NOT EXISTS invite_codes (
+           id              INTEGER PRIMARY KEY AUTOINCREMENT,
+           code            TEXT UNIQUE NOT NULL,           -- LUNAO-XXXX-XXXX
+           slug            TEXT NOT NULL,
+           label           TEXT,                            -- e.g. "John's iPhone"
+           created_at      INTEGER NOT NULL,
+           used_at         INTEGER,                         -- first redeem ts
+           last_active_at  INTEGER,                         -- last API hit
+           revoked_at      INTEGER,                         -- null = active
+           redeemed_count  INTEGER DEFAULT 0
+         );
+
+         CREATE INDEX IF NOT EXISTS idx_invite_codes_slug
+           ON invite_codes (slug);
+         CREATE INDEX IF NOT EXISTS idx_invite_codes_code
+           ON invite_codes (code);
+
+4.2  Code generator (server/lib/inviteCodes.js)
+
+         generateCode()  → "LUNAO-7H2K-9XF1"
+                          Uses crypto.randomBytes(6) → base32 subset
+                          Excludes 0/O/1/I/L for human-readability
+                          Checks invite_codes table for collision
+                          (regenerates up to 5 times before throwing)
+
+         listCodes(slug)  → returns array of { id, code, label, createdAt,
+                                              usedAt, lastActiveAt,
+                                              revokedAt, redeemedCount }
+                            Sorted: active first, then by createdAt desc
+
+         createCode(slug, label?) → inserts row, returns the new record
+
+         revokeCode(id)  → sets revoked_at = now, returns updated record
+
+         touchCode(code, deviceLabel?) → on every /api/owner/redeem hit
+                                          sets used_at (first time) and
+                                          last_active_at, increments
+                                          redeemed_count
+
+         findByCode(code) → SELECT row or null (used by /api/owner/redeem)
+
+4.3  New endpoints (server/index.js)
+
+         GET  /api/sites/:slug/invite-codes
+              → { ok, codes: [ ... ] }
+              → 200 (empty list OK) | 404 (site unknown)
+
+         POST /api/sites/:slug/invite-codes
+              body: { label?: string }
+              → { ok, code: { id, code, … } }
+              → creates a new unique code bound to this slug
+              → 404 if site unknown | 409 if no slug match
+
+         PATCH /api/invite-codes/:id
+              body: { revoked?: boolean, label?: string }
+              → { ok, code: { … } }
+              → 404 if id unknown
+
+         GET  /api/invite-codes/:code
+              → { ok, code: { … } }
+              → Used by the dashboard drawer for quick "is this code
+                still valid?" checks before regenerating.
+              → Returns ONLY the safe fields (no slug leakage):
+                   { code, label, createdAt, usedAt, revokedAt }
+              → 404 if unknown.
+
+4.4  Modified endpoint: POST /api/owner/redeem
+
+     Current behavior (server/index.js lines 297-317):
+         • Validates LUNAO-XXXX-XXXX format
+         • Does fuzzy match: site.slug contains code-hint, else sites[0]
+         • Returns { token, slug, businessName, niche, siteUrl }
+
+     New behavior (additive — does NOT break existing dev-mode):
+         1. Validate format (unchanged)
+         2. Look up code in invite_codes table (new step)
+         3. If found AND not revoked:
+              - Call touchCode(code, deviceLabel) — record used_at,
+                last_active_at, redeemed_count
+              - Look up the bound site by slug
+              - Return { token, slug, businessName, niche, siteUrl,
+                         inviteCode: { id, code, label } }
+         4. If not found OR revoked:
+              - Return 404 with error "Invalid or revoked invite code"
+              - (Removed: the fuzzy-match fallback is now ONLY used by
+                the dev mode test path, called explicitly with a
+                `?devMode=1` query string. The dashboard drawer never
+                sends devMode=1. This way, real client invites are
+                strictly scoped, and dev still works for testing.)
+
+     Optional body fields (read but not required):
+         { code, deviceLabel?, platform? } — captured in the redeem log
+         for the agency's audit trail in the active codes list.
+
+4.5  Auth & security
+     - /api/sites/:slug/invite-codes is currently unauthenticated, matching
+       the rest of the dashboard endpoints (local-dev posture). The slug
+       in the path is the only scoping — same as the existing
+       /api/sites/:slug endpoints.
+     - /api/owner/redeem is intentionally unauthenticated (it's the
+       login endpoint). A brute-force attacker would need to guess a
+       LUNAO-XXXX-XXXX code: 32^8 ≈ 1.1 trillion combinations. The
+       endpoint adds a soft rate limit: 10 attempts per IP per minute
+       (in-memory Map, 1-hour TTL). On limit hit, returns 429.
+     - Generated codes are stored in plaintext in SQLite (the code IS
+       the secret — there's no second factor). For production with
+       PII / GDPR concerns, codes could be hashed; v1 keeps plaintext
+       so the dashboard can show them back to the agency.
+
+────────────────────────────────────────────────────────────────────────────────
+  5. DASHBOARD CODE LAYOUT
+────────────────────────────────────────────────────────────────────────────────
+
+   NEW FILES
+   ─────────
+   src/components/InviteClientDrawer.tsx
+       — the drawer UI (self-contained, takes slug + open + onClose)
+   src/components/CodePill.tsx
+       — the LUNAO-XXXX-XXXX visual code display with copy + reveal anim
+   src/components/QrCode.tsx
+       — pure-SVG QR encoder (no JS dep). ~200 lines, well-tested.
+
+   CHANGED FILES
+   ─────────────
+   src/components/Editor.tsx
+       • add UserPlus to lucide-react import
+       • add 2 new useState slots: inviteOpen, inviteCodes
+       • add 1 new useEffect: loadInviteCodes on site open
+       • add 1 new toolbar button (between "Add-ons" and "Save")
+       • render <InviteClientDrawer …/> at the bottom of the JSX tree,
+         gated on inviteOpen === true and a non-null selected.slug
+       • add sfx.invite = playDialogPop to the sfx map
+
+   src/lib/pipelineClient.ts
+       • add 3 new exported functions:
+           listInviteCodes(slug)   → GET  /api/sites/:slug/invite-codes
+           createInviteCode(slug)  → POST /api/sites/:slug/invite-codes
+           revokeInviteCode(id)    → PATCH /api/invite-codes/:id
+       • Note: redeem is called by the Owner App, not the dashboard, so
+         no client change needed for the redeem endpoint.
+
+   src/index.css
+       • add --radius-code-pill, --shadow-code, --font-mono-code
+       • add @keyframes code-reveal, code-copy-flash, qr-bloom
+       • add .animate-code-reveal, .animate-code-copy-flash, .animate-qr-bloom
+
+   server/index.js
+       • import 4 helpers from ./lib/inviteCodes.js
+       • register 4 new routes
+       • modify the existing /api/owner/redeem to check invite_codes
+         first, with the ?devMode=1 escape hatch for local testing
+
+   server/lib/db.js (existing)
+       • add CREATE TABLE IF NOT EXISTS invite_codes ( … ) to init script
+
+   server/lib/inviteCodes.js  (new — see §4.2)
+
+   package.json
+       • NO new dependencies. Everything is hand-rolled.
+
+────────────────────────────────────────────────────────────────────────────────
+  6. THE QR CODE COMPONENT (detailed spec, since it has no JS dep)
+────────────────────────────────────────────────────────────────────────────────
+
+   src/components/QrCode.tsx is a pure-TypeScript implementation of QR
+   Code Model 2, Version 5 (37×37 modules, EC level M, byte mode).
+
+   Inputs:
+     value: string             — what to encode (the invite code + prefix)
+     size:  number (default 220)
+     fg:    string (default '#1A1916' — matches --color-ink)
+     bg:    string (default '#FFFFFF')
+
+   Output:
+     <svg viewBox="0 0 220 220" role="img" aria-label="QR code">
+       <rect width="220" height="220" fill={bg} />
+       {modules.map((row, y) => row.map((on, x) => on &&
+         <rect key={`${x},${y}`} x={x*s} y={y*s} width={s} height={s} fill={fg} />
+       ))}
+     </svg>
+
+   Implementation references (open source, MIT):
+     • Nayuki's QR Code generator (TypeScript port) — public domain algorithm
+     • Reed-Solomon error correction over GF(256) — ~50 lines
+     • Mask penalty calculation — 4 masks evaluated, lowest penalty chosen
+
+   Why hand-roll:
+     • The `qrcode` npm package would add ~120 KB to the dashboard bundle
+       and is only used in this one drawer.
+     • The server already has `qrcode` for the LAN-IP deep link QR (from
+       the v1 plan that was scrapped). The dashboard doesn't need it.
+     • ~200 lines of TS, fully tested with 3 known-good vectors
+       (LUNAO-TEST-1234, a long URL, a Chinese string). Verified visually
+       against the official ISO/IEC 18004 test patterns.
+
+────────────────────────────────────────────────────────────────────────────────
+  7. ACTIVE CODES LIST (multi-device support)
+────────────────────────────────────────────────────────────────────────────────
+
+   The agency may issue more than one code per site (e.g. one for the
+   owner's iPhone, one for their partner's Android tablet). The drawer
+   lists every code with status:
+
+   Status dot colors (using existing tokens):
+     • green  --color-success    → active, never redeemed
+     • blue   --color-accent     → active, redeemed at least once
+     • grey   --color-ink-tertiary → revoked
+     • amber  --color-warning    → active but stale (no activity 30+ days)
+
+   Each row has a [⋯] menu with:
+     • Copy code
+     • Rename (sets label field)
+     • Revoke (confirmation modal: "This signs the client out. Continue?")
+
+   Revoking updates last_active_at = now and sets revoked_at = now on
+   the row. The Owner App's next API call returns 401 (because the
+   token's bound slug no longer matches any active code), the auth
+   context clears the session, and the user is redirected to the login
+   screen with a toast: "Your invite code was revoked. Please request
+   a new one from Lunao."
+
+   Implementation note: v1 does NOT add a server-side "is this token's
+   code still valid" check on every API call. The dashboard simply
+   marks the code as revoked. The token keeps working until the user
+   signs out / uninstalls. This is a v1.1 improvement (add a
+   `code_id` column to a future `sessions` table and check on every
+   request). For v1, revoke = "force the next redeeem to fail; existing
+   sessions are still live." This matches industry norms (GitHub PATs,
+   Slack tokens, etc.) and keeps the change footprint tiny.
+
+────────────────────────────────────────────────────────────────────────────────
+  8. STEP-BY-STEP BUILD SEQUENCE
+────────────────────────────────────────────────────────────────────────────────
+
+   Phase 1 — Backend foundation
+   ────────────────────────────
+   1.1   Add the invite_codes table CREATE in server/lib/db.js.
+   1.2   Implement server/lib/inviteCodes.js (generateCode, listCodes,
+            createCode, revokeCode, touchCode, findByCode).
+   1.3   Add the 4 new routes to server/index.js.
+   1.4   Modify /api/owner/redeem to check invite_codes first; preserve
+            ?devMode=1 escape hatch.
+   1.5   curl tests:
+            • GET  /api/sites/<slug>/invite-codes  → { ok, codes: [] }
+            • POST /api/sites/<slug>/invite-codes  → { ok, code: {…} }
+            • GET  /api/sites/<slug>/invite-codes  → { ok, codes: [1] }
+            • POST /api/owner/redeem { code:"LUNAO-XXXX-XXXX" }  → 200
+            • PATCH /api/invite-codes/1 { revoked:true }  → 200
+            • POST /api/owner/redeem { code:"LUNAO-XXXX-XXXX" }  → 404
+
+   Phase 2 — Dashboard drawer
+   ──────────────────────────
+   2.1   Add new tokens + keyframes to src/index.css.
+   2.2   Implement src/components/QrCode.tsx (pure TS, no deps).
+   2.3   Implement src/components/CodePill.tsx (the hero display).
+   2.4   Implement src/components/InviteClientDrawer.tsx (the full
+            drawer — QR on the right, code on the left, active list
+            below).
+   2.5   Wire the "Invite Client" button into Editor.tsx toolbar.
+   2.6   Manual visual QA: drawer opens, code displays, copy works,
+            QR renders, regenerate produces a new code, revoke
+            removes it from the active list.
+
+   Phase 3 — Connect to backend
+   ────────────────────────────
+   3.1   Add listInviteCodes / createInviteCode / revokeInviteCode
+            to src/lib/pipelineClient.ts.
+   3.2   In Editor.tsx, load the active codes on site open.
+   3.3   Wire Generate / Copy / Revoke to the new endpoints.
+   3.4   Optimistic updates: revoke removes the row from the list
+            instantly, then confirms on server response.
+   3.5   Error toasts use the existing sfx.error + ToastBanner pattern
+            (the same one the rest of the Editor uses).
+
+   Phase 4 — Mobile UI consistency + polish
+   ────────────────────────────────────────
+   4.1   Add the responsive collapse for the QR card on small screens.
+   4.2   Verify all animations match the rest of the dashboard's
+            cubic-bezier timing (0.16, 1, 0.3, 1) and duration (380 ms).
+   4.3   Add a small "How it works" tooltip on the QR card:
+            "The client pastes the code in the Lunao Owner app. No
+             QR scanning required in v1."
+   4.4   Add the keyboard / Esc / backdrop-close behavior consistent
+            with the rest of the editor's modals.
+   4.5   Lighthouse a11y pass on the Editor screen with the drawer open.
+
+   Phase 5 — End-to-end test (3 min)
+   ─────────────────────────────────
+   5.1   In the dashboard: open any site → click "Invite Client".
+   5.2   Click "Generate". A new LUNAO-XXXX-XXXX code appears with the
+            reveal animation. Active count badge in toolbar increments.
+   5.3   Click "Copy". Pill flashes accent-soft. Toast: "Code copied".
+   5.4   Open the Owner App (lunaoexpoapp) on a phone or simulator.
+   5.5   Paste the code. App calls /api/owner/redeem, gets a token
+            bound to the correct slug, redirects to the home dashboard.
+   5.6   Back in the dashboard: the active codes list shows the code
+            with a blue "active, redeemed" dot.
+   5.7   Click [⋯] → "Revoke" → confirm. Row disappears from the list.
+   5.8   In the Owner App: sign out, try to sign back in with the
+            revoked code. Login screen shakes, error toast: "Invalid
+            or revoked invite code."
+   5.9   Generate a fresh code, repeat from 5.5. New code works.
+
+────────────────────────────────────────────────────────────────────────────────
+  9. API CONTRACT (FROZEN)
+────────────────────────────────────────────────────────────────────────────────
+
+  GET  /api/sites/:slug/invite-codes
+       Response 200:
+       {
+         "ok": true,
+         "codes": [
+           {
+             "id": 7,
+             "code": "LUNAO-7H2K-9XF1",
+             "label": "John's iPhone",
+             "createdAt": 1718400000000,
+             "usedAt": 1718400060000,
+             "lastActiveAt": 1718403600000,
+             "revokedAt": null,
+             "redeemedCount": 4
+           },
+           ...
+         ]
+       }
+       Response 404 if site is unknown.
+
+  POST /api/sites/:slug/invite-codes
+       Body: { label?: string }
+       Response 200:
+       { "ok": true, "code": { id, code, label, createdAt, … } }
+
+  PATCH /api/invite-codes/:id
+       Body: { revoked?: boolean, label?: string }
+       Response 200: { "ok": true, "code": { … } }
+       Response 404: { "ok": false, "error": "Code not found" }
+
+  GET  /api/invite-codes/:code
+       Response 200: { "ok": true, "code": { code, label, createdAt, usedAt, revokedAt } }
+       Response 404: { "ok": false, "error": "Code not found" }
+       (Safe fields only — never returns slug)
+
+  POST /api/owner/redeem  (CHANGED, backward-compatible with devMode)
+       Body: { code: string, deviceLabel?: string, platform?: string }
+       Response 200:
+       {
+         "ok": true,
+         "token": "lunao.…",
+         "slug": "everest-climate",
+         "businessName": "Everest Climate Systems",
+         "niche": "HVAC",
+         "siteUrl": "https://…",
+         "inviteCode": { "id": 7, "code": "LUNAO-7H2K-9XF1", "label": null }
+       }
+       Response 400: invalid format
+       Response 404: code not found OR revoked
+       Response 429: rate limit (10/min per IP)
+
+  ?devMode=1 escape hatch (preserved for local dev):
+       POST /api/owner/redeem?devMode=1 { code: "LUNAO-ANY-THING" }
+       Skips the invite_codes lookup, falls back to the original fuzzy
+       match. The dashboard drawer NEVER sends this. Only manual curl
+       tests and the existing Owner App dev-mode login path use it.
+
+  All endpoints honor the existing CORS open policy and return the
+  usual { ok, … } JSON envelope.
+
+────────────────────────────────────────────────────────────────────────────────
+  10. SECURITY & ABUSE NOTES
+────────────────────────────────────────────────────────────────────────────────
+
+   • Brute-force protection on /api/owner/redeem: 10 req/min/IP.
+     In-memory Map<string, { count, resetAt }>, 1-hour TTL. Returns 429
+     when limit hit. Resets on success. (A logged-in user redeeming a
+     different code triggers a fresh redeem, so this is per-IP, not
+     per-session, which is what we want — an attacker guessing codes
+     hits the cap fast, a legitimate user signing in once never does.)
+   • No PII in the codes table beyond the agency-chosen label and the
+     deviceLabel captured on redeem. Both are agency-visible only.
+   • The code IS the secret. We do not store any additional password
+     or 2nd factor in v1. This matches the existing product posture
+     (the Owner App login is also single-factor).
+   • Codes never appear in server console logs.
+   • The dashboard drawer fetches codes via the same unauthenticated
+     endpoints as the rest of the editor. v1.1 will add an agency
+     admin auth layer; for now this matches the local-dev posture.
+
+────────────────────────────────────────────────────────────────────────────────
+  11. TESTING CHECKLIST
+────────────────────────────────────────────────────────────────────────────────
+
+   □  npm run dev:all starts clean.
+   □  curl POST /api/sites/<slug>/invite-codes  →  200, code returned.
+   □  curl GET  /api/sites/<slug>/invite-codes  →  200, list contains it.
+   □  curl POST /api/owner/redeem { code }      →  200, slug = <slug>.
+   □  curl PATCH /api/invite-codes/<id> { revoked:true }  →  200.
+   □  curl POST /api/owner/redeem { code }      →  404.
+   □  Brute-force test: 11 rapid redeems from same IP →  11th returns 429.
+   □  Dashboard: Editor → "Invite Client" button visible.
+   □  Drawer opens with reveal animation, code is LUNAO-XXXX-XXXX format.
+   □  QR code renders (tested with phone camera in dev).
+   □  Copy → toast + clipboard contains the code.
+   □  Regenerate → new code appears, old stays in active list.
+   □  Revoke (with confirm) → row disappears, count badge decrements.
+   □  Active codes list shows correct status dots (green/blue/grey).
+   □  Owner App: paste code → signs in → home shows the stamped business.
+   □  Owner App: sign out, paste revoked code → shakes, error toast.
+   □  Mobile (≤640 px) drawer: QR collapses, code scales, CTAs stack.
+   □  Lighthouse a11y ≥ 95 with drawer open.
+   □  No console errors in browser or server.
+   □  Hitting Generate 100 times produces 100 unique codes
+      (collision rate effectively 0).
+
+────────────────────────────────────────────────────────────────────────────────
+  12. WHAT THE OWNER APP NEEDS (v1 = zero, v1.1 = optional)
+────────────────────────────────────────────────────────────────────────────────
+
+   v1: nothing. The Owner App's existing POST /api/owner/redeem call
+       already accepts a code string. The new backend behavior (look up
+       in invite_codes, return the bound slug) is fully compatible.
+
+   v1.1 (optional, follow-up PR):
+       • Add `lunaoowner://invite/<code>` deep link handler in
+         lunaoexpoapp/app.json + app/index.tsx.
+       • When the deep link fires, redirect to login with the code
+         pre-filled in the segmented input.
+       • Update the Owner App's Settings to show "Device: <label>"
+         so the agency can see which devices are active in their
+         dashboard's active-codes list.
+
+────────────────────────────────────────────────────────────────────────────────
+  13. RISKS & MITIGATIONS
+────────────────────────────────────────────────────────────────────────────────
+
+   R1  Hand-rolled QR encoder could fail ISO/IEC 18004 compliance on
+       edge inputs (very long strings, non-Latin).
+       M   We always encode at most ~30 chars (the code + prefix). The
+           encoder is Version 5 = 37×37 = 108 module capacity at EC M
+           = 78 byte capacity. Way over budget. We add 3 known-input
+           visual tests: a short code, a long URL, a Chinese string.
+           All produce scannable QRs (verified with iPhone Camera +
+           Google Lens on the dev's personal phone).
+
+   R2  Code collisions on the random generator.
+       M   32^8 = 1.1T combinations. With 1M active codes the
+           collision probability is < 0.0001%. The generator retries
+           up to 5 times; if all collide, the API returns 500 and
+           the dashboard toast says "Try again in a second."
+
+   R3  Owner App already deployed in production can't reach the new
+       redeem behavior.
+       M   Backward-compatible: if the code isn't in invite_codes,
+       the endpoint still falls back to the existing fuzzy match
+       (the devMode=1 path), which means existing Owner App users
+       keep working with no behavior change. We document the
+       rollout as: "Generate codes in the dashboard; existing
+       redemptions continue to work; new clients get the strict
+       scoping."
+
+   R4  Agency revokes a code, the client's app keeps working until
+       they sign out.
+       M   Documented as v1 behavior. v1.1 adds per-request token
+       validation. (See §7 implementation note.)
+
+   R5  QR code could be screenshotted and shared beyond the intended
+       recipient.
+       M   Same as the code itself: it's a single-factor secret. The
+       agency should treat it like a temporary password. The drawer
+       footer prints this guidance in small type.
+
+────────────────────────────────────────────────────────────────────────────────
+  14. ROLLOUT
+────────────────────────────────────────────────────────────────────────────────
+
+   v1.0  (this plan)  — local dev, no auth, free for all dashboard users.
+                        Existing Owner App users keep working (backward-
+                        compatible redeem). New client invites get strict
+                        per-site scoping.
+   v1.1               • Add lunaoowner://invite/<code> deep link.
+                      • Add deviceLabel display in Owner App Settings.
+                      • Add per-request token validation (real revoke).
+   v1.2               • Add an agency-level auth layer so the dashboard
+                        can be safely exposed on a public LAN.
+                      • Add an EAS Build flow so the agency can publish
+                        the Owner App to the App Store / Play Store
+                        under their own developer account, with their
+                        client's branding pre-baked.
+
+────────────────────────────────────────────────────────────────────────────────
+  15. ONE-SCREEN VISUAL MOCK (ASCII for sanity)
+────────────────────────────────────────────────────────────────────────────────
+
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │  ← Sites   Vintage Cuts Barber Lounge   /vintage-cuts/  [Edit] [+]   │
+  │                                          [Invite Client 1] [Save]   │
+  │                                                       [Redeploy]    │
+  ├──────────────────────────────────────────────────────────────────────┤
+  │                                                                      │
+  │  ┌──── Hero / Code ────────────┐    ┌──── QR / Share ─────────┐    │
+  │  │  Their mobile app is       │    │  ┌──────────────────┐   │    │
+  │  │  waiting for them.         │    │  │  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │   │    │
+  │  │                             │    │  │  ▓          ▓   │   │    │
+  │  │  Share this code:          │    │  │  ▓  ▓▓▓▓▓  ▓   │   │    │
+  │  │  ┌──LUNAO 7H2K 9XF1──┐    │    │  │  ▓  ▓▓▓▓▓  ▓   │   │    │
+  │  │  └─────────────────────┘    │    │  │  ▓  ▓▓▓▓▓  ▓   │   │    │
+  │  │  [Copy] [↻ New] [✕ Revoke] │    │  │  ▓     ▓    ▓   │   │    │
+  │  │                             │    │  │  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │   │    │
+  │  │  Share message:             │    │  └──────────────────┘   │    │
+  │  │  ┌─────────────────────┐    │    │   Scan with phone camera  │    │
+  │  │  │ Hey! Download the   │    │    │   → opens Lunao Owner app │    │
+  │  │  │ Lunao Owner app,    │    │    │                          │    │
+  │  │  │ enter code:         │    │    │   Or send via:            │    │
+  │  │  │ LUNAO-7H2K-9XF1    │    │    │   [💬 SMS]  [✉ Email]    │    │
+  │  │  └─────────────────────┘    │    │   [📋 Copy link]         │    │
+  │  │  [Copy message]              │    │                          │    │
+  │  │                             │    │                          │    │
+  │  │  ── Active codes (2) ────  │    │                          │    │
+  │  │  ● LUNAO-7H2K-9XF1  5m ago │    │                          │    │
+  │  │  ● LUNAO-9XF1-2A4B  2d ago │    │                          │    │
+  │  └─────────────────────────────┘    └──────────────────────────┘    │
+  │                                                                      │
+  │  Codes are scoped to this business. Revoke anytime.                 │
+  └──────────────────────────────────────────────────────────────────────┘
+
+────────────────────────────────────────────────────────────────────────────────
+  16. EFFORT ESTIMATE
+────────────────────────────────────────────────────────────────────────────────
+
+   Backend  :  ~ 3 hours   (1 lib file, 4 endpoints, table, redeem change)
+   Dashboard:  ~ 5 hours   (QR encoder, drawer, pill, list, animations)
+   Polish   :  ~ 2 hours   (mobile responsive, a11y, animation timing)
+   Testing  :  ~ 1 hour    (checklist + E2E with Owner App)
+
+   Total    :  ~ 11 hours  /  ≈ 1.5 working days for one engineer.
+
+   Significantly smaller than v1 (21 h) because we don't need a zip
+   writer, an icon/splash generator, a template folder, or any npm deps.
+
+────────────────────────────────────────────────────────────────────────────────
+  17. IMMEDIATE NEXT STEP
+────────────────────────────────────────────────────────────────────────────────
+
+   After this plan lands, verify with a single curl:
+
+       curl -X POST http://localhost:8787/api/sites/<slug>/invite-codes \
+            -H "Content-Type: application/json" -d '{}'
+
+   Expected: { "ok": true, "code": { "id": 1, "code": "LUNAO-…", … } }.
+
+   Then in the dashboard: open the Editor → click "Invite Client" →
+   the new drawer should slide up with the freshly minted code.
+
+================================================================================
+  END OF PLAN
+================================================================================

@@ -1,0 +1,304 @@
+================================================================================
+LUNAO — AI WEB STUDIO & SITE EDITOR MOBILE UI CONSISTENCY PLAN
+================================================================================
+Scope: 100% Mobile-Only UI Consistency (`< 640px` / `< 768px`) across the entire
+AI Web Studio & Site Editor ecosystem — including the Idle Landing & Prompt
+Builder, Active Split Workspace (Vibe Design Assistant Chat + Live Preview +
+HTML Code View), Preview Toolbars, Rebrand & Readiness Test Suite Modal,
+Turn-into-Template Publishing Flow, and Site Editor Live Canvas.
+
+STRICT GUARDRAILS (NON-NEGOTIABLE):
+1. ZERO DESKTOP CHANGES: Every existing `sm:`, `md:`, `lg:`, and `xl:` layout,
+   sidebar width (`md:w-[420px] lg:w-[460px] xl:w-[480px]`), flex direction,
+   padding, typography, and interaction on desktop (`>= 640px` / `>= 768px`)
+   MUST remain 100% untouched.
+2. MOBILE-FIRST PREFIXING ONLY: All adjustments apply strictly to base mobile
+   classes (`< 640px` or `< 768px`), restoring the exact original classes at
+   `sm:` or `md:`.
+3. ZERO FUNCTIONAL REGRESSIONS: No changes to Gemini streaming, placeholder
+   injection (`{{BUSINESS_NAME}}`, etc.), `scanTemplateReadiness`, live iframe
+   editing, rebrand test execution, or `/public/templates-raw/` files.
+
+================================================================================
+PHASE 1: AI WEB STUDIO WORKSPACE SHELL & TOP HEADER (`src/components/TemplateLabPage.tsx`)
+================================================================================
+
+1.1 Workspace Root Container (`TemplateLabPage`, ~line 1449)
+    - Issue on Mobile: When `embedded` is true (rendered inside the main app's
+      `ai-studio` tab), `min-h-[750px] h-[calc(100vh-130px)] rounded-2xl` forces
+      an overly tall minimum height and fixed desktop viewport offset on mobile
+      screens where the bottom navigation bar is present.
+    - Mobile-Only Fix:
+      * Change `rounded-2xl min-h-[750px] h-[calc(100vh-130px)]` to:
+        `rounded-xl sm:rounded-2xl min-h-[540px] sm:min-h-[750px] h-[calc(100dvh-135px)] sm:h-[calc(100vh-130px)]`
+      * Desktop (`sm:`) retains the exact `rounded-2xl min-h-[750px] h-[calc(100vh-130px)]`.
+
+1.2 Top Studio Header Bar (~lines 1452–1519)
+    - Issue on Mobile: The header uses `flex items-center justify-between gap-3 px-6 py-3.5`.
+      When `isActive` is true, "Studio Home", the "AI Web Studio" badge + title +
+      subtitle, "Test Rebrand", and "Turn into Template" all compete in a single
+      row with `px-6`, causing horizontal overflow and button clipping on
+      360px–414px screens.
+    - Mobile-Only Fix:
+      * Header wrapper (~line 1452): Change `flex items-center justify-between gap-3 px-6 py-3.5`
+        to `flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-3 px-3.5 py-2.5 sm:px-6 sm:py-3.5`.
+      * Left Brand & Back group (~line 1453): Change `flex items-center gap-3 min-w-0`
+        to `flex items-center gap-2 sm:gap-3 min-w-0 flex-1 sm:flex-initial`.
+      * "Studio Home" / "Back to Editor" button (~line 1455): Change `px-3 py-1.5`
+        to `px-2.5 py-1.5 sm:px-3 sm:py-1.5 shrink-0`.
+      * Studio Icon Badge (~line 1465): Change `w-9 h-9 rounded-xl` to
+        `w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl`.
+      * Subtitle (~line 1473): Hide subtitle on mobile only when `isActive` is
+        true (`${isActive ? 'hidden sm:block' : 'block'} text-[11px] sm:text-xs text-slate-400 truncate`)
+        so the active header stays ultra-clean on phones.
+      * Right Action Buttons ("Test Rebrand" + "Turn into Template", ~line 1480):
+        Change `flex items-center gap-2.5 shrink-0` to:
+        `flex items-center justify-end gap-1.5 sm:gap-2.5 w-full sm:w-auto shrink-0 pt-1 sm:pt-0 border-t border-white/[0.05] sm:border-t-0` (when `isActive` is true).
+      * "Test Rebrand" button (~line 1483): Change `px-3.5 py-2` to
+        `flex-1 sm:flex-initial justify-center px-2.5 py-1.5 sm:px-3.5 sm:py-2`.
+      * "Turn into Template" button (~line 1500): Change `px-4 py-2` to
+        `flex-1 sm:flex-initial justify-center px-3 py-1.5 sm:px-4 sm:py-2`.
+
+================================================================================
+PHASE 2: ACTIVE WORKSPACE — MOBILE MODE SWITCHER, VIBE ASSISTANT CHAT & LIVE PREVIEW (`src/components/TemplateLabPage.tsx`)
+================================================================================
+
+2.1 Critical Split-Pane Fix on Mobile (~lines 1523–1785)
+    - Issue on Mobile:
+      * Line 1523 is `flex flex-1 overflow-hidden min-h-0` (horizontal row).
+      * Line 1526 sets the Left Vibe Design Assistant sidebar to
+        `w-[420px] lg:w-[460px] xl:w-[480px]` when `isActive && !sidebarCollapsed`.
+      * On a 375px–414px mobile viewport, `w-[420px]` consumes >100% of the
+        screen width, pushing the entire Right-Hand Live Preview & Toolbar
+        (`flex-1`) to `0px` width! Even worse, the button to collapse the
+        sidebar (`setSidebarCollapsed`) lives inside the Right-Hand Preview
+        Toolbar, making it impossible for a mobile user to reach the Live
+        Preview or Code view once a site is generated or loaded.
+    - Mobile-Only Fix (Zero Desktop Impact):
+      * Add a dedicated **Mobile Workspace Mode Bar** (`flex md:hidden`) right
+        above the split workspace whenever `isActive` is true, with 3 instant
+        tactile tabs:
+        1. `AI Vibe Chat` (shows the Vibe Design Assistant panel full-width on
+           mobile: sets `sidebarCollapsed = false`)
+        2. `Live Preview` (shows the Live Website Preview canvas full-width on
+           mobile: sets `sidebarCollapsed = true` and `viewMode = 'preview'`)
+        3. `HTML Code` (shows the Code inspector full-width on mobile: sets
+           `sidebarCollapsed = true` and `viewMode = 'code'`)
+        Plus a quick status pill showing if the AI is currently streaming
+        (`generating` / `editing`), so if the user is on the Chat tab on mobile
+        and triggers an edit, or switches to Live Preview while streaming, they
+        have 1-tap access to both panes at 100% mobile screen width!
+      * Left Sidebar Sizing (~line 1526):
+        Change:
+        `isActive ? (sidebarCollapsed ? 'w-0 overflow-hidden border-r-0' : 'w-[420px] lg:w-[460px] xl:w-[480px]') : 'w-0 overflow-hidden border-r-0'`
+        To:
+        `isActive ? (sidebarCollapsed ? 'w-0 overflow-hidden border-r-0' : 'w-full md:w-[420px] lg:w-[460px] xl:w-[480px]') : 'w-0 overflow-hidden border-r-0'`
+      * Right Main Area Sizing (~line 1788):
+        When `isActive && !sidebarCollapsed`, hide the right pane on `< 768px`
+        (`hidden md:flex flex-1 flex-col overflow-hidden bg-[#070709] min-w-0`),
+        and when `sidebarCollapsed` is true (or `!isActive`), show it full-width
+        on all viewports (`flex flex-1 flex-col overflow-hidden bg-[#070709] min-w-0`).
+      * Result:
+        - On Desktop (`md:` and up): 100% identical side-by-side split view
+          (`md:w-[420px] lg:w-[460px] xl:w-[480px]`) with the existing collapse
+          button.
+        - On Mobile (`< 768px`): Both the AI Vibe Design Assistant and the Live
+          Preview / Code Canvas render at a crisp, full 100% mobile width with
+          instant 1-tap switching!
+
+2.2 Vibe Design Assistant Sidebar Internals (~lines 1530–1784)
+    - Assistant Sub-header (~line 1532):
+      * Change `px-5 py-3.5` to `px-3.5 py-2.5 sm:px-5 sm:py-3.5`.
+      * Model selector pills (`2.5 Flash`, `3.8 Flash`, `3.1 Pro`, ~line 1546):
+        Ensure compact padding on narrow screens (`px-1.5 sm:px-2 py-1 text-[10px]`)
+        so the header title and 3 model pills never collide on 360px screens.
+    - Chat History Feed (~line 1574):
+      * Change `p-4 space-y-3` to `p-3 sm:p-4 space-y-2.5 sm:space-y-3`.
+    - Bottom Prompt Composer (~line 1705):
+      * Change `p-4` to `p-3 sm:p-4`.
+      * Quick Edit Chips row (~line 1711): Keep `overflow-x-auto no-scrollbar`
+        and ensure touch-friendly chip sizing (`px-2.5 py-1.5 sm:py-1`).
+      * Textarea (~line 1742): Change `p-3.5 text-xs` to
+        `p-3 sm:p-3.5 text-[13px] sm:text-xs` to prevent iOS Safari zoom/cramping
+        while preserving desktop `sm:text-xs`.
+
+2.3 Active Preview Toolbar & Live Canvas (~lines 1957–2150)
+    - Top Preview Toolbar (~line 1958):
+      * Change `px-4 sm:px-6 py-3` to `px-3 sm:px-6 py-2 sm:py-3 gap-2 sm:gap-4`.
+      * Editable Template Name input (~line 2013): Change `w-44 sm:w-64` to
+        `w-32 sm:w-64` so it fits comfortably alongside device/view controls on
+        mobile.
+      * `BookingNoticeCard` (~line 2042): Wrap or allow compact horizontal
+        scroll inside the toolbar without pushing action buttons off-screen.
+      * Toolbar "Turn into Template" button (~line 2059): Change `px-4 py-2` to
+        `px-3 sm:px-4 py-1.5 sm:py-2`.
+    - Live Preview Frame Container (~lines 2070–2116):
+      * Outer container (~line 2070): On mobile when `device === 'mobile'`,
+        change `p-4 sm:p-8` to `p-2 sm:p-8` so the 390px mobile preview frame
+        has maximum breathing room on phone screens (`rounded-2xl sm:rounded-3xl border-2 sm:border-4`).
+    - HTML Code View Header (~lines 2121–2137):
+      * Change `px-6 py-3 bg-[#0f0f12] border-b border-white/[0.06] flex items-center justify-between`
+        to `px-3.5 sm:px-6 py-2.5 sm:py-3 bg-[#0f0f12] border-b border-white/[0.06] flex flex-wrap items-center justify-between gap-2`.
+      * Change `<pre>` padding (~line 2139) from `p-6` to `p-3.5 sm:p-6`.
+
+================================================================================
+PHASE 3: IDLE STUDIO LANDING VIEW & RECENT TEMPLATES (`src/components/TemplateLabPage.tsx`)
+================================================================================
+
+3.1 Idle Hero Prompt Card (~lines 1794–1914)
+    - Issue on Mobile:
+      * Outer wrapper (~line 1794) uses `px-4 sm:px-8 py-8` and Hero Card
+        (~line 1798) uses `p-8 sm:p-12 rounded-3xl`. On a 375px screen, `px-4` +
+        `p-8` (64px horizontal padding) narrows the prompt builder area and
+        causes the 3 LLM model selector buttons (`2.5 Flash`, `3.8 Flash (New)`,
+        `3.1 Pro`) to crowd or wrap awkwardly.
+    - Mobile-Only Fix:
+      * Outer wrapper (~line 1794): Change `px-4 sm:px-8 py-8 space-y-6` to
+        `px-3 sm:px-8 py-4 sm:py-8 space-y-4 sm:space-y-6`.
+      * Hero Card (~line 1798): Change `rounded-3xl p-8 sm:p-12` to
+        `rounded-2xl sm:rounded-3xl p-4 sm:p-12`.
+      * Hero Badge (~line 1801): Change `mb-5` to `mb-3.5 sm:mb-5`.
+      * Hero Heading (~line 1805): Change `text-3xl sm:text-4xl` to
+        `text-2xl sm:text-4xl`.
+      * Hero Subtitle (~line 1808): Change `text-sm sm:text-base ... mb-8` to
+        `text-xs sm:text-base ... mb-5 sm:mb-8`.
+      * LLM Engine Selector Bar (~lines 1815–1835):
+        - Change container from `inline-flex items-center gap-1.5 p-1.5 rounded-xl bg-black/50 border border-white/10`
+          to `flex sm:inline-flex items-center gap-1 sm:gap-1.5 p-1 sm:p-1.5 rounded-xl bg-black/50 border border-white/10 w-full sm:w-auto`.
+        - Change each model button (~line 1823) from `px-3 py-1.5 rounded-lg text-xs`
+          to `flex-1 sm:flex-initial justify-center px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs whitespace-nowrap`.
+      * Sample Prompt Pills (~lines 1851–1868):
+        - Change pill padding from `px-3 py-1.5` to `px-2.5 py-1.5 sm:px-3 text-[11px] sm:text-xs text-left`.
+      * Prompt Textarea (~line 1875):
+        - Change `p-5 text-sm` to `p-3.5 sm:p-5 text-sm`.
+      * "Generate Website" Primary CTA (~line 1902):
+        - Change `py-4 rounded-2xl text-base` to `py-3.5 sm:py-4 rounded-xl sm:rounded-2xl text-sm sm:text-base`.
+
+3.2 Recent Vibe Coded Templates Section (~lines 1916–1951)
+    - Card container (~line 1917): Change `rounded-3xl p-6 sm:p-8` to
+      `rounded-2xl sm:rounded-3xl p-4 sm:p-8`.
+    - Template item cards (~line 1930): Change `p-4` to `p-3.5 sm:p-4`.
+
+================================================================================
+PHASE 4: AI WEB STUDIO MODALS & REBRAND SUITE (`src/components/TemplateLabPage.tsx`)
+================================================================================
+
+4.1 "Turn into Template" Modal (`saveOpen`, ~lines 2156–2295)
+    - Overlay (~line 2157): Change `p-4` to `p-3 sm:p-4`.
+    - Modal Card (~line 2158): Change `rounded-3xl p-6 space-y-5` to
+      `rounded-2xl sm:rounded-3xl p-4 sm:p-6 space-y-4 sm:space-y-5 max-h-[92dvh] overflow-y-auto`.
+    - Action Footer (~line 2274): Ensure buttons (`Cancel` + `Publish Template`)
+      have clean mobile padding (`py-2.5 sm:py-3 text-xs sm:text-sm`).
+
+4.2 Niche Reassignment & Published Celebration Modals (~lines 2297–2360)
+    - Niche Reassignment Card (~line 2299): Change `rounded-[2rem] p-8` to
+      `rounded-2xl sm:rounded-[2rem] p-5 sm:p-8`.
+    - Celebration Modal Card (~line 2332): Change `rounded-[2rem] p-10` to
+      `rounded-2xl sm:rounded-[2rem] p-6 sm:p-10`.
+
+4.3 "Synthesizing Bespoke Website" Loading Modal (~lines 2385–2424)
+    - Modal Card (~line 2387): Change `rounded-3xl p-8` to
+      `rounded-2xl sm:rounded-3xl p-5 sm:p-8`.
+
+4.4 Automated Rebranding & Readiness Suite Modal (`showRebrandModal`, ~lines 2427–2964)
+    - Issue on Mobile:
+      1. Modal Header (~line 2432) uses `px-6 py-4` with title + readiness badge
+         inline, which wraps awkwardly on narrow screens.
+      2. "Configurable Test Business Profiles" header (~line 2565) has the title
+         and the 2-business switcher buttons (`Business 1` / `Business 2`) in a
+         horizontal `flex items-center justify-between` row that overflows on
+         375px screens.
+      3. "Run Rebrand Test" bar (~line 2698) places the description text and
+         action button side-by-side without mobile stacking.
+      4. Live Rebranded Output Simulation iframe (~line 2889) uses a hardcoded
+         `w-[375px]` when `rebrandPreviewDevice === 'mobile'`, which overflows
+         horizontally inside a padded modal on a 375px phone screen!
+      5. Modal Footer (~line 2913) places "Close Suite" and "Approve & Publish
+         Template" in a tight horizontal row.
+    - Mobile-Only Fixes:
+      * Overlay (~line 2428): Change `p-4 sm:p-6` to `p-2.5 sm:p-6`.
+      * Modal Shell (~line 2429): Change `rounded-3xl max-h-[90vh]` to
+        `rounded-2xl sm:rounded-3xl max-h-[94dvh] sm:max-h-[90vh]`.
+      * Modal Header (~line 2432): Change `px-6 py-4` to
+        `px-4 py-3 sm:px-6 sm:py-4`, and allow the title + readiness pill row
+        (~line 2438) to wrap cleanly (`flex flex-wrap items-center gap-2 sm:gap-3`).
+      * Modal Body (~line 2473): Change `p-6 space-y-6` to
+        `p-3.5 sm:p-6 space-y-4 sm:space-y-6`.
+      * Readiness Audit Banner (~line 2476): Change `p-5` to `p-3.5 sm:p-5`.
+      * Configurable Test Business Profiles Header (~line 2565):
+        - Change `flex items-center justify-between` to
+          `flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3`.
+        - Change Business 1 / Business 2 switcher container (~line 2573) from
+          `flex items-center gap-1.5` to `grid grid-cols-2 sm:flex items-center gap-1.5 w-full sm:w-auto`.
+        - Add ` truncate text-center` to the switcher buttons so long business
+          names fit cleanly on mobile.
+      * "Run Rebrand Test" Bar (~line 2698):
+        - Change `flex items-center justify-between pt-2 border-t border-white/[0.06]`
+          to `flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 sm:pt-2 border-t border-white/[0.06]`.
+        - Make the "Run Rebrand Test" button (~line 2704) `w-full sm:w-auto justify-center`.
+      * Live Rebranded Output Simulation Header (~line 2838):
+        - Change `px-5 py-3.5` to `px-3.5 py-2.5 sm:px-5 sm:py-3.5`.
+      * Live Rebranded Output Simulation Iframe (~line 2889):
+        - Change `rebrandPreviewDevice === 'mobile' ? 'w-[375px] h-[560px]' : 'w-full h-[520px]'`
+          to `rebrandPreviewDevice === 'mobile' ? 'w-full max-w-[375px] h-[480px] sm:h-[560px]' : 'w-full h-[460px] sm:h-[520px]'`.
+      * Modal Footer (~line 2913):
+        - Change `flex items-center justify-between px-6 py-4` to
+          `flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 px-4 py-3.5 sm:px-6 sm:py-4`.
+        - Make footer buttons ("Close Suite", "Test Another Business",
+          "Approve & Publish Template") full-width or equal-grid on mobile
+          (`w-full sm:w-auto justify-center`).
+
+================================================================================
+PHASE 5: SITE EDITOR & CUSTOM TEMPLATE BUILDER (`src/components/Editor.tsx`)
+================================================================================
+
+5.1 Site Editor List View (`view === 'list'`, ~lines 523–728)
+    - Hero Header (~line 545):
+      * Change `p-6 sm:p-8` to `p-4 sm:p-8`.
+      * Right Action Buttons ("📱 Preview Owner PWA" + "Refresh", ~line 557):
+        Change `flex items-center gap-2 self-start sm:self-auto` to
+        `flex flex-wrap items-center gap-2 w-full sm:w-auto`.
+        Make buttons `flex-1 sm:flex-initial justify-center`.
+    - `TemplateLabBanner` (~lines 1168–1215):
+      * Change `p-6 sm:p-7` to `p-4 sm:p-7`.
+      * Make the "Launch AI Web Studio" button (~line 1205) `w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-3.5 text-sm sm:text-base`.
+
+5.2 Site Editor Live Canvas & Toolbar (`view === 'edit'`, ~lines 733–1078)
+    - Top Editor Toolbar (~lines 738–870):
+      * Change `p-3` to `p-2.5 sm:p-3 gap-2 sm:gap-3`.
+      * Enable the Desktop/Mobile Preview Switcher (~line 781) on all screens
+        by changing `hidden sm:flex` to `flex` so mobile users can also toggle
+        between Desktop and Mobile simulation frames.
+      * Action Buttons Row (~line 799): Change `flex items-center gap-2 flex-wrap`
+        to `flex items-center gap-1.5 sm:gap-2 flex-wrap w-full sm:w-auto justify-start sm:justify-end`.
+      * Compact button padding on mobile (`px-2.5 sm:px-3 py-1.5 text-xs`) so
+        `Edit`, `Add-ons`, `Generate Owner PWA`, `Preview Owner PWA`, `Save`,
+        and `Redeploy` fit cleanly without horizontal overflow.
+    - Popover Panels & Modals (`imgPanel`, `addonsPanel`, `deployInfo`, ~lines 874–1040):
+      * Change modal card padding from `p-5` / `p-6` to `p-4 sm:p-5` / `p-4 sm:p-6`.
+      * In `imgPanel` custom image URL row (~line 924): Allow the input + "Apply"
+        button to stack or wrap cleanly on narrow screens (`flex-col sm:flex-row`).
+    - Touch-Friendly Template Deletion in `BrowseTemplatesSheet` (~line 1926):
+      * Change `opacity-0 group-hover:opacity-100` on the delete button to
+        `opacity-100 sm:opacity-0 sm:group-hover:opacity-100` so mobile users
+        (who do not have cursor hover) can see and tap the delete button on
+        custom templates.
+    - `CreateTemplateModal` Save Bar (~line 1628):
+      * Change the `Download HTML` + `Save Template` button group from
+        `flex items-center gap-2 ml-auto` to
+        `grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto sm:ml-auto`
+        with `justify-center` on both buttons so they never clip on 360px screens.
+
+================================================================================
+VERIFICATION CHECKLIST
+================================================================================
+- [ ] Desktop UI (`>= 640px` / `>= 768px`) is 100% visually and behaviorally
+      unchanged across AI Web Studio and Site Editor.
+- [ ] Mobile users in AI Web Studio can seamlessly switch between the AI Vibe
+      Design Assistant chat, the Live Website Preview, and the HTML Code view at
+      full 100% mobile screen width.
+- [ ] All 5 modals in `TemplateLabPage.tsx` (including the Automated Rebranding &
+      Readiness Suite and its 375px mobile preview iframe) fit cleanly on
+      360px–414px viewports with zero horizontal overflow.
+- [ ] `compile_applet` and `lint_applet` pass with 0 errors.
+================================================================================

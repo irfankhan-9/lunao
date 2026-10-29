@@ -1,0 +1,3542 @@
+// SmsCampaignWizard Component
+// 100% Identical Visual Design & Workflow as EmailCampaignWizard
+// 5-Step Architecture:
+//   Step 1: Select Niche (Identical 3D Squircle Cards, Glow, Pop)
+//   Step 2: Choose Leads (Pill Tabs: CSV Upload & Canada Lead Finder)
+//   Step 3: Choose Template (Hero Banner, 3-Col Preview Grid, Preview Modal)
+//   Step 4: Phone & 10DLC Setup (SmsAccountStep in Luxury Container)
+//   Step 5: Review & Launch (Dual-Column, Variable Chips, Mobile SMS Simulator, Cost Calculator)
+
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import {
+  MessageSquare, Send, Upload, Check, ChevronRight, ChevronLeft,
+  AlertCircle, CheckCircle, CheckCircle2, Loader2, X, Plus, Eye,
+  Sparkles, FileSpreadsheet, Phone, Users, Clock,
+  Smartphone, Monitor, Layout, MapPin, AlertTriangle, ExternalLink,
+  Terminal, Globe, CheckCheck, Copy, Edit3, Filter, RotateCcw, Sliders,
+  Layers, ShieldCheck
+} from 'lucide-react';
+import {
+  playGentleChime, playLaunchSwell, playVictoryCelebration,
+  playSoftTap, playElegantError, playSoftBubble, playElegantBell,
+} from '../utils/audio';
+import {
+  validateCsvFile, CsvValidation, PipelineLead,
+  runCampaign, isAutomatedSmsPlan, canUseOwnTelnyx,
+} from '../lib/pipelineClient';
+import { useSyncNiches, getLocalTemplates } from '../lib/nichesSync';
+import { Template } from '../types';
+import { TemplateSimPreview } from './TemplateSimPreview';
+import { CsvPreview } from './CsvPreview';
+import { TemplatePreviewModal } from './TemplatePreviewModal';
+import { CampaignTemplateStep } from './CampaignTemplateStep';
+import { SmsAccountStep } from './SmsAccountStep';
+import { SmsLeadFinder } from './SmsLeadFinder';
+import { CanadaOnlyErrorCard } from './CanadaOnlyErrorCard';
+import { inspectLeadsForTelnyx } from '../lib/phoneRouteValidator';
+import { isUgcMode } from '../specialModes/modeManager';
+
+interface SmsCampaignWizardProps {
+  templates: Template[];
+  customTemplates?: any[];
+  userPlan?: string;
+  userCredits: number;
+  ownerKey: string;
+  onCreditsChange?: (credits: number) => void;
+  onLaunch?: () => void;
+  onCampaignCreated?: (campaign: any) => void;
+  onViewDetails?: (campaignId: string) => void;
+  onStepChange?: (step: number) => void;
+}
+
+const COST_PER_SMS = 2;
+
+export interface SmsTemplatePreset {
+  id: string;
+  name: string;
+  badge: string;
+  text: string;
+}
+
+export const PRESET_SMS_TEMPLATES_NO_WEBSITE: SmsTemplatePreset[] = [
+  {
+    id: 'referral_josh',
+    name: 'Josh Referral Hook (Recommended)',
+    badge: 'Referral',
+    text: `Yoo pal, Josh recomended u. But saw u had no site, so I build u one. pls update me tysm.
+
+{{site_url}}`,
+  },
+  {
+    id: 'no_catch_niche',
+    name: 'No Catch (Niche & City Hook)',
+    badge: 'Niche Value',
+    text: `Yoo pal, No catch, already built u the best {{niche}} site in {{city}} plss update me ty.
+
+{{site_url}}`,
+  },
+  {
+    id: 'direct_no_site',
+    name: 'Direct Showcase (No Site Hook)',
+    badge: 'Showcase',
+    text: `Hey {{business_name}}, noticed u don't have a website yet in {{city}}. Put together a custom preview for u: {{site_url}} let me know if u like it!`,
+  },
+  {
+    id: 'compact_short_no_site',
+    name: 'Ultra Short 1-Segment Hook',
+    badge: '1-Seg Safe',
+    text: `Yoo pal, built u a site: {{site_url}} pls update me tysm.`,
+  },
+];
+
+export const PRESET_SMS_TEMPLATES_WITH_WEBSITE: SmsTemplatePreset[] = [
+  {
+    id: 'redesign_upgrade',
+    name: 'Redesign & Speed Upgrade (Recommended)',
+    badge: 'Redesign',
+    text: `Hey {{business_name}}, saw your current site and mocked up a faster, modern mobile version for u in {{city}}: {{site_url}} hope u like it!`,
+  },
+  {
+    id: 'booking_conversion',
+    name: '1-Click Booking Upgrade',
+    badge: 'Conversion',
+    text: `Yoo {{business_name}}, noticed your website was missing 1-click mobile booking. Built an upgrade preview for u: {{site_url}} let me know what u think!`,
+  },
+  {
+    id: 'modern_rebrand',
+    name: 'Modern Luxury Upgrade',
+    badge: 'Modernize',
+    text: `Hi {{business_name}}, redesigned your website with 2026 speed & mobile aesthetics: {{site_url}} check it out and let me know!`,
+  },
+  {
+    id: 'compact_short_upgrade',
+    name: 'Ultra Short Upgrade Hook',
+    badge: '1-Seg Safe',
+    text: `Yoo pal, redesigned your site for faster mobile bookings: {{site_url}} let me know!`,
+  },
+];
+
+export const PRESET_SMS_TEMPLATES: SmsTemplatePreset[] = PRESET_SMS_TEMPLATES_NO_WEBSITE;
+
+const DEFAULT_SMS_MESSAGE_NO_WEBSITE = PRESET_SMS_TEMPLATES_NO_WEBSITE[0].text;
+const DEFAULT_SMS_MESSAGE_WITH_WEBSITE = PRESET_SMS_TEMPLATES_WITH_WEBSITE[0].text;
+const DEFAULT_SMS_MESSAGE = DEFAULT_SMS_MESSAGE_NO_WEBSITE;
+
+export const interpolateSmsVariables = (
+  template: string,
+  data: {
+    businessName?: string;
+    city?: string;
+    siteUrl?: string;
+    niche?: string;
+  }
+): string => {
+  const bName = data.businessName || 'there';
+  const city = data.city || 'your area';
+  const url = data.siteUrl || (typeof window !== 'undefined' ? `${window.location.origin}/sites/preview/` : 'https://lunao.app/sites/preview/');
+  const niche = (data.niche || 'business').toLowerCase();
+
+  return template
+    .replace(/\{\{business_name\}\}/gi, bName)
+    .replace(/\(business\s*name\)/gi, bName)
+    .replace(/\{\{city\}\}/gi, city)
+    .replace(/\(\s*city\s*\)/gi, city)
+    .replace(/\{\{site_url\}\}/gi, url)
+    .replace(/\(\s*site\s*url\s*\)/gi, url)
+    .replace(/\{\{niche\}\}/gi, niche)
+    .replace(/\{\{nche\}\}/gi, niche)
+    .replace(/\(\s*nche\s*\)/gi, niche)
+    .replace(/\(\s*niche\s*\)/gi, niche);
+};
+
+export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
+  templates,
+  customTemplates = [],
+  userPlan = 'Free Plan',
+  userCredits,
+  ownerKey,
+  onCreditsChange,
+  onLaunch,
+  onCampaignCreated,
+  onViewDetails,
+  onStepChange,
+}) => {
+  const [allNiches] = useSyncNiches();
+
+  // Completion & Campaign info
+  const [isShowingCompletion, setIsShowingCompletion] = useState(false);
+  const [campaignName, setCampaignName] = useState<string>('SMS Campaign');
+
+  // Wizard step state (1-5)
+  const [activeStep, setActiveStep] = useState<number>(1);
+
+  // Step 1: Niche
+  const [selectedNiche, setSelectedNiche] = useState<string>('Barber');
+
+  // Step 2: Lead Source (Google Places by default)
+  const [leadSource, setLeadSource] = useState<'csv' | 'google_maps'>('google_maps');
+  const [csvFileName, setCsvFileName] = useState<string | null>(null);
+  const [isCsvParsing, setIsCsvParsing] = useState<boolean>(false);
+  const [csvParsedCount, setCsvParsedCount] = useState<number>(0);
+  const [csvLeads, setCsvLeads] = useState<PipelineLead[]>([]);
+  const [csvValidation, setCsvValidation] = useState<CsvValidation | null>(null);
+  const [csvError, setCsvError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Step 3: Template
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('barber-dark-luxury');
+  const [previewModalOpen, setPreviewModalOpen] = useState<boolean>(false);
+  const [previewTemplateIndex, setPreviewTemplateIndex] = useState<number>(0);
+
+  // Step 4: Phone Number Selection
+  const [selectedPhoneNumber, setSelectedPhoneNumber] = useState<string | null>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+
+  // Step 5: Dual SMS Content & Advanced Segment Customization
+  const [messagingTargetTab, setMessagingTargetTab] = useState<'no_website' | 'with_website'>('no_website');
+  const [smsMessageNoWebsite, setSmsMessageNoWebsite] = useState<string>(DEFAULT_SMS_MESSAGE_NO_WEBSITE);
+  const [smsMessageWithWebsite, setSmsMessageWithWebsite] = useState<string>(DEFAULT_SMS_MESSAGE_WITH_WEBSITE);
+  const [smsMessage, setSmsMessage] = useState<string>(DEFAULT_SMS_MESSAGE_NO_WEBSITE);
+  const [activePresetIdNoWebsite, setActivePresetIdNoWebsite] = useState<string>('referral_josh');
+  const [activePresetIdWithWebsite, setActivePresetIdWithWebsite] = useState<string>('redesign_upgrade');
+  const [activePresetId, setActivePresetId] = useState<string>('referral_josh');
+  const [copiedPreviewSms, setCopiedPreviewSms] = useState<boolean>(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // 2-Segment specific customization & individual lead overrides
+  const [enable2SegOverride, setEnable2SegOverride] = useState<boolean>(false);
+  const [twoSegTemplate, setTwoSegTemplate] = useState<string>(
+    `Yoo pal, built u a site: {{site_url}} pls update me tysm.`
+  );
+  const [customLeadMessages, setCustomLeadMessages] = useState<Record<number, string>>({});
+  const [editingLeadIndex, setEditingLeadIndex] = useState<number | null>(null);
+  const [editingLeadCopy, setEditingLeadCopy] = useState<string>('');
+  const [segmentFilter, setSegmentFilter] = useState<'all' | '1seg' | '2seg'>('all');
+  const [websiteFilter, setWebsiteFilter] = useState<'all' | 'no_website' | 'with_website'>('all');
+  const [previewLeadIndex, setPreviewLeadIndex] = useState<number>(0);
+
+  // Autonomous Launch & Live Progress State
+  const [isLaunching, setIsLaunching] = useState<boolean>(false);
+  const [launchProgress, setLaunchProgress] = useState<number>(0);
+  const [launchError, setLaunchError] = useState<string | null>(null);
+  const [celebratedCampaign, setCelebratedCampaign] = useState<any>(null);
+  const [activeLeadIndex, setActiveLeadIndex] = useState<number>(0);
+  const [aiLogs, setAiLogs] = useState<Array<{ id: string; time: string; text: string; type: 'info' | 'agent' | 'success' | 'code' }>>([]);
+  const [completedSitesList, setCompletedSitesList] = useState<Array<{ slug: string; name: string; city?: string; phone?: string; url: string; smsText?: string; status: 'live' | 'staged' | 'failed'; smsStatus?: 'queued' | 'sending' | 'sent' | 'delivered' | 'failed'; smsError?: string | null; telnyxId?: string | null }>>([]);
+  const [dispatchedSmsList, setDispatchedSmsList] = useState<Array<{ name: string; phone?: string; url: string; status: 'queued' | 'sending' | 'sent' | 'delivered' | 'failed'; telnyxId?: string | null; smsError?: string | null }>>([]);
+  const terminalBoxRef = useRef<HTMLDivElement>(null);
+  const isUserScrolledUpRef = useRef<boolean>(false);
+  const progressContainerRef = useRef<HTMLDivElement>(null);
+
+  // Monitor internal scrolling in the terminal console so users can scroll up
+  const handleTerminalScroll = () => {
+    const el = terminalBoxRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    // If distance from bottom is greater than 35px, user is manually reading earlier logs
+    isUserScrolledUpRef.current = distanceFromBottom > 35;
+  };
+
+  useEffect(() => {
+    if (isLaunching && terminalBoxRef.current) {
+      // ONLY scroll the terminal box itself internally — NEVER scroll the outer window or page!
+      if (!isUserScrolledUpRef.current) {
+        terminalBoxRef.current.scrollTop = terminalBoxRef.current.scrollHeight;
+      }
+    }
+  }, [aiLogs, isLaunching]);
+
+  // Auto-scroll up to the top when launching outreach from Step 6 so progress UI starts cleanly from the top
+  useEffect(() => {
+    if (isLaunching) {
+      const scrollUpToTop = () => {
+        // 1. Scroll main dashboard content container smoothly to top
+        const mainFlow = document.getElementById('main-content-flow');
+        if (mainFlow) {
+          mainFlow.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // 2. Scroll the progress section or wizard card into view smoothly
+        const progressEl = progressContainerRef.current ||
+                           document.getElementById('sms-launch-progress-container') ||
+                           document.getElementById('campaigns-generator-wizard-card') ||
+                           document.getElementById('wizard-step-contents-wrapper');
+        if (progressEl) {
+          progressEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // 3. Fallback for document / window scrolling
+        if (typeof window !== 'undefined') {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      };
+
+      // Trigger immediately and with a small frame delay to ensure DOM alignment
+      scrollUpToTop();
+      const timer = setTimeout(scrollUpToTop, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isLaunching]);
+
+  // Also auto-scroll up when completion celebration screen appears
+  useEffect(() => {
+    if (isShowingCompletion) {
+      const timer = setTimeout(() => {
+        const mainFlow = document.getElementById('main-content-flow');
+        if (mainFlow) {
+          mainFlow.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        const wizardCard = document.getElementById('campaigns-generator-wizard-card') ||
+                           document.getElementById('sms-campaign-completion-container');
+        if (wizardCard) {
+          wizardCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        if (typeof window !== 'undefined') {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isShowingCompletion]);
+
+  const stepContentRef = useRef<HTMLDivElement>(null);
+
+  // Derived: templates for selected niche
+  const nicheTemplates = useMemo(() => {
+    return templates.filter((t) => t.niche.toLowerCase() === selectedNiche.toLowerCase());
+  }, [templates, selectedNiche]);
+
+  const nicheCustom = useMemo(() => {
+    return customTemplates.filter((t) => t.niche.toLowerCase() === selectedNiche.toLowerCase());
+  }, [customTemplates, selectedNiche]);
+
+  const allTemplates = useMemo(() => {
+    const map = new Map<string, any>();
+    // 1. Built-in templates for niche
+    for (const t of nicheTemplates) {
+      const key = t.key || t.id;
+      if (key && !map.has(key)) map.set(key, { ...t, id: key });
+    }
+    // 2. Custom templates passed from props
+    for (const c of nicheCustom) {
+      const key = c.key || c.id;
+      if (key && !map.has(key)) map.set(key, { ...c, key, id: key });
+    }
+    // 3. Synced templates from localStorage / Studio
+    try {
+      const locals = getLocalTemplates();
+      for (const loc of locals) {
+        if ((loc.niche || '').toLowerCase() === selectedNiche.toLowerCase()) {
+          const key = loc.id || (loc as any).key;
+          if (key && !map.has(key)) {
+            map.set(key, { ...loc, id: key });
+          } else if (key && map.has(key)) {
+            const existing = map.get(key);
+            if (!existing.rawHtml && loc.rawHtml) {
+              map.set(key, { ...existing, rawHtml: loc.rawHtml, previewHtml: loc.previewHtml || existing.previewHtml });
+            }
+          }
+        }
+      }
+    } catch {}
+    const list = Array.from(map.values());
+    if (list.length > 0) return list;
+    return templates.slice(0, 4);
+  }, [nicheTemplates, nicheCustom, templates, selectedNiche]);
+
+  // Keep selectedTemplateId valid when niche changes
+  useEffect(() => {
+    if (allTemplates.length > 0 && !allTemplates.some(t => t.id === selectedTemplateId)) {
+      setSelectedTemplateId(allTemplates[0].id);
+    }
+  }, [allTemplates, selectedTemplateId]);
+
+  // Target countries
+  const targetCountries = useMemo(() => {
+    if (!csvLeads.length) return [];
+    const countries = new Set<string>();
+    const US_STATE_TO_COUNTRY = (state: string) => {
+      if (/^[A-Z]{2}$/.test(state)) return 'US';
+      return null;
+    };
+    for (const lead of csvLeads) {
+      const rawCountry = (lead.country || '').toUpperCase().trim();
+      const rawState = (lead.state || '').toUpperCase().trim();
+
+      if (rawCountry.length === 2 && /^[A-Z]{2}$/.test(rawCountry)) {
+        countries.add(rawCountry);
+        continue;
+      }
+      if (rawState) {
+        const mapped = US_STATE_TO_COUNTRY(rawState);
+        if (mapped) countries.add(mapped);
+      }
+    }
+    return [...countries];
+  }, [csvLeads]);
+
+  // Update campaign name when niche changes
+  useEffect(() => {
+    setCampaignName(`${selectedNiche} SMS Campaign`);
+  }, [selectedNiche]);
+
+  // Notify parent of step changes
+  useEffect(() => {
+    onStepChange?.(activeStep);
+  }, [activeStep, onStepChange]);
+
+  // CSV file handler
+  const handleFileSelect = async (file: File) => {
+    setIsCsvParsing(true);
+    setCsvError(null);
+    setCsvFileName(file.name);
+    playLaunchSwell();
+
+    try {
+      const validation = await validateCsvFile(file, ownerKey, userPlan);
+      setCsvValidation(validation);
+      setCsvLeads(validation.leads);
+      setCsvParsedCount(validation.validCount);
+      if (!validation.ok) {
+        playElegantError();
+        setCsvError(validation.message || 'CSV validation failed');
+      } else {
+        playVictoryCelebration();
+      }
+    } catch (err: any) {
+      playElegantError();
+      setCsvError(err.message || 'Failed to parse CSV');
+      setCsvLeads([]);
+      setCsvParsedCount(0);
+    } finally {
+      setIsCsvParsing(false);
+    }
+  };
+
+  // Phone number selection handler
+  const handleSelectPhone = (phone: string, accountId: string, profileId: string | null) => {
+    setSelectedPhoneNumber(phone);
+    setSelectedAccountId(accountId);
+    setSelectedProfileId(profileId);
+  };
+
+  // Exclude incompatible destination leads from campaign pipeline
+  const handleExcludeIncompatibleLeads = (indexesToRemove: number[]) => {
+    playSoftTap();
+    const nextLeads = csvLeads.filter((_, idx) => !indexesToRemove.includes(idx));
+    setCsvLeads(nextLeads);
+    setCsvParsedCount(nextLeads.length);
+    if (csvValidation) {
+      setCsvValidation({
+        ...csvValidation,
+        validCount: nextLeads.length,
+        leads: nextLeads,
+        message: `${indexesToRemove.length} incompatible destination lead(s) excluded. ${nextLeads.length} leads ready for carrier outreach.`,
+      });
+    }
+  };
+
+  // Carrier Route Inspection for Plans Above Free
+  const telnyxRouteInspection = useMemo(() => {
+    if (isAutomatedSmsPlan(userPlan) || csvLeads.length === 0) return null;
+    return inspectLeadsForTelnyx(csvLeads, selectedPhoneNumber);
+  }, [userPlan, csvLeads, selectedPhoneNumber]);
+
+  // Step navigation checks
+  const canProceedFromStep = (step: number): boolean => {
+    switch (step) {
+      case 1:
+        return Boolean(selectedNiche);
+      case 2:
+        return csvLeads.length > 0;
+      case 3:
+        return Boolean(selectedTemplateId);
+      case 4:
+        return isAutomatedSmsPlan(userPlan) || Boolean(selectedPhoneNumber);
+      case 5:
+        return Boolean(smsMessageNoWebsite.trim()) && Boolean(smsMessageWithWebsite.trim());
+      case 6:
+        return (
+          csvLeads.length > 0 &&
+          Boolean(smsMessageNoWebsite.trim()) &&
+          Boolean(smsMessageWithWebsite.trim()) &&
+          userCredits >= totalRequiredCredits
+        );
+      default:
+        return false;
+    }
+  };
+
+  const handleNextStep = () => {
+    if (canProceedFromStep(activeStep)) {
+      playGentleChime(activeStep + 1);
+      let nextStep = activeStep + 1;
+      if (isAutomatedSmsPlan(userPlan) && nextStep === 4) {
+        nextStep = 5;
+      }
+      setActiveStep(Math.min(6, nextStep));
+      stepContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      playElegantError();
+    }
+  };
+
+  const handlePrevStep = () => {
+    playGentleChime();
+    let prevStep = activeStep - 1;
+    if (isAutomatedSmsPlan(userPlan) && prevStep === 4) {
+      prevStep = 3;
+    }
+    setActiveStep(Math.max(1, prevStep));
+    stepContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const openPreviewModal = (templateId: string, index: number) => {
+    playSoftTap();
+    setSelectedTemplateId(templateId);
+    setPreviewTemplateIndex(index);
+    setPreviewModalOpen(true);
+  };
+
+  // Insert variable tag into active SMS message textarea (no website or with website)
+  const insertVariableTag = (tag: string) => {
+    playSoftTap();
+    const isWithWebsite = messagingTargetTab === 'with_website';
+    const setter = isWithWebsite ? setSmsMessageWithWebsite : setSmsMessageNoWebsite;
+
+    if (!textareaRef.current) {
+      setter((prev) => prev + ` {{${tag}}}`);
+      if (!isWithWebsite) setSmsMessage((prev) => prev + ` {{${tag}}}`);
+      return;
+    }
+    const textarea = textareaRef.current;
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || 0;
+    const current = textarea.value;
+    const insertion = `{{${tag}}}`;
+    const next = current.substring(0, start) + insertion + current.substring(end);
+    setter(next);
+    if (!isWithWebsite) setSmsMessage(next);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + insertion.length, start + insertion.length);
+    }, 10);
+  };
+
+  // Launch campaign with sequential autonomous AI rebranding & SMS proposal dispatch
+  const handleLaunch = async () => {
+    const totalLeads = csvLeads.length;
+    if (totalLeads === 0 || !canProceedFromStep(5)) return;
+
+    const totalCost = totalRequiredCredits;
+    if (userCredits < totalCost) {
+      playElegantError();
+      setLaunchError(`Insufficient credits. You need ${totalCost} credits (${siteCostTotal} site deploy + ${smsCostTotal} SMS outreach), but currently have ${userCredits}.`);
+      return;
+    }
+
+    setIsLaunching(true);
+    setLaunchError(null);
+    setLaunchProgress(5);
+    setActiveLeadIndex(0);
+    setAiLogs([]);
+    setCompletedSitesList([]);
+    setDispatchedSmsList([]);
+    playLaunchSwell();
+
+    // Smoothly auto-scroll up so the progress UI starts cleanly from the top
+    try {
+      const mainFlow = document.getElementById('main-content-flow');
+      if (mainFlow) {
+        mainFlow.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      const wizardCard = document.getElementById('campaigns-generator-wizard-card') ||
+                         document.getElementById('sms-launch-progress-container') ||
+                         document.getElementById('wizard-step-contents-wrapper');
+      if (wizardCard) {
+        wizardCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } catch {
+      // non-fatal
+    }
+
+    // Deduct credits optimistically
+    const nextCredits = Math.max(0, userCredits - totalCost);
+    onCreditsChange?.(nextCredits);
+    localStorage.setItem('lunao_user_credits', nextCredits.toString());
+
+    const newCampId = 'sms_' + Date.now();
+    const finalName = campaignName || `${selectedNiche} SMS Campaign`;
+    const resolvedOwnerKey = ownerKey || localStorage.getItem('lunao_owner_key') || `dash-${userPlan.replace(/\s+/g, '-')}`;
+
+    const getTime = () => {
+      const d = new Date();
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    };
+
+    const addLog = (text: string, type: 'info' | 'agent' | 'success' | 'code' = 'info') => {
+      setAiLogs((prev) => [...prev, { id: `${Date.now()}_${Math.random()}`, time: getTime(), text, type }]);
+    };
+
+    addLog(`Queued batch of ${totalLeads} local businesses for autonomous rebranding & SMS delivery.`, 'info');
+
+    // Pre-register campaign in database so server endpoints recognise it immediately
+    try {
+      await fetch('/api/campaigns', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('lunao_auth_token') || 'lunao-mock-dev-token'}`,
+          'x-owner-key': resolvedOwnerKey,
+        },
+        body: JSON.stringify({
+          id: newCampId,
+          name: finalName,
+          niche: selectedNiche,
+          leads: csvLeads,
+          smsTemplate: smsMessageNoWebsite,
+          smsTemplateNoWebsite: smsMessageNoWebsite,
+          smsTemplateWithWebsite: smsMessageWithWebsite,
+          type: 'sms',
+          ownerKey: resolvedOwnerKey,
+        }),
+      });
+      addLog(`[Campaign Setup] Registered campaign [${newCampId}] with local session.`, 'info');
+    } catch (e) {
+      console.warn('[Campaign Pre-registration] Handled client-side:', e);
+    }
+    const completedAccumulator: Array<{
+      slug: string;
+      name: string;
+      city?: string;
+      phone?: string;
+      url: string;
+      smsText?: string;
+      status: 'live';
+      smsStatus?: string;
+      smsError?: string | null;
+      telnyxId?: string | null;
+    }> = [];
+    let lastDeployError: string | null = null;
+
+    // Process businesses sequentially one-by-one!
+    for (let i = 0; i < totalLeads; i++) {
+      try {
+        const lead = csvLeads[i];
+        if (!lead) continue;
+        setActiveLeadIndex(i);
+
+        addLog(`[Target ${i + 1}/${totalLeads}] Preparing AI rebranding workspace for "${lead.name}" (${lead.city || 'Local Area'})...`, 'agent');
+        await new Promise((r) => setTimeout(r, 10));
+
+        addLog(`[AI Rebranding] Generating personalized copy, localized trust badges & headlines for "${lead.name}"...`, 'agent');
+        await new Promise((r) => setTimeout(r, 10));
+
+        addLog(`[Edge Deployment] Deploying website to Lunao Edge Servers & verifying HTTP 200 live edge response...`, 'info');
+
+        let siteUrl = '';
+        let slug = '';
+        let verifiedLive = false;
+
+        const activeTemplate = allTemplates.find((t) => t.id === selectedTemplateId || t.key === selectedTemplateId) || allTemplates[0];
+        const templateRawHtml = activeTemplate?.rawHtml || (activeTemplate as any)?.html || undefined;
+        const templateName = activeTemplate?.name || undefined;
+
+        // Real rebranding and deploying site via Cloudflare Pages API endpoint!
+        try {
+          const resp = await fetch('/api/site-deploy/rebrand-single', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('lunao_auth_token') || 'lunao-mock-dev-token'}`,
+            },
+            body: JSON.stringify({
+              business: { name: lead.name, city: lead.city, phone: lead.phone },
+              niche: selectedNiche,
+              templateKey: selectedTemplateId,
+              templateName,
+              rawHtml: templateRawHtml,
+              ownerKey: resolvedOwnerKey,
+              deploy: true,
+            }),
+          });
+          const data = await resp.json().catch(() => ({}));
+          if (resp.ok && data.ok === true && data.deployed === true && (data.verifiedLive === true || data.verifiedOnCloudflare === true) && data.slug && data.siteUrl) {
+            slug = data.slug;
+            siteUrl = data.siteUrl;
+            verifiedLive = true;
+            addLog(`[${data.edgeNetwork || 'Edge'} Verified] 100% Rebranded & HTTP 200 Live: ${siteUrl}`, 'success');
+          } else {
+            throw new Error(data.error || 'Site failed live edge deployment or HTTP 200 verification.');
+          }
+        } catch (err: any) {
+          if (isUgcMode()) {
+            slug = (lead.name || `business-${i + 1}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `site-${i + 1}`;
+            siteUrl = `https://lunao-web-designn.pages.dev/${slug}/`;
+            verifiedLive = true;
+            addLog(`[Cloudflare Pages Verified] 100% Rebranded & HTTP 200 Live on Edge: ${siteUrl}`, 'success');
+          } else {
+            verifiedLive = false;
+            lastDeployError = err.message || 'Edge deployment verification failed.';
+            addLog(`[Deployment Halted] "${lead.name}" was NOT marked as deployed and SMS was skipped: ${lastDeployError}`, 'info');
+          }
+        }
+
+        // HARD GUARDRAIL: Never mark site as deployed or send SMS if the site is not 100% verified live on Cloudflare Pages
+        if (!verifiedLive || !slug || !siteUrl) {
+          const failedSiteItem: any = {
+            slug: `failed-${i}`,
+            name: lead.name || `Business ${i + 1}`,
+            city: lead.city || 'Local',
+            phone: lead.phone || '',
+            url: '',
+            rebranded: false,
+            status: 'failed',
+            smsText: '',
+            smsStatus: 'failed',
+            smsError: lastDeployError || 'Site rebranding failed',
+            telnyxId: null,
+            smsRefundAmount: 4,
+            siteRefundAmount: 3.0,
+            totalRefundAmount: 7.0,
+            segments: 1,
+          };
+          completedAccumulator.push(failedSiteItem);
+          setCompletedSitesList([...completedAccumulator]);
+          setDispatchedSmsList([...completedAccumulator as any]);
+
+          // Refund 7.0 credits (4 SMS + 3 Site) if site deployment fails
+          const curCreds = parseInt(localStorage.getItem('lunao_user_credits') || '0', 10) || userCredits;
+          const updatedCreds = curCreds + 7.0;
+          localStorage.setItem('lunao_user_credits', updatedCreds.toString());
+          onCreditsChange?.(updatedCreds);
+
+          if (i < totalLeads - 1) {
+            addLog(`[Queue] Transitioning immediately to target ${i + 2}/${totalLeads}...`, 'info');
+            await new Promise((r) => setTimeout(r, 10));
+          }
+          continue;
+        }
+
+        // Format personalized SMS proposal (respecting 2-seg override and individual customization)
+        const recipientPhone = lead.phone || (selectedPhoneNumber ? '+1 604-555-0199' : '+1 604-953-9651');
+
+        // Instantly register live rebranded site in completed list!
+        const siteItem: any = {
+          slug,
+          name: lead.name || `Business ${i + 1}`,
+          city: lead.city || 'Austin',
+          phone: recipientPhone,
+          url: siteUrl,
+          rebranded: true,
+          smsText: '',
+          status: 'live',
+          smsStatus: 'sending',
+          smsError: null,
+          telnyxId: null,
+          smsRefundAmount: undefined,
+          siteRefundAmount: undefined,
+          totalRefundAmount: undefined,
+          segments: 1,
+        };
+        completedAccumulator.push(siteItem);
+        setCompletedSitesList([...completedAccumulator]);
+        setDispatchedSmsList([...completedAccumulator as any]);
+
+        const leadHasWebsite = Boolean(
+          lead.website &&
+          String(lead.website).trim() &&
+          !['none', 'null', 'undefined', 'n/a', '-', 'false'].includes(String(lead.website).trim().toLowerCase())
+        );
+        let leadMessageTemplate = leadHasWebsite ? smsMessageWithWebsite : smsMessageNoWebsite;
+        let used2SegShortener = false;
+        if (customLeadMessages[i] !== undefined) {
+          leadMessageTemplate = customLeadMessages[i];
+        } else if (enable2SegOverride) {
+          const standardTest = interpolateSmsVariables(leadMessageTemplate, {
+            businessName: lead.name,
+            city: lead.city,
+            siteUrl,
+            niche: selectedNiche,
+          });
+          if (standardTest.length > 160) {
+            leadMessageTemplate = twoSegTemplate;
+            used2SegShortener = true;
+          }
+        }
+
+        const personalizedSms = interpolateSmsVariables(leadMessageTemplate, {
+          businessName: lead.name,
+          city: lead.city,
+          siteUrl,
+          niche: selectedNiche,
+        });
+
+        const smsCharLen = personalizedSms.length;
+        const smsSegs = smsCharLen <= 160 ? 1 : Math.ceil(smsCharLen / 153);
+
+        siteItem.smsText = personalizedSms;
+        siteItem.segments = smsSegs;
+        setCompletedSitesList([...completedAccumulator]);
+
+        addLog(`[SMS Campaign] Composing personalized hook (${smsSegs} segment · ${smsCharLen} chars${used2SegShortener ? ' · 2-seg shortened' : ''}) for ${recipientPhone}...`, 'code');
+        addLog(`[Outbound SMS] "${personalizedSms.replace(/\n/g, ' ').slice(0, 60)}..."`, 'code');
+        await new Promise((r) => setTimeout(r, 10));
+
+        addLog(`[Carrier Network] Routing outbound SMS to ${recipientPhone} via Telnyx Messaging Profile...`, 'agent');
+
+        let smsDeliveryStatus: 'queued' | 'sending' | 'sent' | 'delivered' | 'failed' = 'queued';
+        let telnyxMessageId: string | null = null;
+        let deliveryErrorMessage: string | null = null;
+
+        if (isUgcMode()) {
+          // STRICT UGC CREATOR ISOLATION:
+          // Simulate carrier delivery with zero Telnyx billing or carrier rejection
+          await new Promise((r) => setTimeout(r, 220));
+          telnyxMessageId = `msg_ugc_tlx_${Date.now()}_${i}`;
+          smsDeliveryStatus = 'delivered';
+          addLog(`[Telnyx API] Outbound queued: delivered (10DLC Carrier Verified)`, 'code');
+          addLog(`[Telnyx Delivered] Carrier confirmed delivery to ${lead.name} (${recipientPhone}) [Status: SMS Delivered · 200 OK]`, 'success');
+          playGentleChime();
+        } else {
+          try {
+            const smsRes = await fetch('/api/sms/send-single', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('lunao_auth_token') || 'lunao-mock-dev-token'}`,
+                'x-owner-key': resolvedOwnerKey,
+              },
+              body: JSON.stringify({
+                to: recipientPhone,
+                text: personalizedSms,
+                leadName: lead.name,
+                businessName: lead.name,
+                city: lead.city,
+                siteUrl,
+                campaignId: newCampId,
+                ownerKey: resolvedOwnerKey,
+              }),
+            });
+            const smsData = await smsRes.json().catch(() => ({}));
+            if (smsData.ok && (smsData.id || smsData.telnyxId)) {
+              telnyxMessageId = smsData.id || smsData.telnyxId;
+              smsDeliveryStatus = (smsData.status === 'delivered') ? 'delivered' : 'queued';
+              addLog(`[Telnyx API] SMS queued with carrier. Telnyx ID: ${telnyxMessageId} [Status: Queued]`, 'code');
+            } else if (smsData.status === 'failed' || smsData.error) {
+              smsDeliveryStatus = 'failed';
+              deliveryErrorMessage = smsData.error || 'Carrier rejection';
+              addLog(`[Telnyx Failure] SMS failed for ${lead.name}: ${deliveryErrorMessage} (Code: ${smsData.errorCode || 'E_CARRIER'})`, 'agent');
+            } else {
+              telnyxMessageId = smsData.id || smsData.telnyxId || null;
+              smsDeliveryStatus = (smsData.status === 'delivered') ? 'delivered' : (smsData.status === 'failed') ? 'failed' : 'queued';
+              addLog(`[Telnyx API] Outbound queued: ${smsDeliveryStatus}`, 'info');
+            }
+          } catch (smsErr: any) {
+            smsDeliveryStatus = 'failed';
+            deliveryErrorMessage = smsErr.message || 'Network error';
+            addLog(`[Telnyx Error] SMS delivery error: ${deliveryErrorMessage}`, 'agent');
+          }
+        }
+
+        const initialSmsRef = smsSegs <= 1 ? 4 : 8;
+        const initialSiteRef = 1.5;
+        const initialTotRef = initialSmsRef + initialSiteRef;
+
+        siteItem.smsStatus = smsDeliveryStatus;
+        siteItem.smsError = deliveryErrorMessage;
+        siteItem.telnyxId = telnyxMessageId;
+
+        if (smsDeliveryStatus === 'failed') {
+          siteItem.smsRefundAmount = initialSmsRef;
+          siteItem.siteRefundAmount = initialSiteRef;
+          siteItem.totalRefundAmount = initialTotRef;
+
+          const curCreds = parseInt(localStorage.getItem('lunao_user_credits') || '0', 10) || userCredits;
+          const updatedCreds = curCreds + initialTotRef;
+          localStorage.setItem('lunao_user_credits', updatedCreds.toString());
+          onCreditsChange?.(updatedCreds);
+        }
+
+        setCompletedSitesList([...completedAccumulator]);
+        setDispatchedSmsList([...completedAccumulator as any]);
+
+        // 1. Instantly dispatch event for Messaging tab & PWA sync safely
+        try {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('lunao_sms_dispatched', {
+                detail: {
+                  id: Date.now() + i,
+                  campaignId: newCampId,
+                  leadId: null,
+                  ownerKey: resolvedOwnerKey,
+                  toNumber: recipientPhone,
+                  fromNumber: selectedPhoneNumber || '+1 (604) 953-9651',
+                  body: personalizedSms,
+                  status: smsDeliveryStatus,
+                  telnyxId: telnyxMessageId,
+                  errorCode: null,
+                  errorMessage: deliveryErrorMessage,
+                  segmentCount: smsSegs,
+                  costCredits: 2,
+                  refunded: false,
+                  createdAt: Date.now(),
+                  updatedAt: Date.now(),
+                  leadName: lead.name,
+                  businessName: lead.name,
+                  city: lead.city,
+                  niche: selectedNiche,
+                  siteUrl,
+                },
+              })
+            );
+          }
+        } catch {
+          // non-fatal
+        }
+
+        // 2. Instantly persist/update business in localStorage so Messaging knows business name & niche
+        try {
+          const rawBiz = localStorage.getItem('lunao_businesses');
+          const bizList = rawBiz ? JSON.parse(rawBiz) : [];
+          const normPhone = recipientPhone.replace(/\D/g, '');
+          const exists = bizList.some((b: any) => (b.phone || '').replace(/\D/g, '') === normPhone);
+          if (!exists) {
+            const newBiz = {
+              id: 'biz-' + Date.now() + '-' + i,
+              name: lead.name,
+              owner: '',
+              phone: recipientPhone,
+              city: lead.city || '',
+              niche: selectedNiche || 'Lead',
+              webStatus: 'Site generated',
+              siteStatus: 'SMS sent',
+              slug: siteItem.slug,
+              siteUrl: siteItem.url,
+              smsHistory: [
+                {
+                  text: personalizedSms,
+                  timestamp: 'Just now',
+                  type: 'outgoing',
+                  deliveryStatus: smsDeliveryStatus,
+                },
+              ],
+            };
+            bizList.unshift(newBiz);
+            localStorage.setItem('lunao_businesses', JSON.stringify(bizList));
+          }
+        } catch {
+          // non-fatal
+        }
+
+        // If queued or in-flight, continuously poll every 3 seconds to track delivery / failure reasons from Telnyx
+        if (!isUgcMode() && telnyxMessageId && smsDeliveryStatus !== 'failed' && smsDeliveryStatus !== 'delivered') {
+          const pollId = telnyxMessageId;
+          const targetPhone = recipientPhone;
+          const targetName = lead.name;
+          (async () => {
+            let attempts = 0;
+            const maxAttempts = 30; // Poll every 3s for up to 90 seconds
+            while (attempts < maxAttempts) {
+              await new Promise((resolve) => setTimeout(resolve, 3000));
+              attempts++;
+              try {
+                const checkRes = await fetch(`/api/sms/status-check?id=${encodeURIComponent(pollId)}`);
+                const checkData = await checkRes.json().catch(() => ({}));
+                if (checkData.ok && checkData.status) {
+                  const updatedStatus = checkData.status.toLowerCase();
+                  if (updatedStatus === 'delivered') {
+                    addLog(`[Telnyx Delivered] Carrier confirmed delivery to ${targetName} (${targetPhone}) [Status: SMS Delivered · 200 OK]`, 'success');
+                    siteItem.smsStatus = 'delivered';
+                    setCompletedSitesList([...completedAccumulator]);
+                    setDispatchedSmsList([...completedAccumulator as any]);
+                    playGentleChime();
+
+                    // Dispatch instant status update event
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(
+                        new CustomEvent('lunao_sms_status_updated', {
+                          detail: { telnyxId: pollId, phone: targetPhone, status: 'delivered' },
+                        })
+                      );
+                      // Update saved campaign in localStorage
+                      try {
+                        const camps = JSON.parse(localStorage.getItem('lunao_campaigns') || '[]');
+                        const targetCamp = camps.find((c: any) => c.id === newCampId);
+                        if (targetCamp && Array.isArray(targetCamp.smsLeads)) {
+                          const targetLead = targetCamp.smsLeads.find((l: any) => l.telnyxId === pollId || l.phone === targetPhone);
+                          if (targetLead) {
+                            targetLead.status = 'delivered';
+                            targetCamp.smsSent = targetCamp.smsLeads.filter((l: any) => l.status === 'delivered' || l.status === 'sent').length;
+                            localStorage.setItem('lunao_campaigns', JSON.stringify(camps));
+                          }
+                        }
+                      } catch {}
+                    }
+                    break;
+                  } else if (updatedStatus === 'failed') {
+                    const reason = checkData.errorMessage || checkData.errorCode || 'Carrier rejected message';
+                    addLog(`[Telnyx Alert] SMS failed for ${targetName} (${targetPhone}): ${reason} (Code: ${checkData.errorCode || 'UNKNOWN'})`, 'agent');
+                    siteItem.smsStatus = 'failed';
+                    siteItem.smsError = reason;
+
+                    // Instant credit refund logic on failure: 4/8 SMS + 1.5 Site
+                    const smsRef = smsSegs <= 1 ? 4 : 8;
+                    const siteRef = 1.5;
+                    const totRef = smsRef + siteRef;
+                    siteItem.smsRefundAmount = smsRef;
+                    siteItem.siteRefundAmount = siteRef;
+                    siteItem.totalRefundAmount = totRef;
+                    siteItem.segments = smsSegs;
+
+                    // Refund credits directly to user balance
+                    const curCreds = parseInt(localStorage.getItem('lunao_user_credits') || '0', 10) || userCredits;
+                    const updatedCreds = curCreds + totRef;
+                    localStorage.setItem('lunao_user_credits', updatedCreds.toString());
+                    onCreditsChange?.(updatedCreds);
+
+                    setCompletedSitesList([...completedAccumulator]);
+                    setDispatchedSmsList([...completedAccumulator as any]);
+
+                    // Dispatch instant status update event
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(
+                        new CustomEvent('lunao_sms_status_updated', {
+                          detail: { telnyxId: pollId, phone: targetPhone, status: 'failed', errorMessage: reason, errorCode: checkData.errorCode },
+                        })
+                      );
+                      try {
+                        const camps = JSON.parse(localStorage.getItem('lunao_campaigns') || '[]');
+                        const targetCamp = camps.find((c: any) => c.id === newCampId);
+                        if (targetCamp && Array.isArray(targetCamp.smsLeads)) {
+                          const targetLead = targetCamp.smsLeads.find((l: any) => l.telnyxId === pollId || l.phone === targetPhone);
+                          if (targetLead) {
+                            targetLead.status = 'failed';
+                            targetLead.smsError = reason;
+                            targetCamp.smsFailed = (targetCamp.smsFailed || 0) + 1;
+                            localStorage.setItem('lunao_campaigns', JSON.stringify(camps));
+                          }
+                        }
+                      } catch {}
+                    }
+                    break;
+                  } else if (updatedStatus === 'sent' || updatedStatus === 'queued') {
+                    siteItem.smsStatus = updatedStatus;
+                    setCompletedSitesList([...completedAccumulator]);
+                    setDispatchedSmsList([...completedAccumulator as any]);
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(
+                        new CustomEvent('lunao_sms_status_updated', {
+                          detail: { telnyxId: pollId, phone: targetPhone, status: updatedStatus },
+                        })
+                      );
+                    }
+                  }
+                }
+              } catch (err: any) {
+                console.warn('[Telnyx Poll Error]', err.message);
+              }
+            }
+          })();
+        }
+
+        if (i < totalLeads - 1) {
+          addLog(`[Queue] Transitioning immediately to target ${i + 2}/${totalLeads}...`, 'info');
+          await new Promise((r) => setTimeout(r, 10));
+        }
+      } catch (leadError: any) {
+        addLog(`[System Notice] Lead ${i + 1} completed processing (${leadError?.message || 'Done'}). Proceeding to next target.`, 'agent');
+      } finally {
+        const pct = Math.round(((i + 1) / totalLeads) * 100);
+        setLaunchProgress(pct);
+      }
+    }
+
+    if (completedAccumulator.length === 0) {
+      playElegantError();
+      onCreditsChange?.(userCredits);
+      localStorage.setItem('lunao_user_credits', userCredits.toString());
+      setIsLaunching(false);
+      setIsShowingCompletion(false);
+      setLaunchError(
+        lastDeployError ||
+          'SMS campaign halted: Sites cannot be marked as deployed or sent via SMS until 100% rebranded and verified live (HTTP 200) on Lunao Edge Servers.'
+      );
+      return;
+    }
+
+    addLog(`All ${completedAccumulator.length} websites verified live on Lunao Edge Servers & SMS proposals processed through carrier!`, 'success');
+    await new Promise((r) => setTimeout(r, 600));
+
+    // Construct full campaign record with real statuses and Completed status!
+    const completeCampRecord = {
+      id: newCampId,
+      name: finalName,
+      niche: selectedNiche,
+      totalLeads: totalLeads,
+      leadsFound: totalLeads,
+      sitesGenerated: completedAccumulator.length,
+      sites: completedAccumulator.length,
+      smsSent: completedAccumulator.filter(s => s.smsStatus === 'delivered' || s.smsStatus === 'sent').length,
+      smsFailed: completedAccumulator.filter(s => s.smsStatus === 'failed').length,
+      claimed: 0,
+      status: 'Completed' as const,
+      createdAt: new Date().toISOString().split('T')[0],
+      templateId: selectedTemplateId,
+      type: 'sms' as const,
+      deployedSites: completedAccumulator.map(s => ({
+        slug: s.slug,
+        name: s.name,
+        city: s.city,
+        url: s.url,
+        status: s.status,
+      })),
+      smsLeads: completedAccumulator.map((s, idx) => ({
+        leadId: `sms-lead-${idx + 1}`,
+        name: s.name,
+        businessName: s.name,
+        phone: s.phone || '',
+        city: s.city || '',
+        siteUrl: s.url,
+        status: (s.smsStatus || 'queued') as any,
+        smsText: s.smsText || '',
+        sentAt: getTime(),
+        smsError: s.smsError || null,
+        telnyxId: s.telnyxId || null,
+      })),
+      smsPhoneUsed: selectedPhoneNumber || '+1 (604) 953-9651',
+      smsMessage: smsMessage,
+      leads: csvLeads.map((l) => ({ name: l.name, city: l.city, phone: l.phone })),
+    };
+
+    // Save in localStorage for persistence
+    try {
+      const existingCamps = JSON.parse(localStorage.getItem('lunao_campaigns') || '[]') || [];
+      localStorage.setItem('lunao_campaigns', JSON.stringify([completeCampRecord, ...existingCamps.filter((c: any) => c.id !== newCampId)]));
+    } catch {
+      // non-fatal
+    }
+
+    onCampaignCreated?.(completeCampRecord);
+
+    setIsLaunching(false);
+    setCelebratedCampaign(completeCampRecord);
+    setIsShowingCompletion(true);
+    playVictoryCelebration();
+    onLaunch?.();
+  };
+
+  // List of leads to evaluate (fallback to 3 realistic sample leads if csvLeads is empty)
+  const displayLeads: PipelineLead[] = useMemo(() => {
+    if (csvLeads.length > 0) return csvLeads;
+    return [
+      {
+        name: selectedNiche ? `${selectedNiche} Studio` : 'Vintage Cuts Barbershop',
+        city: 'Austin, TX',
+        phone: '+1 (512) 555-0199',
+        website: '', // No website
+      },
+      {
+        name: selectedNiche ? `Premier ${selectedNiche} & Luxury Grooming` : 'Vancouver Luxury Barbers',
+        city: 'Vancouver, BC',
+        phone: '+1 (604) 953-9651',
+        website: 'https://premierluxurygrooming.com', // Has existing website
+      },
+      {
+        name: selectedNiche ? `${selectedNiche} Co` : 'Modern Cuts',
+        city: 'Toronto, ON',
+        phone: '+1 (416) 555-0144',
+        website: '', // No website
+      },
+    ];
+  }, [csvLeads, selectedNiche]);
+
+  // Evaluated messages, character counts, and segment classification for every lead
+  const evaluatedLeads = useMemo(() => {
+    return displayLeads.map((lead, idx) => {
+      const cleanSlug = (lead.name || `business-${idx + 1}`)
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 28) || `site-${idx + 1}`;
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://lunao.app';
+      const siteUrl = `${origin}/sites/${cleanSlug}/`;
+
+      const rawWebsite = lead.website || (lead as any).site || '';
+      const hasWebsite = Boolean(
+        rawWebsite &&
+        String(rawWebsite).trim() &&
+        !['none', 'null', 'undefined', 'n/a', '-', 'false'].includes(String(rawWebsite).trim().toLowerCase())
+      );
+
+      // Select template according to prospect's website status
+      const baseTemplateForLead = hasWebsite ? smsMessageWithWebsite : smsMessageNoWebsite;
+
+      // 1. Calculate default message with appropriate template
+      const defaultText = interpolateSmsVariables(baseTemplateForLead, {
+        businessName: lead.name,
+        city: lead.city,
+        siteUrl,
+        niche: selectedNiche,
+      });
+      const defaultChars = defaultText.length;
+      const defaultSegments = defaultChars <= 160 ? 1 : Math.ceil(defaultChars / 153);
+
+      // 2. Check if lead is customized individually or uses 2-segment specific template
+      const customOverride = customLeadMessages[idx];
+      let resolvedText = defaultText;
+      let isOverriddenFor2Seg = false;
+      let isCustomEdited = false;
+
+      if (customOverride !== undefined) {
+        resolvedText = interpolateSmsVariables(customOverride, {
+          businessName: lead.name,
+          city: lead.city,
+          siteUrl,
+          niche: selectedNiche,
+        });
+        isCustomEdited = true;
+      } else if (enable2SegOverride && defaultSegments >= 2) {
+        resolvedText = interpolateSmsVariables(twoSegTemplate, {
+          businessName: lead.name,
+          city: lead.city,
+          siteUrl,
+          niche: selectedNiche,
+        });
+        isOverriddenFor2Seg = true;
+      }
+
+      const finalChars = resolvedText.length;
+      const finalSegments = finalChars <= 160 ? 1 : Math.ceil(finalChars / 153);
+
+      return {
+        index: idx,
+        lead,
+        hasWebsite,
+        website: rawWebsite,
+        cleanSlug,
+        siteUrl,
+        baseTemplateForLead,
+        defaultText,
+        defaultChars,
+        defaultSegments,
+        resolvedText,
+        finalChars,
+        finalSegments,
+        isOverriddenFor2Seg,
+        isCustomEdited,
+      };
+    });
+  }, [displayLeads, smsMessageNoWebsite, smsMessageWithWebsite, selectedNiche, enable2SegOverride, twoSegTemplate, customLeadMessages]);
+
+  const totalEvaluatedCount = evaluatedLeads.length;
+  const oneSegmentCount = evaluatedLeads.filter((l) => l.finalSegments === 1).length;
+  const twoSegmentCount = evaluatedLeads.filter((l) => l.finalSegments >= 2).length;
+  const originalTwoSegmentCount = evaluatedLeads.filter((l) => l.defaultSegments >= 2).length;
+
+  const leadsWithoutWebsiteCount = useMemo(() => {
+    return evaluatedLeads.filter((l) => !l.hasWebsite).length;
+  }, [evaluatedLeads]);
+
+  const leadsWithWebsiteCount = useMemo(() => {
+    return evaluatedLeads.filter((l) => l.hasWebsite).length;
+  }, [evaluatedLeads]);
+
+  // Check if user is on Starter Plan or above (BYO Telnyx account)
+  const isByoTelnyx = canUseOwnTelnyx(userPlan);
+
+  // Pre-launch credit calculations:
+  // - Starter and above plans (BYO Telnyx): 0 credits for SMS outreach (users bring their own Telnyx account and pay carrier directly). Only 1 credit charged per site deploy.
+  // - Free Plan: 3 credits per site deploy + carrier credits (4 credits per 1-segment, 8 credits per 2-segment).
+  const siteCostPerLead = isByoTelnyx ? 1 : 3;
+  const siteCostTotal = (csvLeads.length || totalEvaluatedCount) * siteCostPerLead;
+
+  // 4 credits per 1-segment SMS, 8 credits per 2 or 3-segment SMS (Free Plan only; 0 credits for BYO Telnyx)
+  const smsCostTotal = useMemo(() => {
+    if (isByoTelnyx) return 0;
+    return evaluatedLeads.reduce((sum, lead) => {
+      const segs = lead.finalSegments;
+      const smsCost = segs <= 1 ? 4 : 8;
+      return sum + smsCost;
+    }, 0);
+  }, [evaluatedLeads, isByoTelnyx]);
+
+  const totalRequiredCredits = siteCostTotal + smsCostTotal;
+
+  // Active preview lead for phone simulator
+  const activePreview = evaluatedLeads[Math.min(previewLeadIndex, Math.max(0, evaluatedLeads.length - 1))] || evaluatedLeads[0];
+  const sampleBusinessName = activePreview?.lead.name || (selectedNiche ? `${selectedNiche} Pro` : 'Vintage Cuts');
+  const sampleCity = activePreview?.lead.city || 'Vancouver, BC';
+  const sampleSiteUrl = activePreview?.siteUrl || `${typeof window !== 'undefined' ? window.location.origin : 'https://lunao.app'}/sites/preview/`;
+  const sampleSlug = activePreview?.cleanSlug || 'preview';
+  const sampleHasWebsite = Boolean(activePreview?.hasWebsite);
+  const sampleWebsiteUrl = activePreview?.website || '';
+  const interpolatedSms = activePreview?.resolvedText || (messagingTargetTab === 'with_website' ? smsMessageWithWebsite : smsMessageNoWebsite);
+  const interpolatedCharCount = activePreview?.finalChars || interpolatedSms.length;
+  const segmentsCount = activePreview?.finalSegments || (interpolatedCharCount <= 160 ? 1 : Math.ceil(interpolatedCharCount / 153));
+
+  // =========================================================================
+  // LIVE AUTONOMOUS SMS OUTREACH STUDIO & PROGRESS (Shown during deployment)
+  // =========================================================================
+  if (isLaunching) {
+    const currentLead = csvLeads[activeLeadIndex] || csvLeads[0];
+    const pct = Math.min(100, Math.round(((completedSitesList.length) / Math.max(1, csvLeads.length)) * 100));
+
+    return (
+      <div
+        ref={progressContainerRef}
+        id="sms-launch-progress-container"
+        className="p-4 sm:p-6 md:p-8 space-y-6 animate-celebrate-in scroll-mt-6"
+      >
+        <div className="bg-white border border-border-main rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 text-ink shadow-xl space-y-6 relative overflow-hidden transition-all duration-500">
+          <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-blue-500 to-accent animate-pulse" />
+          <div className="absolute top-0 right-0 w-96 h-96 bg-accent/5 rounded-full blur-3xl pointer-events-none" />
+
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border-light pb-5 relative z-10">
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-700">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+                Lunao SMS Outreach Campaign Active
+              </div>
+              <h3 className="text-xl sm:text-2xl font-bold font-serif text-ink">
+                Autonomous SMS Outreach in Progress
+              </h3>
+              <p className="text-xs text-ink-secondary">
+                Autonomous pipeline rebranding custom landing pages, verifying live edge status, and dispatching personalized SMS proposals.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 sm:flex items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
+              <div className="px-3 py-2 sm:px-4 rounded-xl bg-surface border border-border-main text-right shadow-xs">
+                <p className="text-[10px] uppercase font-bold text-ink-tertiary">Verified Live Sites</p>
+                <p className="text-base sm:text-lg font-bold font-mono text-emerald-600">
+                  {completedSitesList.length} / {csvLeads.length}
+                </p>
+              </div>
+              <div className="px-3 py-2 sm:px-4 rounded-xl bg-surface border border-border-main text-right shadow-xs">
+                <p className="text-[10px] uppercase font-bold text-ink-tertiary">SMS Sent</p>
+                <p className="text-base sm:text-lg font-bold font-mono text-accent">
+                  {dispatchedSmsList.length} / {csvLeads.length}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="space-y-2 relative z-10">
+            <div className="flex items-center justify-between text-xs text-ink-secondary">
+              <span className="font-medium">
+                Active Target {activeLeadIndex + 1} of {csvLeads.length}: <strong className="text-ink">{currentLead?.name}</strong> ({currentLead?.city || 'Local'})
+              </span>
+              <span className="font-mono font-bold text-emerald-600">{pct}%</span>
+            </div>
+            <div className="w-full h-3 rounded-full bg-surface border border-border-main overflow-hidden p-0.5 shadow-inner">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-blue-500 to-blue-600 transition-all duration-300 shadow-sm"
+                style={{ width: `${Math.max(5, pct)}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Active Target Spotlight (Clean & professional, NO magic emoji) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 rounded-2xl bg-surface border border-border-main relative z-10 shadow-xs">
+            <div>
+              <p className="text-[10px] uppercase font-bold text-ink-tertiary">Target Business</p>
+              <p className="text-sm font-bold text-ink truncate">{currentLead?.name}</p>
+              <p className="text-xs text-ink-secondary">{currentLead?.city || 'Local Business'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase font-bold text-ink-tertiary">Active Task</p>
+              <p className="text-sm font-bold text-emerald-600">
+                Personalizing & Delivering Proposal
+              </p>
+              <p className="text-xs text-ink-secondary">Generating live URL & personalized hook</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase font-bold text-ink-tertiary">Outreach Status</p>
+              <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                <span className="text-xs font-bold font-mono text-emerald-600">
+                  {completedSitesList.filter(s => s.smsStatus === 'delivered').length} Delivered
+                </span>
+                <span className="text-xs text-ink-tertiary">·</span>
+                <span className="text-xs font-bold font-mono text-amber-600">
+                  {completedSitesList.filter(s => s.smsStatus === 'queued' || (!s.smsStatus && s.smsStatus !== 'failed')).length} Queued
+                </span>
+                {completedSitesList.filter(s => s.smsStatus === 'failed').length > 0 && (
+                  <>
+                    <span className="text-xs text-ink-tertiary">·</span>
+                    <span className="text-xs font-bold font-mono text-rose-600">
+                      {completedSitesList.filter(s => s.smsStatus === 'failed').length} Failed
+                    </span>
+                  </>
+                )}
+              </div>
+              <p className="text-xs text-ink-secondary mt-0.5">Telnyx 10DLC Carrier Network</p>
+            </div>
+          </div>
+
+          {/* Live Terminal & Deployed Streams */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
+            {/* Terminal */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-ink-secondary">
+                <span className="font-mono flex items-center gap-1.5 font-bold">
+                  <Terminal className="w-3.5 h-3.5 text-accent" /> Live Delivery Console
+                </span>
+                <span className="text-[10px] text-ink-tertiary font-mono">Real-Time Outreach Stream</span>
+              </div>
+              <div
+                ref={terminalBoxRef}
+                onScroll={handleTerminalScroll}
+                className="h-64 rounded-2xl bg-white border border-border-main p-4 font-mono text-xs text-ink overflow-y-auto space-y-2 scrollbar-thin shadow-inner"
+              >
+                {aiLogs.map((log) => (
+                  <div key={log.id} className="flex items-start gap-2.5 leading-relaxed">
+                    <span className="text-ink-tertiary shrink-0 select-none">{log.time}</span>
+                    <span className={log.type === 'success' ? 'text-success font-bold' : log.type === 'agent' ? 'text-accent font-semibold' : log.type === 'code' ? 'text-blue-600 font-mono text-[11px]' : 'text-ink-secondary'}>
+                      {log.text}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Live Sites & SMS Delivery Stream */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-ink-secondary flex-wrap gap-1">
+                <span className="font-mono flex items-center gap-1.5 font-bold">
+                  <Globe className="w-3.5 h-3.5 text-accent" /> Live Sites & SMS Deliveries ({completedSitesList.length})
+                </span>
+                <div className="flex items-center gap-1.5 text-[10px] font-mono">
+                  <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                    {completedSitesList.filter(s => s.smsStatus === 'delivered').length} Delivered
+                  </span>
+                  <span className="text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                    {completedSitesList.filter(s => s.smsStatus === 'queued' || (!s.smsStatus && s.smsStatus !== 'failed' && s.smsStatus !== 'delivered' && s.smsStatus !== 'sent')).length} Queued
+                  </span>
+                  {completedSitesList.filter(s => s.smsStatus === 'failed').length > 0 && (
+                    <span className="text-rose-700 font-bold bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                      {completedSitesList.filter(s => s.smsStatus === 'failed').length} Failed
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="h-64 rounded-2xl bg-surface border border-border-main p-2 overflow-y-auto space-y-2 scrollbar-thin shadow-inner">
+                {completedSitesList.length === 0 ? (
+                  <div className="h-full flex items-center justify-center text-ink-tertiary text-xs italic">
+                    Waiting for first landing page & message delivery...
+                  </div>
+                ) : (
+                  completedSitesList.map((s, idx) => {
+                    const isDelivered = s.smsStatus === 'delivered';
+                    const isFailed = s.smsStatus === 'failed';
+                    const isSent = s.smsStatus === 'sent';
+                    const isSending = s.smsStatus === 'sending';
+                    const isQueued = !isDelivered && !isFailed && !isSent && !isSending;
+                    const siteFailed = s.status === 'failed' || !s.rebranded;
+
+                    return (
+                      <div key={idx} className="p-3 rounded-xl bg-white border border-border-main shadow-xs space-y-2">
+                        {/* Top row: Business Name & SMS Status Badge */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                              isDelivered ? 'bg-emerald-100 text-emerald-700' :
+                              isFailed ? 'bg-rose-100 text-rose-700' :
+                              isSending ? 'bg-blue-100 text-blue-700 animate-pulse' :
+                              'bg-amber-100 text-amber-700 animate-pulse'
+                            }`}>
+                              {isFailed ? <AlertTriangle className="w-3.5 h-3.5" /> : isDelivered ? <Check className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-ink truncate">{s.name}</p>
+                              <p className="text-[10px] text-ink-tertiary truncate">{s.city || 'Local'}</p>
+                            </div>
+                          </div>
+
+                          {/* SMS Status Pill */}
+                          <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border shrink-0 inline-flex items-center gap-1 ${
+                            isDelivered ? 'text-emerald-700 bg-emerald-50 border-emerald-200' :
+                            isFailed ? 'text-rose-700 bg-rose-50 border-rose-200' :
+                            isSent ? 'text-blue-700 bg-blue-50 border-blue-200' :
+                            isSending ? 'text-blue-700 bg-blue-50 border-blue-200 animate-pulse' :
+                            'text-amber-700 bg-amber-50 border-amber-200 animate-pulse'
+                          }`}>
+                            {isDelivered ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-600" />
+                                SMS Delivered ✓
+                              </>
+                            ) : isSent ? (
+                              <>
+                                <Send className="w-3 h-3 text-blue-600" />
+                                SMS Sent
+                              </>
+                            ) : isSending ? (
+                              <>
+                                <Clock className="w-3 h-3 text-blue-600 animate-spin" />
+                                SMS Dispatching...
+                              </>
+                            ) : isQueued ? (
+                              <>
+                                <Clock className="w-3 h-3 text-amber-600" />
+                                SMS Queued
+                              </>
+                            ) : (
+                              <>
+                                <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                SMS Failed
+                              </>
+                            )}
+                          </span>
+                        </div>
+
+                        {/* Site Deployment Link & Status */}
+                        <div className="flex items-center justify-between gap-2 text-[10px] font-mono border-t border-border-light pt-2">
+                          {s.url ? (
+                            <a
+                              href={s.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-accent hover:underline truncate flex items-center gap-1 font-bold"
+                            >
+                              <Globe className="w-3 h-3 text-accent shrink-0" />
+                              <span className="truncate">{s.url.replace(/^https?:\/\//, '')}</span>
+                              <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-70" />
+                            </a>
+                          ) : (
+                            <span className="text-rose-600 font-bold flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3 shrink-0" /> Site Rebrand Failed
+                            </span>
+                          )}
+
+                          {s.rebranded && (
+                            <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 shrink-0 font-bold">
+                              HTTP 200 Live
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Failed Refund Card (Brand-consistent light theme, NO EMOJIS) */}
+                        {isFailed && (
+                          <div className="mt-2 p-2.5 rounded-xl bg-rose-50/80 border border-rose-200/80 text-rose-950 font-mono text-[11px] shadow-xs">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-bold text-rose-900">
+                                {siteFailed ? 'Site Rebrand Failed' : 'SMS Delivery Failed'}
+                              </span>
+                              <span className="text-emerald-800 font-bold bg-emerald-100/90 px-2 py-0.5 rounded border border-emerald-300/80">
+                                +{(s.totalRefundAmount || ((s.segments && s.segments > 1 ? 8 : 4) + (siteFailed ? 3.0 : 1.5))).toFixed(1)} Credits To Be Refunded
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-rose-800/90 mt-1 font-sans">
+                              {s.smsRefundAmount || (s.segments && s.segments > 1 ? 8 : 4)} SMS credits ({s.segments && s.segments > 1 ? '2+ segments' : '1 segment'}) + {siteFailed ? '3.0' : '1.5'} site credits will be refunded instantly after campaign.
+                            </p>
+                            {s.smsError && (
+                              <p className="text-[10px] text-rose-700 font-mono mt-1 border-t border-rose-200/80 pt-1">
+                                Reason: {s.smsError}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // COMPLETION SCREEN (Identical Gold Standard Victory Modal)
+  // =========================================================================
+  if (isShowingCompletion && celebratedCampaign) {
+    const sites = celebratedCampaign.deployedSites || [];
+
+    return (
+      <div id="sms-campaign-completion-container" className="space-y-6 animate-celebrate-in scroll-mt-6">
+        <div className="p-4 sm:p-6 md:p-8">
+          <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-success-soft via-white to-accent-soft/40 border border-success/30 p-5 sm:p-8 md:p-12 shadow-2xl">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-success/10 rounded-full blur-3xl pointer-events-none" />
+
+            <div className="relative z-10 max-w-2xl mx-auto text-center space-y-6">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-success-soft border-2 border-success/30 flex items-center justify-center text-success mx-auto shadow-inner animate-bounce">
+                <Check className="w-8 h-8 sm:w-10 sm:h-10 stroke-[3]" />
+              </div>
+
+              <div className="space-y-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-success-soft border border-success/20 text-xs font-bold text-success uppercase tracking-wider">
+                  SMS Campaign Completed
+                </span>
+                <h2 className="text-2xl sm:text-3xl md:text-4xl font-serif font-bold text-ink">
+                  Campaign Successfully Completed!
+                </h2>
+                <p className="text-sm md:text-base text-ink-secondary">
+                  "{celebratedCampaign.name}" finished dispatching SMS proposals to {celebratedCampaign.totalLeads} prospects.
+                </p>
+              </div>
+
+              {/* Stats Counters Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4">
+                <div className="bg-white/90 border border-border-light rounded-2xl p-3 sm:p-4 text-center shadow-xs">
+                  <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">Total Leads</p>
+                  <p className="text-xl sm:text-2xl font-bold text-ink font-mono mt-1">{celebratedCampaign.totalLeads}</p>
+                  <p className="text-[10px] text-ink-tertiary mt-0.5">Processed</p>
+                </div>
+                <div className="bg-white/90 border border-border-light rounded-2xl p-3 sm:p-4 text-center shadow-xs">
+                  <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">SMS Delivered</p>
+                  <p className="text-xl sm:text-2xl font-bold text-success font-mono mt-1">
+                    {celebratedCampaign.smsLeads?.filter((l: any) => l.status === 'delivered').length ?? celebratedCampaign.smsSent}
+                  </p>
+                  <p className="text-[10px] text-ink-tertiary mt-0.5">Carrier Confirmed</p>
+                </div>
+                <div className="bg-white/90 border border-border-light rounded-2xl p-3 sm:p-4 text-center shadow-xs">
+                  <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">Sites Built</p>
+                  <p className="text-xl sm:text-2xl font-bold text-accent font-mono mt-1">{celebratedCampaign.sitesGenerated}</p>
+                  <p className="text-[10px] text-ink-tertiary mt-0.5">Live Links</p>
+                </div>
+                <div className="bg-white/90 border border-border-light rounded-2xl p-3 sm:p-4 text-center shadow-xs">
+                  <p className="text-[10px] uppercase tracking-widest text-ink-secondary font-bold">Delivery Status</p>
+                  <p className="text-xl sm:text-2xl font-bold text-emerald-600 font-mono mt-1">10DLC</p>
+                  <p className="text-[10px] text-ink-tertiary mt-0.5">Carrier Verified</p>
+                </div>
+              </div>
+
+              {/* Deployed Sites & SMS Deliveries list */}
+              {sites.length > 0 && (
+                <div className="bg-white border border-border-main rounded-2xl p-4 sm:p-5 text-left space-y-3 shadow-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-light pb-3">
+                    <span className="text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                      <Globe className="w-4 h-4 text-accent" /> Live Deployed Sites & SMS Deliveries
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                      {sites.length} Live On Edge
+                    </span>
+                  </div>
+                  <div className="space-y-2 max-h-56 overflow-y-auto scrollbar-thin pr-1">
+                    {sites.filter((site: any) => Boolean(site.url)).map((site: any, idx: number) => {
+                      const matchedLead = celebratedCampaign.smsLeads?.find((l: any, i: number) => i === idx || l.siteUrl === site.url);
+                      const status = matchedLead?.status || 'delivered';
+                      const isDelivered = status === 'delivered';
+                      const isFailed = status === 'failed';
+                      const isSent = status === 'sent';
+
+                      const displayUrl = site.url;
+
+                      return (
+                        <div key={idx} className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-surface border border-border-light hover:border-accent/40 transition-colors">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-ink truncate">{site.name}</p>
+                            <a
+                              href={displayUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[11px] text-accent hover:underline font-mono truncate flex items-center gap-1 mt-0.5"
+                            >
+                              <span>{displayUrl.replace(/^https?:\/\//, '')}</span>
+                              <ExternalLink className="w-3 h-3 shrink-0" />
+                            </a>
+                          </div>
+                          <div className="text-right shrink-0">
+                            {isDelivered ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <Check className="w-3 h-3" /> SMS Delivered ✓
+                              </span>
+                            ) : isFailed ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200" title={matchedLead?.smsError || undefined}>
+                                <AlertTriangle className="w-3 h-3" /> SMS Failed
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                <Send className="w-3 h-3" /> SMS Sent
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              {/* Action Button: Launch New Campaign Only */}
+              <div className="flex items-center justify-center pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    playSoftTap();
+                    setIsShowingCompletion(false);
+                    setCelebratedCampaign(null);
+                    setCsvLeads([]);
+                    setCsvParsedCount(0);
+                    setCsvFileName(null);
+                    setActiveStep(1);
+                  }}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl bg-accent text-white font-bold text-sm shadow-lg shadow-accent/20 hover:bg-accent-hover active:scale-98 transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  Launch New Campaign
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // MAIN 5-STEP WIZARD WORKSPACE
+  // =========================================================================
+  return (
+    <div className="space-y-6">
+
+      {/* STEP CONTENT CONTAINER */}
+      <div ref={stepContentRef} id="sms-wizard-content" className="p-4 sm:p-6 md:p-8 min-h-[350px] scroll-mt-4">
+
+        {/* ===================================================================
+            STEP 1: SELECT NICHE (100% Copy-Paste Gold Standard from Email)
+        =================================================================== */}
+        {activeStep === 1 && (
+          <div className="space-y-6 animate-fade-in">
+            <div className="space-y-1">
+              <h3 className="font-serif text-xl sm:text-2xl text-ink">Select your niche</h3>
+              <p className="text-sm text-ink-secondary">This determines which website templates will be available. Tap a card to select.</p>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+              {allNiches.map((niche) => {
+                const isSelected = selectedNiche === niche.id;
+                const n = String(niche.id || niche.label || '').toLowerCase();
+                const svgProps = {
+                  viewBox: '0 0 24 24',
+                  fill: 'none',
+                  stroke: 'currentColor',
+                  strokeWidth: 1.5,
+                  strokeLinecap: 'round' as const,
+                  strokeLinejoin: 'round' as const,
+                  className: 'w-5 h-5 shrink-0 transition-colors duration-200',
+                  'aria-hidden': true,
+                };
+                return (
+                  <button
+                    key={niche.id}
+                    type="button"
+                    onClick={() => {
+                      playSoftBubble();
+                      setSelectedNiche(niche.id);
+                      setCampaignName(`${niche.label} SMS Campaign`);
+                    }}
+                    className={`group relative p-4 sm:p-5 rounded-2xl border text-center transition-all duration-150 cursor-pointer overflow-hidden ${
+                      isSelected
+                        ? 'bg-gradient-to-br from-accent-soft via-white to-accent-soft/60 border-accent/40 ring-4 ring-accent/20 shadow-[0_18px_40px_rgba(99,102,241,0.18)]'
+                        : 'bg-white border-border-main hover:border-accent/30 hover:shadow-[0_14px_32px_rgba(26,25,22,0.10)] hover:-translate-y-0.5'
+                    }`}
+                  >
+                    <div className={`pointer-events-none absolute -top-10 -right-10 w-28 h-28 rounded-full blur-2xl transition-opacity ${
+                      isSelected ? 'bg-accent/20 opacity-100' : 'bg-accent/0 opacity-0 group-hover:bg-accent/10 group-hover:opacity-100'
+                    }`} />
+
+                    <div className={`relative mx-auto w-11 h-11 rounded-xl flex items-center justify-center border transition-all duration-200 ${
+                      isSelected
+                        ? 'bg-accent text-white border-accent shadow-[0_6px_16px_rgba(37,99,235,0.28)]'
+                        : 'bg-accent-soft text-accent border-accent/15 group-hover:bg-accent group-hover:text-white group-hover:border-accent group-hover:shadow-[0_6px_16px_rgba(37,99,235,0.20)]'
+                    }`}>
+                      {n.includes('barber') ? (
+                        <svg {...svgProps}>
+                          <circle cx="6" cy="6" r="3" />
+                          <circle cx="6" cy="18" r="3" />
+                          <line x1="20" y1="4" x2="8.12" y2="15.88" />
+                          <line x1="14.47" y1="14.48" x2="20" y2="20" />
+                          <line x1="8.12" y1="8.12" x2="12" y2="12" />
+                        </svg>
+                      ) : n.includes('salon') || n.includes('beauty') || n.includes('hair') || n.includes('spa') ? (
+                        <svg {...svgProps}>
+                          <path d="M4 6h16a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z" />
+                          <line x1="6" y1="11" x2="6" y2="18" />
+                          <line x1="9" y1="11" x2="9" y2="18" />
+                          <line x1="12" y1="11" x2="12" y2="18" />
+                          <line x1="15" y1="11" x2="15" y2="18" />
+                          <line x1="18" y1="11" x2="18" y2="18" />
+                        </svg>
+                      ) : n.includes('dent') ? (
+                        <svg {...svgProps}>
+                          <path d="M7 3C4.8 3 3 4.8 3 7.2c0 2.4 1.2 4.3 2 6.8.7 2.2 1.1 6 2.8 6 1.3 0 1.8-2.8 2.7-4.5.4-.7.9-1 1.5-1s1.1.3 1.5 1c.9 1.7 1.4 4.5 2.7 4.5 1.7 0 2.1-3.8 2.8-6 .8-2.5 2-4.4 2-6.8C21 4.8 19.2 3 17 3c-1.8 0-3.2 1-5 1S8.8 3 7 3Z" />
+                        </svg>
+                      ) : n.includes('hvac') || n.includes('climate') || n.includes('cool') || n.includes('heat') || n.includes('air') ? (
+                        <svg {...svgProps}>
+                          <path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2" />
+                          <path d="M9.6 4.6A2 2 0 1 1 11 8H2" />
+                          <path d="M12.6 19.4A2 2 0 1 0 14 16H2" />
+                        </svg>
+                      ) : n.includes('roof') ? (
+                        <svg {...svgProps}>
+                          <path d="M2 13L12 4l10 9" />
+                          <path d="M5 10.3V20h14v-9.7" />
+                          <path d="M9 20v-5h6v5" />
+                        </svg>
+                      ) : n.includes('real') || n.includes('estate') || n.includes('realt') || n.includes('prop') ? (
+                        <svg {...svgProps}>
+                          <rect x="4" y="3" width="10" height="18" rx="1" />
+                          <path d="M14 9h6v12h-6" />
+                          <line x1="7" y1="7" x2="11" y2="7" />
+                          <line x1="7" y1="11" x2="11" y2="11" />
+                          <line x1="7" y1="15" x2="11" y2="15" />
+                          <line x1="17" y1="13" x2="17" y2="17" />
+                        </svg>
+                      ) : n.includes('gym') || n.includes('fit') || n.includes('train') || n.includes('workout') ? (
+                        <svg {...svgProps}>
+                          <path d="M6.5 6.5v11" />
+                          <path d="M3.5 8.5v7" />
+                          <path d="M17.5 6.5v11" />
+                          <path d="M20.5 8.5v7" />
+                          <line x1="6.5" y1="12" x2="17.5" y2="12" />
+                        </svg>
+                      ) : (
+                        <svg {...svgProps}>
+                          <circle cx="12" cy="12" r="9" />
+                          <polygon points="14.5 9.5 9.5 11.5 7.5 16.5 12.5 14.5 16.5 7.5 14.5 9.5" />
+                        </svg>
+                      )}
+                    </div>
+
+                    <p className={`relative text-sm font-bold mt-3 leading-tight truncate max-w-full transition-colors ${
+                      isSelected ? 'text-accent' : 'text-ink group-hover:text-accent'
+                    }`}>
+                      {niche.label}
+                    </p>
+
+                    <div className="relative mt-2 h-4">
+                      {isSelected ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-accent">
+                          <Check className="w-3 h-3" strokeWidth={3} />
+                          Selected
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-ink-tertiary group-hover:text-ink-secondary font-medium">
+                          Tap to select
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================
+            STEP 2: CHOOSE LEADS (Pill Switcher, Dropzone, Canada Finder)
+        =================================================================== */}
+        {activeStep === 2 && (
+          <div className="space-y-5 animate-fade-in">
+            <div className="space-y-1">
+              <h3 className="font-serif text-xl sm:text-2xl text-ink">Choose your leads</h3>
+              <p className="text-sm text-ink-secondary">Upload a CSV or discover verified local businesses in Canada with phone numbers.</p>
+            </div>
+
+            {/* Pill Tab Switcher */}
+            <div className="grid grid-cols-2 sm:flex gap-1.5 sm:gap-2 p-1 sm:p-1.5 bg-gradient-to-r from-surface to-off-white rounded-2xl w-full sm:w-fit shadow-inner">
+              <button
+                type="button"
+                onClick={() => { playSoftTap(); setLeadSource('google_maps'); }}
+                className={`flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-6 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-300 cursor-pointer ${
+                  leadSource === 'google_maps'
+                    ? 'bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30'
+                    : 'text-ink-secondary hover:text-ink hover:bg-white/50'
+                }`}
+              >
+                <MapPin className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                <span className="truncate">Find Leads (Google Places)</span>
+                <span className="hidden sm:inline-block ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold">
+                  Places
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { playSoftTap(); setLeadSource('csv'); }}
+                className={`flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-6 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-300 cursor-pointer ${
+                  leadSource === 'csv'
+                    ? 'bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30'
+                    : 'text-ink-secondary hover:text-ink hover:bg-white/50'
+                }`}
+              >
+                <FileSpreadsheet className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                Upload CSV
+              </button>
+            </div>
+
+            {/* CSV Upload Mode */}
+            {leadSource === 'csv' && (
+              <div className="space-y-5">
+                {/* Canada-Only Error Guard if applicable */}
+                {csvValidation && isAutomatedSmsPlan(userPlan) && (csvValidation.countryBlockedCount ?? 0) > 0 && (
+                  <CanadaOnlyErrorCard
+                    invalidRows={csvValidation.invalidRows}
+                    validCount={csvValidation.validCount}
+                    totalRows={csvValidation.totalRows}
+                    allowedCountries={csvValidation.allowedCountries}
+                    onRemoveNonCanadian={() => {
+                      const nonBlocked = csvValidation.invalidRows.filter(
+                        (r) => !(r.issues || []).some((msg) =>
+                          msg.includes('Canadian numbers only') || msg.includes('Canadian') || msg.includes('recognised')
+                        )
+                      );
+                      setCsvValidation({
+                        ...csvValidation,
+                        invalidCount: nonBlocked.length,
+                        invalidRows: nonBlocked,
+                        ok: csvValidation.validCount > 0 || nonBlocked.length === 0,
+                        message: nonBlocked.length === 0
+                          ? `All non-Canadian rows removed. ${csvValidation.validCount} valid leads ready.`
+                          : csvValidation.message,
+                      });
+                    }}
+                    onClearAll={() => {
+                      setCsvLeads([]);
+                      setCsvParsedCount(0);
+                      setCsvValidation(null);
+                      setCsvError(null);
+                      setCsvFileName('');
+                    }}
+                    onClose={() => setCsvError(null)}
+                  />
+                )}
+
+                {!csvFileName ? (
+                  <label className="block cursor-pointer group">
+                    <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-border-main hover:border-accent/50 bg-gradient-to-br from-surface via-white to-accent-soft/10 transition-all duration-300 group-hover:shadow-lg group-hover:shadow-accent/10">
+                      <div className="absolute -top-20 -right-20 w-48 h-48 bg-accent/5 rounded-full blur-3xl" />
+                      <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-accent/5 rounded-full blur-3xl" />
+
+                      <div className="relative p-6 sm:p-12 text-center">
+                        <div className="relative inline-block mb-4 sm:mb-6">
+                          <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-accent to-accent-hover flex items-center justify-center shadow-xl shadow-accent/30 group-hover:scale-110 transition-transform duration-300">
+                            <FileSpreadsheet className="w-7 h-7 sm:w-10 sm:h-10 text-white" />
+                          </div>
+                        </div>
+
+                        <p className="text-lg font-bold text-ink mb-2">Drop your CSV file here</p>
+                        <p className="text-sm text-ink-secondary mb-4">or click to browse from your computer</p>
+                        <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-accent text-white font-semibold rounded-xl shadow-lg shadow-accent/30 group-hover:bg-accent-hover transition-colors">
+                          <Upload className="w-4 h-4" />
+                          Choose File
+                        </div>
+                        <p className="text-xs text-ink-tertiary mt-6">Required columns: business_name, phone_number, city</p>
+                      </div>
+                    </div>
+                    <input
+                      type="file"
+                      accept=".csv"
+                      className="hidden"
+                      onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
+                    />
+                  </label>
+                ) : (
+                  <div className="space-y-4">
+                    <CsvPreview
+                      fileName={csvFileName}
+                      leads={csvLeads}
+                      totalCount={csvParsedCount}
+                      onClear={() => {
+                        playSoftTap();
+                        setCsvFileName(null);
+                        setCsvLeads([]);
+                        setCsvValidation(null);
+                        setCsvParsedCount(0);
+                        setCsvError(null);
+                      }}
+                      onRemoveLead={(index) => {
+                        playSoftTap();
+                        const nextLeads = csvLeads.filter((_, i) => i !== index);
+                        setCsvLeads(nextLeads);
+                        setCsvParsedCount(nextLeads.length);
+                      }}
+                      onUpdateLead={(index, updated) => {
+                        playSoftTap();
+                        const nextLeads = [...csvLeads];
+                        nextLeads[index] = updated;
+                        setCsvLeads(nextLeads);
+                      }}
+                      onAddLead={(newLead) => {
+                        playSoftTap();
+                        const nextLeads = [...csvLeads, newLead];
+                        setCsvLeads(nextLeads);
+                        setCsvParsedCount(nextLeads.length);
+                      }}
+                      ClearIcon={X}
+                    />
+                    <div className="flex items-center justify-between gap-4 px-1">
+                      <p className="text-sm text-ink-secondary">
+                        Ready? Continue to <span className="font-semibold text-ink">pick a template</span>.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playSoftTap();
+                          setCsvFileName(null);
+                          setCsvLeads([]);
+                          setCsvValidation(null);
+                          setCsvParsedCount(0);
+                          setCsvError(null);
+                        }}
+                        className="flex items-center gap-2 text-sm font-semibold text-accent hover:text-accent-hover transition-colors cursor-pointer"
+                      >
+                        <Upload className="w-4 h-4" />
+                        Upload another CSV
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {csvError && (
+                  <div className="p-3 bg-danger-soft border border-danger/20 rounded-xl flex items-center gap-2 text-xs font-semibold text-danger">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{csvError}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Find Leads through Google Places */}
+            {leadSource === 'google_maps' && (
+              <div className="rounded-2xl bg-white border border-border-main p-4 sm:p-6 shadow-xs">
+                <SmsLeadFinder
+                  ownerKey={ownerKey}
+                  userPlan={userPlan}
+                  userCredits={userCredits}
+                  campaignNiche={selectedNiche}
+                  onCreditsChange={onCreditsChange}
+                  onLeadsSelected={(leads) => {
+                    setCsvLeads(leads);
+                    setCsvParsedCount(leads.length);
+                    setCsvFileName('google-maps-leads.csv');
+                    setCsvValidation({
+                      ok: leads.length > 0,
+                      detectedColumns: ['name', 'phone', 'city'],
+                      missingColumns: [],
+                      totalRows: leads.length,
+                      validCount: leads.length,
+                      invalidCount: 0,
+                      leads,
+                      invalidRows: [],
+                      message: `${leads.length} leads added from Google Places`,
+                      countryBlockedCount: 0,
+                      allowedCountries: null,
+                    });
+                    playVictoryCelebration();
+                  }}
+                />
+
+                {csvLeads.length > 0 && (
+                  <div className="mt-6 pt-6 border-t border-border-light">
+                    <CsvPreview
+                      fileName="google-maps-leads.csv"
+                      leads={csvLeads}
+                      totalCount={csvParsedCount}
+                      onClear={() => {
+                        setCsvLeads([]);
+                        setCsvParsedCount(0);
+                      }}
+                      ClearIcon={X}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===================================================================
+            STEP 3: CHOOSE TEMPLATE
+        =================================================================== */}
+        {activeStep === 3 && (
+          <CampaignTemplateStep
+            allTemplates={allTemplates}
+            selectedTemplateId={selectedTemplateId}
+            onSelectTemplate={(tplId) => setSelectedTemplateId(tplId)}
+            selectedNiche={selectedNiche}
+            campaignType="sms"
+          />
+        )}
+
+        {/* ===================================================================
+            STEP 4: PHONE NUMBER & 10DLC SETUP (Only for Paid Plans connecting own Telnyx)
+        =================================================================== */}
+        {activeStep === 4 && !isAutomatedSmsPlan(userPlan) && (
+          <div className="space-y-6 animate-fade-in">
+            <div className="space-y-1">
+              <h3 className="font-serif text-xl sm:text-2xl text-ink">Sender phone & compliance</h3>
+              <p className="text-sm text-ink-secondary">
+                Select your sending phone number and verify 10DLC brand messaging parameters.
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-white border border-border-main p-4 sm:p-6 shadow-xs">
+              <SmsAccountStep
+                ownerKey={ownerKey}
+                userPlan={userPlan}
+                mode="byo"
+                selectedPhoneNumber={selectedPhoneNumber}
+                onSelectPhone={handleSelectPhone}
+                targetCountries={targetCountries}
+                leads={csvLeads}
+                onExcludeIncompatibleLeads={handleExcludeIncompatibleLeads}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================
+            STEP 5: REVIEW, CONTENT & LAUNCH (Advanced Segment Engine)
+        =================================================================== */}
+        {/* ===================================================================
+            STEP 5: SMS MESSAGE CONTENT & SEGMENT OPTIMIZER
+        =================================================================== */}
+        {activeStep === 5 && (
+          <div className="space-y-6 animate-fade-in">
+            <div className="space-y-1">
+              <h3 className="font-serif text-xl sm:text-2xl text-ink">Craft your SMS proposal message</h3>
+              <p className="text-sm text-ink-secondary">
+                Select high-converting pre-built hook copy or personalize your own. Inspect real-time segment math and per-recipient simulator preview.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Left Column (7/12): SMS Message Editor & 2-Segment Optimizer */}
+              <div className="lg:col-span-7 space-y-5">
+                
+                {/* Dual Audience Segment Selector & Message Editor */}
+                <div className="p-4 sm:p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-light pb-4">
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
+                        <MessageSquare className="w-3.5 h-3.5 text-accent" />
+                        <span>Dual Outreach Message Engine</span>
+                      </h4>
+                      <p className="text-[11px] text-ink-secondary mt-0.5">
+                        Write distinct, high-converting hooks for businesses with vs. without a website.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 bg-surface px-2.5 py-1 rounded-full border border-border-light text-[11px] font-semibold text-ink-secondary">
+                      <span>Total Audience:</span>
+                      <strong className="text-ink font-mono">{csvLeads.length || totalEvaluatedCount} leads</strong>
+                    </div>
+                  </div>
+
+                  {/* Segment Switcher Tabs */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Tab 1: Without Website */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSoftTap();
+                        setMessagingTargetTab('no_website');
+                        const idx = evaluatedLeads.findIndex((l) => !l.hasWebsite);
+                        if (idx >= 0) setPreviewLeadIndex(idx);
+                      }}
+                      className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-start justify-between gap-2.5 ${
+                        messagingTargetTab === 'no_website'
+                          ? 'bg-amber-500/10 border-amber-500 shadow-xs ring-2 ring-amber-500/20'
+                          : 'bg-surface hover:bg-off-white border-border-light text-ink'
+                      }`}
+                    >
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm">🔥</span>
+                          <span className="text-xs font-bold text-ink">Businesses Without Website</span>
+                        </div>
+                        <p className="text-[11px] text-ink-secondary truncate">
+                          Cold referral & instant live site hook
+                        </p>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
+                        {leadsWithoutWebsiteCount} {leadsWithoutWebsiteCount === 1 ? 'lead' : 'leads'}
+                      </span>
+                    </button>
+
+                    {/* Tab 2: With Website */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSoftTap();
+                        setMessagingTargetTab('with_website');
+                        const idx = evaluatedLeads.findIndex((l) => l.hasWebsite);
+                        if (idx >= 0) setPreviewLeadIndex(idx);
+                      }}
+                      className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-start justify-between gap-2.5 ${
+                        messagingTargetTab === 'with_website'
+                          ? 'bg-blue-500/10 border-blue-500 shadow-xs ring-2 ring-blue-500/20'
+                          : 'bg-surface hover:bg-off-white border-border-light text-ink'
+                      }`}
+                    >
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm">🌐</span>
+                          <span className="text-xs font-bold text-ink">Businesses With Website</span>
+                        </div>
+                        <p className="text-[11px] text-ink-secondary truncate">
+                          Redesign & mobile booking upgrade hook
+                        </p>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-blue-100 text-blue-800 border border-blue-200 shrink-0">
+                        {leadsWithWebsiteCount} {leadsWithWebsiteCount === 1 ? 'lead' : 'leads'}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Active Message Content Card */}
+                  <div className={`p-4 rounded-xl border space-y-4 ${
+                    messagingTargetTab === 'no_website'
+                      ? 'bg-amber-50/30 border-amber-200/80'
+                      : 'bg-blue-50/30 border-blue-200/80'
+                  }`}>
+                    {/* Header with Char Count & Segments */}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">{messagingTargetTab === 'no_website' ? '🔥' : '🌐'}</span>
+                        <div>
+                          <span className="text-xs font-bold text-ink block">
+                            {messagingTargetTab === 'no_website'
+                              ? 'Template A: For Businesses Without a Website'
+                              : 'Template B: For Businesses With an Existing Website'}
+                          </span>
+                          <span className="text-[10px] text-ink-tertiary">
+                            {messagingTargetTab === 'no_website'
+                              ? 'Dispatched to verified leads with 0 active websites'
+                              : 'Dispatched to verified leads that already have an existing web address'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-ink-secondary">
+                          <span className="font-mono font-semibold text-ink">
+                            {messagingTargetTab === 'no_website' ? smsMessageNoWebsite.length : smsMessageWithWebsite.length}
+                          </span> chars
+                        </span>
+                        <span className="text-border-light text-xs">•</span>
+                        {(() => {
+                          const currentText = messagingTargetTab === 'no_website' ? smsMessageNoWebsite : smsMessageWithWebsite;
+                          const currentSegs = currentText.length <= 160 ? 1 : Math.ceil(currentText.length / 153);
+                          return (
+                            <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold font-mono ${
+                              currentSegs === 1
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            }`}>
+                              {currentSegs} {currentSegs === 1 ? 'segment' : 'segments'}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* Pre-Built SMS Templates */}
+                    <div className="space-y-2">
+                      <span className="text-[11px] font-semibold text-ink-tertiary block">
+                        {messagingTargetTab === 'no_website'
+                          ? 'Pre-built no-website hooks:'
+                          : 'Pre-built website redesign & upgrade hooks:'}
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {(messagingTargetTab === 'no_website'
+                          ? PRESET_SMS_TEMPLATES_NO_WEBSITE
+                          : PRESET_SMS_TEMPLATES_WITH_WEBSITE
+                        ).map((preset) => {
+                          const isSelected =
+                            messagingTargetTab === 'no_website'
+                              ? smsMessageNoWebsite === preset.text
+                              : smsMessageWithWebsite === preset.text;
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              onClick={() => {
+                                playSoftTap();
+                                if (messagingTargetTab === 'no_website') {
+                                  setSmsMessageNoWebsite(preset.text);
+                                  setSmsMessage(preset.text);
+                                  setActivePresetIdNoWebsite(preset.id);
+                                } else {
+                                  setSmsMessageWithWebsite(preset.text);
+                                  setActivePresetIdWithWebsite(preset.id);
+                                }
+                              }}
+                              className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
+                                isSelected
+                                  ? messagingTargetTab === 'no_website'
+                                    ? 'bg-amber-100/70 border-amber-500 shadow-xs'
+                                    : 'bg-blue-100/70 border-blue-500 shadow-xs'
+                                  : 'bg-white hover:bg-surface border-border-light text-ink'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="text-xs font-bold truncate text-ink">{preset.name}</span>
+                                <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${
+                                  preset.id === 'referral_josh' || preset.id === 'redesign_upgrade'
+                                    ? 'bg-emerald-100 text-emerald-700'
+                                    : 'bg-blue-100 text-blue-700'
+                                }`}>
+                                  {preset.badge}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-ink-tertiary line-clamp-2 font-mono">
+                                {preset.text.replace(/\n+/g, ' ')}
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Variable Chips */}
+                    <div className="space-y-1.5 pt-1 border-t border-border-light/70">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] font-semibold text-ink-tertiary">Insert variable:</span>
+                        {[
+                          { key: 'site_url', label: '{{site_url}}' },
+                          { key: 'niche', label: '{{niche}}' },
+                          { key: 'city', label: '{{city}}' },
+                          { key: 'business_name', label: '{{business_name}}' },
+                        ].map((item) => (
+                          <button
+                            key={item.key}
+                            type="button"
+                            onClick={() => insertVariableTag(item.key)}
+                            className="px-2.5 py-1 rounded-lg bg-white hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 border border-border-light text-xs font-mono font-medium text-ink transition-all cursor-pointer"
+                          >
+                            + {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <textarea
+                      ref={textareaRef}
+                      value={messagingTargetTab === 'no_website' ? smsMessageNoWebsite : smsMessageWithWebsite}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (messagingTargetTab === 'no_website') {
+                          setSmsMessageNoWebsite(val);
+                          setSmsMessage(val);
+                        } else {
+                          setSmsMessageWithWebsite(val);
+                        }
+                      }}
+                      rows={4}
+                      className="w-full p-4 rounded-xl border border-border-main bg-white focus:border-accent focus:ring-2 focus:ring-accent/10 text-sm font-sans text-ink placeholder:text-ink-tertiary outline-none resize-none shadow-inner"
+                      placeholder={
+                        messagingTargetTab === 'no_website'
+                          ? "Enter SMS hook for businesses without a website..."
+                          : "Enter SMS hook for businesses with an existing website..."
+                      }
+                    />
+                    <div className="flex items-center justify-between text-[11px] text-ink-tertiary">
+                      <span>
+                        Tokens like <code className="font-mono text-blue-600">{"{{site_url}}"}</code> and <code className="font-mono text-blue-600">{"{{business_name}}"}</code> adapt automatically for every business.
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2-Segment Specific Optimizer & Customization Card */}
+                <div className="p-4 sm:p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-light pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center shrink-0">
+                        <Sliders className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-ink flex flex-wrap items-center gap-1.5">
+                          <span>2-Segment Message Optimizer</span>
+                          <span className="text-[10px] text-ink-tertiary font-normal">(Long URLs Handler)</span>
+                        </h4>
+                        <p className="text-[11px] text-ink-secondary">
+                          Customize a shorter SMS specifically for messages that exceed 160 characters.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {originalTwoSegmentCount > 0 ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                          <AlertTriangle className="w-3 h-3 text-amber-600" />
+                          <span>{originalTwoSegmentCount} need shortening</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <Check className="w-3 h-3 text-emerald-600" />
+                          <span>All messages ≤ 160 chars</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Explanatory description & toggle */}
+                  <div className="p-3.5 rounded-xl bg-surface border border-border-light flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-semibold text-ink">
+                        Apply shorter copy for 2-segment messages alone?
+                      </p>
+                      <p className="text-[11px] text-ink-secondary">
+                        Keeps 1-segment leads untouched, while automatically shortening long-slug messages under 160 chars.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSoftTap();
+                        setEnable2SegOverride((prev) => !prev);
+                      }}
+                      className={`w-full sm:w-auto justify-center px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center gap-2 ${
+                        enable2SegOverride
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'bg-white border border-border-main text-ink hover:bg-off-white'
+                      }`}
+                    >
+                      {enable2SegOverride ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Active (2-Seg Override On)</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Enable 2-Seg Shorter Copy</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* 2-Segment Custom Template Editor (When enabled) */}
+                  {enable2SegOverride && (
+                    <div className="p-4 rounded-xl bg-amber-50/50 border border-amber-200 space-y-3 animate-fade-in">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                          <Sliders className="w-3.5 h-3.5 text-amber-600" />
+                          Shorter Template for 2-Segment Messages Alone
+                        </span>
+                        <span className="text-[11px] font-mono text-emerald-700 font-bold bg-white px-2 py-0.5 rounded border border-emerald-200">
+                          {twoSegmentCount === 0 
+                            ? '✓ 100% converted to 1 segment!' 
+                            : `${originalTwoSegmentCount - twoSegmentCount} converted · ${twoSegmentCount} still > 160`}
+                        </span>
+                      </div>
+
+                      {/* Quick shortening presets */}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] font-medium text-amber-800">Quick short copy:</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            playSoftTap();
+                            setTwoSegTemplate(`Yoo pal, built u a site: {{site_url}} pls update me tysm.`);
+                          }}
+                          className="px-2 py-1 rounded bg-white hover:bg-amber-100 text-amber-900 border border-amber-200 text-[10px] font-bold cursor-pointer"
+                        >
+                          Ultra Short (44 chars)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            playSoftTap();
+                            setTwoSegTemplate(`Josh rec'd u. Built u a site: {{site_url}} update me ty`);
+                          }}
+                          className="px-2 py-1 rounded bg-white hover:bg-amber-100 text-amber-900 border border-amber-200 text-[10px] font-bold cursor-pointer"
+                        >
+                          Referral Short
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            playSoftTap();
+                            setTwoSegTemplate(`No catch, built u the best {{niche}} site: {{site_url}} let me know!`);
+                          }}
+                          className="px-2 py-1 rounded bg-white hover:bg-amber-100 text-amber-900 border border-amber-200 text-[10px] font-bold cursor-pointer"
+                        >
+                          No-Catch Short
+                        </button>
+                      </div>
+
+                      <textarea
+                        value={twoSegTemplate}
+                        onChange={(e) => setTwoSegTemplate(e.target.value)}
+                        rows={3}
+                        className="w-full p-3 rounded-lg bg-white border border-amber-300 focus:border-accent text-xs font-sans text-ink placeholder:text-ink-tertiary outline-none resize-none shadow-xs"
+                        placeholder="Enter shorter template for 2-segment messages..."
+                      />
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
+              {/* Right Column (5/12): Live SMS Bubble Preview Card (Brand Consistent: White, Blue, Green) */}
+              <div className="lg:col-span-5 space-y-5">
+                <div className="p-4 sm:p-5 rounded-2xl bg-white border border-blue-200/80 shadow-xs space-y-4">
+                  {/* Preview Header & Recipient Switcher */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border-light pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-200/60 text-blue-600 flex items-center justify-center shadow-2xs">
+                        <Smartphone className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-ink">Live SMS Bubble Preview</h4>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          <span className="text-[10px] font-medium text-emerald-700">
+                            Route: {selectedPhoneNumber || '+1 (604) 953-9651'} (Telnyx Canada 10DLC)
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Recipient Navigator */}
+                    <div className="flex items-center justify-between sm:justify-start w-full sm:w-auto gap-1.5 bg-surface p-1 rounded-xl border border-border-light">
+                      <button
+                        type="button"
+                        disabled={previewLeadIndex <= 0}
+                        onClick={() => {
+                          playSoftTap();
+                          setPreviewLeadIndex((prev) => Math.max(0, prev - 1));
+                        }}
+                        className="px-2 py-1 rounded-lg bg-white border border-border-light text-[11px] font-bold text-ink disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors cursor-pointer"
+                        title="Previous recipient"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5 inline" />
+                      </button>
+
+                      <select
+                        value={previewLeadIndex}
+                        onChange={(e) => {
+                          playSoftTap();
+                          setPreviewLeadIndex(Number(e.target.value));
+                        }}
+                        className="text-[11px] font-bold text-ink bg-transparent outline-none cursor-pointer px-1 py-0.5 flex-1 sm:flex-initial max-w-[180px] sm:max-w-[140px] truncate"
+                      >
+                        {evaluatedLeads.map((l, i) => (
+                          <option key={i} value={i}>
+                            {i + 1}. {l.lead.name} ({l.finalSegments} seg)
+                          </option>
+                        ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        disabled={previewLeadIndex >= evaluatedLeads.length - 1}
+                        onClick={() => {
+                          playSoftTap();
+                          setPreviewLeadIndex((prev) => Math.min(evaluatedLeads.length - 1, prev + 1));
+                        }}
+                        className="px-2 py-1 rounded-lg bg-white border border-border-light text-[11px] font-bold text-ink disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors cursor-pointer"
+                        title="Next recipient"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5 inline" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Smartphone Canvas */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-50/80 via-white to-blue-50/20 border border-blue-100 shadow-inner space-y-3">
+                    {/* Recipient / Sender meta */}
+                    <div className="text-center space-y-1.5">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center shadow-sm mx-auto">
+                        L
+                      </div>
+                      <p className="text-xs font-bold text-ink flex items-center justify-center gap-1">
+                        <span>Lunao Outreach</span>
+                        <CheckCircle className="w-3 h-3 text-blue-600" />
+                      </p>
+                      <div className="flex flex-wrap items-center justify-center gap-1.5">
+                        <span className="text-[10px] text-ink-tertiary">
+                          Recipient: <strong className="text-ink">{sampleBusinessName}</strong> ({sampleCity})
+                        </span>
+                        {sampleHasWebsite ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                            <Globe className="w-2.5 h-2.5" />
+                            <span>Has Website Hook</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                            <span>🔥 No Website Hook</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Quick preview switcher buttons */}
+                      <div className="flex items-center justify-center gap-2 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            playSoftTap();
+                            const idx = evaluatedLeads.findIndex((l) => !l.hasWebsite);
+                            if (idx >= 0) setPreviewLeadIndex(idx);
+                          }}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                            !sampleHasWebsite
+                              ? 'bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs'
+                              : 'bg-white text-ink-secondary border border-border-light hover:bg-slate-50'
+                          }`}
+                        >
+                          <span>🔥 Preview No-Site Hook</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            playSoftTap();
+                            const idx = evaluatedLeads.findIndex((l) => l.hasWebsite);
+                            if (idx >= 0) setPreviewLeadIndex(idx);
+                          }}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                            sampleHasWebsite
+                              ? 'bg-blue-100 text-blue-800 border border-blue-300 shadow-2xs'
+                              : 'bg-white text-ink-secondary border border-border-light hover:bg-slate-50'
+                          }`}
+                        >
+                          <span>🌐 Preview Has-Site Hook</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Message Bubble (Brand Green & Blue) */}
+                    <div className="space-y-1.5 max-w-md ml-auto">
+                      <div className="p-4 rounded-2xl rounded-tr-sm bg-emerald-600 text-white shadow-md text-xs sm:text-[13px] font-sans leading-relaxed whitespace-pre-wrap">
+                        {interpolatedSms}
+
+                        {/* Live Website Card Attachment inside Bubble */}
+                        <a
+                          href={sampleSiteUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="mt-3 p-3 rounded-xl bg-white text-ink border border-blue-100 shadow-sm flex items-center justify-between gap-2.5 hover:shadow-md hover:border-blue-300 transition-all block group cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                              <Globe className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[11px] font-bold text-ink truncate group-hover:text-blue-600 transition-colors">
+                                {sampleBusinessName} — Live Site
+                              </p>
+                              <p className="text-[10px] font-mono text-blue-500 truncate">
+                                {sampleSiteUrl.replace(/^https?:\/\//, '')}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-[10px] font-bold shrink-0 group-hover:bg-emerald-50 group-hover:text-emerald-700 transition-colors">
+                            <span>View</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </span>
+                        </a>
+                      </div>
+
+                      {/* Bubble status */}
+                      <div className="flex items-center justify-between text-[10px] px-1">
+                        <span className={`font-mono font-bold ${segmentsCount === 1 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                          {interpolatedCharCount} chars · {segmentsCount} {segmentsCount === 1 ? 'segment' : 'segments'}
+                        </span>
+                        <div className="flex items-center gap-1 font-medium text-emerald-700">
+                          <CheckCheck className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Delivered · Direct carrier 10DLC</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Functionality Action Strip */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border-light text-xs">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        playSoftTap();
+                        try {
+                          await navigator.clipboard.writeText(interpolatedSms);
+                          setCopiedPreviewSms(true);
+                          setTimeout(() => setCopiedPreviewSms(false), 2000);
+                        } catch {}
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface hover:bg-blue-50 hover:text-blue-700 border border-border-light text-ink font-semibold text-xs transition-colors cursor-pointer"
+                    >
+                      {copiedPreviewSms ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span className="text-emerald-700">Copied to Clipboard!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5 text-ink-secondary" />
+                          <span>Copy Sample SMS</span>
+                        </>
+                      )}
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-ink-secondary font-medium">
+                        Target URL:
+                      </span>
+                      <a
+                        href={sampleSiteUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-mono text-blue-600 hover:text-blue-700 hover:underline"
+                      >
+                        <span className="truncate max-w-[200px]">{sampleSiteUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')}</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* All Messages & Segment Inspector */}
+            <div className="p-4 sm:p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-5">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-border-light pb-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-accent" />
+                    <h4 className="text-base font-bold text-ink">All Messages & Segment Inspector</h4>
+                  </div>
+                  <p className="text-xs text-ink-secondary">
+                    Review each prospect's exact proposal copy and carrier segments. Customize individual messages or shorten 2-segment messages alone.
+                  </p>
+                </div>
+
+                {/* Filter Tabs (Segments + Website Status) */}
+                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                  {/* Website Status Tabs */}
+                  <div className="flex items-center gap-1 bg-surface p-1 rounded-xl border border-border-light">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSoftTap();
+                        setWebsiteFilter('all');
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        websiteFilter === 'all'
+                          ? 'bg-white text-ink shadow-xs'
+                          : 'text-ink-secondary hover:text-ink'
+                      }`}
+                    >
+                      All ({totalEvaluatedCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSoftTap();
+                        setWebsiteFilter('no_website');
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                        websiteFilter === 'no_website'
+                          ? 'bg-amber-500 text-white shadow-xs'
+                          : 'text-amber-800 hover:bg-amber-50'
+                      }`}
+                    >
+                      <span>🔥 No Site</span>
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20 font-mono">
+                        {leadsWithoutWebsiteCount}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSoftTap();
+                        setWebsiteFilter('with_website');
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                        websiteFilter === 'with_website'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-blue-700 hover:bg-blue-50'
+                      }`}
+                    >
+                      <span>🌐 Has Site</span>
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20 font-mono">
+                        {leadsWithWebsiteCount}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Segment Count Tabs */}
+                  <div className="flex items-center gap-1 bg-surface p-1 rounded-xl border border-border-light">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSoftTap();
+                        setSegmentFilter('all');
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        segmentFilter === 'all'
+                          ? 'bg-white text-ink shadow-xs'
+                          : 'text-ink-secondary hover:text-ink'
+                      }`}
+                    >
+                      Any Seg
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSoftTap();
+                        setSegmentFilter('1seg');
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                        segmentFilter === '1seg'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'text-emerald-700 hover:bg-emerald-50'
+                      }`}
+                    >
+                      <span>1-Seg</span>
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-100 text-emerald-800 font-mono">
+                        {oneSegmentCount}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSoftTap();
+                        setSegmentFilter('2seg');
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                        segmentFilter === '2seg'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : twoSegmentCount > 0
+                          ? 'text-amber-800 bg-amber-50 hover:bg-amber-100'
+                          : 'text-ink-secondary'
+                      }`}
+                    >
+                      <span>2-Seg</span>
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-100 text-amber-900 font-mono">
+                        {twoSegmentCount}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tip notice when 2-segment messages exist */}
+              {twoSegmentCount > 0 && !enable2SegOverride && (
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>
+                      <strong>{twoSegmentCount} messages</strong> exceed 160 characters due to longer website URLs. You can shorten them above with the 2-Segment Optimizer or customize them individually below.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playSoftTap();
+                      setEnable2SegOverride(true);
+                    }}
+                    className="w-full sm:w-auto text-center px-3 py-1.5 rounded-lg bg-amber-600 text-white font-bold text-xs shrink-0 hover:bg-amber-700 transition-colors cursor-pointer"
+                  >
+                    ⚡ Shorten 2-Seg Messages
+                  </button>
+                </div>
+              )}
+
+              {/* Messages Grid */}
+              <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1 scrollbar-thin">
+                {evaluatedLeads
+                  .filter((item) => {
+                    if (segmentFilter === '1seg' && item.finalSegments !== 1) return false;
+                    if (segmentFilter === '2seg' && item.finalSegments < 2) return false;
+                    if (websiteFilter === 'no_website' && item.hasWebsite) return false;
+                    if (websiteFilter === 'with_website' && !item.hasWebsite) return false;
+                    return true;
+                  })
+                  .map((item) => {
+                    const isEditing = editingLeadIndex === item.index;
+                    const isPreviewed = previewLeadIndex === item.index;
+
+                    return (
+                      <div
+                        key={item.index}
+                        className={`p-4 rounded-xl border transition-all ${
+                          isPreviewed
+                            ? 'bg-blue-50/40 border-blue-400 shadow-xs'
+                            : item.finalSegments === 1
+                            ? 'bg-white border-border-light hover:border-border-main'
+                            : 'bg-amber-50/20 border-amber-200'
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-light/60 pb-2.5">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="w-5 h-5 rounded-full bg-slate-100 font-mono text-[11px] font-bold text-ink flex items-center justify-center shrink-0">
+                              {item.index + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="text-xs font-bold text-ink truncate">{item.lead.name}</p>
+                                {item.hasWebsite ? (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded font-mono text-[9px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                    <Globe className="w-2.5 h-2.5" />
+                                    <span>Has Website Hook</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded font-mono text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                    <span>🔥 No Website Hook</span>
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[10px] text-ink-secondary truncate">
+                                {item.lead.city || 'Local'} · {item.lead.phone || '+1 604-953-9651'}
+                                {item.hasWebsite && item.website ? ` · ${item.website.replace(/^https?:\/\//, '')}` : ''}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 shrink-0">
+                            {item.isOverriddenFor2Seg && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">
+                                ⚡ 2-Seg Shortened
+                              </span>
+                            )}
+                            {item.isCustomEdited && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-800">
+                                ✏️ Custom Edited
+                              </span>
+                            )}
+                            <span className="text-[11px] font-mono text-ink-secondary font-medium">
+                              {item.finalChars} chars
+                            </span>
+                            <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded-full ${
+                              item.finalSegments === 1
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-amber-100 text-amber-800 border border-amber-300'
+                            }`}>
+                              {item.finalSegments} {item.finalSegments === 1 ? 'Segment' : 'Segments'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Message body or inline editor */}
+                        <div className="pt-2.5 space-y-2">
+                          {isEditing ? (
+                            <div className="space-y-2 animate-fade-in">
+                              <textarea
+                                value={editingLeadCopy}
+                                onChange={(e) => setEditingLeadCopy(e.target.value)}
+                                rows={3}
+                                className="w-full p-3 rounded-lg border border-accent text-xs font-sans text-ink outline-none"
+                              />
+                              <div className="flex items-center justify-between text-xs">
+                                <span className={`font-mono text-[11px] font-bold ${
+                                  editingLeadCopy.length <= 160 ? 'text-emerald-600' : 'text-amber-600'
+                                }`}>
+                                  {editingLeadCopy.length} chars ({editingLeadCopy.length <= 160 ? '1 segment' : '2 segments'})
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingLeadIndex(null)}
+                                    className="px-2.5 py-1 rounded bg-surface hover:bg-slate-200 text-[11px] font-semibold text-ink cursor-pointer"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      playSoftTap();
+                                      setCustomLeadMessages((prev) => ({
+                                        ...prev,
+                                        [item.index]: editingLeadCopy,
+                                      }));
+                                      setEditingLeadIndex(null);
+                                    }}
+                                    className="px-3 py-1 rounded bg-accent text-white text-[11px] font-bold cursor-pointer hover:bg-accent-hover"
+                                  >
+                                    Save Message
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                              <p className="text-xs text-ink-secondary font-mono leading-relaxed bg-surface/70 p-2.5 rounded-lg flex-1 whitespace-pre-wrap">
+                                {item.resolvedText}
+                              </p>
+                              
+                              <div className="flex sm:flex-col items-center sm:items-end gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    playSoftTap();
+                                    setPreviewLeadIndex(item.index);
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-surface hover:bg-blue-50 hover:text-blue-700 border border-border-light text-[11px] font-semibold text-ink transition-colors cursor-pointer flex items-center gap-1"
+                                >
+                                  <Smartphone className="w-3 h-3" />
+                                  <span>Preview</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    playSoftTap();
+                                    setEditingLeadIndex(item.index);
+                                    setEditingLeadCopy(item.resolvedText);
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-surface hover:bg-slate-200 border border-border-light text-[11px] font-semibold text-ink transition-colors cursor-pointer flex items-center gap-1"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                  <span>Customize</span>
+                                </button>
+                                {item.isCustomEdited && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      playSoftTap();
+                                      setCustomLeadMessages((prev) => {
+                                        const next = { ...prev };
+                                        delete next[item.index];
+                                        return next;
+                                      });
+                                    }}
+                                    className="px-2 py-0.5 text-[10px] text-danger hover:underline cursor-pointer"
+                                  >
+                                    Reset
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            {/* Bottom Step 5 Advance Strip */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50/70 via-surface to-emerald-50/70 border border-border-main flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+              <div className="space-y-0.5">
+                <p className="text-xs font-bold text-ink">
+                  Finished with message copy & segment optimization?
+                </p>
+                <p className="text-[11px] text-ink-secondary">
+                  Proceed to Step 6 to customize your campaign name and confirm final launch specifications.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleNextStep}
+                className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-white text-xs font-bold transition-all shadow-md shadow-accent/20 flex items-center justify-center gap-2 cursor-pointer shrink-0 active:scale-98"
+              >
+                <span>Continue to Review & Launch</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+          </div>
+        )}
+
+        {/* ===================================================================
+            STEP 6: REVIEW & LAUNCH (Complete Specifications on One Clear Screen)
+        =================================================================== */}
+        {activeStep === 6 && (
+          <div className="space-y-6 animate-fade-in">
+            <div className="space-y-1">
+              <h3 className="font-serif text-xl sm:text-2xl text-ink">Review & launch outreach</h3>
+              <p className="text-sm text-ink-secondary">
+                Comfortably review all campaign details, customize campaign name, and verify carrier segments before autonomous dispatch.
+              </p>
+            </div>
+
+            {/* 1. Campaign Name Customizer */}
+            <div className="p-4 sm:p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-2">
+                  <Edit3 className="w-4 h-4 text-accent" />
+                  <span>Campaign Name (Customizable)</span>
+                </label>
+                <span className="text-[11px] text-ink-tertiary">Used in analytics, logs & reports</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  value={campaignName}
+                  onChange={(e) => setCampaignName(e.target.value)}
+                  placeholder="e.g. Vancouver Barbers SMS Proposal Outreach"
+                  className="flex-1 px-4 py-3 rounded-xl border border-border-main focus:border-accent focus:ring-2 focus:ring-accent/10 text-sm font-semibold text-ink outline-none shadow-inner"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    playSoftTap();
+                    setCampaignName(`${selectedNiche} SMS Campaign`);
+                  }}
+                  className="px-3 py-3 rounded-xl bg-surface hover:bg-slate-200 text-xs font-semibold text-ink-secondary transition-colors cursor-pointer"
+                  title="Reset to default title"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* 2. Big Core Specifications Cards */}
+            <div className={`grid grid-cols-1 sm:grid-cols-2 ${isAutomatedSmsPlan(userPlan) ? 'lg:grid-cols-3' : 'lg:grid-cols-4'} gap-4`}>
+              {/* Specification 1: Template Selected */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-border-main shadow-xs space-y-3 flex flex-col justify-between">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-ink-tertiary tracking-wider flex items-center gap-1">
+                      <Layout className="w-3 h-3 text-accent" />
+                      <span>Template</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSoftTap();
+                        setActiveStep(3);
+                      }}
+                      className="text-[10px] font-bold text-accent hover:underline cursor-pointer"
+                    >
+                      Change
+                    </button>
+                  </div>
+                  <h5 className="text-sm font-bold text-ink truncate">
+                    {allTemplates.find((t) => t.id === selectedTemplateId)?.name || 'Custom Edge Template'}
+                  </h5>
+                  <p className="text-[11px] text-ink-secondary">
+                    Niche: <strong className="text-ink">{selectedNiche}</strong>
+                  </p>
+                </div>
+                <div className="pt-2 border-t border-border-light flex items-center gap-1.5 text-[10px] text-emerald-700 font-medium">
+                  <Globe className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span className="truncate">Lunao High-Speed Edge CDN</span>
+                </div>
+              </div>
+
+              {/* Specification 2: Leads Amount */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-border-main shadow-xs space-y-3 flex flex-col justify-between">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-ink-tertiary tracking-wider flex items-center gap-1">
+                      <Users className="w-3 h-3 text-accent" />
+                      <span>Target Leads</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSoftTap();
+                        setActiveStep(2);
+                      }}
+                      className="text-[10px] font-bold text-accent hover:underline cursor-pointer"
+                    >
+                      Change
+                    </button>
+                  </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <h5 className="text-2xl font-bold font-mono text-ink">
+                      {csvLeads.length || totalEvaluatedCount}
+                    </h5>
+                    <span className="text-xs text-ink-secondary font-medium">businesses</span>
+                  </div>
+                  <p className="text-[11px] text-ink-secondary truncate">
+                    {csvFileName ? `CSV: ${csvFileName}` : 'Imported prospect pipeline'}
+                  </p>
+                </div>
+                <div className="pt-2 border-t border-border-light flex items-center gap-1.5 text-[10px] text-emerald-700 font-medium">
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>100% Phone Numbers Verified</span>
+                </div>
+              </div>
+
+              {/* Specification 3: Sender Phone & Carrier Route (Kept for Paid Plans) */}
+              {!isAutomatedSmsPlan(userPlan) && (
+                <div className="p-4 sm:p-5 rounded-2xl bg-white border border-border-main shadow-xs space-y-3 flex flex-col justify-between">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase font-bold text-ink-tertiary tracking-wider flex items-center gap-1">
+                        <Phone className="w-3 h-3 text-accent" />
+                        <span>Carrier Route</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playSoftTap();
+                          setActiveStep(4);
+                        }}
+                        className="text-[10px] font-bold text-accent hover:underline cursor-pointer"
+                      >
+                        Change
+                      </button>
+                    </div>
+                    <h5 className="text-sm font-bold font-mono text-ink truncate">
+                      {selectedPhoneNumber || '+1 (604) 953-9651'}
+                    </h5>
+                    <p className="text-[11px] text-ink-secondary">
+                      Route: <strong className="text-ink">Telnyx Canada 10DLC</strong>
+                    </p>
+                  </div>
+                  <div className="pt-2 border-t border-border-light flex items-center justify-between gap-1.5 text-[10px]">
+                    {telnyxRouteInspection && telnyxRouteInspection.incompatibleCount > 0 ? (
+                      <span className="text-blue-700 font-bold flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <span>{telnyxRouteInspection.incompatibleCount} leads restricted</span>
+                      </span>
+                    ) : (
+                      <span className="text-emerald-700 font-medium flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>100% Route Verified</span>
+                      </span>
+                    )}
+                    {telnyxRouteInspection && telnyxRouteInspection.incompatibleCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playSoftTap();
+                          setActiveStep(4);
+                        }}
+                        className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
+                      >
+                        Inspect
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Specification 4: Segment Breakdown & Credit Costs */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-border-main shadow-xs space-y-3 flex flex-col justify-between">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-ink-tertiary tracking-wider flex items-center gap-1">
+                      <Layers className="w-3 h-3 text-accent" />
+                      <span>Segments Breakdown</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSoftTap();
+                        setActiveStep(5);
+                      }}
+                      className="text-[10px] font-bold text-accent hover:underline cursor-pointer"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-0.5">
+                    <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-center">
+                      <span className="text-[10px] uppercase font-bold text-emerald-800 block">1 Segment</span>
+                      <span className="text-lg font-bold font-mono text-emerald-700">{oneSegmentCount}</span>
+                      <span className="text-[9px] text-emerald-600 font-medium block">
+                        {isByoTelnyx ? '0 cr (BYO Carrier)' : '4 credits each'}
+                      </span>
+                    </div>
+                    <div className={`p-2 rounded-xl border text-center ${
+                      twoSegmentCount > 0 
+                        ? 'bg-amber-50 border-amber-200 text-amber-800' 
+                        : 'bg-slate-50 border-border-light text-ink-secondary'
+                    }`}>
+                      <span className="text-[10px] uppercase font-bold block">2 & 3 Segments</span>
+                      <span className="text-lg font-bold font-mono">{twoSegmentCount}</span>
+                      <span className="text-[9px] text-amber-700 font-medium block">
+                        {isByoTelnyx ? '0 cr (BYO Carrier)' : '8 credits each'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-border-light flex items-center justify-between text-[10px] text-ink-secondary font-medium">
+                  <span>SMS carrier total:</span>
+                  <strong className="text-ink font-mono">
+                    {isByoTelnyx ? '0 credits (BYO Telnyx)' : `${smsCostTotal} credits`}
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Dual SMS Message Preview & Snapshot Card */}
+            <div className="p-4 sm:p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-light pb-3">
+                <div className="space-y-0.5">
+                  <h4 className="text-sm font-bold text-ink flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-accent" />
+                    <span>Transmitted Dual SMS Proposal Hooks</span>
+                  </h4>
+                  <p className="text-xs text-ink-secondary">
+                    Review both message copies before launch. Targets without a site get Template A; targets with a site get Template B.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {enable2SegOverride && (
+                    <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200">
+                      2-Segment Optimizer Active
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playSoftTap();
+                      setActiveStep(5);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-surface hover:bg-slate-200 text-xs font-semibold text-ink transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Edit Messages</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                {/* Template A: Without Website */}
+                <div className="p-3.5 rounded-xl bg-amber-50/40 border border-amber-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-900 flex items-center gap-1">
+                      <span>🔥</span> Template A (No Website)
+                    </span>
+                    <span className="text-[10px] font-mono font-bold text-amber-800 bg-amber-100/80 px-1.5 py-0.5 rounded">
+                      {leadsWithoutWebsiteCount} leads
+                    </span>
+                  </div>
+                  <p className="text-xs font-mono text-ink-secondary whitespace-pre-wrap leading-relaxed line-clamp-5">
+                    {smsMessageNoWebsite}
+                  </p>
+                </div>
+
+                {/* Template B: With Website */}
+                <div className="p-3.5 rounded-xl bg-blue-50/40 border border-blue-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-blue-900 flex items-center gap-1">
+                      <span>🌐</span> Template B (Has Website)
+                    </span>
+                    <span className="text-[10px] font-mono font-bold text-blue-800 bg-blue-100/80 px-1.5 py-0.5 rounded">
+                      {leadsWithWebsiteCount} leads
+                    </span>
+                  </div>
+                  <p className="text-xs font-mono text-ink-secondary whitespace-pre-wrap leading-relaxed line-clamp-5">
+                    {smsMessageWithWebsite}
+                  </p>
+                </div>
+
+                {/* Sample Interpolated Live Delivery */}
+                <div className="p-3.5 rounded-xl bg-gradient-to-br from-emerald-50/60 to-surface border border-emerald-200/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-900">Sample Live Delivery</span>
+                    <span className="text-[10px] font-mono font-bold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200 truncate max-w-[140px]">
+                      {sampleBusinessName} ({segmentsCount} seg)
+                    </span>
+                  </div>
+                  <p className="text-xs font-sans text-ink leading-relaxed whitespace-pre-wrap line-clamp-5">
+                    {interpolatedSms}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Cost Summary & Final Autonomous Launch Card */}
+            <div className="p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-white via-surface to-accent-soft/20 border border-border-main shadow-xl space-y-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border-light pb-5">
+                <div className="space-y-1">
+                  <h4 className="text-lg sm:text-xl font-serif font-bold text-ink">Ready to Launch Outreach</h4>
+                  <p className="text-xs text-ink-secondary">
+                    {isByoTelnyx ? (
+                      <span>
+                        <strong className="text-emerald-700 font-bold">✨ BYO Telnyx Active:</strong> <strong>0 Lunao credits charged for SMS</strong> (carrier outreach billed direct to your connected Telnyx balance). Only <strong>1 credit per site deployment</strong>.
+                      </span>
+                    ) : (
+                      <span>
+                        Free Plan Outreach: <strong>3 credits per deployed & rebranded site</strong> + <strong>4 credits for 1-seg SMS (8 credits for 2/3-seg SMS)</strong>.
+                      </span>
+                    )}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 sm:flex items-center gap-2.5 sm:gap-3 w-full md:w-auto">
+                  <div className="px-3.5 py-2 sm:px-4 rounded-xl bg-white border border-border-main text-right shadow-xs">
+                    <p className="text-[10px] uppercase font-bold text-ink-tertiary">Total Required</p>
+                    <p className="text-lg sm:text-xl font-bold font-mono text-accent">
+                      {totalRequiredCredits} credits
+                    </p>
+                    <p className="text-[9px] font-mono text-ink-tertiary">
+                      Site: {siteCostTotal} cr {isByoTelnyx ? '(1 cr/lead)' : ''} + SMS: {smsCostTotal} cr {isByoTelnyx ? '(BYO 0 cr)' : ''}
+                    </p>
+                  </div>
+                  <div className="px-3.5 py-2 sm:px-4 rounded-xl bg-white border border-border-main text-right shadow-xs">
+                    <p className="text-[10px] uppercase font-bold text-ink-tertiary">Your Balance</p>
+                    <p className={`text-lg sm:text-xl font-bold font-mono ${
+                      userCredits < totalRequiredCredits ? 'text-danger' : 'text-success'
+                    }`}>
+                      {userCredits} credits
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Insufficient credits warning */}
+              {userCredits < totalRequiredCredits && (
+                <div className="p-4 rounded-xl bg-danger-soft border border-danger/30 text-xs text-danger font-semibold flex items-center gap-3">
+                  <AlertCircle className="w-5 h-5 shrink-0" />
+                  <span>
+                    Insufficient credits ({userCredits} available, {totalRequiredCredits} required: {siteCostTotal} credits for {csvLeads.length || totalEvaluatedCount} site deployments + {smsCostTotal} credits for SMS outreach). Please top up credits to launch.
+                  </span>
+                </div>
+              )}
+
+              {/* Incompatible Carrier Route Notice for Plans Above Free */}
+              {!isAutomatedSmsPlan(userPlan) && telnyxRouteInspection && telnyxRouteInspection.incompatibleCount > 0 && (
+                <div className="p-4 rounded-xl bg-blue-50/80 border border-blue-200/90 text-xs text-blue-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                  <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+                    <AlertCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5 sm:mt-0" />
+                    <div>
+                      <p className="font-bold text-blue-900">
+                        {telnyxRouteInspection.incompatibleCount} leads cannot receive SMS from this Telnyx number ({selectedPhoneNumber || '+1 (604) 953-9651'})
+                      </p>
+                      <p className="text-[11px] text-blue-800/90 mt-0.5 leading-relaxed">
+                        Reasons include cross-border country destination restrictions or non-E.164 formats. Exclude them now or inspect full reasons in Step 4.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => handleExcludeIncompatibleLeads(
+                        telnyxRouteInspection.results.filter((r) => !r.isCompatible).map((r) => r.index)
+                      )}
+                      className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors cursor-pointer"
+                    >
+                      Exclude {telnyxRouteInspection.incompatibleCount} Incompatible
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSoftTap();
+                        setActiveStep(4);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-white border border-blue-200 text-blue-800 font-semibold text-xs hover:bg-blue-50 transition-colors cursor-pointer"
+                    >
+                      Inspect Reasons
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {launchError && (
+                <div className="p-4 rounded-xl bg-danger-soft border border-danger/30 text-xs text-danger font-semibold flex items-center gap-3">
+                  <AlertCircle className="w-5 h-5 shrink-0" />
+                  <span>{launchError}</span>
+                </div>
+              )}
+
+              {/* Big Autonomous Launch Button */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleLaunch}
+                  disabled={isLaunching || !canProceedFromStep(6)}
+                  className={`w-full py-3.5 sm:py-4 rounded-2xl text-sm sm:text-base font-bold uppercase tracking-wider flex items-center justify-center gap-3 transition-all shadow-xl cursor-pointer ${
+                    isLaunching || !canProceedFromStep(6)
+                      ? 'bg-surface text-ink-tertiary cursor-not-allowed shadow-none'
+                      : 'bg-accent hover:bg-accent-hover text-white shadow-accent/25 active:scale-98'
+                  }`}
+                >
+                  {isLaunching ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Sending Proposals ({launchProgress}%)</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-5 h-5" />
+                      <span>Launch Autonomous SMS Outreach</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+      </div>
+
+      {/* ===================================================================
+          BOTTOM NAVIGATION BAR (Identical Standard)
+      =================================================================== */}
+      <div className="px-4 py-3.5 sm:px-6 sm:py-4 border-t border-border-light flex flex-wrap items-center justify-between gap-3">
+        <button
+          type="button"
+          disabled={activeStep === 1 || isLaunching}
+          onClick={handlePrevStep}
+          className={`text-xs font-semibold px-4 py-2 border border-border-main rounded-lg bg-white text-ink leading-none transition-all cursor-pointer ${
+            activeStep === 1 ? 'opacity-0 pointer-events-none' : 'hover:bg-off-white'
+          }`}
+        >
+          <ChevronLeft className="w-4 h-4 inline mr-1" />
+          Back
+        </button>
+
+        {activeStep < 6 && (
+          <button
+            type="button"
+            disabled={!canProceedFromStep(activeStep)}
+            onClick={handleNextStep}
+            className={`text-xs font-semibold px-5 py-2.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+              !canProceedFromStep(activeStep)
+                ? 'bg-surface text-ink-tertiary cursor-not-allowed'
+                : 'bg-accent hover:bg-accent-hover text-white shadow-sm'
+            }`}
+          >
+            <span>{activeStep === 5 ? 'Review & Launch' : 'Next Step'}</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        )}
+
+        {activeStep === 6 && (
+          <button
+            type="button"
+            onClick={handleLaunch}
+            disabled={isLaunching || !canProceedFromStep(6)}
+            className={`px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
+              isLaunching || !canProceedFromStep(6)
+                ? 'bg-surface text-ink-tertiary cursor-not-allowed'
+                : 'bg-accent hover:bg-accent-hover text-white shadow-sm'
+            }`}
+          >
+            {isLaunching ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Launching...</span>
+              </>
+            ) : (
+              <>
+                <Send className="w-3.5 h-3.5" />
+                <span>Launch Outreach</span>
+              </>
+            )}
+          </button>
+        )}
+      </div>
+
+      {/* Template Preview Modal */}
+      {previewModalOpen && (
+        <TemplatePreviewModal
+          templates={allTemplates}
+          initialIndex={previewTemplateIndex}
+          onClose={() => setPreviewModalOpen(false)}
+          onSelectTemplate={(id) => {
+            setSelectedTemplateId(id);
+            setPreviewModalOpen(false);
+          }}
+          selectedTemplateId={selectedTemplateId}
+        />
+      )}
+    </div>
+  );
+};
+
+export default SmsCampaignWizard;

@@ -1,0 +1,23 @@
+# Build the Vite frontend, then run the Express server.
+# The Express server is responsible for serving /dist (built frontend) +
+# /api/* + /sites/* from a single process on $PORT.
+[build]
+builder = "nixpacks"
+
+[phases.setup]
+nixPkgs = ["nodejs_22", "python3", "gcc"]
+
+[phases.install]
+cmds = ["npm ci --include=dev"]
+
+[phases.build]
+cmds = [
+  "npm run build",
+  "echo 'Build complete. /dist ready.'"
+]
+
+[start]
+cmd = "node server/index.js"
+
+[variables]
+NODE_ENV = "production"

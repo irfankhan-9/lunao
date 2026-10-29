@@ -1,0 +1,1746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ironclad Roofing — Industrial Strength Roofing in Dallas, TX</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --black:      #0C0C0B;
+      --charcoal:   #161614;
+      --dark:       #1E1E1B;
+      --dark-mid:   #282824;
+      --dark-light: #333330;
+      --white:      #F5F4F0;
+      --white-mid:  #B8B5AC;
+      --white-muted:#706D65;
+      --white-ghost:#3A3834;
+      --amber:      #E8760A;
+      --amber-light:#F5941C;
+      --amber-dark: #C45E04;
+      --amber-tint: rgba(232,118,10,0.06);
+      --amber-glow: 0 4px 18px rgba(232,118,10,0.22);
+      --emergency:  #E03030;
+      --emergency-soft: rgba(224,48,48,0.08);
+      --rule:       1px solid #2A2A26;
+      --rule-light: 1px solid #222220;
+      --rule-amber: 1px solid rgba(232,118,10,0.2);
+      --shadow-sm:  0 2px 8px rgba(0,0,0,0.3);
+      --shadow-md:  0 8px 25px rgba(0,0,0,0.4);
+      --r-xs:  2px;
+      --r-sm:  4px;
+      --r-md:  8px;
+      --r-lg:  12px;
+      --t-fast: 0.15s ease;
+      --t-base: 0.25s ease;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
+    body {
+      background-color: var(--charcoal);
+      font-family: 'Barlow', sans-serif;
+      color: var(--white);
+      overflow-x: hidden;
+      line-height: 1.5;
+    }
+    a { text-decoration: none; color: inherit; transition: color var(--t-fast); }
+    button, input, select, textarea { font-family: inherit; transition: all var(--t-fast); }
+
+    /* Layout & Rule Lines */
+    section { border-top: var(--rule); position: relative; content-visibility: auto; }
+    .container { max-width: 1360px; margin: 0 auto; padding: 80px 24px; }
+    @media (min-width: 768px) { .container { padding: 96px 48px; } }
+
+    /* CSS Geometric Marks */
+    .roof-triangle {
+      width: 0; height: 0;
+      border-left: 14px solid transparent;
+      border-right: 14px solid transparent;
+      border-bottom: 20px solid var(--amber);
+      display: inline-block;
+    }
+    .diamond-bullet {
+      width: 10px; height: 10px;
+      background: var(--amber);
+      transform: rotate(45deg);
+      display: inline-block;
+      flex-shrink: 0;
+    }
+    .css-checkbox {
+      width: 18px; height: 18px;
+      border: 1.5px solid var(--amber);
+      border-radius: var(--r-xs);
+      flex-shrink: 0;
+      position: relative;
+    }
+    .css-checkbox::after {
+      content: '';
+      position: absolute;
+      left: 5px; top: 1px;
+      width: 4px; height: 8px;
+      border: solid var(--amber);
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+    .accent-bar {
+      width: 50px; height: 3px;
+      background: var(--amber);
+      margin: 20px 0;
+    }
+
+    /* CSS Shingle Patterns */
+    .gallery-grid { display: grid; grid-template-columns: 1fr; gap: 4px; }
+    @media (min-width: 768px) { .gallery-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (min-width: 1024px) { .gallery-grid { grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 16px; } }
+    .gallery-item {
+      position: relative;
+      overflow: hidden;
+      aspect-ratio: 4/3;
+      border: var(--rule-light);
+      background: var(--dark-mid);
+      border-radius: var(--r-sm);
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .gallery-item.hidden {
+      opacity: 0;
+      transform: scale(0.95);
+      position: absolute;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .gallery-texture {
+      position: absolute; inset: 0;
+      background: repeating-linear-gradient(-8deg, transparent, transparent 16px, rgba(255,255,255,0.025) 16px, rgba(255,255,255,0.025) 18px);
+    }
+    .gallery-overlay {
+      position: absolute; inset: 0;
+      background: rgba(12,12,11,0.9);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      opacity: 0; transition: opacity var(--t-base);
+      padding: 16px; text-align: center;
+    }
+    .gallery-item:hover .gallery-overlay { opacity: 1; }
+
+    /* CSS Avatars */
+    .avatar {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 15px; color: var(--white);
+      flex-shrink: 0;
+    }
+    .av-1 { background: linear-gradient(135deg, #E8760A 0%, #8B3A00 100%); }
+    .av-2 { background: linear-gradient(135deg, #1A5C8A 0%, #0A2840 100%); }
+    .av-3 { background: linear-gradient(135deg, #2E7D32 0%, #0A2E0C 100%); }
+    .av-4 { background: linear-gradient(135deg, #6A1B9A 0%, #2A0040 100%); }
+    .av-5 { background: linear-gradient(135deg, #C62828 0%, #4A0000 100%); }
+    .av-6 { background: linear-gradient(135deg, #00695C 0%, #002822 100%); }
+
+    /* Utility UI */
+    .badge-outline {
+      border: var(--rule-amber);
+      border-radius: var(--r-sm);
+      padding: 8px 16px;
+      background: var(--dark-mid);
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .btn-primary {
+      background: var(--amber);
+      color: var(--black);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--r-sm);
+      box-shadow: var(--amber-glow);
+      font-size: 13px;
+      padding: 12px 18px;
+      transition: all var(--t-base);
+    }
+    .btn-primary:hover { background: var(--amber-light); transform: translateY(-1px); }
+    .btn-emergency {
+      background: var(--emergency-soft);
+      color: var(--emergency);
+      border: 1.5px solid var(--emergency);
+      font-weight: 700;
+      text-transform: uppercase;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--r-sm);
+      font-size: 13px;
+      padding: 12px 18px;
+      transition: all var(--t-base);
+    }
+    .btn-emergency:hover { background: var(--emergency); color: var(--white); transform: translateY(-1px); }
+    @media (min-width: 640px) {
+      .btn-primary, .btn-emergency {
+        font-size: 15px;
+        padding: 16px 32px;
+      }
+    }
+
+    /* Section Headers */
+    .section-num { font-size: 11px; letter-spacing: 0.2em; color: var(--amber); font-weight: 600; text-transform: uppercase; margin-bottom: 8px; }
+    .section-title { font-size: clamp(28px, 4vw, 42px); font-weight: 800; text-transform: uppercase; tracking: -0.01em; margin-bottom: 24px; }
+    .section-desc { max-width: 600px; color: var(--white-mid); font-size: 15px; margin-bottom: 48px; }
+
+    /* Emergency Strip */
+    #emergency-strip {
+      background: var(--emergency-soft);
+      border-bottom: 1.5px solid rgba(224, 48, 48, 0.2);
+      padding: 6px 12px;
+      text-align: center;
+      font-size: 11.5px;
+      font-weight: 600;
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 6px;
+    }
+    @media (min-width: 768px) {
+      #emergency-strip { padding: 10px 48px; gap: 0; justify-content: space-between; font-size: 13px; }
+    }
+
+    /* Header Nav */
+    #main-navbar {
+      height: 56px;
+      background: var(--black);
+      border-bottom: var(--rule);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      position: sticky; top: 0; z-index: 100;
+    }
+    @media (min-width: 1024px) {
+      #main-navbar { height: 64px; padding: 0 48px; }
+    }
+    .nav-links { display: none; }
+    @media (min-width: 1024px) {
+      .nav-links { display: flex; gap: 20px; align-items: center; }
+      .nav-link { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--white-muted); }
+      .nav-link:hover, .nav-link.active { color: var(--amber); }
+    }
+
+    /* Hero */
+    #hero { background: var(--charcoal); min-height: 100vh; padding-top: 64px; display: flex; align-items: center; width: 100%; overflow-x: hidden; position: relative; padding-bottom: 40px; }
+    .hero-grid { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; max-width: 1360px; margin: 0 auto; height: auto; }
+    @media (min-width: 1024px) {
+      .hero-grid { grid-template-columns: 55% 45%; height: 100%; }
+      #hero { padding-bottom: 0; }
+    }
+    .hero-content { padding: 40px 20px; display: flex; flex-direction: column; justify-content: center; max-width: 100vw; overflow: hidden; box-sizing: border-box; }
+    @media (min-width: 768px) { .hero-content { padding: 40px 32px; } }
+    @media (min-width: 1024px) { .hero-content { padding: 60px 48px; } }
+    .hero-eyebrow { font-size: 11px; letter-spacing: 0.2em; color: var(--amber); font-weight: 600; text-transform: uppercase; margin-bottom: 24px; }
+    .hero-title { font-size: clamp(38px, 10vw, 84px); font-weight: 800; line-height: 0.92; letter-spacing: -0.02em; margin-bottom: 24px; text-transform: uppercase; word-break: break-word; }
+    .hero-title span { color: var(--amber); display: block; }
+    .hero-desc { color: var(--white-mid); font-size: clamp(14px, 4vw, 16px); max-width: 100%; line-height: 1.6; word-wrap: break-word; white-space: normal; }
+    .hero-buttons { display: flex; flex-direction: column; gap: 16px; margin: 32px 0 48px; width: 100%; max-width: 100%; box-sizing: border-box; }
+    .hero-buttons > a { width: 100%; text-align: center; justify-content: center; max-width: 100%; box-sizing: border-box; }
+    @media (min-width: 640px) { .hero-buttons { flex-direction: row; } .hero-buttons > a { width: auto; max-width: auto; } }
+
+    /* Hero Stats */
+    .stats-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 16px; border-top: var(--rule-light); padding-top: 32px; width: 100%; box-sizing: border-box; }
+    @media (min-width: 768px) { .stats-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; border-top: var(--rule); } }
+    .stat-item { border-left: var(--rule); padding-left: 16px; }
+    .stat-item:first-child { border-left: none; padding-left: 0; }
+    .stat-num { font-size: 32px; font-weight: 800; color: var(--amber); line-height: 1; }
+    .stat-lbl { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--white-muted); margin-top: 4px; }
+
+    /* CSS Roofscape Illustration */
+    .hero-artwork { display: none; background: var(--dark); position: relative; overflow: hidden; height: 100%; min-height: 480px; }
+    @media (min-width: 1024px) { .hero-artwork { display: block; } }
+    .roof-polygon {
+      position: absolute; bottom: 0; left: 10%; right: 10%; top: 25%;
+      clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+      background: var(--dark-mid);
+      border-top: 2px solid var(--amber);
+    }
+    .roof-sub-line {
+      position: absolute; bottom: 0; left: 10%; right: 10%; top: 35%;
+      background: repeating-linear-gradient(-45deg, transparent, transparent 15px, rgba(232, 118, 10, 0.05) 15px, rgba(232, 118, 10, 0.05) 17px);
+      clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+    }
+
+    /* Trust Strip */
+    #trust-strip { background: var(--dark); border-top: var(--rule); padding: 24px 0; }
+    .trust-scroll { display: flex; gap: 16px; overflow-x: auto; white-space: nowrap; padding: 0 16px; scrollbar-width: none; }
+    .trust-scroll::-webkit-scrollbar { display: none; }
+    @media (min-width: 1024px) {
+      .trust-scroll { justify-content: center; overflow: visible; }
+    }
+
+    /* Services Rows */
+    .service-tabs { display: flex; gap: 16px; border-bottom: var(--rule); margin-bottom: 24px; padding-bottom: 12px; overflow-x: auto; scrollbar-width: none; }
+    .service-tabs::-webkit-scrollbar { display: none; }
+    .tab-btn { background: none; border: none; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--white-muted); cursor: pointer; padding: 8px 0; border-bottom: 2px solid transparent; margin-right: 16px; }
+    .tab-btn.active { color: var(--amber); border-bottom-color: var(--amber); }
+    .services-rows { display: flex; flex-direction: column; }
+    .service-row { display: flex; flex-direction: column; justify-content: space-between; padding: 20px 0; border-bottom: var(--rule-light); transition: background var(--t-fast); }
+    @media (min-width: 768px) {
+      .service-row { flex-direction: row; align-items: center; padding: 20px 16px; }
+    }
+    .service-row:hover { background: var(--amber-tint); }
+    .service-meta-left { display: flex; flex-direction: column; gap: 4px; }
+    @media (min-width: 768px) { .service-meta-left { flex-direction: row; align-items: baseline; gap: 12px; } }
+    .service-name { font-size: 18px; font-weight: 700; color: var(--white); }
+    .service-desc { font-size: 13px; color: var(--white-mid); }
+    .service-time { font-size: 12px; color: var(--white-muted); font-weight: 500; font-family: monospace; margin-top: 4px; }
+
+    /* Process steps timeline */
+    .process-timeline {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    .process-timeline::before {
+      content: '';
+      position: absolute;
+      left: 17px;
+      top: 24px;
+      bottom: 24px;
+      width: 2px;
+      background: linear-gradient(180deg, var(--amber) 0%, rgba(232, 118, 10, 0.1) 100%);
+      z-index: 1;
+    }
+    .process-step {
+      position: relative;
+      padding-left: 48px;
+      transition: all var(--t-base);
+    }
+    .process-step-badge {
+      position: absolute;
+      left: 0;
+      top: 18px;
+      width: 36px;
+      height: 36px;
+      background: var(--dark-mid);
+      border: 1.5px solid var(--dark-light);
+      color: var(--white-muted);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 13px;
+      z-index: 2;
+      transition: all var(--t-base);
+      font-family: monospace;
+    }
+    .process-card {
+      background: linear-gradient(180deg, var(--dark-mid) 0%, var(--dark) 100%);
+      border: 1px solid var(--dark-light);
+      border-radius: var(--r-md);
+      padding: 24px;
+      transition: all var(--t-base);
+      display: flex;
+      flex-direction: column;
+    }
+    .process-card-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: var(--white);
+    }
+    .process-card-desc {
+      font-size: 13px;
+      color: var(--white-mid);
+      line-height: 1.6;
+    }
+    .process-step:hover .process-step-badge,
+    .process-step.active .process-step-badge {
+      background: var(--amber);
+      color: var(--black);
+      border-color: var(--amber);
+      box-shadow: 0 0 12px rgba(232, 118, 10, 0.4);
+    }
+    .process-step:hover .process-card,
+    .process-step.active .process-card {
+      border-color: rgba(232, 118, 10, 0.3);
+      background: linear-gradient(180deg, rgba(232, 118, 10, 0.05) 0%, var(--dark) 100%);
+      box-shadow: 0 4px 20px rgba(0, 0,0, 0.2);
+    }
+
+    @media (min-width: 1024px) {
+      .process-timeline {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 20px;
+      }
+      .process-timeline::before {
+        left: 20px;
+        right: 20px;
+        top: 17px;
+        bottom: auto;
+        width: auto;
+        height: 2px;
+        background: linear-gradient(90deg, var(--amber) 0%, rgba(232, 118, 10, 0.1) 100%);
+      }
+      .process-step {
+        padding-left: 0;
+        padding-top: 48px;
+      }
+      .process-step-badge {
+        left: 20px;
+        top: 0;
+      }
+      .process-step:hover .process-card {
+        transform: translateY(-4px);
+      }
+    }
+
+    /* Storm Damage Section Grid */
+    .storm-container { display: grid; grid-template-columns: 1fr; gap: 48px; }
+    @media (min-width: 1024px) { .storm-container { grid-template-columns: 55% 45%; } }
+    .checklist-card { background: var(--dark); border: var(--rule); border-radius: var(--r-lg); padding: 32px; }
+    .checklist-title { font-size: 20px; font-weight: 700; margin-bottom: 24px; text-transform: uppercase; }
+    .checklist-row { display: flex; gap: 16px; align-items: flex-start; padding: 12px 0; border-bottom: var(--rule-light); }
+    .checklist-row:last-child { border-bottom: none; }
+    .checklist-text { font-size: 13px; color: var(--white-mid); }
+
+    /* Gallery Grid */
+    .filter-tabs { display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none; margin-bottom: 32px; }
+    .filter-tabs::-webkit-scrollbar { display: none; }
+    .filter-btn { border: var(--rule); background: var(--dark-mid); padding: 8px 16px; border-radius: var(--r-sm); font-size: 11px; text-transform: uppercase; font-weight: 600; cursor: pointer; color: var(--white-muted); }
+    .filter-btn.active { background: var(--amber); color: var(--black); border-color: var(--amber); }
+    .gallery-grid { display: grid; grid-template-columns: 1fr; gap: 4px; }
+    @media (min-width: 640px) { .gallery-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (min-width: 1024px) { .gallery-grid { grid-template-columns: repeat(3, 1fr); } }
+
+    /* Warranties cards */
+    .warranty-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    @media (min-width: 1024px) { .warranty-grid { grid-template-columns: repeat(3, 1fr); gap: 24px; } }
+    .warranty-card { background: var(--dark); border-top: 3px solid var(--amber); border-radius: var(--r-md); padding: 32px; }
+    .warranty-card.workmanship { border-top-color: var(--white-ghost); }
+    .warranty-card.no-sub { border-top-color: var(--dark-light); }
+    .warranty-number { font-size: 64px; font-weight: 800; color: var(--white); line-height: 1; margin-bottom: 8px; }
+    .warranty-number.accent { color: var(--amber); }
+
+    /* Financing */
+    .financing-grid { display: grid; grid-template-columns: 1fr; gap: 32px; }
+    @media (min-width: 1024px) { .financing-grid { grid-template-columns: 60% 40%; } }
+    .financing-option { border-bottom: var(--rule-light); padding: 16px 0; display: flex; gap: 16px; }
+    .financing-apr { font-size: 28px; font-weight: 800; color: var(--amber); min-width: 80px; }
+    .financing-sim-card { background: var(--dark); border: var(--rule); border-radius: var(--r-lg); padding: 32px; display: flex; flex-direction: column; gap: 16px; justify-content: space-between; }
+
+    /* Reviews carousel-grid */
+    .reviews-grid { display: flex; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 16px; scrollbar-width: none; }
+    .reviews-grid::-webkit-scrollbar { display: none; }
+    .review-card { flex: 0 0 85vw; scroll-snap-align: start; background: var(--dark); border: var(--rule); border-radius: var(--r-md); padding: 24px; display: flex; flex-direction: column; justify-content: space-between; }
+    @media (min-width: 1024px) { .review-card { flex: 0 0 calc(33.333% - 11px); } }
+    .review-author { display: flex; gap: 12px; align-items: center; margin-top: 16px; border-top: var(--rule-light); padding-top: 16px; }
+    .review-btn {
+      width: 48px; height: 48px; border-radius: var(--r-sm); background: var(--dark-mid); border: 1px solid var(--dark-light); color: var(--white); cursor: pointer; transition: all var(--t-base); display: flex; justify-content: center; align-items: center;
+    }
+    .review-btn:hover:not(:disabled) {
+      background: var(--amber); color: var(--black); border-color: var(--amber); box-shadow: var(--amber-glow); transform: translateY(-2px);
+    }
+    .review-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    
+    .desktop-nav-btns { display: none; }
+    .mobile-nav-btns { display: flex; justify-content: space-between; margin-top: 24px; padding: 0 16px; }
+    @media (min-width: 768px) {
+      .desktop-nav-btns { display: flex; gap: 8px; }
+      .mobile-nav-btns { display: none; }
+    }
+
+    /* Form Layout */
+    .estimate-form-grid { display: grid; grid-template-columns: 1fr; gap: 32px; }
+    @media (min-width: 1024px) { .estimate-form-grid { grid-template-columns: 1fr 380px; } }
+    .form-group { margin-bottom: 20px; }
+    .form-label { display: block; font-size: 11px; text-transform: uppercase; font-weight: 600; color: var(--white-muted); margin-bottom: 6px; }
+    .form-control { width: 100%; background: var(--dark); border: none; border-bottom: 1.5px solid var(--dark-light); color: var(--white); padding: 12px 4px; font-size: 15px; border-radius: var(--r-xs); }
+    .form-control:focus { border-bottom-color: var(--amber); }
+
+    /* FAQ accordion */
+    .faq-grid { display: grid; grid-template-columns: 1fr; gap: 0 40px; }
+    @media (min-width: 1024px) { .faq-grid { grid-template-columns: repeat(2, 1fr); } }
+    .faq-item { border-bottom: var(--rule-light); }
+    .faq-trigger { width: 100%; padding: 20px 0; display: flex; justify-content: space-between; align-items: center; cursor: pointer; background: none; border: none; font-size: 15px; font-weight: 700; color: var(--white); text-align: left; }
+    .faq-icon {
+      width: 22px; height: 22px;
+      border: 1px solid var(--white-ghost);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--amber); font-weight: 600;
+      transition: transform var(--t-base);
+    }
+    .faq-item.active .faq-icon { transform: rotate(45deg); }
+    .faq-content { max-height: 0; overflow: hidden; transition: max-height var(--t-base) ease-out; }
+    .faq-content p { padding-bottom: 20px; color: var(--white-mid); font-size: 13.5px; line-height: 1.6; }
+
+    /* Blog guides */
+    .blog-grid { display: grid; grid-template-columns: 1fr; gap: 24px; }
+    @media (min-width: 768px) { .blog-grid { grid-template-columns: repeat(3, 1fr); } }
+    .blog-card { background: var(--dark); border: var(--rule); border-radius: var(--r-md); overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; transition: all var(--t-base); }
+    .blog-card:hover { transform: translateY(-4px); border-color: var(--amber); }
+    .blog-cover { height: 160px; position: relative; }
+    .blog-cover-1 { background: linear-gradient(135deg, var(--dark-mid) 0%, var(--black) 100%); }
+    .blog-cover-2 { background: linear-gradient(135deg, var(--dark-light) 0%, var(--dark) 100%); }
+    .blog-cover-3 { background: linear-gradient(135deg, var(--black) 0%, var(--dark-mid) 100%); }
+    .blog-cover-logo { position: absolute; inset: 0; display: flex; justify-content: center; align-items: center; }
+
+    /* Service Area */
+    .area-grid { display: grid; grid-template-columns: 1fr; gap: 32px; }
+    @media (min-width: 1024px) { .area-grid { grid-template-columns: 60% 40%; } }
+    .cities-table { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; }
+    .city-cell { border-bottom: var(--rule-light); border-right: var(--rule-light); padding: 12px; font-size: 14px; font-weight: 500; }
+    .map-box { height: 280px; background: var(--dark-mid); border: var(--rule); border-radius: var(--r-lg); position: relative; overflow: hidden; }
+    .pulse-dot {
+      width: 14px; height: 14px; background: var(--amber); border-radius: 50%;
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      animation: pulseAnim 2s infinite ease-in-out;
+    }
+    @keyframes pulseAnim {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(232, 118, 10, 0.6), 0 0 0 0 rgba(232, 118, 10, 0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(232, 118, 10, 0.2), 0 0 0 16px rgba(232, 118, 10, 0.1); }
+    }
+
+    /* Contact Block */
+    .contact-grid { display: grid; grid-template-columns: 1fr; gap: 32px; }
+    @media (min-width: 768px) { .contact-grid { grid-template-columns: repeat(3, 1fr); gap: 24px; } }
+    .contact-col { border-left: var(--rule); padding-left: 20px; }
+
+    /* Footer */
+    #footer { background: var(--black); border-top: var(--rule); padding: 64px 16px 32px; font-size: 13px; }
+    @media (min-width: 1024px) { #footer { padding: 80px 48px 32px; } }
+    .footer-top { display: flex; flex-direction: column; gap: 40px; margin-bottom: 48px; }
+    @media (min-width: 768px) { .footer-top { flex-direction: row; justify-content: space-between; } }
+    .footer-col-main { max-width: 320px; }
+    .footer-nav { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+    .footer-link-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .footer-link-list a { color: var(--white-muted); }
+    .footer-link-list a:hover { color: var(--white); }
+    .footer-bottom { display: flex; flex-direction: column; gap: 16px; border-top: var(--rule); padding-top: 24px; color: var(--white-muted); }
+    @media (min-width: 768px) { .footer-bottom { flex-direction: row; justify-content: space-between; } }
+
+    /* Mobile trigger hamburger */
+    .menu-trigger { background: none; border: none; cursor: pointer; display: flex; flex-direction: column; gap: 6px; padding: 4px; }
+    @media (min-width: 1024px) { .menu-trigger { display: none; } }
+    .menu-bar { width: 22px; height: 2px; background: var(--white); transition: var(--t-fast); }
+    .menu-trigger.open .menu-bar:nth-child(1) { transform: translateY(8px) rotate(45deg); }
+    .menu-trigger.open .menu-bar:nth-child(2) { opacity: 0; }
+    .menu-trigger.open .menu-bar:nth-child(3) { transform: translateY(-8px) rotate(-45deg); }
+
+    /* Mobile Navigation Drawer Overlay */
+    #mobile-nav-overlay {
+      position: fixed; inset: 56px 0 0 0; background: var(--black); z-index: 99;
+      transform: translateX(-100%); transition: transform var(--t-base) ease-in-out;
+      display: flex; flex-direction: column; padding: 32px 24px 100px;
+      overflow-y: auto; height: calc(100vh - 56px); box-sizing: border-box;
+    }
+    @media (min-width: 768px) { #mobile-nav-overlay { inset: 64px 0 0 0; } }
+    #mobile-nav-overlay.open { transform: translateX(0); }
+    .mobile-nav-link {
+      font-size: 18px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--white);
+      padding: 18px 0;
+      border-bottom: 1px solid var(--rule-light);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      text-decoration: none;
+      transition: color var(--t-fast);
+      letter-spacing: 0.05em;
+    }
+    .mobile-nav-link:hover { color: var(--amber); }
+    .mobile-nav-link:active { color: var(--amber-light); }
+    .mobile-nav-link::after {
+      content: '+';
+      color: var(--amber);
+      font-weight: 400;
+    }
+    /* Blog Modal */
+    #blog-overlay {
+      position: fixed; inset: 0; background: var(--charcoal); z-index: 999;
+      transform: translateY(100%); transition: transform var(--t-slow) ease-in-out;
+      overflow-y: auto; padding: 0 0 120px 0; display: flex; flex-direction: column;
+    }
+    #blog-overlay.open { transform: translateY(0); }
+    .blog-close-btn {
+      position: fixed; top: 24px; right: 24px; width: 44px; height: 44px;
+      border-radius: 50%; background: var(--dark-mid); border: var(--rule);
+      display: flex; justify-content: center; align-items: center; color: var(--white);
+      z-index: 1000; cursor: pointer; transition: all var(--t-fast);
+    }
+    .blog-close-btn:hover { background: var(--amber); color: var(--black); border-color: var(--amber); }
+    .blog-article-header { padding: 80px 24px 40px; border-bottom: var(--rule); background: var(--dark); position: relative; }
+    .blog-hero-img { width: 100%; height: 280px; object-fit: cover; border-radius: var(--r-md); margin-bottom: 32px; display: none; }
+    @media (min-width: 768px) {
+      .blog-article-header { padding: 120px 48px 64px; text-align: center; }
+      .blog-hero-img { height: 400px; }
+      .blog-close-btn { top: 32px; right: 48px; width: 56px; height: 56px; }
+    }
+    .blog-container { max-width: 800px; margin: 0 auto; width: 100%; }
+    .blog-article-body { padding: 48px 24px; font-size: 16px; line-height: 1.8; color: var(--white-mid); }
+    @media (min-width: 768px) { .blog-article-body { padding: 64px 48px; font-size: 18px; } }
+    .blog-article-body h2 { font-size: clamp(24px, 4vw, 32px); color: var(--white); font-weight: 800; margin: 48px 0 24px; text-transform: uppercase; letter-spacing: -0.01em; }
+    .blog-article-body h3 { font-size: 20px; color: var(--amber); font-weight: 700; margin: 32px 0 16px; }
+    .blog-article-body p { margin-bottom: 24px; }
+    .blog-article-body ul { margin-bottom: 24px; padding-left: 20px; }
+    .blog-article-body li { margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+
+  <!-- 1. EMERGENCY BANNER -->
+  <div id="emergency-strip">
+    <div style="color: var(--emergency); font-weight: 700;">
+      Emergency roof damage? We respond 24/7 across Dallas, TX.
+    </div>
+    <div>
+      <a href="tel:5125551234" style="color: var(--emergency); border-bottom: 1.5px solid var(--emergency); text-transform: uppercase;" onclick="Sound.urgent()">
+        Call Now: 5125551234
+      </a>
+    </div>
+  </div>
+
+  <!-- 2. NAVIGATION -->
+  <nav id="main-navbar">
+    <a href="#" style="display: flex; align-items: center; gap: 10px;" onclick="Sound.tap()">
+      <span class="roof-triangle"></span>
+      <span style="font-size: 18px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;">Ironclad</span>
+    </a>
+
+    <!-- Desktop menu -->
+    <div class="nav-links">
+      <a href="#services" class="nav-link" onclick="Sound.tap()">Services</a>
+      <a href="#process" class="nav-link" onclick="Sound.tap()">Process</a>
+      <a href="#storm" class="nav-link" onclick="Sound.tap()">Storm Claims</a>
+      <a href="#gallery" class="nav-link" onclick="Sound.tap()">Gallery</a>
+      <a href="#warranties" class="nav-link" onclick="Sound.tap()">Warranties</a>
+      <a href="#financing" class="nav-link" onclick="Sound.tap()">Financing</a>
+      <a href="#reviews" class="nav-link" onclick="Sound.tap()">Reviews</a>
+      <a href="#faq" class="nav-link" onclick="Sound.tap()">FAQ</a>
+      <a href="#book" class="nav-link active" style="color: var(--black); background: var(--amber); padding: 8px 16px; border-radius: var(--r-sm); margin-left: 10px;" onclick="Sound.click()">Free Estimate</a>
+    </div>
+
+    <!-- Mobile toggle -->
+    <button class="menu-trigger" onclick="toggleMobileNav()">
+      <span class="menu-bar"></span>
+      <span class="menu-bar"></span>
+      <span class="menu-bar"></span>
+    </button>
+  </nav>
+
+  <!-- Mobile nav overlay -->
+  <div id="mobile-nav-overlay">
+    <a href="#services" class="mobile-nav-link" onclick="closeMobileNav()">Services</a>
+    <a href="#process" class="mobile-nav-link" onclick="closeMobileNav()">Process</a>
+    <a href="#storm" class="mobile-nav-link" onclick="closeMobileNav()">Storm Claims</a>
+    <a href="#gallery" class="mobile-nav-link" onclick="closeMobileNav()">Gallery</a>
+    <a href="#warranties" class="mobile-nav-link" onclick="closeMobileNav()">Warranties</a>
+    <a href="#financing" class="mobile-nav-link" onclick="closeMobileNav()">Financing</a>
+    <a href="#reviews" class="mobile-nav-link" onclick="closeMobileNav()">Reviews</a>
+    <a href="#faq" class="mobile-nav-link" onclick="closeMobileNav()">FAQ</a>
+    <a href="#book" class="btn-primary" style="padding: 16px; text-align: center; margin-top: 24px; width: 100%; box-sizing: border-box;" onclick="closeMobileNav(); Sound.click()">Free Estimate</a>
+  </div>
+
+  <!-- 3. HERO -->
+  <section id="hero">
+    <div class="hero-grid">
+      <div class="hero-content">
+        <div class="hero-eyebrow">LICENSED &amp; CERTIFIED · Dallas, TX</div>
+        <h1 class="hero-title">
+          Dallas, TX's<br style="display: none;">
+          Roofing <span>Experts.</span>
+        </h1>
+        <div class="accent-bar"></div>
+        <p class="hero-desc">
+          2015 years installing and repairing roofs in Dallas, TX. GAF certified Master Elite. Fully licensed and insured. We answer the phone.
+        </p>
+
+        <div class="hero-buttons">
+          <a href="#book" class="btn-primary" onclick="Sound.click()">Get Free Estimate</a>
+          <a href="tel:5125551234" class="btn-emergency" onclick="Sound.urgent()">Emergency Repair</a>
+        </div>
+
+        <div class="stats-strip">
+          <div class="stat-item">
+            <div class="stat-num">2015+</div>
+            <div class="stat-lbl">Years in Dallas, TX</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-num">500+</div>
+            <div class="stat-lbl">Roofs Installed</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-num">GAF</div>
+            <div class="stat-lbl">Master Elite</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-num">A+</div>
+            <div class="stat-lbl">BBB Rating</div>
+          </div>
+        </div>
+      </div>
+      <div class="hero-artwork">
+        <div class="roof-polygon"></div>
+        <div class="roof-sub-line"></div>
+        <div style="position: absolute; bottom: 32px; right: 32px; font-size: 11px; font-weight: 700; tracking: 0.1em; color: var(--amber);">
+          IRONCLAD STRUCTURES
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. CREDENTIALS STRIP -->
+  <section id="trust-strip">
+    <div class="trust-scroll">
+      <div class="badge-outline">
+        <span class="diamond-bullet"></span>
+        <span style="font-size: 11px; font-weight: 700; color: var(--white-mid);">GAF MASTER ELITE</span>
+      </div>
+      <div class="badge-outline">
+        <span class="diamond-bullet"></span>
+        <span style="font-size: 11px; font-weight: 700; color: var(--white-mid);">OWENS CORNING PLATINUM</span>
+      </div>
+      <div class="badge-outline">
+        <span class="diamond-bullet"></span>
+        <span style="font-size: 11px; font-weight: 700; color: var(--white-mid);">BBB A+ RATED</span>
+      </div>
+      <div class="badge-outline">
+        <span class="diamond-bullet"></span>
+        <span style="font-size: 11px; font-weight: 700; color: var(--white-mid);">HAAG CERTIFIED</span>
+      </div>
+      <div class="badge-outline">
+        <span class="diamond-bullet"></span>
+        <span style="font-size: 11px; font-weight: 700; color: var(--white-mid);">LICENSED &amp; INSURED</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. SERVICES -->
+  <section id="services">
+    <div class="container">
+      <div class="section-num">03 — SERVICES</div>
+      <h2 class="section-title">What We Do</h2>
+      
+      <div class="service-tabs">
+        <button class="tab-btn active" onclick="switchServiceTab('residential')">Residential</button>
+        <button class="tab-btn" onclick="switchServiceTab('commercial')">Commercial</button>
+        <button class="tab-btn" onclick="switchServiceTab('emergency')">Emergency</button>
+      </div>
+
+      <div class="services-rows" id="services-list-container">
+        <!-- Filled on load or on tab change -->
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. OUR PROCESS -->
+  <section id="process">
+    <div class="container">
+      <div class="section-num">04 — HOW IT WORKS</div>
+      <h2 class="section-title">Our Process</h2>
+      <p class="section-desc">Roofing projects make homeowners anxious. Here is exactly what happens when you call Ironclad Roofing, from first contact to final inspection.</p>
+
+      <div class="process-timeline">
+        <div class="process-step">
+          <div class="process-step-badge">01</div>
+          <div class="process-card">
+            <h3 class="process-card-title">Free Inspection</h3>
+            <p class="process-card-desc">We come to you. A certified inspector examines your roof, documents everything with photos, and gives you an honest assessment.</p>
+          </div>
+        </div>
+        <div class="process-step">
+          <div class="process-step-badge">02</div>
+          <div class="process-card">
+            <h3 class="process-card-title">Detailed Estimate</h3>
+            <p class="process-card-desc">You receive a written, itemized estimate within 24 hours. Line by line — materials, labor, timeline, and warranty in writing.</p>
+          </div>
+        </div>
+        <div class="process-step">
+          <div class="process-step-badge">03</div>
+          <div class="process-card">
+            <h3 class="process-card-title">Insurance Support</h3>
+            <p class="process-card-desc">If your damage is storm-related, we file your claim with you and attend the adjuster meeting to protect your interests.</p>
+          </div>
+        </div>
+        <div class="process-step">
+          <div class="process-step-badge">04</div>
+          <div class="process-card">
+            <h3 class="process-card-title">Expert Install</h3>
+            <p class="process-card-desc">Our crews are trained and background-checked. We protect your garden landscaping, clean up perfectly, and run heavy magnets for stray nails.</p>
+          </div>
+        </div>
+        <div class="process-step">
+          <div class="process-step-badge">05</div>
+          <div class="process-card">
+            <h3 class="process-card-title">Final Inspection</h3>
+            <p class="process-card-desc">We walk the roof with you (or send detailed photos), confirm warranties, and count the job finished only when you are satisfied.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. STORM DAMAGE & INSURANCE CLAIMS -->
+  <section id="storm">
+    <div class="container">
+      <div class="section-num">05 — STORM DAMAGE</div>
+      <h2 class="section-title">We Handle the Insurance So You Don't Have To</h2>
+      
+      <div class="storm-container">
+        <div>
+          <p style="color: var(--white-mid); font-size: 16px; line-height: 1.7; margin-bottom: 24px;">
+            If your roof was damaged by hail, wind, or a storm, your homeowner's insurance likely covers it. Most Dallas, TX homeowners do not realize this — and many roofing companies do not tell them. We do.
+          </p>
+          
+          <div style="display: flex; gap: 16px; flex-direction: column;">
+            <div style="border-top: var(--rule-light); padding-top: 16px;">
+              <h4 style="font-size: 16px; font-weight: 700; margin-bottom: 4px; color: var(--amber);">1. Free Storm Inspection</h4>
+              <p style="font-size: 13px; color: var(--white-mid);">HAAG-certified inspection with complete photo records matching actual adjuster requirements.</p>
+            </div>
+            <div style="border-top: var(--rule-light); padding-top: 16px;">
+              <h4 style="font-size: 16px; font-weight: 700; margin-bottom: 4px; color: var(--amber);">2. Claim Filing</h4>
+              <p style="font-size: 13px; color: var(--white-mid);">We support your claim submission and meet the insurance adjuster on site to secure full coverage.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="checklist-card">
+          <h3 class="checklist-title">Signs of Storm Damage</h3>
+          <div class="checklist-row">
+            <span class="css-checkbox"></span>
+            <span class="checklist-text">Missing or visibly displaced shingles</span>
+          </div>
+          <div class="checklist-row">
+            <span class="css-checkbox"></span>
+            <span class="checklist-text">Excessive dark granules accumulating in gutters</span>
+          </div>
+          <div class="checklist-row">
+            <span class="css-checkbox"></span>
+            <span class="checklist-text">Asphalt dents, bruising, or missing round spots (hail)</span>
+          </div>
+          <div class="checklist-row">
+            <span class="css-checkbox"></span>
+            <span class="checklist-text">Wind lifting roof edge flashing around vents/chimneys</span>
+          </div>
+          <div class="checklist-row">
+            <span class="css-checkbox"></span>
+            <span class="checklist-text">Water marks appearing unexpectedly on ceiling boards</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. PROJECT GALLERY -->
+  <section id="gallery">
+    <div class="container">
+      <div class="section-num">06 — OUR WORK</div>
+      <h2 class="section-title">Recent Projects in Dallas, TX</h2>
+      
+      <div class="filter-tabs">
+        <button class="filter-btn active" onclick="filterGallery('All')">All Projects</button>
+        <button class="filter-btn" onclick="filterGallery('residential')">Residential</button>
+        <button class="filter-btn" onclick="filterGallery('commercial')">Commercial</button>
+        <button class="filter-btn" onclick="filterGallery('metal')">Metal</button>
+        <button class="filter-btn" onclick="filterGallery('flat')">Flat Roof</button>
+      </div>
+
+      <div class="gallery-grid" id="gallery-container">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </section>
+
+  <!-- 9. WHY CHOOSE US / WARRANTIES -->
+  <section id="warranties">
+    <div class="container">
+      <div class="section-num">07 — WARRANTIES</div>
+      <h2 class="section-title">Built to Endure</h2>
+      <p class="section-desc">Our industrial status means we can offer stronger factory warranties than uncertified remodelers.</p>
+
+      <div class="warranty-grid">
+        <div class="warranty-card">
+          <div class="warranty-number accent">50</div>
+          <div style="font-size: 11px; font-weight: 700; color: var(--amber); letter-spacing: 0.1em; text-transform: uppercase;">YEAR WARRANTY</div>
+          <h3 style="font-size: 18px; margin-top: 16px; margin-bottom: 8px;">Asphalt Lifetime Protection</h3>
+          <p style="font-size: 13px; color: var(--white-mid); line-height: 1.6;">Our Master Elite GAF structures carry a 50-year material warranty. If shingles fail, replacement material costs are entirely covered.</p>
+        </div>
+        <div class="warranty-card workmanship">
+          <div class="warranty-number">25</div>
+          <div style="font-size: 11px; font-weight: 700; color: var(--white-mid); letter-spacing: 0.1em; text-transform: uppercase;">YEAR WORKMANSHIP</div>
+          <h3 style="font-size: 18px; margin-top: 16px; margin-bottom: 8px;">Workmanship Guarantee</h3>
+          <p style="font-size: 13px; color: var(--white-mid); line-height: 1.6;">Our installation crews handle details to extreme safety guidelines. We offer a 25-year structural leak-free proofing guarantee on labor.</p>
+        </div>
+        <div class="warranty-card no-sub">
+          <div style="height: 64px; display: flex; flex-direction: column; gap: 8px; justify-content: center;">
+            <span style="height: 3px; background: var(--amber); width: 40px;"></span>
+            <span style="height: 3px; background: var(--amber); width: 25px;"></span>
+          </div>
+          <div style="font-size: 11px; font-weight: 700; color: var(--white-muted); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 8px;">ZERO THIRD PARTY</div>
+          <h3 style="font-size: 18px; margin-top: 16px; margin-bottom: 8px;">No Subcontractors</h3>
+          <p style="font-size: 13px; color: var(--white-mid); line-height: 1.6;">We employ and train local installers who undergo drug testing and security checks. Our business does not use casual sub-laborers.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10. FINANCING -->
+  <section id="financing">
+    <div class="container">
+      <div class="section-num">08 — FINANCING</div>
+      <h2 class="section-title">Flexible Payments</h2>
+      
+      <div class="financing-grid">
+        <div>
+          <p style="color: var(--white-mid); font-size: 15px; margin-bottom: 32px; line-height: 1.6;">
+            A new roof in Dallas, TX is a major capital cost. We coordinate financing with verified providers so you can protect your property now and pay with structural comfort.
+          </p>
+
+          <div class="financing-option">
+            <div class="financing-apr">0%</div>
+            <div>
+              <h4 style="font-weight: 700; font-size: 16px;">Zero Interest Option</h4>
+              <p style="font-size: 13px; color: var(--white-mid);">12 to 18 Month interest-free loans on qualifying structural upgrades.</p>
+            </div>
+          </div>
+          <div class="financing-option" style="border-bottom: none;">
+            <div class="financing-apr" style="color: var(--white);">LOW</div>
+            <div>
+              <h4 style="font-weight: 700; font-size: 16px;">Flat Rate Terms</h4>
+              <p style="font-size: 13px; color: var(--white-mid);">Extended repayment structures up to 84 months with zero pre-payment penalization.</p>
+            </div>
+          </div>
+
+          <a href="#book" class="btn-primary" style="padding: 14px 28px; margin-top: 24px;" onclick="Sound.click()">Apply with Estimator</a>
+        </div>
+
+        <div class="financing-sim-card">
+          <div>
+            <div style="font-size: 11px; color: var(--amber); font-weight: 700; tracking: 0.05em; text-transform: uppercase;">Simulated Structure Quote</div>
+            <div style="font-size: 32px; font-weight: 800; margin-top: 8px; color: var(--white);">$0 DOWN</div>
+          </div>
+          <div style="border-top: var(--rule-light); padding-top: 16px;">
+            <p style="font-size: 12px; color: var(--white-muted); font-family: monospace;">QUALIFYING HOMES IN Dallas, TX MAY ACCESS COMPLETE STRUCTURE EXCHANGES WITH MINIMAL MONTHLY REMITTANCE.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 11. REVIEWS -->
+  <section id="reviews">
+    <div class="container" style="padding-bottom: 48px;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
+        <div>
+          <div class="section-num">09 — REVIEWS</div>
+          <h2 class="section-title" style="margin-bottom: 0;">What Dallas, TX Homeowners Say</h2>
+        </div>
+        <div class="desktop-nav-btns">
+          <button id="revPrevDesk" onclick="scrollReviews(-1)" class="review-btn" disabled>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <button id="revNextDesk" onclick="scrollReviews(1)" class="review-btn">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        </div>
+      </div>
+      
+      <div style="position: relative;">
+        <div class="reviews-grid" id="reviewsContainer">
+          <div class="review-card">
+            <div>
+              <div style="color: var(--amber); font-weight: 700; font-size: 14px;">★★★★★ <span style="font-size: 10px; font-family: monospace; background: var(--dark-light); color: var(--white-mid); padding: 2px 6px; border-radius: 10px; margin-left:8px;">GOOGLE</span></div>
+              <p style="font-size: 13.5px; color: var(--white-mid); margin-top: 16px; line-height: 1.6;">
+                "Had a leak that three other roofers told me needed a full replacement. Ironclad Roofing came out, found a failed flashing, and repaired it for $280. They could have sold me a new roof but didn't. Honesty like that is rare."
+              </p>
+            </div>
+            <div class="review-author">
+              <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80" alt="Robert Henderson" class="avatar" style="object-fit: cover;">
+              <div>
+                <div style="font-size: 14px; font-weight: 700;">Robert Henderson</div>
+                <div style="font-size: 11px; color: var(--white-muted);">Leak Repair · Dallas, TX</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="review-card">
+            <div>
+              <div style="color: var(--amber); font-weight: 700; font-size: 14px;">★★★★★ <span style="font-size: 10px; font-family: monospace; background: var(--dark-light); color: var(--white-mid); padding: 2px 6px; border-radius: 10px; margin-left:8px;">YELP</span></div>
+              <p style="font-size: 13.5px; color: var(--white-mid); margin-top: 16px; line-height: 1.6;">
+                "Woke up to heavy ceiling water leaks during storms. Called at 7am, prompt crew dispatched by 10. High waterproofing speed, permanent metal structures replaced. Perfect follow-through."
+              </p>
+            </div>
+            <div class="review-author">
+              <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80" alt="Sandra Wilson" class="avatar" style="object-fit: cover;">
+              <div>
+                <div style="font-size: 14px; font-weight: 700;">Sandra Wilson</div>
+                <div style="font-size: 11px; color: var(--white-muted);">Emergency Repair · Dallas, TX</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="review-card">
+            <div>
+              <div style="color: var(--amber); font-weight: 700; font-size: 14px;">★★★★★ <span style="font-size: 10px; font-family: monospace; background: var(--dark-light); color: var(--white-mid); padding: 2px 6px; border-radius: 10px; margin-left:8px;">BBB</span></div>
+              <p style="font-size: 13.5px; color: var(--white-mid); margin-top: 16px; line-height: 1.6;">
+                "Highly professional commercial flat roof installation on our retail warehouse. On budget, superb debris management, detailed documentation matching everything we requested."
+              </p>
+            </div>
+            <div class="review-author">
+              <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80" alt="Marcus Thompson" class="avatar" style="object-fit: cover;">
+              <div>
+                <div style="font-size: 14px; font-weight: 700;">Marcus Thompson</div>
+                <div style="font-size: 11px; color: var(--white-muted);">Commercial TPO · Dallas, TX</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="review-card">
+            <div>
+              <div style="color: var(--amber); font-weight: 700; font-size: 14px;">★★★★★ <span style="font-size: 10px; font-family: monospace; background: var(--dark-light); color: var(--white-mid); padding: 2px 6px; border-radius: 10px; margin-left:8px;">GOOGLE</span></div>
+              <p style="font-size: 13.5px; color: var(--white-mid); margin-top: 16px; line-height: 1.6;">
+                "A tree branch took out a section of my roof during the storm. Ironclad Roofing came out immediately, tarped it, and had it fully repaired within the week. Looks identical to the rest of the roof."
+              </p>
+            </div>
+            <div class="review-author">
+              <img src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=150&q=80" alt="Michael Daniels" class="avatar" style="object-fit: cover;">
+              <div>
+                <div style="font-size: 14px; font-weight: 700;">Michael Daniels</div>
+                <div style="font-size: 11px; color: var(--white-muted);">Roof Repair · Dallas, TX</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="review-card">
+            <div>
+              <div style="color: var(--amber); font-weight: 700; font-size: 14px;">★★★★★ <span style="font-size: 10px; font-family: monospace; background: var(--dark-light); color: var(--white-mid); padding: 2px 6px; border-radius: 10px; margin-left:8px;">YELP</span></div>
+              <p style="font-size: 13.5px; color: var(--white-mid); margin-top: 16px; line-height: 1.6;">
+                "Very transparent pricing. No hidden fees. The final invoice matched the written estimate exactly. The crew was extremely polite and the new roof looks fantastic."
+              </p>
+            </div>
+            <div class="review-author">
+              <img src="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=150&q=80" alt="Emily Stone" class="avatar" style="object-fit: cover;">
+              <div>
+                <div style="font-size: 14px; font-weight: 700;">Emily Stone</div>
+                <div style="font-size: 11px; color: var(--white-muted);">Full Replacement · Dallas, TX</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="review-card">
+            <div>
+              <div style="color: var(--amber); font-weight: 700; font-size: 14px;">★★★★★ <span style="font-size: 10px; font-family: monospace; background: var(--dark-light); color: var(--white-mid); padding: 2px 6px; border-radius: 10px; margin-left:8px;">GOOGLE</span></div>
+              <p style="font-size: 13.5px; color: var(--white-mid); margin-top: 16px; line-height: 1.6;">
+                "They showed up right on time, replaced the whole roof in under two days, and ran magnets around the property to make sure there was absolutely no debris left over."
+              </p>
+            </div>
+            <div class="review-author">
+              <img src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80" alt="Sarah Johnson" class="avatar" style="object-fit: cover;">
+              <div>
+                <div style="font-size: 14px; font-weight: 700;">Sarah Johnson</div>
+                <div style="font-size: 11px; color: var(--white-muted);">Full Replacement · Dallas, TX</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="review-card">
+            <div>
+              <div style="color: var(--amber); font-weight: 700; font-size: 14px;">★★★★★ <span style="font-size: 10px; font-family: monospace; background: var(--dark-light); color: var(--white-mid); padding: 2px 6px; border-radius: 10px; margin-left:8px;">BBB</span></div>
+              <p style="font-size: 13.5px; color: var(--white-mid); margin-top: 16px; line-height: 1.6;">
+                "We had multiple leaks after a bad winter. Not only was Ironclad Roofing the fastest to respond, but they correctly identified issues that other companies entirely missed. Very impressive work."
+              </p>
+            </div>
+            <div class="review-author">
+              <img src="https://images.unsplash.com/photo-1616422285623-13ffb162095e?auto=format&fit=crop&w=150&q=80" alt="David Miller" class="avatar" style="object-fit: cover;">
+              <div>
+                <div style="font-size: 14px; font-weight: 700;">David Miller</div>
+                <div style="font-size: 11px; color: var(--white-muted);">Storm Claims · Dallas, TX</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mobile-nav-btns">
+          <button id="revPrevMob" onclick="scrollReviews(-1)" class="review-btn" disabled>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <button id="revNextMob" onclick="scrollReviews(1)" class="review-btn">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+    </div>
+  </section>
+
+  <!-- 12. FREE ESTIMATE FORM -->
+  <section id="book">
+    <div class="container" style="border-top: var(--rule-amber);">
+      <div class="section-num">10 — ESTIMATOR</div>
+      <h2 class="section-title">Get Your Free Estimate</h2>
+      
+      <div class="estimate-form-grid">
+        <div id="estimate-form-card" style="background: var(--dark); border-radius: var(--r-md); border: var(--rule); padding: 32px;">
+          <form id="leadForm" onsubmit="handleFormSubmit(event)">
+            <div class="form-group">
+              <label class="form-label" for="fullName">Full Name</label>
+              <input type="text" id="fullName" class="form-control" required placeholder="John Doe">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="phoneNum">Phone Number</label>
+              <input type="tel" id="phoneNum" class="form-control" required placeholder="(512) 555-0199">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="addressInCity">Address / Region</label>
+              <input type="text" id="addressInCity" class="form-control" placeholder="102 Main Street, Dallas, TX">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="serviceSelect">Service Desired</label>
+              <select id="serviceSelect" class="form-control">
+                <option value="Replacement">Full Replacement</option>
+                <option value="Repair">Leak / Wind Repair</option>
+                <option value="StormClaim">Storm Damage Assessment</option>
+                <option value="Commercial">Commercial Flat Roofing</option>
+              </select>
+            </div>
+            <button type="submit" class="btn-primary" style="width: 100%; padding: 16px;" onclick="Sound.click()">Request Free Estimate</button>
+          </form>
+          <div id="formSuccessMessage" style="display: none; text-align: center; padding: 16px 0;">
+            <div style="font-size: 24px; font-weight: 800; color: var(--amber); margin-bottom: 8px;">Estimate Request Logged</div>
+            <p style="font-size: 14px; color: var(--white-mid);">A verified estimator will contact you within 2 hours to coordinate structural inspections. Thank you for choosing Ironclad Roofing.</p>
+          </div>
+        </div>
+
+        <div style="background: var(--dark-mid); border-radius: var(--r-md); padding: 32px; display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <h4 style="font-size: 18px; font-weight: 700; margin-bottom: 12px;">What Happens Next?</h4>
+            <ul style="list-style: none; display: flex; flex-direction: column; gap: 12px; font-size: 13px; color: var(--white-mid);">
+              <li style="display: flex; gap: 8px;"><span class="diamond-bullet" style="margin-top: 4px;"></span> Verified local scheduling within 24 hours</li>
+              <li style="display: flex; gap: 8px;"><span class="diamond-bullet" style="margin-top: 4px;"></span> Complete aerial + on-roof detailed imaging</li>
+              <li style="display: flex; gap: 8px;"><span class="diamond-bullet" style="margin-top: 4px;"></span> Written, binding itemized quotation delivered immediately</li>
+            </ul>
+          </div>
+
+          <div style="border-top: var(--rule-light); padding-top: 24px; margin-top:24px;">
+            <div style="font-size: 11px; color: var(--white-muted); text-transform: uppercase;">Direct Line</div>
+            <a href="tel:5125551234" style="font-size: 24px; font-weight: 800; color: var(--amber);" onclick="Sound.tap()">5125551234</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 13. FAQ ACCORDION -->
+  <section id="faq">
+    <div class="container">
+      <div class="section-num">11 — COMMON KNOWLEDGE</div>
+      <h2 class="section-title">Common Questions</h2>
+      
+      <div class="faq-grid">
+        <div>
+          <div class="faq-item">
+            <button class="faq-trigger" onclick="toggleFaq(this)">
+              <span>How long does a roof replacement take?</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-content">
+              <p>Most residential installations in Dallas, TX are completed within 1 to 2 working days depending on surface complex pitch and area. Crew members clean continuously ensuring site safety.</p>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-trigger" onclick="toggleFaq(this)">
+              <span>Will my homeowner insurance cover a leakage?</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-content">
+              <p>Leakage or structural compromises originating from dynamic storm elements (high speed wind gusts, heavy hail) are usually fully covered. We supply reports ensuring robust adjuster submissions.</p>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-trigger" onclick="toggleFaq(this)">
+              <span>Do you invoice deposit payments upfront?</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-content">
+              <p>We mandate absolutely zero deposits on residential roofing. We secure materials and complete full, satisfactory structural walkthroughs before executing financial invoicing.</p>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="faq-item">
+            <button class="faq-trigger" onclick="toggleFaq(this)">
+              <span>What elements characterize a Master Elite Roofer?</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-content">
+              <p>GAF Master Elite status represents a structural licensing level granted to less than 2% of total national builders. This ensures high structural workmanship backup and non-prorated factory support warranties.</p>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-trigger" onclick="toggleFaq(this)">
+              <span>What roof materials do you support?</span>
+              <span class="faq-icon">+</span>
+            </button>
+            <div class="faq-content">
+              <p>We work with architectural asphalt dimensional shingles, heavy weight standing seam high end metal sheets, low-slope flat synthetic membranes (TPO/EPDM), and natural stone tile finishes.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 14. BLOG SECTIONS -->
+  <section id="blog">
+    <div class="container">
+      <div class="section-num">12 — RESOURCE GUIDES</div>
+      <h2 class="section-title">Roofing Guides</h2>
+      
+      <div class="blog-grid">
+        <div class="blog-card" style="cursor: pointer;" onclick="openBlog(1)">
+          <div>
+            <div class="blog-cover" style="background: url('https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80') center/cover;">
+              <div style="position: absolute; inset:0; background: linear-gradient(0deg, rgba(0,0,0,0.7) 0%, transparent 100%);"></div>
+            </div>
+            <div style="padding: 24px;">
+              <span style="font-size: 10px; font-weight: 700; color: var(--amber); background: var(--amber-tint); padding: 4px 10px; border-radius: var(--r-pill);">REPAIR GUIDE</span>
+              <h3 style="font-size: 18px; font-weight: 700; margin-top: 12px; margin-bottom: 8px;">Repair vs. Full Replacement</h3>
+              <p style="font-size: 13px; color: var(--white-mid); line-height: 1.6;">How to correctly audit wear and identify when sealing components can extend the structural surface life, protecting your budget from sales reps.</p>
+            </div>
+          </div>
+          <div style="padding: 0 24px 24px;">
+            <a style="font-size: 12px; font-weight: 700; color: var(--amber); letter-spacing: 0.05em; pointer-events: none;">Read Article →</a>
+          </div>
+        </div>
+
+        <div class="blog-card" style="cursor: pointer;" onclick="openBlog(2)">
+          <div>
+            <div class="blog-cover" style="background: url('https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=600&q=80') center/cover;">
+              <div style="position: absolute; inset:0; background: linear-gradient(0deg, rgba(0,0,0,0.7) 0%, transparent 100%);"></div>
+            </div>
+            <div style="padding: 24px;">
+              <span style="font-size: 10px; font-weight: 700; color: var(--amber); background: var(--amber-tint); padding: 4px 10px; border-radius: var(--r-pill);">INSURANCE</span>
+              <h3 style="font-size: 18px; font-weight: 700; margin-top: 12px; margin-bottom: 8px;">Adjuster Meeting Playbook</h3>
+              <p style="font-size: 13px; color: var(--white-mid); line-height: 1.6;">Exactly what inspection agents look for, how to collect visual wind records, and the process of securing approved replacement files.</p>
+            </div>
+          </div>
+          <div style="padding: 0 24px 24px;">
+            <a style="font-size: 12px; font-weight: 700; color: var(--amber); letter-spacing: 0.05em; pointer-events: none;">Read Article →</a>
+          </div>
+        </div>
+
+        <div class="blog-card" style="cursor: pointer;" onclick="openBlog(3)">
+          <div>
+            <div class="blog-cover" style="background: url('https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=600&q=80') center/cover;">
+              <div style="position: absolute; inset:0; background: linear-gradient(0deg, rgba(0,0,0,0.7) 0%, transparent 100%);"></div>
+            </div>
+            <div style="padding: 24px;">
+              <span style="font-size: 10px; font-weight: 700; color: var(--amber); background: var(--amber-tint); padding: 4px 10px; border-radius: var(--r-pill);">FINANCE</span>
+              <h3 style="font-size: 18px; font-weight: 700; margin-top: 12px; margin-bottom: 8px;">Roof replacement for $0 down</h3>
+              <p style="font-size: 13px; color: var(--white-mid); line-height: 1.6;">Repayment methods explained. We analyze flat monthly budgeting versus standard direct home improvement financing programs.</p>
+            </div>
+          </div>
+          <div style="padding: 0 24px 24px;">
+            <a style="font-size: 12px; font-weight: 700; color: var(--amber); letter-spacing: 0.05em; pointer-events: none;">Read Article →</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 15. SERVICE AREA -->
+  <section id="area">
+    <div class="container">
+      <div class="section-num">13 — LOCAL COVERAGE</div>
+      <h2 class="section-title">Where We Build</h2>
+      
+      <div class="area-grid">
+        <div>
+          <p style="color: var(--white-mid); font-size: 15px; margin-bottom: 32px; line-height: 1.6;">
+            We operate fully equipped roofing dispatch trucks active daily inside Dallas, TX and neighbouring commuter belts. We commit to responsive dispatch.
+          </p>
+
+          <div class="cities-table">
+            <div class="city-cell">Downtown Dallas, TX</div>
+            <div class="city-cell">Metro commuter belt</div>
+            <div class="city-cell">North-East Counties</div>
+            <div class="city-cell">Zip code area zones</div>
+            <div class="city-cell">Same-Day Emergency Area</div>
+            <div class="city-cell">45-Mile Service Arc</div>
+          </div>
+        </div>
+
+        <div class="map-box">
+          <div class="pulse-dot"></div>
+          <div style="position: absolute; bottom: 16px; left: 16px; background: rgba(12,12,11,0.85); padding: 8px 12px; border-radius: var(--r-xs); font-size: 11px; font-weight: 700; border: var(--rule-light);">
+            📍 HQ DISPATCH AREA: Dallas, TX
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 16. CONTACT BLOCKS -->
+  <section id="contact">
+    <div class="container">
+      <div class="section-num">14 — CONTACT</div>
+      <h2 class="section-title">Talk to a Roofer</h2>
+      
+      <div class="contact-grid">
+        <div class="contact-col" style="border-left: none; padding-left: 0;">
+          <div style="font-size: 11px; font-weight:700; color: var(--amber); text-transform:uppercase;">DIRECT CO-ORDINATION</div>
+          <div style="font-size: 28px; font-weight:800; margin-top:8px; margin-bottom:12px;">
+            <a href="tel:5125551234" onclick="Sound.tap()">5125551234</a>
+          </div>
+          <p style="font-size: 13px; color: var(--white-mid);">Available continuously for disaster response tarping. Administrative team active 7am to 6pm weekdays.</p>
+        </div>
+
+        <div class="contact-col">
+          <div style="font-size: 11px; font-weight:700; color: var(--amber); text-transform:uppercase;">RESOURCES &amp; PORTFOLIO</div>
+          <div style="font-size:18px; font-weight:700; margin-top:8px; margin-bottom:8px;">
+            <a href="https://facebook.com/ironclad_roofing" target="_blank" onclick="Sound.tap()">Facebook Profile</a>
+          </div>
+          <div style="font-size:18px; font-weight:700; margin-bottom:12px;">
+            <a href="https://instagram.com/ironclad_roofing" target="_blank" onclick="Sound.tap()">@ironclad_roofing</a>
+          </div>
+          <p style="font-size: 13px; color: var(--white-mid);">Follow before-and-after drone captures of residential transformations throughout the local region.</p>
+        </div>
+
+        <div class="contact-col">
+          <div style="font-size: 11px; font-weight:700; color: var(--amber); text-transform:uppercase;">REGISTERED OFFICE</div>
+          <div style="font-size: 22px; font-weight:800; margin-top:8px; margin-bottom:8px;">Dallas, TX</div>
+          <p style="font-size: 13px; color: var(--white-mid);">HQ administrative staff deploy materials management centrally to preserve short trucking times and quick turnaround completions.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 17. FOOTER -->
+  <footer id="footer">
+    <div class="footer-top">
+      <div class="footer-col-main">
+        <div style="display: flex; align-items:center; gap:8px;">
+          <span class="roof-triangle"></span>
+          <span style="font-size: 18px; font-weight: 800; text-transform:uppercase;">Ironclad</span>
+        </div>
+        <p style="color: var(--white-muted); margin-top:16px; line-height:1.6;">
+          Licensed commercial and residential roofing structures inside the Dallas, TX community. 2015 years. Zero third-party labor. Complete workmanship support backings.
+        </p>
+      </div>
+
+      <div class="footer-nav">
+        <div>
+          <h4 style="font-weight: 700; font-size: 11px; text-transform:uppercase; color: var(--amber); margin-bottom:16px;">Services</h4>
+          <ul class="footer-link-list">
+            <li><a href="#services">Full Replacement</a></li>
+            <li><a href="#services">Structural Leak Repair</a></li>
+            <li><a href="#storm">Storm Claims Assessment</a></li>
+            <li><a href="#services">Flat TPO Systems</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4 style="font-weight: 700; font-size: 11px; text-transform:uppercase; color: var(--amber); margin-bottom:16px;">Core Company</h4>
+          <ul class="footer-link-list">
+            <li><a href="#process">Five-Step Process</a></li>
+            <li><a href="#gallery">Project Showcase</a></li>
+            <li><a href="#warranties">Warranty Backup</a></li>
+            <li><a href="#financing">Zero Interest Loans</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <div>© 2025 Ironclad Roofing. All rights reserved.</div>
+      <div>GAF Master Elite #ME884120 · Fully licensed, bonded &amp; insured for structural building.</div>
+    </div>
+  </footer>
+
+  <!-- Blog Modal -->
+  <div id="blog-overlay">
+    <button class="blog-close-btn" onclick="closeBlog()">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </button>
+    <div class="blog-article-header">
+      <div class="blog-container">
+        <img src="" alt="Blog Cover" id="blog-hero-img" class="blog-hero-img">
+        <span id="blog-category" style="font-size: 11px; font-weight: 700; color: var(--amber); background: var(--amber-tint); padding: 4px 10px; border-radius: var(--r-pill); text-transform: uppercase;"></span>
+        <h1 id="blog-title" style="font-size: clamp(32px, 5vw, 56px); font-weight: 800; color: var(--white); margin: 24px 0 16px; line-height: 1.1; letter-spacing: -0.02em;"></h1>
+        <div id="blog-date" style="font-size: 13px; color: var(--white-muted);"></div>
+      </div>
+    </div>
+    <div class="blog-article-body blog-container" id="blog-content"></div>
+  </div>
+
+  <!-- Sound System API & Event binders -->
+  <script>
+    const blogPosts = {
+      1: {
+        title: "How to Tell if Your Roof Needs Repair or Full Replacement",
+        category: "REPAIR GUIDE",
+        date: "Dallas, TX · October 2025",
+        img: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=1200&q=80",
+        content: `
+          <p>Most homeowners wait too long. By the time a roof is leaking into the house, there is often more damage than just the shingles. Our team in Dallas, TX breaks down the exact signs that separate a proper repair job from a full replacement—and how to avoid being oversold either way.</p>
+          
+          <h2>1. The Age of the Roof</h2>
+          <p>The single most predictive factor in the repair vs. replace debate is age. Architectural asphalt shingles—the standard across Dallas, TX—are generally rated for 25 to 30 years under optimal conditions. If your roof is under 15 years old and experiencing a localized leak, a targeted repair is almost always the correct path. The materials surrounding the damaged area still have integrity and can tie into the new repair smoothly.</p>
+          <p>However, if your roof is pushing 20 years or older, repairs become a game of whack-a-mole. The asphalt has lost its volatile oils, meaning the shingles are brittle. When a roofer lifts an adjacent shingle to slide a new piece of flashing underneath, that old shingle will often crack. You fix one leak and create another. At this stage, full replacement is the mathematically sound decision.</p>
+
+          <h2>2. Granule Loss and Bald Spots</h2>
+          <p>Look at your gutters next time you clean them. Are they packed with heavy, sand-like granules? Those granules are the only thing protecting the asphalt layer of your shingles from UV degradation. Once the granules wash away, the sun bakes the asphalt, causing it to curl, crack, and fail completely.</p>
+          <ul>
+            <li><strong>Localized granule loss:</strong> Often caused by excessive water runoff from a higher roof tier or a poorly placed downspout. Can be repaired.</li>
+            <li><strong>Widespread uniform granule loss:</strong> The roof has reached the end of its life cycle. Replacement necessary.</li>
+          </ul>
+
+          <h2>3. Wind vs. Structural Damage</h2>
+          <p>Dallas, TX sees serious wind events. If high winds have ripped off three or four shingles, but the rest of the roof is intact and the plywood deck underneath is dry, that is a straightforward repair. We simply weave new shingles into the existing matrix.</p>
+          <p>Conversely, if a storm reveals that your roof deck is soft, sagging, or structurally compromised due to long-term moisture intrusion, putting a patch over it is like putting a band-aid on a broken leg. The structural deck must be rebuilt, which requires a full tear-off and replacement.</p>
+          
+          <h2>4. The "Two-Layer" Problem</h2>
+          <p>Building codes in most areas allow for a maximum of two layers of roofing. If your current roof was installed directly over an older layer (a practice we strongly advise against), and it is now failing, you cannot repair it or layer over it again. The entire system must be torn down to the structural decking.</p>
+
+          <h2>The Ironclad Roofing Approach</h2>
+          <p>We do not guess. When you call us for an inspection, we bring high-resolution moisture scanners and get physically onto the roof. We document the exact condition of the shingles, the underlayment, and the flashing. If a $300 repair is all that is required to give your roof another five years of life, that is exactly what we will write in the estimate. We are building long-term trust in Dallas, TX, not chasing quick sales.</p>
+        `
+      },
+      2: {
+        title: "What Actually Happens When You File a Hail Damage Roof Claim in Dallas, TX",
+        category: "INSURANCE",
+        date: "Dallas, TX · September 2025",
+        img: "https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=1200&q=80",
+        content: `
+          <p>The insurance claim process for storm damage is straightforward once you know the steps—but most homeowners do not. Here is exactly what happens, from the first inspection to the insurance adjuster's visit, based on hundreds of claims we have filed with Dallas, TX homeowners.</p>
+          
+          <h2>Step 1: The Initial Assessment</h2>
+          <p>Before you ever call your insurance company, you need concrete proof of damage. If you file a claim and the adjuster finds nothing, you now have a "zero-pay claim" on your record, which can impact your rates. When Ironclad Roofing is called out, we perform a HAAG-certified inspection. We look for actual bruising on the shingles—where the hail impact has fractured the fiberglass mat beneath the asphalt.</p>
+          <p>If we find sufficient damage to warrant a claim, we will show you the photographic evidence and advise you to file.</p>
+
+          <h2>Step 2: Filing the Claim</h2>
+          <p>You contact your insurance provider and state you have suspected hail or wind damage on a specific date (the "Date of Loss"). They will issue you a claim number and assign an outside field adjuster to visit your property.</p>
+
+          <h2>Step 3: The Adjuster Meeting (Crucial)</h2>
+          <p>This is where claims are won or lost. The insurance adjuster's job is to verify damage on behalf of the insurer. Our job, as your contractor, is to advocate for your property. We meet the adjuster on the roof. We walk the perimeter together. We point out the collateral damage—dented gutters, struck AC units, cracked window screens—that validates the severity of the storm. Having a licensed professional advocating for you drastically increases the likelihood of full approval.</p>
+          
+          <h2>Step 4: The Statement of Loss</h2>
+          <p>Within a week, your insurance company will send a "Statement of Loss." This document breaks down the approved scope of work. It is usually confusing, heavily depreciated, and written in proprietary software like Xactimate. We review this document with you line-by-line. If the adjuster missed required local building codes in Dallas, TX (like ice and water shield requirements), we file a supplement to ensure those are covered.</p>
+
+          <h2>Step 5: The Work and The Payments</h2>
+          <p>Insurance pays out in two checks. The first is the Actual Cash Value (ACV). You pay your deductible, combine it with the ACV check, and that funds the first phase of construction. Once Ironclad Roofing completes the installation and signs off on the final inspection, we submit the certificate of completion to your insurance. They release the second check (Depreciation), which covers the final balance.</p>
+          <p>Your only out-of-pocket expense is your deductible. Period.</p>
+        `
+      },
+      3: {
+        title: "You Can Get a New Roof in Dallas, TX for $0 Down — Here Is How",
+        category: "FINANCE",
+        date: "Dallas, TX · August 2025",
+        img: "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=1200&q=80",
+        content: `
+          <p>Financing a roof replacement is more common than most people realize, and the terms available in 2025 are genuinely good. We explain the options Ironclad Roofing offers, who qualifies for 0% APR, and what the monthly payment looks like on an average Dallas, TX roof job.</p>
+
+          <h2>Why Deplete Savings for a Roof?</h2>
+          <p>A roof is not a luxury purchase; it is a structural necessity that protects the rest of the asset. When faced with an unexpected $12,000 replacement, many homeowners panic and opt for the absolute cheapest contractor they can find—often an un-licensed outfit operating out of a truck. The result is a poorly ventilated, improperly flashed roof that fails in five years.</p>
+          <p>Financing changes the equation. It allows you to select a premium GAF material, hire a Master Elite certified contractor, and secure a 50-year warranty, all while keeping your cash reserves intact in the bank.</p>
+
+          <h2>The 0% Interest Strategy</h2>
+          <p>For qualifying buyers, our lenders offer zero-interest promotional periods lasting 12 to 18 months. This is functionally the same as paying cash, provided you divide the total balance by the promotional months and automate the payments. No interest accrues, there is zero down payment, and you get immediate structural protection.</p>
+
+          <h2>Long-Term Fixed Rate Options</h2>
+          <p>If you prefer to keep the monthly footprint as small as possible, we offer fixed-rate extended terms up to 84 months. For an average replacement in Dallas, TX, this often equates to a monthly payment around $150 to $200. There are no pre-payment penalties on any of these lines—if you choose to pay it off early when a work bonus or tax return arrives, you simply pay the principal balance.</p>
+          
+          <p>Do not let a temporary cash limitation force you into a permanent mistake on your home. Call us for a free estimate, and we can run a 60-second soft-credit pre-qualification that does not impact your credit score.</p>
+        `
+      }
+    };
+
+    function openBlog(id) {
+      const post = blogPosts[id];
+      if (!post) return;
+      
+      Sound.tap();
+      document.body.style.overflow = 'hidden'; // Lock background scroll
+      
+      const overlay = document.getElementById('blog-overlay');
+      const img = document.getElementById('blog-hero-img');
+      img.src = post.img;
+      img.style.display = 'block';
+      document.getElementById('blog-category').innerText = post.category;
+      document.getElementById('blog-title').innerText = post.title;
+      document.getElementById('blog-date').innerText = post.date;
+      document.getElementById('blog-content').innerHTML = post.content;
+      
+      overlay.scrollTop = 0;
+      overlay.classList.add('open');
+    }
+
+    function closeBlog() {
+      Sound.tap();
+      document.body.style.overflow = '';
+      document.getElementById('blog-overlay').classList.remove('open');
+    }
+
+    const Sound = {
+      _ctx: null,
+      _init() {
+        if (!this._ctx) this._ctx = new (window.AudioContext || window.webkitAudioContext)();
+        return this._ctx;
+      },
+      click() {
+        try {
+          const c = this._init();
+          const o = c.createOscillator(), g = c.createGain();
+          o.type = 'sine'; o.connect(g); g.connect(c.destination);
+          o.frequency.setValueAtTime(500, c.currentTime);
+          o.frequency.exponentialRampToValueAtTime(280, c.currentTime + 0.12);
+          g.gain.setValueAtTime(0.08, c.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.15);
+          o.start(); o.stop(c.currentTime + 0.15);
+        } catch(e) {}
+      },
+      tap() {
+        try {
+          const c = this._init();
+          const o = c.createOscillator(), g = c.createGain();
+          o.type = 'sine'; o.connect(g); g.connect(c.destination);
+          o.frequency.setValueAtTime(900, c.currentTime);
+          o.frequency.exponentialRampToValueAtTime(600, c.currentTime + 0.07);
+          g.gain.setValueAtTime(0.04, c.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.09);
+          o.start(); o.stop(c.currentTime + 0.09);
+        } catch(e) {}
+      },
+      urgent() {
+        try {
+          const c = this._init();
+          [0, 0.07].forEach(delay => {
+            const o = c.createOscillator(), g = c.createGain();
+            o.type = 'square'; o.connect(g); g.connect(c.destination);
+            o.frequency.setValueAtTime(700, c.currentTime + delay);
+            g.gain.setValueAtTime(0.02, c.currentTime + delay);
+            g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + delay + 0.08);
+            o.start(c.currentTime + delay); o.stop(c.currentTime + delay + 0.08);
+          });
+        } catch(e) {}
+      },
+      success() {
+        try {
+          const c = this._init();
+          [[330, 0], [415, 0.12], [494, 0.24]].forEach(([f, d]) => {
+            const o = c.createOscillator(), g = c.createGain();
+            o.type = 'sine'; o.frequency.value = f; o.connect(g); g.connect(c.destination);
+            const t = c.currentTime + d;
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(0.06, t + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+            o.start(t); o.stop(t + 0.5);
+          });
+        } catch(e) {}
+      },
+      whoosh() {
+        try {
+          const c = this._init();
+          const o = c.createOscillator(), g = c.createGain();
+          o.type = 'sawtooth'; o.connect(g); g.connect(c.destination);
+          o.frequency.setValueAtTime(250, c.currentTime);
+          o.frequency.exponentialRampToValueAtTime(80, c.currentTime + 0.2);
+          g.gain.setValueAtTime(0.03, c.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.2);
+          o.start(); o.stop(c.currentTime + 0.2);
+        } catch(e) {}
+      }
+    };
+
+    // Mobile Navbar handlers
+    function toggleMobileNav() {
+      const overlay = document.getElementById('mobile-nav-overlay');
+      const trigger = document.querySelector('.menu-trigger');
+      overlay.classList.toggle('open');
+      trigger.classList.toggle('open');
+      Sound.whoosh();
+    }
+    function closeMobileNav() {
+      const overlay = document.getElementById('mobile-nav-overlay');
+      const trigger = document.querySelector('.menu-trigger');
+      overlay.classList.remove('open');
+      trigger.classList.remove('open');
+    }
+
+    // Dynamic services categories
+    const servicesDB = {
+      residential: [
+        { name: "🏠 Full Roof Replacement", desc: "Complete replacement with heavy modern architectural options", time: "1–2 days" },
+        { name: "🛠️ Leak & Wind Repair", desc: "Isolating compromised flashing zones and replacing shingles", time: "Same day" },
+        { name: "☀️ Skylight Waterproofing", desc: "Double flash seals resolving active window water leaks", time: "1 day" },
+        { name: "🌬️ High Grade Ventilation", desc: "Improving roofing insulation by balancing ridge and soffit air flows", time: "Half day" }
+      ],
+      commercial: [
+        { name: "🏢 Flat TPO Assemblies", desc: "Standard commercial white heat welded energy efficient roofing membranes", time: "2-4 days" },
+        { name: "💧 EPDM Surface Patches", desc: "Commercial structural restoration and standing water blockages", time: "Same day" },
+        { name: "🛡️ Metal Standing Seam", desc: "Industrial strength snap lock panels offering long lifecycle backings", time: "3-5 days" }
+      ],
+      emergency: [
+        { name: "🚨 Disaster Emergency Tarping", desc: "Immediate heavy duty plastic tarp deployment to suppress further framing leaks", time: "2 hours" },
+        { name: "📋 Hail Impression Reports", desc: "Complete document creation mapping exact hail damage records", time: "Same day" },
+        { name: "🌲 Fallen Tree Emergency", desc: "Removing tree weight loading and water seal proofing structures", time: "Immediate" }
+      ]
+    };
+
+    function switchServiceTab(category) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.textContent.toLowerCase().includes(category.substring(0,4)));
+      if (activeBtn) activeBtn.classList.add('active');
+
+      const container = document.getElementById('services-list-container');
+      const services = servicesDB[category] || servicesDB.residential;
+      
+      container.innerHTML = services.map(srv => `
+        <div class="service-row">
+          <div class="service-meta-left">
+            <h3 class="service-name">${srv.name}</h3>
+            <span class="service-desc">— ${srv.desc}</span>
+          </div>
+          <div class="service-time">${srv.time}</div>
+        </div>
+      `).join('');
+      Sound.tap();
+    }
+
+    // Interactive gallery
+    const galleryDB = [
+      { cat: "residential", name: "High dimensional architectural layout", label: "Full Replacement", img: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=600&q=80" },
+      { cat: "residential", name: "Deep brown dimensional shingle finish", label: "Dimensional Shingle", img: "https://images.unsplash.com/photo-1613665813446-82a78c468a1d?auto=format&fit=crop&w=600&q=80" },
+      { cat: "metal", name: "Corrugated charcoal metal sheets", label: "Metal Sheeting", img: "https://images.unsplash.com/photo-1508248467877-9c3ab85c7d2e?auto=format&fit=crop&w=600&q=80" },
+      { cat: "flat", name: "Flat roof membrane installation", label: "TPO Flat", img: "https://images.unsplash.com/photo-1599839619722-39751411ea63?auto=format&fit=crop&w=600&q=80" },
+      { cat: "commercial", name: "Industrial retail warehouse roofing", label: "Commercial Flat", img: "https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?auto=format&fit=crop&w=600&q=80" },
+      { cat: "residential", name: "New build clean framing replacement", label: "New Build", img: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80" }
+    ];
+
+    function initGallery() {
+      const container = document.getElementById('gallery-container');
+      container.innerHTML = galleryDB.map(item => `
+        <div class="gallery-item" data-cat="${item.cat}">
+          <img src="${item.img}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0; transition: opacity 0.4s ease; filter: brightness(0.85);" onload="this.style.opacity=1" loading="lazy" alt="${item.label}" />
+          <div style="position: absolute; bottom: 16px; left: 16px; z-index: 5; font-size:11px; font-weight:700; background:rgba(0,0,0,0.6); padding:4px 8px; border-radius: var(--r-xs); text-transform:uppercase;">
+            ${item.label}
+          </div>
+          <div class="gallery-overlay">
+            <h3 style="font-size: 16px; margin-bottom: 8px; font-weight:800; color:var(--amber); text-transform:uppercase;">${item.label}</h3>
+            <p style="font-size: 12px; color: var(--white-mid);">${item.name}</p>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function filterGallery(category) {
+      document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+      const activeBtn = Array.from(document.querySelectorAll('.filter-btn')).find(b => b.textContent.toLowerCase().includes(category.toLowerCase().substring(0,4)));
+      if (activeBtn) activeBtn.classList.add('active');
+
+      const items = document.querySelectorAll('.gallery-item');
+      items.forEach(item => {
+        if (category === 'All' || item.getAttribute('data-cat') === category) {
+          item.classList.remove('hidden');
+        } else {
+          item.classList.add('hidden');
+        }
+      });
+      Sound.tap();
+    }
+
+    // FAQ Toggles
+    function toggleFaq(button) {
+      const item = button.parentElement;
+      const content = button.nextElementSibling;
+      const isActive = item.classList.contains('active');
+
+      document.querySelectorAll('.faq-item').forEach(i => {
+        i.classList.remove('active');
+        i.querySelector('.faq-content').style.maxHeight = null;
+      });
+
+      if (!isActive) {
+        item.classList.add('active');
+        content.style.maxHeight = content.scrollHeight + "px";
+      }
+      Sound.tap();
+    }
+
+    // Form Handling with Sound confirmaion
+    function handleFormSubmit(e) {
+      e.preventDefault();
+      document.getElementById('leadForm').style.display = 'none';
+      document.getElementById('formSuccessMessage').style.display = 'block';
+      Sound.success();
+    }
+
+    // Carousel Reviews Scroller
+    function scrollReviews(direction) {
+      if(direction !== 0) Sound.tap();
+      const container = document.getElementById('reviewsContainer');
+      const scrollAmount = window.innerWidth < 1024 ? window.innerWidth * 0.85 : 300;
+      container.scrollBy({ left: direction * scrollAmount, behavior: 'smooth' });
+    }
+
+    function updateScrollBtns() {
+      const container = document.getElementById('reviewsContainer');
+      if (!container) return;
+      const isAtStart = container.scrollLeft <= 5;
+      const isAtEnd = container.scrollLeft + container.clientWidth >= container.scrollWidth - 5;
+      
+      const prevBtns = [document.getElementById('revPrevDesk'), document.getElementById('revPrevMob')];
+      const nextBtns = [document.getElementById('revNextDesk'), document.getElementById('revNextMob')];
+      
+      prevBtns.forEach(btn => { if(btn) btn.disabled = isAtStart; });
+      nextBtns.forEach(btn => { if(btn) btn.disabled = isAtEnd; });
+    }
+
+    const reviewsContainer = document.getElementById('reviewsContainer');
+    if (reviewsContainer) {
+      reviewsContainer.addEventListener('scroll', updateScrollBtns);
+      setTimeout(updateScrollBtns, 500);
+      window.addEventListener('resize', updateScrollBtns);
+    }
+
+
+
+    // Initial load triggering 
+    window.addEventListener('load', () => {
+      switchServiceTab('residential');
+      initGallery();
+      filterGallery('All');
+
+      // Scroll effect for process timeline on mobile
+      const processSteps = document.querySelectorAll('.process-step');
+      const processObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('active');
+          } else {
+            entry.target.classList.remove('active');
+          }
+        });
+      }, { threshold: 0.6 });
+      
+      processSteps.forEach(step => {
+        processObserver.observe(step);
+      });
+    });
+  </script>
+</body>
+</html>

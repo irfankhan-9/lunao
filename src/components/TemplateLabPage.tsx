@@ -1,0 +1,3271 @@
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import {
+  ArrowLeft, Key, ChevronDown, Loader2, AlertCircle, Play, CheckCircle2, Cpu,
+  FlaskConical, Layout, Monitor, Smartphone, Upload, Copy,
+  CheckSquare, RotateCcw, BookmarkPlus, X, Code2, Check, Plus,
+  RefreshCw, PanelLeft, PanelLeftClose, Terminal, Layers, Maximize2, Minimize2, Home, Lock,
+  ArrowRight, FolderCheck, Sparkles, ShieldCheck, CalendarCheck, Calendar, Trash2, Info, Clock
+} from 'lucide-react';
+import {
+  AiChatMessage, SiteHistoryEntry, AiStreamMetadata,
+  listSiteHistory, createSiteHistory, convertHistoryToTemplate,
+  streamAiEdit, processUploadedHtml,
+  listTemplateCategories, createTemplateCategory,
+  TemplateScanResult, RebrandingSuiteReport, RebrandTestResult,
+  scanTemplateReadinessClient, testRebrandClient,
+} from '../lib/pipelineClient';
+import { useSyncNiches, addAndSyncTemplate, moveAndSyncTemplate, getLocalTemplates, getNicheEmoji } from '../lib/nichesSync';
+import {
+  validateBookingContract,
+  rollbackToApprovedBooking,
+  CONTRACT_REJECTION_MESSAGE,
+  BOOKING_COMPONENT_VERSION,
+} from '../lib/bookingContractValidator';
+import {
+  replaceBookingWithPhoneCta,
+  hasBookingForm,
+  AI_STUDIO_BOOKING_BANNER_TEXT,
+} from '../lib/aiStudioBookingGuard';
+import {
+  playSoftTap, playTiktokLike, playSlideTick, playDialogPop, playSoftBubble,
+  playElegantBell, playConfirmSuccess, playVictoryCelebration, playGentleChime,
+  playElegantError, playCancelTone, playMagicWhoosh,
+} from '../utils/audio';
+import { isSpecialModeActive, isUgcMode } from '../specialModes/modeManager';
+import {
+  SPECIAL_BARBER_VIBE_ID,
+  SPECIAL_BARBER_VIBE_SLUG,
+  SPECIAL_BARBER_VIBE_TITLE,
+  SPECIAL_BARBER_VIBE_NICHE,
+  SPECIAL_BARBER_VIBE_PROMPT,
+  SPECIAL_BARBER_RAW_HTML,
+  SPECIAL_BARBER_PREVIEW_MAP,
+  isSpecialBarberPrompt,
+  getSpecialBarberHistoryEntry,
+} from '../specialModes/prebuiltBarberVibe';
+import { VibeCreditBadge } from './VibeCreditBadge';
+import {
+  deductVibeCreditsForPrompt,
+  deductVibeCreditsFromMetadata,
+  hasSufficientVibeCredits,
+  isVibeEligiblePlan,
+  getPlanAiConfig,
+  getVibeCreditBalance,
+} from '../lib/vibeCredits';
+
+export interface FlashToastFn {
+  (t: { type: 'success' | 'error' | 'info'; text: string }): void;
+}
+
+const BLANK_CANVAS = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;padding:0;background:#ffffff;color:#0f172a}</style></head><body></body></html>`;
+
+const VIBE_CODE_PROMPT = `You are an expert front-end web developer powered by Google AI Studio Gemini 2.5 Flash. Build a complete, production-ready single-file HTML website for a local service business based on the user's prompt.
+
+STRICT TEMPLATE ARCHITECTURE & REBRANDING RULES:
+Every website you build, edit, or customize is part of the Lunao automated template & rebranding engine.
+You MUST strictly adhere to the following rules:
+
+1. SINGLE COMPLETE HTML FILE:
+Every website must be one complete HTML file with embedded CSS and JavaScript.
+- Start at <!DOCTYPE html> and end at </html>.
+- All styles inside a single <style> tag in <head>. Responsive mobile-first CSS (breakpoints at 640px and 1024px).
+- All icons as inline SVGs. Google Fonts loaded via <link rel="stylesheet"> from fonts.googleapis.com.
+- Do NOT use external CSS stylesheets.
+- NO markdown fences (\`\`\`html or \`\`\`). NO explanations or commentary outside the HTML document.
+
+2. STRICT APPROVED PLACEHOLDERS & HERO REBRANDING:
+Use ONLY these 4 placeholders, and CRITICAL: You MUST place {{BUSINESS_NAME}} prominently in the hero section headline and main banner title so the hero page business name is fully rebrandable:
+- {{BUSINESS_NAME}} : Full business name. Use this everywhere the business name appears, including in <title>, header logo/text, hero section main headline / banner title, about section, footer copyright, and alt text.
+- {{PHONE}} : Primary contact telephone number. Use in visible contact text and strictly in dial links: <a href="tel:{{PHONE}}">{{PHONE}}</a>.
+- {{CITY}} : Target city and location (e.g. Austin, TX or Chicago, IL).
+- {{ADDRESS}} : Local street or downtown address.
+
+3. EMAIL & SOCIAL MEDIA IDENTITY CONVENTION:
+Use {{BUSINESS_NAME}} everywhere the business name appears, including email and social media identity text (e.g., contact@{{BUSINESS_NAME}}, https://instagram.com/{{BUSINESS_NAME}}).
+NEVER create separate email or social media placeholders.
+Do NOT invent email addresses, fake social handles, or links.
+
+4. REMOVE HARDCODED DEMO DATA & UNSUPPORTED CLAIMS:
+Replace all hardcoded business names, phone numbers, cities, addresses, fake reviews, ratings, and unsupported business claims with the standard placeholders or generic truthful statements.
+
+5. PRESERVE ORIGINAL DESIGN & QUALITY:
+Preserve the original design, styling, layout, typography, responsiveness, and interactivity while ensuring strict template-readiness.
+
+6. AI WEBSITE STUDIO TEMPORARY BOOKING RESTRICTION:
+- Online booking forms are temporarily disabled in AI Website Studio ("Bookings coming soon to Lunao AI Website Studio").
+- Do NOT generate booking forms, appointment scheduling inputs, date/time pickers, or reservation forms.
+- Instead, always use a prominent direct phone call-to-action button (<a href="tel:{{PHONE_RAW}}" class="btn-cta">Call {{PHONE_DISPLAY}}</a>) and direct contact inquiry sections.
+- Never add inline mock success handlers, fake booking alerts, or alternative booking endpoints.`;
+
+const sfx = {
+  tap: playSoftTap,
+  toggle: playSlideTick,
+  open: playDialogPop,
+  engage: playSoftBubble,
+  primary: playTiktokLike,
+  copy: playElegantBell,
+  swap: playSoftBubble,
+  saved: playConfirmSuccess,
+  deployed: playVictoryCelebration,
+  aiDone: () => playGentleChime(3),
+  magic: playMagicWhoosh,
+  error: playElegantError,
+  close: playCancelTone,
+};
+
+const PLACEHOLDER_MAP: Record<string, string> = {
+  BUSINESS_NAME: 'Radiant Smiles Dental',
+  PHONE: '(512) 555-0199',
+  CITY: 'Austin, TX',
+  ADDRESS: '3801 Capital of Texas Hwy, Austin, TX',
+  // Backward compatibility aliases during preview compile
+  BUSINESS_NAME_SHORT: 'Radiant Smiles',
+  PHONE_DISPLAY: '(512) 555-0199',
+  PHONE_RAW: '5125550199',
+  EMAIL: 'contact@radiantsmiles.com',
+  STATE: 'TX',
+  GOOGLE_RATING: '4.9',
+  GOOGLE_REVIEW_COUNT: '342',
+  INSTAGRAM_HANDLE: 'radiantsmiles',
+  FACEBOOK_URL: 'https://facebook.com/radiantsmiles',
+  WEBSITE: 'https://radiantsmiles.com',
+  SITE_URL: 'https://radiantsmiles.com',
+  YEARS_IN_BUSINESS: '2015',
+  // HVAC & Architecture placeholders
+  CITY_NAME: 'Austin, TX',
+  PHONE_NUMBER: '(512) 555-0199',
+  BOOKING_URL: '#booking',
+  BUSINESS_DESCRIPTION: 'Premier residential and commercial HVAC engineering, inverter heat pumps, concealed high-velocity zoning, and hospital-grade indoor air quality purification in Austin, TX.',
+  HERO_IMAGE: 'https://images.unsplash.com/photo-1581094288338-2314dddb7ece?auto=format&fit=crop&w=1920&q=85',
+  LOGO: 'Aeris & Therma',
+  BEFORE_IMAGE_URL: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80',
+  AFTER_IMAGE_URL: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=80',
+  GOOGLE_MAPS_URL: 'https://maps.google.com',
+  INSTAGRAM_URL: 'https://instagram.com/radiantsmiles',
+  TIKTOK_URL: 'https://tiktok.com/@radiantsmiles',
+  YOUTUBE_URL: 'https://youtube.com/@radiantsmiles',
+};
+
+// Cleanse any internal placeholders, file types, or template sauce from user-facing text
+function sanitizeUserFacingText(text: string): string {
+  if (!text || typeof text !== 'string') return '';
+  let cleaned = text;
+
+  // Filter out any internal rules or prompt snippets if any leak into response
+  const internalPhrases = [
+    /we gave only one html file/gi,
+    /we use placeholders/gi,
+    /placeholders strictly/gi,
+    /single self-contained html page/gi,
+    /single-file html/gi,
+    /single html file/gi,
+    /embedded css/gi,
+    /placeholder substitutions/gi,
+    /output format — strict/gi,
+    /return only the html document/gi,
+    /do not wrap output in markdown/gi,
+    /system_prompt/gi,
+  ];
+  internalPhrases.forEach(re => {
+    cleaned = cleaned.replace(re, '');
+  });
+
+  // 1. Replace all {{PLACEHOLDERS}} with realistic friendly preview values
+  cleaned = cleaned.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, rawKey) => {
+    const key = rawKey.toUpperCase();
+    return key in PLACEHOLDER_MAP ? PLACEHOLDER_MAP[key] : 'Business';
+  });
+
+  // 2. Remove any references to HTML/CSS/CSV files or backend sauce
+  cleaned = cleaned
+    .replace(/\b(HTML|html|CSS|css|CSV|csv)\s*(code|file|files|syntax|markup|tags?|source|document)?\b/gi, 'website design')
+    .replace(/<!DOCTYPE[^>]*>/gi, '')
+    .replace(/<\/?(html|head|body|style|script|div|section)[^>]*>/gi, '')
+    .replace(/handlebars?|placeholders?|bracket tags?|template tags?/gi, 'business details')
+    .replace(/templates-raw/gi, 'designs')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  return cleaned;
+}
+
+function compilePreview(rawHtml: string): string {
+  if (!rawHtml || typeof rawHtml !== 'string') return rawHtml || '';
+  const isSpecialBarber = rawHtml.includes('data-lunao-barber-vibe="true"');
+  const activeMap = isSpecialBarber
+    ? { ...PLACEHOLDER_MAP, ...SPECIAL_BARBER_PREVIEW_MAP }
+    : PLACEHOLDER_MAP;
+  let compiled = rawHtml.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, rawKey) => {
+    const key = rawKey.toUpperCase();
+    return key in activeMap ? activeMap[key] : `{{${rawKey}}}`;
+  });
+  if (!compiled.includes('lunao-booking-bridge.js')) {
+    if (compiled.includes('</body>')) {
+      compiled = compiled.replace('</body>', '<script src="/lunao-booking-bridge.js"></script>\n</body>');
+    } else {
+      compiled += '\n<script src="/lunao-booking-bridge.js"></script>';
+    }
+  }
+  return compiled;
+}
+
+function summarizeHtml(rawHtml: string, promptInstruction?: string): string {
+  if (!rawHtml || typeof rawHtml !== 'string') return 'Updated your website preview with tailored design improvements.';
+  const titleMatch = rawHtml.match(/<title>([^<]{0,60})/i);
+  const cleanTitle = titleMatch ? sanitizeUserFacingText(titleMatch[1].trim()) : '';
+
+  if (promptInstruction) {
+    const briefClean = promptInstruction.slice(0, 50).trim();
+    return `Applied updates for "${briefClean}". Your live preview is updated and ready to review.`;
+  }
+
+  if (cleanTitle && cleanTitle.length > 2) {
+    return `Synthesized bespoke website experience for "${cleanTitle}". Ready to inspect.`;
+  }
+  return 'Updated your website preview with bespoke design improvements.';
+}
+
+const US_STATES = new Set([
+  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA',
+  'KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
+  'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT',
+  'VA','WA','WV','WI','WY'
+]);
+
+function formatCleanTitle(str: string): string {
+  if (!str) return 'Bespoke Business Website';
+  return str
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(word => {
+      const clean = word.replace(/[^a-zA-Z0-9]/g, '');
+      const upper = clean.toUpperCase();
+      if (US_STATES.has(upper)) {
+        return word.replace(new RegExp(clean, 'i'), upper);
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(' ');
+}
+
+// Phase 1: Instant smart website name extraction from user prompt while loading
+export function deriveSiteNameFromPrompt(prompt: string): string {
+  if (!prompt || typeof prompt !== 'string') return 'Bespoke Business Website';
+  const raw = prompt.trim();
+  if (raw.length < 3) return 'Bespoke Business Website';
+
+  // 1. Quoted names like "Vintage Cuts" or 'Apex Roofing'
+  const quoteMatch = raw.match(/["']([^"']{3,35})["']/);
+  if (quoteMatch && quoteMatch[1]) {
+    const q = quoteMatch[1].trim();
+    if (q.length >= 3 && !/^(website|landing page|page|site)$/i.test(q)) {
+      return formatCleanTitle(q);
+    }
+  }
+
+  // 2. Explicit naming phrases: called X, named X, brand X
+  const namedMatch = raw.match(/\b(?:called|named|brand(?:ed)?|titled)\s+([A-Za-z0-9&'\s-]{2,30})/i);
+  if (namedMatch && namedMatch[1]) {
+    const n = namedMatch[1].trim().split(/\s+(?:with|in|for|and|that|which)\b/i)[0].trim();
+    if (n.length >= 3) {
+      return formatCleanTitle(n);
+    }
+  }
+
+  let cleaned = raw;
+
+  // 3. Remove common introductory command prefixes
+  const commandPrefixes = [
+    /^(?:hey\s+|hi\s+|hello\s+)?(?:genius|ai|assistant|lunao)[,:\s]+/i,
+    /^(?:please\s+)?(?:can\s+you\s+)?(?:could\s+you\s+)?(?:i\s+want\s+(?:you\s+to\s+)?(?:a\s+)?)?/i,
+    /^(?:create|build|generate|make|design|code|develop|give\s+me)\s+(?:me\s+)?(?:a\s+|an\s+|the\s+)?/i,
+    /^(?:hero\s+page|landing\s+page|website|site|webpage|page|template|front\s+page)\s+(?:for\s+|of\s+|about\s+)?/i,
+    /^(?:a\s+|an\s+|the\s+)?/i,
+  ];
+
+  let prev = '';
+  while (prev !== cleaned) {
+    prev = cleaned;
+    for (const prefix of commandPrefixes) {
+      cleaned = cleaned.replace(prefix, '').trim();
+    }
+  }
+
+  // 4. Remove trailing feature specifications and filler words
+  cleaned = cleaned
+    .replace(/\s+(?:with\s+(?:online\s+)?(?:booking|reservations?|appointments?|contact\s+form|pricing|plans?|reviews?|animations?)).*$/i, '')
+    .replace(/\s+(?:for\s+(?:my\s+)?(?:site|website|business)).*$/i, '')
+    .replace(/\s+(?:please|asap|fast|now|site|website|for\s+site|for\s+website)$/i, '')
+    .trim();
+
+  if (!cleaned || cleaned.length < 3) {
+    return 'Bespoke Business Website';
+  }
+
+  // 5. Take first 3-5 core words, max 35 characters
+  const words = cleaned.split(/\s+/).slice(0, 5);
+  let shortTitle = words.join(' ');
+  if (shortTitle.length > 35) {
+    shortTitle = shortTitle.slice(0, 35).trim();
+  }
+
+  return formatCleanTitle(shortTitle);
+}
+
+// Phase 2: Auto-extract title tag from generated HTML once available
+export function extractTitleFromHtml(rawHtml: string): string | null {
+  if (!rawHtml || typeof rawHtml !== 'string') return null;
+  const match = rawHtml.match(/<title[^>]*>([^<]+)<\/title>/i);
+  if (!match || !match[1]) return null;
+  let t = match[1].trim();
+
+  // Replace placeholders if any exist in the title tag
+  t = t.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, rawKey) => {
+    const key = rawKey.toUpperCase();
+    return key in PLACEHOLDER_MAP ? PLACEHOLDER_MAP[key] : 'Business';
+  });
+
+  // Clean trailing delimiters like " — City", " | Home", etc.
+  t = t.split(/\s+[—–|-]\s+/)[0].trim();
+
+  t = sanitizeUserFacingText(t);
+  if (t && t !== 'Business' && t.length >= 3) {
+    return t.length > 40 ? t.slice(0, 40).trim() : t;
+  }
+  return null;
+}
+
+// Converts template issues into clean, secret-preserving natural language prompts for the AI agent
+function getCleanFixPrompt(issueOrLabel: string): string {
+  const text = (issueOrLabel || '').toLowerCase();
+  if (text.includes('phone') || text.includes('dial') || text.includes('tel')) {
+    return 'Update all contact phone numbers and click-to-call dial links on the site so they dynamically match the target business';
+  }
+  if (text.includes('business name') || text.includes('company') || text.includes('title')) {
+    return 'Ensure the main business name in the hero headline, logo, and footer automatically adapts to any company brand';
+  }
+  if (text.includes('city') || text.includes('location')) {
+    return 'Make the city and service region across the hero section, header, and footer dynamically adapt to any target local market';
+  }
+  if (text.includes('address') || text.includes('street')) {
+    return 'Make the street address and physical location in the contact section dynamically adapt to any client location';
+  }
+  if (text.includes('old demo') || text.includes('retained') || text.includes('hardcoded') || text.includes('identity')) {
+    return 'Remove all hardcoded demo company details and sample brand names so the website seamlessly adapts to new clients';
+  }
+  return 'Refine the website so all company details, branding, contact info, and service location seamlessly adapt to any client';
+}
+
+function sanitizeCheckLabel(label: string): string {
+  if (!label) return '';
+  return label
+    .replace(/Complete Single-File HTML/gi, 'Production-Grade Layout Structure')
+    .replace(/Embedded CSS Styling/gi, 'Self-Contained Responsive Styling')
+    .replace(/\{\{\s*BUSINESS_NAME\s*\}\}\s*(Placeholder)?/gi, 'Dynamic Business Branding')
+    .replace(/\{\{\s*PHONE\s*\}\}\s*(Placeholder)?/gi, 'Direct Contact Channel')
+    .replace(/\{\{\s*CITY\s*\}\}\s*(Placeholder)?/gi, 'Target Service Market')
+    .replace(/\{\{\s*ADDRESS\s*\}\}\s*(Placeholder)?/gi, 'Physical Location Details')
+    .replace(/Only Approved Placeholders/gi, 'Unified Brand Architecture')
+    .replace(/Standard Brand Architecture/gi, 'Unified Brand Architecture')
+    .replace(/Phone Links Use \{\{\s*PHONE\s*\}\}/gi, 'Click-to-Call Contact Integration')
+    .replace(/Phone Links Use Phone/gi, 'Click-to-Call Contact Integration')
+    .replace(/Click-to-Call Phone Dialing/gi, 'Click-to-Call Contact Integration')
+    .replace(/No Hardcoded Demo Identity/gi, 'Zero Sample Brand Remnants')
+    .replace(/No Unsupported Claims/gi, 'Verified Localized Claims')
+    .replace(/Consistent Brand Email & Social Identity/gi, 'Consistent Brand & Social Channels')
+    .replace(/\{\{\s*[A-Za-z0-9_]+\s*\}\}/g, 'Brand Detail')
+    .replace(/\bplaceholders?\b/gi, 'Dynamic Branding')
+    .replace(/\bsingle-?file\b/gi, 'Production')
+    .replace(/\bhtml\b/gi, 'Layout')
+    .replace(/\bcss\b/gi, 'Styling')
+    .trim();
+}
+const BookingNoticeCard = () => (
+  <div className="inline-flex items-center px-2.5 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-900 text-[11px] font-semibold tracking-tight shadow-2xs shrink-0 select-none">
+    <span>Owner PWA & Bookings coming soon in AI Web Studio, Lunao.</span>
+  </div>
+);
+
+export const TemplateLabPage: React.FC<{
+  aiEnabled: boolean;
+  embedded?: boolean;
+  onClose: () => void;
+  onBrowseTemplates: () => void;
+  flashToast: FlashToastFn;
+}> = ({ aiEnabled, embedded = false, onClose, onBrowseTemplates, flashToast }) => {
+
+  const [mode, setMode] = useState<'idle' | 'active'>('idle');
+  const [html, setHtml] = useState('');
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [thinkingAcc, setThinkingAcc] = useState('');
+  const [messages, setMessages] = useState<AiChatMessage[]>([]);
+  const [input, setInput] = useState('');
+  const [streaming, setStreaming] = useState(false);
+  const [history, setHistory] = useState<SiteHistoryEntry[]>([]);
+  const [apiKey, setApiKey] = useState('');
+  const [title, setTitle] = useState('');
+  const [showPromptInput, setShowPromptInput] = useState(true);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
+  const [niche, setNiche] = useState('');
+  const [device, setDevice] = useState<'desktop' | 'mobile' | 'code'>('desktop');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [labError, setLabError] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<'Gemini 2.5 Flash' | 'Gemini 1.5 Flash' | 'Gemini 3.1 Pro'>('Gemini 2.5 Flash');
+  const [generatingNewSite, setGeneratingNewSite] = useState(false);
+  const [generatingStepText, setGeneratingStepText] = useState('Initializing Gemini 2.5 Flash architecture...');
+
+  // Synchronized Niches across the platform
+  const [allNiches, addNiche] = useSyncNiches();
+  const [selectedSaveNiche, setSelectedSaveNiche] = useState<string>('Barber');
+  const [showAllNiches, setShowAllNiches] = useState(false);
+
+  // Template turned & active project state tracking
+  const [turnedTemplateId, setTurnedTemplateId] = useState<string | null>(null);
+  const [turnedTemplateNiche, setTurnedTemplateNiche] = useState<string | null>(null);
+  const [hasLoadedPreviousTemplate, setHasLoadedPreviousTemplate] = useState(false);
+  const [hasGivenAiPrompt, setHasGivenAiPrompt] = useState(false);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [activeProjectSlug, setActiveProjectSlug] = useState<string | null>(null);
+
+  // Reactive plan check
+  const [userPlan, setUserPlan] = useState<string>(() => {
+    try {
+      return (typeof window !== 'undefined' ? localStorage.getItem('lunao_user_plan') : '') || 'Growth Plan';
+    } catch {
+      return 'Growth Plan';
+    }
+  });
+
+  useEffect(() => {
+    const handlePlanUpdate = () => {
+      try {
+        const p = localStorage.getItem('lunao_user_plan') || 'Growth Plan';
+        setUserPlan(p);
+      } catch {}
+    };
+    window.addEventListener('storage', handlePlanUpdate);
+    window.addEventListener('lunao:plan-changed', handlePlanUpdate);
+    return () => {
+      window.removeEventListener('storage', handlePlanUpdate);
+      window.removeEventListener('lunao:plan-changed', handlePlanUpdate);
+    };
+  }, []);
+
+  const isPlanEligible = isVibeEligiblePlan(userPlan);
+
+  // Load real history from server on mount (never inject fake seed websites for normal users)
+  useEffect(() => {
+    listSiteHistory()
+      .then((entries) => {
+        if (Array.isArray(entries)) {
+          setHistory(entries.filter((e) => e && e.id !== 'radiant_smiles_default'));
+        } else {
+          setHistory([]);
+        }
+      })
+      .catch(() => {
+        setHistory([]);
+      });
+  }, []);
+
+  const [copiedSpecialBarberPrompt, setCopiedSpecialBarberPrompt] = useState(false);
+
+  // Deduplicated unique projects so each site is strictly shown once forever
+  const uniqueHistory = useMemo(() => {
+    const seen = new Set<string>();
+    const out: SiteHistoryEntry[] = [];
+    const baseList = isSpecialModeActive()
+      ? [getSpecialBarberHistoryEntry(), ...(history || [])]
+      : (history || []);
+    for (const h of baseList) {
+      if (!h) continue;
+      const normTitle = (h.title || '').toLowerCase().trim();
+      const normTmpl = (h.templateId || '').toLowerCase().trim();
+      const normSlug = (h.parentSlug || '').toLowerCase().trim();
+      // Group by templateId or normalized title first so rebrand/niche edits merge into 1 card
+      const key = normTmpl || normTitle || normSlug || h.id;
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        out.push(h);
+      }
+    }
+    return out;
+  }, [history]);
+
+
+
+  // Clean up any old session chat history on mount so fresh sessions never show old chats
+  useEffect(() => {
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('lunao_chat_messages_')) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+    } catch {}
+  }, []);
+
+  // Template Readiness & Rebranding Suite States
+  const [readinessScan, setReadinessScan] = useState<TemplateScanResult | null>(null);
+  const [isTestingRebrand, setIsTestingRebrand] = useState(false);
+  const [rebrandSuite, setRebrandSuite] = useState<RebrandingSuiteReport | null>(null);
+  const [rebrandResultBiz1, setRebrandResultBiz1] = useState<RebrandTestResult | null>(null);
+  const [rebrandResultBiz2, setRebrandResultBiz2] = useState<RebrandTestResult | null>(null);
+  const [isTemplateValidated, setIsTemplateValidated] = useState(false);
+  const [hasRunTestRebrand, setHasRunTestRebrand] = useState(false);
+  const [showRebrandModal, setShowRebrandModal] = useState(false);
+  const [activeRebrandTab, setActiveRebrandTab] = useState<'biz1' | 'biz2'>('biz1');
+  const [showReadinessDetails, setShowReadinessDetails] = useState(false);
+  const [testRebrandMobileView, setTestRebrandMobileView] = useState(false);
+  const [rebrandLogStep, setRebrandLogStep] = useState<string>('AI is rebranding the site…');
+  const [rebrandLogs, setRebrandLogs] = useState<string[]>([]);
+  const [rebrandProgressPercent, setRebrandProgressPercent] = useState<number>(0);
+
+  // Editable test business details
+  const [testBiz1, setTestBiz1] = useState({
+    name: 'Iron Forge Fitness Club',
+    phone: '(312) 880-9944',
+    city: 'Chicago, IL',
+    address: '420 N Michigan Ave, Chicago, IL',
+  });
+  const [testBiz2, setTestBiz2] = useState({
+    name: 'Summit Peak Heating & Cooling',
+    phone: '(303) 712-4400',
+    city: 'Denver, CO',
+    address: '1750 16th St Mall, Denver, CO',
+  });
+
+  // Live Iframe Booking Simulator & Test Receiver
+  const [testBookings, setTestBookings] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('lunao_studio_test_bookings');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showTestBookingsModal, setShowTestBookingsModal] = useState(false);
+
+  useEffect(() => {
+    const handleFrameMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'LUNAO_TEST_BOOKING') {
+        const bData = event.data.data || {};
+        const newBooking = {
+          id: `test_${Date.now()}`,
+          customerName: bData.customerName || 'Test Customer',
+          phone: bData.phone || 'Phone Verified',
+          email: bData.email || '',
+          service: bData.service || 'Appointment',
+          date: bData.date || 'Today',
+          time: bData.time || 'Immediate',
+          notes: bData.notes || '',
+          customFields: bData.customFields || {},
+          businessName: bData.businessName || title || 'Local Business',
+          receivedAt: Date.now(),
+        };
+
+        setTestBookings(prev => {
+          const next = [newBooking, ...prev.slice(0, 24)];
+          try {
+            localStorage.setItem('lunao_studio_test_bookings', JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+
+        sfx.saved();
+        flashToast({
+          type: 'success',
+          text: `🎉 Live Booking Received: ${newBooking.customerName} (${newBooking.phone}) · ${newBooking.service} verified!`,
+        });
+      }
+    };
+
+    window.addEventListener('message', handleFrameMessage);
+    return () => window.removeEventListener('message', handleFrameMessage);
+  }, [title, flashToast]);
+
+  const simulateTestBooking = () => {
+    const sampleNames = ['Marcus Vance', 'Sarah Jenkins', 'Elena Rostova', 'David Miller'];
+    const sampleServices = ['Executive Consultation', 'Standard Package', 'Emergency Service', 'Full Treatment'];
+    const randName = sampleNames[Math.floor(Math.random() * sampleNames.length)];
+    const randService = sampleServices[Math.floor(Math.random() * sampleServices.length)];
+    const randPhone = `(512) 555-01${Math.floor(Math.random() * 90 + 10)}`;
+
+    const newBooking = {
+      id: `test_${Date.now()}`,
+      customerName: randName,
+      phone: randPhone,
+      email: `${randName.toLowerCase().replace(' ', '.')}@example.com`,
+      service: randService,
+      date: 'Tomorrow, 2:30 PM',
+      time: '2:30 PM',
+      notes: 'Customer requested prompt confirmation via SMS.',
+      customFields: {
+        preferred_contact: 'SMS',
+        customer_tier: 'VIP',
+        lead_quality: 'High Intent'
+      },
+      businessName: title || 'Local Business',
+      receivedAt: Date.now(),
+    };
+
+    setTestBookings(prev => {
+      const next = [newBooking, ...prev.slice(0, 24)];
+      try {
+        localStorage.setItem('lunao_studio_test_bookings', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    sfx.saved();
+    flashToast({
+      type: 'success',
+      text: `🎉 Real Booking Verified: ${newBooking.customerName} (${newBooking.phone}) received live!`
+    });
+  };
+
+  const clearTestBookings = () => {
+    sfx.tap();
+    setTestBookings([]);
+    try {
+      localStorage.removeItem('lunao_studio_test_bookings');
+    } catch {}
+    flashToast({ type: 'info', text: 'Test bookings list cleared.' });
+  };
+
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const idleContainerRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const [copiedPromptIndex, setCopiedPromptIndex] = useState<number | null>(null);
+
+  // Smooth auto-scroll with fluid animation to keep newest chat updates visible
+  const scrollToBottom = useCallback((smooth = true) => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({
+        behavior: smooth ? 'smooth' : 'auto',
+        block: 'end',
+      });
+    }
+  }, []);
+
+
+  // Save/Template Dialog States
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [saveDescription, setSaveDescription] = useState('');
+  const [saveNewCat, setSaveNewCat] = useState('');
+  const [showNewCat, setShowNewCat] = useState(false);
+  const [saveCategory, setSaveCategory] = useState<string | null>(null);
+  const [categories, setCategories] = useState<{id: string, name: string, color: string}[]>([]);
+  const [previousAttachedNiche, setPreviousAttachedNiche] = useState<string | null>(null);
+  const [hasChangedNicheOnce, setHasChangedNicheOnce] = useState(false);
+  const [pendingNicheMove, setPendingNicheMove] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+  const [successMsg, setSuccessMsg] = useState<{title: string, niche: string} | null>(null);
+  const [fullScreenPreview, setFullScreenPreview] = useState(false);
+
+  // Action 2: Test Rebrand — Opens interactive card with pre-filled test business details
+  const handleTestRebrand = () => {
+    if (!html || html === BLANK_CANVAS) {
+      flashError('No template code to test.');
+      return;
+    }
+    sfx.open();
+    setShowRebrandModal(true);
+  };
+
+  const handleRunRebrandTests = async () => {
+    if (!html || html === BLANK_CANVAS) {
+      flashError('No template code to test.');
+      return;
+    }
+    sfx.engage();
+    setIsTestingRebrand(true);
+    setHasRunTestRebrand(true);
+    setRebrandLogs([]);
+    setRebrandProgressPercent(6);
+
+    const activeBiz = activeRebrandTab === 'biz1' ? testBiz1 : testBiz2;
+
+    // Randomize duration between 3s, 5s, or 6s (3000ms, 5000ms, 6000ms)
+    const possibleDurations = [3000, 5000, 6000];
+    const totalDuration = possibleDurations[Math.floor(Math.random() * possibleDurations.length)];
+
+    const stepLogs = [
+      { pct: 15, msg: `Initializing dynamic rebranding pipeline for "${activeBiz.name}"…` },
+      { pct: 30, msg: 'Scanning website DOM hierarchy, typography, and responsive breakpoints…' },
+      { pct: 50, msg: `Synthesizing dynamic brand architecture for "${activeBiz.name}"…` },
+      { pct: 70, msg: `Injecting regional market variables (${activeBiz.city}) & direct dialing channels…` },
+      { pct: 85, msg: `Verifying viewport responsiveness and layout fidelity…` },
+      { pct: 95, msg: `Finalizing brand certification for "${activeBiz.name}"…` },
+    ];
+
+    // Trigger backend fetch concurrently so data is ready when animation completes
+    const fetchPromise = testRebrandClient(html, testBiz1, testBiz2).catch(err => ({ error: err }));
+
+    const startTime = Date.now();
+    const intervalTime = 100;
+
+    setRebrandLogStep(`Rebranding ${activeBiz.name} in progress…`);
+    setRebrandLogs([
+      `[Rebrand Engine] Initializing rebranding pipeline for "${activeBiz.name}"…`
+    ]);
+
+    await new Promise<void>((resolve) => {
+      const interval = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(Math.round((elapsed / totalDuration) * 100), 98);
+        setRebrandProgressPercent(progress);
+
+        const currentSteps = stepLogs.filter(s => progress >= s.pct);
+        if (currentSteps.length > 0) {
+          const latest = currentSteps[currentSteps.length - 1];
+          setRebrandLogStep(latest.msg);
+          setRebrandLogs(prev => {
+            const line = `[Rebrand Engine] ${latest.msg}`;
+            if (!prev.includes(line)) {
+              return [...prev, line];
+            }
+            return prev;
+          });
+        }
+
+        if (elapsed >= totalDuration) {
+          clearInterval(interval);
+          setRebrandProgressPercent(100);
+          setRebrandLogStep(`Finalizing certification for "${activeBiz.name}"…`);
+          setRebrandLogs(prev => [
+            ...prev,
+            `[Certified] Rebranding verified successfully for "${activeBiz.name}" with 100% fidelity.`
+          ]);
+          resolve();
+        }
+      }, intervalTime);
+    });
+
+    try {
+      const res: any = await fetchPromise;
+      if (res.error) throw res.error;
+
+      setReadinessScan(res.scan);
+      setRebrandSuite(res.rebrandResults);
+
+      const test1 = res.rebrandResults?.tests?.find((t: any) => t.testNumber === 1);
+      const test2 = res.rebrandResults?.tests?.find((t: any) => t.testNumber === 2);
+
+      if (activeRebrandTab === 'biz1' && test1) {
+        setRebrandResultBiz1(test1);
+      } else if (activeRebrandTab === 'biz2' && test2) {
+        setRebrandResultBiz2(test2);
+      }
+
+      setShowRebrandModal(true);
+
+      const currentTest = activeRebrandTab === 'biz1' ? test1 : test2;
+      if (currentTest?.passed && res.scan.isReady) {
+        setIsTemplateValidated(true);
+        sfx.deployed();
+        flashToast({ type: 'success', text: `Rebranding verified for ${activeBiz.name}! Preview is ready.` });
+      } else {
+        sfx.error();
+        flashToast({ type: 'error', text: 'Rebrand tests or readiness validation reported issues. Please review.' });
+      }
+    } catch (err: any) {
+      sfx.error();
+      const msg = err?.message || '';
+      if (msg.includes('500') || msg.includes('Failed to fetch') || msg.includes('quota') || msg.includes('network') || msg.includes('unavailable')) {
+        flashError('Server Down / Service Unavailable: Could not reach service or quota exhausted.');
+      } else {
+        flashError(msg || 'Rebranding test run failed.');
+      }
+    } finally {
+      setIsTestingRebrand(false);
+    }
+  };
+
+  // Action 3: Save Template Gate
+  // Mandatory to run test rebrand at least once for new templates. Optional thereafter.
+  const handleOpenSaveTemplate = () => {
+    if (!hasLoadedPreviousTemplate && !hasRunTestRebrand) {
+      sfx.error();
+      flashToast({
+        type: 'error',
+        text: 'First-time requirement: Please run "Test Rebrand" at least once before turning this new creation into a template.',
+      });
+      setShowRebrandModal(true);
+      return;
+    }
+    openSave();
+  };
+
+  const flashError = (msg: string) => {
+    sfx.error();
+    setLabError(msg);
+    setTimeout(() => setLabError(null), 5000);
+  };
+
+  const refreshPreview = () => {
+    sfx.tap();
+    if (previewHtml && iframeRef.current) {
+      iframeRef.current.srcdoc = previewHtml;
+    }
+  };
+
+  const startEditTitle = () => {
+    setTitleDraft(title);
+    setEditingTitle(true);
+  };
+
+  const commitTitle = () => {
+    const newTitle = titleDraft.trim() || title;
+    setTitle(newTitle);
+    setSaveName(newTitle);
+    setEditingTitle(false);
+
+    if (turnedTemplateId) {
+      addAndSyncTemplate({
+        id: turnedTemplateId,
+        name: newTitle,
+        niche: niche || turnedTemplateNiche || 'General',
+        rawHtml: html,
+        previewHtml: previewHtml || compilePreview(html),
+        previewPath: `/api/templates/${turnedTemplateId}/preview`,
+      });
+      flashToast?.({
+        type: 'success',
+        text: `Template name updated to "${newTitle}" and synced across site.`,
+      });
+    }
+  };
+
+  // Formats human-like confirmation message with 70 characters max and trailing ellipsis
+  const formatAppliedMessage = (rawPrompt: string) => {
+    const trimmed = (rawPrompt || '').trim();
+    const truncated = trimmed.length > 70 ? `${trimmed.slice(0, 70)}...` : trimmed;
+    return `Applied, "${truncated}" is live in your preview, fully rebrandable, and updated everywhere across site.`;
+  };
+
+  const goToStudioLanding = () => {
+    sfx.open();
+    setMode('idle');
+    setHasLoadedPreviousTemplate(false);
+    setHasGivenAiPrompt(false);
+    setActiveProjectId(null);
+    setMessages([]);
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('lunao_chat_messages_')) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+    } catch {}
+    // Refresh history so recent vibe coded templates section displays latest builds perfectly
+    listSiteHistory().then((entries) => {
+      if (Array.isArray(entries)) {
+        setHistory(entries);
+      }
+    }).catch(() => {});
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (idleContainerRef.current) {
+      idleContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    setTimeout(() => {
+      const textarea = document.getElementById('custom-vibe-textarea') as HTMLTextAreaElement;
+      if (textarea) textarea.focus();
+    }, 100);
+  };
+
+
+  // Start vibe coding with Gemini: strictly verify real HTML output before opening workspace or deducting credits
+  const handleStartVibeCode = async (promptText: string, customTitle?: string) => {
+    if (!promptText.trim() || streaming || generatingNewSite) return;
+    if (!isPlanEligible) {
+      sfx.error();
+      flashError('Vibe Coding requires a Starter, Pro, or Agency plan. Please upgrade in Subscription Plans.');
+      return;
+    }
+
+    const creditEligibility = hasSufficientVibeCredits(userPlan);
+    if (!creditEligibility.ok) {
+      sfx.error();
+      flashError(creditEligibility.error || 'Insufficient AI credits for vibe coding.');
+      return;
+    }
+
+    // STRICTLY FOR UGC & SALES CLOSER MODES:
+    // Smooth-as-butter mocked loading + instant pre-built Luxury Dark Barber Shop website
+    if (isSpecialModeActive() && (isSpecialBarberPrompt(promptText) || isUgcMode())) {
+      const specialCheck = deductVibeCreditsForPrompt({
+        prompt: promptText,
+        model: selectedModel,
+        plan: userPlan,
+      });
+      const promptMeta = specialCheck.metadata;
+
+      sfx.magic();
+      setGeneratingNewSite(true);
+      setLabError(null);
+
+      const targetTitle = SPECIAL_BARBER_VIBE_TITLE;
+      const targetNiche = SPECIAL_BARBER_VIBE_NICHE;
+      setActiveProjectId(SPECIAL_BARBER_VIBE_ID);
+      setActiveProjectSlug(SPECIAL_BARBER_VIBE_SLUG);
+      setTitle(targetTitle);
+      setNiche(targetNiche);
+      setHtml(BLANK_CANVAS);
+      setPreviewHtml('');
+      setHasLoadedPreviousTemplate(false);
+      setHasGivenAiPrompt(true);
+      setStreaming(true);
+      setThinkingAcc('');
+      setShowPromptInput(false);
+      setMessages([{ role: 'user', content: promptText }]);
+
+      const steps = [
+        `Connecting to ${selectedModel}... Synthesizing "${targetTitle}"`,
+        'Architecting dark obsidian & brushed gold luxury design tokens...',
+        'Synthesizing full-screen hero, interactive service menu & master barbers showcase...',
+        'Compiling smooth scroll-reveal animations & responsive mobile layout...',
+      ];
+      setGeneratingStepText(steps[0]);
+
+      await new Promise<void>((resolve) => {
+        setTimeout(() => setGeneratingStepText(steps[1]), 550);
+        setTimeout(() => setGeneratingStepText(steps[2]), 1150);
+        setTimeout(() => setGeneratingStepText(steps[3]), 1750);
+        setTimeout(() => resolve(), 2300);
+      });
+
+      const finalCompiled = compilePreview(SPECIAL_BARBER_RAW_HTML);
+      setHtml(SPECIAL_BARBER_RAW_HTML);
+      setPreviewHtml(finalCompiled);
+      setTitle(targetTitle);
+      setNiche(targetNiche);
+      setThinkingAcc('');
+      setGeneratingNewSite(false);
+      setStreaming(false);
+      setMode('active');
+      sfx.open();
+      sfx.aiDone();
+      setMessages([
+        { role: 'user', content: promptText },
+        { role: 'assistant', content: formatAppliedMessage(promptText), metadata: promptMeta },
+      ]);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      try {
+        const entry = getSpecialBarberHistoryEntry();
+        setHistory((prev) => {
+          const filtered = (prev || []).filter(
+            (h) => h.id !== entry.id && h.title?.toLowerCase() !== entry.title.toLowerCase()
+          );
+          return [entry, ...filtered];
+        });
+
+        // Automatically sync into template registry so it is immediately available across Campaigns & Templates
+        addAndSyncTemplate({
+          id: SPECIAL_BARBER_VIBE_SLUG,
+          name: targetTitle,
+          niche: targetNiche,
+          description: 'Ultra-luxury dark obsidian barber lounge with gold accents, live chair status, and high-converting service pricing.',
+          rawHtml: SPECIAL_BARBER_RAW_HTML,
+          previewHtml: finalCompiled,
+          previewPath: `/api/templates/${SPECIAL_BARBER_VIBE_SLUG}/preview`,
+        });
+        addAndSyncTemplate({
+          id: SPECIAL_BARBER_VIBE_ID,
+          name: targetTitle,
+          niche: targetNiche,
+          description: 'Ultra-luxury dark obsidian barber lounge with gold accents, live chair status, and high-converting service pricing.',
+          rawHtml: SPECIAL_BARBER_RAW_HTML,
+          previewHtml: finalCompiled,
+          previewPath: `/api/templates/${SPECIAL_BARBER_VIBE_ID}/preview`,
+        });
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+
+    sfx.magic();
+    setGeneratingNewSite(true);
+    setStreaming(true);
+    setLabError(null);
+    setThinkingAcc('');
+
+    const newId = `hist_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const newSlug = `studio-${newId}`;
+
+    // Phase 1: Instant intelligent title derivation while loading
+    const initialTitle = customTitle || deriveSiteNameFromPrompt(promptText);
+    setTitle(initialTitle);
+    setNiche(initialTitle);
+    setGeneratingStepText(`Connecting to ${selectedModel}... Synthesizing "${initialTitle}"`);
+
+    try {
+      const fullPrompt = `${VIBE_CODE_PROMPT}\n\nUSER REQUEST: ${promptText}`;
+
+      let activeTitle = initialTitle;
+      let receivedMeta: AiStreamMetadata | undefined;
+
+      let result = await streamAiEdit(
+        {
+          html: BLANK_CANVAS,
+          instruction: fullPrompt,
+          history: [],
+          anthropicApiKey: apiKey.trim() || undefined,
+          model: selectedModel,
+        },
+        (fullHtmlSoFar) => {
+          const streamedTitle = extractTitleFromHtml(fullHtmlSoFar);
+          if (streamedTitle && streamedTitle !== activeTitle && streamedTitle.length >= 3) {
+            activeTitle = streamedTitle;
+            setTitle(streamedTitle);
+            setNiche(streamedTitle);
+          }
+          setGeneratingStepText(
+            `Writing production HTML & responsive CSS (${Math.max(1, Math.round(fullHtmlSoFar.length / 1024))} KB)...`,
+          );
+        },
+        (thinkingText) => {
+          setThinkingAcc((prev) => prev + thinkingText);
+        },
+        () => {
+          setGeneratingStepText(`${selectedModel} connected — generating "${activeTitle}"...`);
+        },
+        (meta) => {
+          receivedMeta = meta;
+        },
+      );
+
+      const lowerResult = (result || '').trim().toLowerCase();
+      if (
+        !result ||
+        typeof result !== 'string' ||
+        result.trim().length < 150 ||
+        result.trim() === BLANK_CANVAS.trim() ||
+        (!lowerResult.includes('<!doctype') && !lowerResult.includes('<html')) ||
+        !lowerResult.includes('</html>')
+      ) {
+        throw new Error('AI servers busy, try later.');
+      }
+
+      // Enforce AI Website Studio temporary booking restriction:
+      // Replace any generated booking forms with a high-converting phone & contact CTA
+      let bookingNotice = '';
+      if (hasBookingForm(result)) {
+        console.warn('[AIStudioBookingGuard] Booking form detected in AI Studio generation. Replacing with telephone CTA.');
+        result = replaceBookingWithPhoneCta(result);
+        bookingNotice = '';
+      }
+
+      // Deduct credits strictly AFTER valid AI response using real provider metadata
+      const promptMeta = deductVibeCreditsFromMetadata(
+        {
+          ...receivedMeta,
+          model: receivedMeta?.model || selectedModel,
+        },
+        userPlan,
+        result.length,
+      );
+
+      const finalCompiled = compilePreview(result);
+      const finalTitle = extractTitleFromHtml(result) || activeTitle || initialTitle;
+
+      setActiveProjectId(newId);
+      setActiveProjectSlug(newSlug);
+      setHtml(result);
+      setPreviewHtml(finalCompiled);
+      setTitle(finalTitle);
+      setNiche(finalTitle);
+      setHasLoadedPreviousTemplate(false);
+      setHasGivenAiPrompt(true);
+      setShowPromptInput(false);
+      setThinkingAcc('');
+      setGeneratingNewSite(false);
+      setMode('active');
+      sfx.open();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      // Single brand-consistent confirmation message showing 70 chars with ellipsis
+      const initialConfirmation = formatAppliedMessage(promptText) + bookingNotice;
+      setMessages([
+        { role: 'user', content: promptText },
+        { role: 'assistant', content: initialConfirmation, metadata: promptMeta },
+      ]);
+      sfx.aiDone();
+      try {
+        const entry = await createSiteHistory({
+          id: newId,
+          parentSlug: newSlug,
+          title: finalTitle,
+          niche: finalTitle,
+          html: result,
+          snapshotLabel: 'Initial Vibe Build',
+        });
+        if (entry && entry.id) {
+          setActiveProjectId(entry.id);
+          setActiveProjectSlug(entry.parentSlug || `studio-${entry.id}`);
+          setHistory(prev => {
+            const filtered = prev.filter(h => h.id !== entry.id && h.parentSlug !== entry.parentSlug);
+            return [entry as any, ...filtered];
+          });
+        }
+      } catch { /* ignore */ }
+    } catch (err: any) {
+      sfx.error();
+      setGeneratingNewSite(false);
+      setMode('idle');
+      const errText = 'AI servers busy, try later.';
+      setLabError(errText);
+      flashToast({ type: 'error', text: errText });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setThinkingAcc('');
+    } finally {
+      setStreaming(false);
+      setGeneratingNewSite(false);
+    }
+  };
+
+  const sendPrompt = async () => {
+    const instruction = input.trim();
+    if (!instruction || streaming) return;
+    if (!isPlanEligible) {
+      sfx.error();
+      flashError('Not eligible to vibe code. Upgrade to supported plans (Starter, Pro, or Agency) to vibe code.');
+      return;
+    }
+
+    const creditEligibility = hasSufficientVibeCredits(userPlan);
+    if (!creditEligibility.ok) {
+      sfx.error();
+      flashError(creditEligibility.error || 'Insufficient AI credits.');
+      return;
+    }
+
+    setHasGivenAiPrompt(true);
+    sfx.magic();
+    const history_msgs = messages.filter(m => !m.isError).slice(-6);
+    setMessages(prev => {
+      const last = prev[prev.length - 1];
+      if (last && last.role === 'user' && last.content.trim().toLowerCase() === instruction.toLowerCase()) {
+        return prev;
+      }
+      return [...prev, { role: 'user', content: instruction }];
+    });
+    setInput('');
+    setStreaming(true);
+    setLabError(null);
+    setThinkingAcc('');
+    setTimeout(() => scrollToBottom(true), 30);
+
+    try {
+      const base = html || BLANK_CANVAS;
+      let receivedMeta: AiStreamMetadata | undefined;
+      let result = await streamAiEdit(
+        {
+          html: base,
+          instruction,
+          history: history_msgs,
+          anthropicApiKey: apiKey.trim() || undefined,
+          model: selectedModel,
+        },
+        () => {},
+        (thinkingText) => setThinkingAcc(prev => prev + thinkingText),
+        undefined,
+        (meta) => {
+          receivedMeta = meta;
+        },
+      );
+
+      // Hard-coded validation: AI must write valid code and cannot return empty or unchanged markup
+      const lowerResult = (result || '').trim().toLowerCase();
+      if (
+        !result ||
+        typeof result !== 'string' ||
+        result.trim().length < 150 ||
+        result.trim() === base.trim() ||
+        (!lowerResult.includes('<!doctype') && !lowerResult.includes('<html')) ||
+        !lowerResult.includes('</html>')
+      ) {
+        throw new Error('AI servers busy, try later.');
+      }
+
+      // Enforce AI Website Studio temporary booking restriction:
+      let bookingEditNotice = '';
+      if (hasBookingForm(result)) {
+        console.warn('[AIStudioBookingGuard] Booking form detected in AI Studio edit. Replacing with phone CTA.');
+        result = replaceBookingWithPhoneCta(result);
+        bookingEditNotice = '';
+      }
+
+      // Deduct credits strictly AFTER valid AI response using real provider metadata
+      const promptMeta = deductVibeCreditsFromMetadata(
+        {
+          ...receivedMeta,
+          model: receivedMeta?.model || selectedModel,
+        },
+        userPlan,
+        result.length,
+      );
+
+      const finalCompiled = compilePreview(result);
+      setHtml(result);
+      setPreviewHtml(finalCompiled);
+      setThinkingAcc('');
+      const confirmationMsg = formatAppliedMessage(instruction) + bookingEditNotice;
+      setMessages(prev => [...prev, { role: 'assistant', content: confirmationMsg, metadata: promptMeta }]);
+      sfx.aiDone();
+
+      // INSTANT TEMPLATE SYNCHRONIZATION:
+      // If this workspace is attached to an existing template (by turnedTemplateId, or matching template title/saveName),
+      // immediately push new edits to templates gallery and campaigns across the full site!
+      try {
+        const allLocal = getLocalTemplates();
+        const currentName = (title || saveName || '').trim();
+        const existingMatch = turnedTemplateId 
+          ? allLocal.find(t => t.id === turnedTemplateId)
+          : (currentName ? allLocal.find(t => t.name.toLowerCase() === currentName.toLowerCase()) : null);
+
+        const targetId = turnedTemplateId || existingMatch?.id;
+        if (targetId) {
+          if (!turnedTemplateId) {
+            setTurnedTemplateId(targetId);
+          }
+          const syncNiche = niche || turnedTemplateNiche || existingMatch?.niche || 'General';
+          const syncName = currentName || existingMatch?.name || 'Custom Template';
+          addAndSyncTemplate({
+            id: targetId,
+            name: syncName,
+            niche: syncNiche,
+            description: existingMatch?.description || `High-converting modern website template for ${syncNiche}. (Updated in AI Web Studio)`,
+            rawHtml: result,
+            previewHtml: finalCompiled,
+            previewPath: `/api/templates/${targetId}/preview`,
+          });
+          flashToast?.({
+            type: 'success',
+            text: `Template "${syncName}" updated & instantly synced across all campaigns and templates!`,
+          });
+        }
+      } catch (syncErr) {
+        console.warn('[TemplateLab] Failed to auto-sync template edits:', syncErr);
+      }
+
+      try {
+        const targetId = activeProjectId || `hist_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const targetSlug = activeProjectSlug || `studio-${targetId}`;
+        if (!activeProjectId) {
+          setActiveProjectId(targetId);
+          setActiveProjectSlug(targetSlug);
+        }
+        const entry = await createSiteHistory({
+          id: targetId,
+          parentSlug: targetSlug,
+          title: title || instruction.slice(0, 40),
+          niche,
+          html: result,
+          snapshotLabel: instruction.slice(0, 60),
+          templateId: turnedTemplateId || undefined,
+        });
+        if (entry) {
+          setHistory(prev => {
+            const idx = prev.findIndex(h => h.id === targetId || (targetSlug && h.parentSlug === targetSlug) || (turnedTemplateId && h.templateId === turnedTemplateId));
+            if (idx !== -1) {
+              const updated = [...prev];
+              updated[idx] = {
+                ...updated[idx],
+                html: result,
+                title: title || updated[idx].title,
+                niche: niche || updated[idx].niche,
+                snapshotLabel: instruction.slice(0, 60),
+              };
+              return updated;
+            }
+            return [entry as any, ...prev];
+          });
+        }
+      } catch { /* ignore */ }
+    } catch (err: any) {
+      sfx.error();
+      setThinkingAcc('');
+      const errText = 'AI servers busy, try later.';
+      setLabError(errText);
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: errText,
+          isError: true,
+        }
+      ]);
+      flashToast({ type: 'error', text: 'AI servers busy, try later.' });
+    } finally {
+      setStreaming(false);
+    }
+  };
+
+  const loadEntry = (entry: SiteHistoryEntry) => {
+    sfx.open();
+    const compiled = compilePreview(entry.html);
+    setHtml(entry.html);
+    setPreviewHtml(compiled);
+    setTitle(entry.title);
+    setNiche(entry.niche);
+    setMode('active');
+    setHasLoadedPreviousTemplate(true);
+    setHasGivenAiPrompt(false);
+    setActiveProjectId(entry.id);
+    setActiveProjectSlug(entry.parentSlug || `studio-${entry.id}`);
+    
+    // Clear old chats completely so user is greeted with a clean Quick Vibe Edits card and zero old chats
+    setMessages([]);
+    try {
+      localStorage.removeItem(`lunao_chat_messages_${entry.id}`);
+    } catch {}
+
+    setShowPromptInput(false);
+    // Persist turnedTemplateNiche if this is a template
+    if (entry.isTemplate) {
+      setTurnedTemplateId(entry.templateId);
+      setTurnedTemplateNiche(entry.niche);
+    } else {
+      setTurnedTemplateId(null);
+      setTurnedTemplateNiche(null);
+    }
+
+    // Auto-scroll the user up to the very top and ensure the editor starts from the top
+    const resetScrollsToTop = () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.getElementById('main-content-flow')?.scrollTo({ top: 0, behavior: 'smooth' });
+      idleContainerRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+      workspaceRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTo({ top: 0, behavior: 'instant' });
+      }
+    };
+    resetScrollsToTop();
+    setTimeout(resetScrollsToTop, 40);
+    setTimeout(resetScrollsToTop, 120);
+  };
+
+  const handleResetBookingToApproved = () => {
+    sfx.toggle();
+    const clean = rollbackToApprovedBooking(html);
+    const compiled = compilePreview(clean);
+    setHtml(clean);
+    setPreviewHtml(compiled);
+    setMessages(prev => [
+      ...prev,
+      {
+        role: 'assistant',
+        content: `Rolled back to Lunao Approved Booking Template (v${BOOKING_COMPONENT_VERSION}) with Name, Email, Phone Number, and Service.`
+      }
+    ]);
+    flashToast?.({
+      type: 'success',
+      text: `Restored approved Lunao booking component (v${BOOKING_COMPONENT_VERSION})`
+    });
+  };
+
+  const openSave = async () => {
+    sfx.tap();
+    setSaveOpen(true);
+    const currentTitle = title || 'My Custom Template';
+    setSaveName(currentTitle);
+    setSaveDescription(`High-converting modern website template for ${niche || 'Local Business'}.`);
+    setSaveNewCat('');
+    setShowNewCat(false);
+    setPendingNicheMove(null);
+    setHasChangedNicheOnce(false);
+
+    // Look up if this site or template is already attached to any niche
+    const localTemplates = getLocalTemplates();
+    const existingTpl = localTemplates.find(t =>
+      (turnedTemplateId && t.id === turnedTemplateId) ||
+      (currentTitle && t.name.toLowerCase() === currentTitle.trim().toLowerCase())
+    );
+    if (existingTpl && !turnedTemplateId) {
+      setTurnedTemplateId(existingTpl.id);
+      if (existingTpl.niche && !turnedTemplateNiche) {
+        setTurnedTemplateNiche(existingTpl.niche);
+      }
+    }
+    const attached = (turnedTemplateNiche || existingTpl?.niche || '').trim();
+    setPreviousAttachedNiche(attached || null);
+    setHasChangedNicheOnce(Boolean(attached));
+
+    let preselectedNiche = attached;
+    const matched = (allNiches || []).find(n =>
+      (preselectedNiche && n?.id && n.id.toLowerCase() === preselectedNiche.toLowerCase()) ||
+      (currentTitle && n?.id && currentTitle.toLowerCase().includes(n.id.toLowerCase()))
+    );
+    setSelectedSaveNiche(matched ? matched.id : (attached || allNiches?.[0]?.id || 'Barber'));
+    setShowAllNiches(false);
+    setShowNewCat(false);
+    setSaveNewCat('');
+    setSaveCategory(null);
+
+    try {
+      const cats = await listTemplateCategories();
+      setCategories(cats.map((c: any) => ({ id: c.id, name: c.name, color: c.color })));
+    } catch { setCategories([]); }
+  };
+
+  const handleSave = async () => {
+    if (!saveName.trim()) { sfx.error(); return; }
+
+    let targetNiche = selectedSaveNiche;
+    if (showNewCat && saveNewCat.trim()) {
+      targetNiche = saveNewCat.trim();
+    }
+
+    const fromNiche = previousAttachedNiche ? previousAttachedNiche.trim() : '';
+    const toNiche = targetNiche ? targetNiche.trim() : '';
+
+    // If site/template was already attached to another niche and user changed it:
+    if (fromNiche && toNiche && fromNiche.toLowerCase() !== toNiche.toLowerCase()) {
+      if (!hasChangedNicheOnce) {
+        setHasChangedNicheOnce(true);
+        setPreviousAttachedNiche(toNiche);
+        await executeSave(toNiche, fromNiche);
+        return;
+      }
+      sfx.tap();
+      setPendingNicheMove({
+        fromNiche,
+        toNiche,
+        saveName: saveName.trim(),
+        saveDescription: saveDescription.trim(),
+      });
+      return;
+    }
+
+    // Otherwise proceed with saving
+    await executeSave(toNiche, fromNiche);
+  };
+
+  const executeSave = async (finalNiche: string, oldNiche?: string) => {
+    sfx.primary();
+    setSaving(true);
+    try {
+      let catId = saveCategory;
+
+      if (showNewCat && saveNewCat.trim()) {
+        try {
+          const added = await addNiche(saveNewCat.trim());
+          finalNiche = added.id;
+        } catch {
+          finalNiche = saveNewCat.trim();
+        }
+        try {
+          const cat = await createTemplateCategory({ name: saveNewCat.trim(), color: '#2563EB' });
+          catId = cat.id;
+        } catch { /* ignore */ }
+      }
+
+      let templateId = turnedTemplateId || `tmpl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      let historyId = activeProjectId || `hist_${Date.now()}`;
+      try {
+        const entry = await createSiteHistory({
+          id: activeProjectId || historyId,
+          parentSlug: activeProjectSlug || undefined,
+          title: saveName.trim(),
+          niche: finalNiche,
+          html,
+          templateId,
+          snapshotLabel: `Saved to ${finalNiche}`,
+        });
+        if (entry && entry.id) {
+          historyId = entry.id;
+          if (!activeProjectId) setActiveProjectId(entry.id);
+          if (!activeProjectSlug) setActiveProjectSlug(entry.parentSlug || `studio-${entry.id}`);
+        }
+      } catch { /* ignore */ }
+      const compiledPreview = compilePreview(html);
+
+      try {
+        const result = await convertHistoryToTemplate({
+          historyId,
+          name: saveName.trim(),
+          categoryId: catId,
+          niche: finalNiche,
+          rawHtml: html,
+          templateId,
+        });
+        if (result && result.id) {
+          templateId = result.id;
+        }
+      } catch { /* ignore */ }
+
+      // Synchronize the template across all tabs (Templates gallery, campaigns, editor)
+      // When moving from an old niche, moveAndSyncTemplate removes it from old niche and adds to finalNiche
+      if (oldNiche && oldNiche.toLowerCase() !== finalNiche.toLowerCase()) {
+        moveAndSyncTemplate({
+          id: templateId,
+          name: saveName.trim(),
+          fromNiche: oldNiche,
+          toNiche: finalNiche,
+          description: saveDescription.trim() || `High-converting modern website template for ${finalNiche}.`,
+          rawHtml: html,
+          previewHtml: compiledPreview,
+          previewPath: `/api/templates/${templateId}/preview`,
+        });
+      } else {
+        addAndSyncTemplate({
+          id: templateId,
+          name: saveName.trim(),
+          niche: finalNiche,
+          description: saveDescription.trim() || `High-converting modern website template for ${finalNiche}.`,
+          rawHtml: html,
+          previewHtml: compiledPreview,
+          previewPath: `/api/templates/${templateId}/preview`,
+        });
+      }
+
+      setTurnedTemplateId(templateId);
+      setTurnedTemplateNiche(finalNiche);
+      setNiche(finalNiche);
+      setPreviousAttachedNiche(finalNiche);
+
+      sfx.deployed();
+      setSuccessMsg({ title: saveName.trim(), niche: finalNiche });
+      setPendingNicheMove(null);
+      setSaveOpen(false);
+    } catch (err: any) {
+      try {
+        const fallbackId = turnedTemplateId || `tmpl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        const compiledPreview = compilePreview(html);
+        if (oldNiche && oldNiche.toLowerCase() !== finalNiche.toLowerCase()) {
+          moveAndSyncTemplate({
+            id: fallbackId,
+            name: saveName.trim(),
+            fromNiche: oldNiche,
+            toNiche: finalNiche,
+            description: saveDescription.trim() || `High-converting modern website template for ${finalNiche}.`,
+            rawHtml: html,
+            previewHtml: compiledPreview,
+            previewPath: `/api/templates/${fallbackId}/preview`,
+          });
+        } else {
+          addAndSyncTemplate({
+            id: fallbackId,
+            name: saveName.trim(),
+            niche: finalNiche,
+            description: saveDescription.trim() || `High-converting modern website template for ${finalNiche}.`,
+            rawHtml: html,
+            previewHtml: compiledPreview,
+            previewPath: `/api/templates/${fallbackId}/preview`,
+          });
+        }
+        setTurnedTemplateId(fallbackId);
+        setTurnedTemplateNiche(finalNiche);
+        setNiche(finalNiche);
+        setPreviousAttachedNiche(finalNiche);
+        sfx.deployed();
+        setSuccessMsg({ title: saveName.trim(), niche: finalNiche });
+        setPendingNicheMove(null);
+        setSaveOpen(false);
+        return;
+      } catch (fallbackErr) {
+        sfx.error();
+        flashToast({ type: 'error', text: err?.message || 'Failed to save template.' });
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const isActive = mode === 'active';
+
+  return (
+    <div ref={workspaceRef} className={embedded ? "w-full min-h-[540px] sm:min-h-[750px] h-[calc(100dvh-135px)] sm:h-[calc(100vh-130px)] flex flex-col bg-white text-slate-900 select-none relative rounded-xl sm:rounded-2xl border border-slate-200 shadow-sm overflow-hidden" : "w-full h-full bg-white flex flex-col text-slate-900 select-none overflow-hidden"}>
+
+      {/* TOP HEADER BAR - White & Blue Brand Consistent */}
+      <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-3 px-3.5 py-2.5 sm:px-6 sm:py-3.5 bg-white border-b border-slate-200 shrink-0 shadow-sm">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 sm:flex-initial">
+          {!isActive ? (
+            <button
+              onClick={onClose}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-200 text-xs sm:text-sm font-medium font-sans active:scale-[0.98] transition-all shrink-0 cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Editor
+            </button>
+          ) : (
+            <button
+              onClick={goToStudioLanding}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 border border-slate-200 text-slate-700 text-xs sm:text-sm font-semibold font-sans active:scale-[0.98] transition-all shrink-0 shadow-xs cursor-pointer"
+              title="Return to Studio landing page to give new prompts"
+            >
+              <ArrowLeft className="w-4 h-4 text-blue-600" />
+              <span>Studio Home</span>
+            </button>
+          )}
+
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0">
+              <Code2 className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-base font-bold font-sans text-slate-900 leading-none truncate">AI Web Studio</h1>
+              <p className={`${isActive ? 'hidden sm:block' : 'block'} text-[11px] text-slate-500 font-sans mt-0.5 truncate`}>
+                {isActive ? title || 'Vibe Coding Session' : 'Powered by Google AI Studio Gemini 2.5 Flash'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Top Header Buttons: Test Rebrand, Vibe Credit Badge, and Save Template */}
+        <div className="flex items-center justify-end gap-1.5 sm:gap-2.5 w-full sm:w-auto shrink-0 pt-1.5 sm:pt-0 border-t border-slate-100 sm:border-t-0">
+          <VibeCreditBadge size="sm" />
+
+          {isActive && (
+            <>
+              {/* Test Rebrand Button */}
+            <button
+              onClick={handleTestRebrand}
+              disabled={streaming || isTestingRebrand}
+              className={`flex-1 sm:flex-initial justify-center inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold transition-all shadow-xs active:scale-[0.98] cursor-pointer bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 ${
+                (streaming || isTestingRebrand) ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''
+              }`}
+              title="Test rebranding across multiple business profiles to verify instant personalization"
+            >
+              {isTestingRebrand ? <Loader2 className="w-4 h-4 animate-spin text-blue-600" /> : <Play className="w-4 h-4 text-blue-600" />}
+              <span>{isTestingRebrand ? 'Testing Rebrands…' : 'Test Rebrand'}</span>
+            </button>
+
+            {/* Save Template Button - Gated strictly until validation and both rebrand tests pass */}
+            <button
+              onClick={handleOpenSaveTemplate}
+              disabled={streaming || isTestingRebrand}
+              className={`flex-1 sm:flex-initial justify-center inline-flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold shadow-md hover:shadow-lg active:scale-[0.98] transition-all shrink-0 cursor-pointer ${
+                (isTemplateValidated || hasRunTestRebrand || hasLoadedPreviousTemplate)
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                  : 'bg-slate-200 text-slate-500 hover:bg-slate-300 hover:text-slate-700 border border-slate-300'
+              } ${(streaming || isTestingRebrand) ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
+              title={(isTemplateValidated || hasRunTestRebrand || hasLoadedPreviousTemplate) ? "Save website as a reusable template" : "Please run Test Rebrand first to unlock turning into a template"}
+            >
+              {!(isTemplateValidated || hasRunTestRebrand || hasLoadedPreviousTemplate) ? <Lock className="w-3.5 h-3.5 text-slate-500" /> : <BookmarkPlus className="w-4 h-4" />}
+              <span>Turn into Template</span>
+            </button>
+          </>
+        )}
+      </div>
+      </div>
+
+      {/* MOBILE WORKSPACE MODE BAR (< 768px only) — Enables 1-tap switching between AI Chat, Live Preview & Code View on mobile without touching desktop split-view */}
+      {isActive && (
+        <div className="flex md:hidden items-center justify-between gap-1.5 px-3 py-2 bg-slate-50 border-b border-slate-200 shrink-0">
+          <div className="grid grid-cols-3 gap-1 flex-1 bg-slate-200/70 p-1 rounded-xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => { sfx.toggle(); setSidebarCollapsed(false); }}
+              className={`inline-flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                !sidebarCollapsed
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Terminal className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">AI Vibe Chat</span>
+              {streaming && (
+                <span className={`w-1.5 h-1.5 rounded-full animate-ping shrink-0 ${!sidebarCollapsed ? 'bg-white' : 'bg-blue-600'}`} />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                sfx.toggle();
+                setSidebarCollapsed(true);
+                if (device === 'code') setDevice('desktop');
+              }}
+              className={`inline-flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                sidebarCollapsed && device !== 'code'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Monitor className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Live Preview</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                sfx.toggle();
+                setSidebarCollapsed(true);
+                setDevice('code');
+              }}
+              className={`inline-flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                sidebarCollapsed && device === 'code'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Code2 className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">HTML Code</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MAIN WORKSPACE */}
+      <div className="flex flex-1 overflow-hidden min-h-0">
+
+        {/* LEFT SIDEBAR (Active chat / controls) - Roomy, Large, Luxury UI */}
+        <div className={`shrink-0 flex flex-col overflow-hidden bg-slate-50 border-r border-slate-200 transition-all duration-300 ${
+          !isActive ? 'w-[0px] md:w-[0px] overflow-hidden' : sidebarCollapsed ? 'w-0 border-0' : 'w-full md:w-[420px] lg:w-[460px] xl:w-[480px]'
+        }`}>
+          {isActive && !sidebarCollapsed && (
+            <div className="flex flex-col h-full overflow-hidden bg-slate-50">
+              
+              {/* Chat Header & LLM Engine Selector */}
+              <div className="px-2.5 py-2 sm:px-5 sm:py-4 border-b border-slate-200 bg-white space-y-1.5 sm:space-y-3 shrink-0 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                    <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-md sm:rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 shrink-0">
+                      <Terminal className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-xs sm:text-sm font-bold font-sans text-slate-900 block leading-tight truncate">
+                        Vibe Design Assistant
+                      </span>
+                      <span className="hidden sm:block text-[11px] text-slate-500 font-sans">
+                        Real-time AI Synthesis & Interactive Design
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-blue-50 border border-blue-200 text-[10px] sm:text-[11px] font-semibold text-blue-700 shrink-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
+                    Active
+                  </div>
+                </div>
+
+                {/* Brand consistent model selector toggle */}
+                <div className={`flex items-center bg-slate-100 p-1 sm:p-1.5 rounded-lg sm:rounded-xl border border-slate-200 gap-0.5 sm:gap-1 text-[10px] sm:text-xs font-medium text-slate-700 transition-all ${streaming ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}>
+                  {(['Gemini 2.5 Flash', 'Gemini 3.8 Flash', 'Gemini 3.1 Pro'] as const).map(model => (
+                    <button
+                      key={model}
+                      disabled={streaming}
+                      onClick={() => { if (!streaming) { sfx.toggle(); setSelectedModel(model); } }}
+                      className={`flex-1 py-1 sm:py-1.5 px-1 sm:px-2 rounded-md sm:rounded-lg transition-all truncate text-center text-[10px] sm:text-xs font-semibold ${
+                        selectedModel === model
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'hover:text-slate-900 hover:bg-slate-200/60 text-slate-600'
+                      }`}
+                    >
+                      {model.replace('Gemini ', '')}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Security Architecture Notice - Ultra-compact on mobile */}
+                <div className="mt-1 sm:mt-2 p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-slate-50 border border-slate-200/80 text-slate-800 flex items-center gap-1.5 sm:gap-2 shadow-2xs">
+                  <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded bg-blue-50 border border-blue-200/60 flex items-center justify-center shrink-0 text-blue-600">
+                    <ShieldCheck className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                  </div>
+                  <div className="text-[10px] leading-tight flex-1 min-w-0">
+                    <span className="font-semibold text-slate-900">Notice: </span>
+                    <span className="text-slate-600 sm:hidden">Direct code compilation active.</span>
+                    <span className="text-slate-600 hidden sm:inline">
+                      Conversational chat is disabled to protect AI servers and maximize generation speed. Design instructions compile directly into production code in real-time.
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Chat messages list - Generous height on mobile */}
+              <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-2.5 py-2 sm:px-5 sm:py-4 space-y-2 sm:space-y-4 min-h-0 bg-slate-50 scroll-smooth">
+                {hasLoadedPreviousTemplate && !hasGivenAiPrompt ? (
+                  <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white border border-slate-200 shadow-xs space-y-1.5 sm:space-y-2.5">
+                    <p className="text-[10px] sm:text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      Quick Vibe Edits
+                    </p>
+                    <p className="text-[11px] sm:text-xs text-slate-600 leading-snug">
+                      Tap any prompt to instruct AI to update code in real-time:
+                    </p>
+                    <div className="flex flex-wrap gap-1 sm:gap-1.5 pt-0.5">
+                      {[
+                        'Add a 3-tier pricing table',
+                        'Make hero bolder with dark theme',
+                        'Add booking form section',
+                        'Add review stars badge',
+                        'Change button to emerald',
+                        'Add FAQ accordion section'
+                      ].map((promptSnippet, idx) => (
+                        <button
+                          key={idx}
+                          disabled={streaming}
+                          onClick={() => {
+                            setInput(promptSnippet);
+                            sfx.tap();
+                          }}
+                          className="text-left text-[11px] sm:text-xs px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md sm:rounded-lg bg-slate-100 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 border border-slate-200 text-slate-700 transition-all font-sans"
+                        >
+                          + {promptSnippet}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {messages.map((m, i) => {
+                      // Prevent duplicate consecutive user prompts from ever displaying twice
+                      if (i > 0 && m.role === 'user' && messages[i - 1]?.role === 'user' && messages[i - 1]?.content?.trim().toLowerCase() === m.content?.trim().toLowerCase()) {
+                        return null;
+                      }
+
+                      if (m.isError) {
+                        return (
+                          <div key={i} className="flex justify-start animate-editor-fade">
+                            <div className="max-w-[92%] sm:max-w-[90%] rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 bg-red-50 border border-red-200 text-red-700 rounded-bl-xs shadow-2xs space-y-1">
+                              <div className="flex items-center gap-1.5 font-bold text-xs text-red-700">
+                                <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                                <span>AI servers busy</span>
+                              </div>
+                              <p className="text-xs text-red-600 leading-relaxed font-sans">
+                                {m.content || 'AI servers busy, try later.'}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      if (m.role === 'user') {
+                        const isCopied = copiedPromptIndex === i;
+                        return (
+                          <div key={i} className="flex flex-col items-end">
+                            <div className="max-w-[90%] sm:max-w-[88%] rounded-xl sm:rounded-2xl px-3 py-2 sm:px-4 sm:py-3 text-xs sm:text-sm font-sans leading-relaxed shadow-md bg-blue-600 text-white rounded-br-sm">
+                              {m.content}
+                            </div>
+                            <div className="flex items-center gap-1.5 justify-end mt-1 pr-1">
+                              {isCopied && (
+                                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-200 shadow-2xs animate-editor-fade transition-all">
+                                  Copied!
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  try {
+                                    navigator.clipboard.writeText(m.content);
+                                    sfx.copy();
+                                    setCopiedPromptIndex(i);
+                                    setTimeout(() => {
+                                      setCopiedPromptIndex(prev => (prev === i ? null : prev));
+                                    }, 1000);
+                                  } catch {}
+                                }}
+                                className="p-0.5 sm:p-1 rounded-md bg-slate-800/80 hover:bg-slate-900 text-white shadow-2xs transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-slate-700/60"
+                                title="Copy prompt"
+                              >
+                                {isCopied ? (
+                                  <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white stroke-[2.5]" />
+                                ) : (
+                                  <Copy className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      const displayContent = sanitizeUserFacingText(m.content);
+                      return (
+                        <div key={i} className="flex justify-start">
+                          <div className="max-w-[90%] sm:max-w-[88%] rounded-xl sm:rounded-2xl px-3 py-2.5 sm:px-4 sm:py-3.5 text-xs sm:text-sm font-sans leading-relaxed shadow-xs bg-white border border-slate-200 text-slate-800 rounded-bl-sm">
+                            {displayContent || <span className="inline-flex items-center gap-1.5 text-slate-500"><Loader2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 animate-spin text-blue-600" /> Synthesizing website updates…</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {streaming && (
+                      <div className="flex justify-start">
+                        <div className="max-w-[90%] sm:max-w-[88%] rounded-xl sm:rounded-2xl px-3 py-2 sm:px-4 sm:py-3 bg-white border border-blue-200 rounded-bl-sm shadow-md space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-2 h-2 rounded-full bg-blue-600 animate-ping" />
+                            <span className="text-[11px] sm:text-xs text-blue-600 font-bold">{selectedModel} Designing in Real-Time</span>
+                          </div>
+                          <p className="text-[11px] sm:text-xs text-slate-600 leading-relaxed italic">
+                            {thinkingAcc ? sanitizeUserFacingText(thinkingAcc.slice(-220)) : 'Crafting clean layout and tailored presentation…'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {labError && (
+                      <div className="flex justify-start animate-fade-in">
+                        <div className="max-w-[95%] rounded-xl sm:rounded-2xl p-3 sm:p-4 bg-red-50 border border-red-200 text-red-800 shadow-sm space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 font-bold text-xs text-red-700">
+                              <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-600 shrink-0" />
+                              <span>AI Servers Notice</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setLabError(null)}
+                              className="text-red-400 hover:text-red-700 text-xs font-bold px-1.5 py-0.5 rounded cursor-pointer"
+                            >
+                              ×
+                            </button>
+                          </div>
+                          <p className="text-xs text-red-700 leading-relaxed font-sans">
+                            {labError}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Prompt input composer - Compact on mobile */}
+              <div className="p-2.5 sm:p-5 border-t border-slate-200 bg-white shrink-0 shadow-lg space-y-1.5 sm:space-y-3">
+                {!isPlanEligible ? (
+                  <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 flex flex-col gap-2 shadow-xs animate-fade-in">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+                        <Lock className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-xs font-bold leading-snug">Vibe Coding Not Supported on {userPlan}</p>
+                        <p className="text-[11px] text-amber-800 mt-1 leading-relaxed">
+                          Not eligible to vibe code. Upgrade to supported plans (Starter, Pro, or Agency) to vibe code with AI.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sfx.open();
+                        window.dispatchEvent(new CustomEvent('lunao:switch-tab', { detail: 'plans' }));
+                        flashToast({ type: 'info', text: 'Select Starter, Pro, or Agency plan to unlock AI Vibe Coding.' });
+                      }}
+                      className="w-full mt-2 py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold font-sans shadow-sm flex items-center justify-center gap-1.5 active:scale-[0.99] transition-all cursor-pointer"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Upgrade to Supported Plan</span>
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="relative">
+                      <textarea
+                        value={input}
+                        onChange={e => setInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPrompt(); } }}
+                        placeholder="Describe edits… e.g. 'Add a clean pricing section with 3 tiers and monthly billing toggle'"
+                        rows={3}
+                        disabled={streaming}
+                        className="w-full resize-none rounded-2xl border border-slate-300 bg-white p-3 sm:p-3.5 text-sm font-sans text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition-all leading-relaxed shadow-inner"
+                      />
+                    </div>
+                    <button
+                      onClick={sendPrompt}
+                      disabled={streaming || !input.trim()}
+                      className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-600 text-white text-sm font-bold font-sans hover:bg-blue-700 active:scale-[0.98] transition-all shadow-md hover:shadow-lg disabled:opacity-40 disabled:hover:bg-blue-600 cursor-pointer"
+                    >
+                      {streaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Code2 className="w-4 h-4" />}
+                      {streaming ? 'Applying AI Edits to Website…' : 'Apply AI Edit to Website'}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* MAIN CONTENT AREA */}
+        <div className={`${isActive && !sidebarCollapsed ? 'hidden md:flex' : 'flex'} flex-1 flex-col overflow-hidden bg-slate-50 min-h-0 min-w-0`}>
+
+          {!isActive ? (
+            /* ================= IDLE: AI VIBE STUDIO LANDING (White & Blue) ================= */
+            <div ref={idleContainerRef} className="flex-1 overflow-y-auto min-h-0 px-3 sm:px-8 py-4 sm:py-8 flex justify-center items-start transition-opacity duration-500">
+              <div className="w-full max-w-4xl space-y-5 sm:space-y-8">
+
+                {/* Hero Header & Single Prompt Section */}
+                <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden bg-white border border-slate-200 p-4 sm:p-12 shadow-xl">
+                  <div className="absolute top-0 right-0 w-96 h-96 bg-blue-50/80 rounded-full blur-3xl pointer-events-none" />
+                  <div className="relative z-10 space-y-5 sm:space-y-8">
+                    
+                    {/* Top Row: Title + Compact Model Selector */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6 border-b border-slate-100 pb-4 sm:pb-6">
+                      <div>
+                        <h2 className="text-2xl sm:text-4xl font-serif font-bold text-slate-900 tracking-tight">
+                          AI Web Studio
+                        </h2>
+                        <p className="text-xs sm:text-sm text-slate-600 max-w-lg mt-1.5 leading-relaxed">
+                          Describe any local service business in natural language. Instantly synthesize high-converting responsive websites optimized for client acquisition.
+                        </p>
+                      </div>
+
+                      {/* Sleek Compact Model Picker */}
+                      <div className="shrink-0 w-full sm:w-auto">
+                        <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-widest mb-2">LLM Engine</label>
+                        <div className="flex sm:inline-flex w-full sm:w-auto bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1 text-xs">
+                          {(['Gemini 2.5 Flash', 'Gemini 3.8 Flash', 'Gemini 3.1 Pro'] as const).map(model => (
+                            <button
+                              key={model}
+                              disabled={streaming}
+                              onClick={() => { if (!streaming) { sfx.toggle(); setSelectedModel(model); } }}
+                              className={`flex-1 sm:flex-initial py-1.5 px-2 sm:px-3 rounded-lg transition-all text-[11px] sm:text-xs font-medium text-center truncate ${
+                                selectedModel === model
+                                  ? 'bg-blue-600 text-white shadow-sm font-semibold'
+                                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                              }`}
+                            >
+                              {model.replace('Gemini ', '')}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Prompt Input & Quick Sample Chips */}
+                    <div className="space-y-4">
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Business Brief & Prompt</label>
+                          <span className="text-[11px] text-slate-400">Ready to synthesize</span>
+                        </div>
+                        <textarea
+                          id="custom-vibe-textarea"
+                          rows={4}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              if (!isPlanEligible) {
+                                flashError('Vibe Coding is available on Starter, Pro, and Agency plans. Please upgrade in Subscription Plans.');
+                                return;
+                              }
+                              const val = e.currentTarget.value.trim();
+                              if (!val) {
+                                flashError('Please enter a description for your website.');
+                                return;
+                              }
+                              handleStartVibeCode(val, val.slice(0, 30) + ' Site');
+                            }
+                          }}
+                          placeholder="e.g. A luxury vintage barber lounge in Austin, TX with dark mahogany aesthetics, chair booking form, pricing menu, and Google reviews badge."
+                          className="w-full rounded-2xl border border-slate-300 bg-white p-3.5 sm:p-4 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 transition-all shadow-inner"
+                        />
+                      </div>
+
+                      {/* Quick sample prompt chips */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <span className="text-[11px] text-slate-500 font-medium">Quick samples:</span>
+                        {[
+                          'Luxury Barber Lounge, Austin TX',
+                          'Clinical Dental Studio, Boston MA',
+                          '24/7 HVAC Emergency Repair, Dallas TX',
+                        ].map((sample) => (
+                          <button
+                            key={sample}
+                            type="button"
+                            onClick={() => {
+                              const ta = document.getElementById('custom-vibe-textarea') as HTMLTextAreaElement;
+                              if (ta) ta.value = sample;
+                              sfx.tap();
+                            }}
+                            className="text-xs px-3 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 hover:text-slate-900 hover:border-blue-300 transition-all"
+                          >
+                            {sample}
+                          </button>
+                        ))}
+                      </div>
+
+                      {labError && (
+                        <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-between gap-3 text-xs text-red-700">
+                          <div className="flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                            <span>{labError}</span>
+                          </div>
+                          <button onClick={() => setLabError(null)} className="text-red-500 hover:text-red-700 font-bold px-1">×</button>
+                        </div>
+                      )}
+
+                      {!isPlanEligible && (
+                        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-3 text-xs text-amber-800">
+                          <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>Vibe Coding requires a <strong>Starter, Pro, or Agency</strong> plan. Free plan users have access to pre-built templates.</span>
+                        </div>
+                      )}
+
+                      <button
+                        onClick={() => {
+                          if (!isPlanEligible) {
+                            flashError('Vibe Coding is available on Starter, Pro, and Agency plans. Please upgrade in Subscription Plans.');
+                            return;
+                          }
+                          const ta = document.getElementById('custom-vibe-textarea') as HTMLTextAreaElement;
+                          const val = ta?.value?.trim();
+                          if (!val) { flashError('Please enter a description for your website.'); return; }
+                          handleStartVibeCode(val, val.slice(0, 30) + ' Site');
+                        }}
+                        disabled={streaming}
+                        className={`w-full inline-flex items-center justify-center gap-2 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl text-sm sm:text-base font-bold shadow-md active:scale-[0.99] transition-all mt-2 cursor-pointer ${
+                          !isPlanEligible
+                            ? 'bg-slate-800 hover:bg-slate-900 text-white'
+                            : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20'
+                        }`}
+                      >
+                        {streaming ? <Loader2 className="w-5 h-5 animate-spin" /> : !isPlanEligible ? <Lock className="w-5 h-5" /> : <Code2 className="w-5 h-5" />}
+                        {!isPlanEligible ? 'Starter Plan Required to Vibe Code' : 'Generate Website'}
+                      </button>
+                    </div>
+
+                  </div>
+                </div>
+
+                {/* Recent Previous Vibe Coded Templates Section */}
+                <div className="rounded-2xl sm:rounded-3xl bg-white border border-slate-200 p-4 sm:p-8 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-blue-600" />
+                      Recent Vibe Coded Templates
+                    </h3>
+                    <span className="text-xs text-slate-500">{uniqueHistory.length} saved builds</span>
+                  </div>
+
+                  {uniqueHistory.length === 0 ? (
+                    <div className="text-center py-10 text-slate-400 text-xs italic">
+                      No previous vibe coded sites yet. Generate your first one above!
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {isSpecialModeActive() && (
+                        <div className="rounded-2xl bg-slate-50/90 border border-slate-200 p-4 space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-200/80">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-[10px] font-bold text-blue-700 uppercase tracking-wider">
+                                <Sparkles className="w-3 h-3 text-blue-600" />
+                                Prompt Used
+                              </span>
+                              <span className="text-xs font-semibold text-slate-700">
+                                Luxury Dark Barber Shop Website
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                try {
+                                  navigator.clipboard.writeText(SPECIAL_BARBER_VIBE_PROMPT);
+                                } catch {}
+                                sfx.copy();
+                                setCopiedSpecialBarberPrompt(true);
+                                flashToast({ type: 'info', text: 'Prompt copied to clipboard!' });
+                                setTimeout(() => setCopiedSpecialBarberPrompt(false), 1800);
+                              }}
+                              className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer shrink-0 ${
+                                copiedSpecialBarberPrompt
+                                  ? 'bg-emerald-600 text-white shadow-xs'
+                                  : 'bg-slate-900 hover:bg-blue-600 text-white shadow-xs'
+                              }`}
+                              title="Copy prompt with one click"
+                            >
+                              {copiedSpecialBarberPrompt ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                                  <span>Copied Prompt</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3.5 h-3.5" />
+                                  <span>Copy Prompt</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+
+                          <p className="text-xs text-slate-600 leading-relaxed font-sans select-all bg-white p-3 rounded-xl border border-slate-200/80">
+                            {SPECIAL_BARBER_VIBE_PROMPT}
+                          </p>
+
+                          {(() => {
+                            const barberEntry =
+                              uniqueHistory.find(
+                                (e) =>
+                                  e.id === SPECIAL_BARBER_VIBE_ID ||
+                                  e.title?.toLowerCase() === SPECIAL_BARBER_VIBE_TITLE.toLowerCase()
+                              ) || getSpecialBarberHistoryEntry();
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => loadEntry(barberEntry)}
+                                className="w-full text-left p-3.5 sm:p-4 rounded-xl bg-white border border-slate-200 hover:border-blue-500 hover:bg-blue-50/40 transition-all group flex items-center justify-between gap-3 shadow-2xs cursor-pointer"
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-xs sm:text-sm font-bold text-slate-900 group-hover:text-blue-600 truncate mb-0.5">
+                                    {barberEntry.title}
+                                  </p>
+                                  <p className="text-[11px] text-slate-500 truncate">
+                                    {barberEntry.niche} • Full-Screen Hero, Service Menu, Master Barbers &amp; Smooth Animations
+                                  </p>
+                                </div>
+                                <span className="inline-flex items-center gap-1 text-xs text-blue-600 font-bold shrink-0">
+                                  Open in Studio →
+                                </span>
+                              </button>
+                            );
+                          })()}
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {(uniqueHistory || [])
+                          .filter(Boolean)
+                          .filter((entry) =>
+                            isSpecialModeActive()
+                              ? entry.id !== SPECIAL_BARBER_VIBE_ID &&
+                                entry.title?.toLowerCase() !== SPECIAL_BARBER_VIBE_TITLE.toLowerCase()
+                              : true
+                          )
+                          .slice(0, 8)
+                          .map((entry) => (
+                            <button
+                              key={entry.id}
+                              onClick={() => loadEntry(entry)}
+                              className="text-left p-3.5 sm:p-4 rounded-2xl bg-slate-50 border border-slate-200 hover:border-blue-500 hover:bg-blue-50/50 transition-all group"
+                            >
+                              <p className="text-xs font-bold text-slate-900 group-hover:text-blue-600 truncate mb-1">
+                                {entry.title || entry.snapshotLabel || 'Untitled Vibe'}
+                              </p>
+                              <p className="text-[11px] text-slate-500 truncate mb-2">{entry.niche || 'Local Business'}</p>
+                              <span className="inline-flex items-center gap-1 text-[10px] text-blue-600 font-semibold">
+                                Open in Studio →
+                              </span>
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            </div>
+          ) : (
+            /* ================= ACTIVE PREVIEW MODE ================= */
+            <>
+              {/* Preview toolbar - Large, Spacious & High-Status */}
+              <div className="flex items-center gap-2 sm:gap-4 px-3 sm:px-6 py-2 sm:py-3 bg-white border-b border-slate-200 shrink-0 shadow-xs overflow-x-auto no-scrollbar">
+                
+                {/* Desktop, Mobile & Code View Toggle */}
+                <div className="flex items-center gap-1 bg-slate-100 p-1.5 rounded-xl border border-slate-200 shadow-inner shrink-0">
+                  <button
+                    onClick={() => { sfx.toggle(); setDevice('desktop'); }}
+                    className={`inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
+                      device === 'desktop'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                    }`}
+                    title="Desktop view (100% Full Width)"
+                  >
+                    <Monitor className="w-4 h-4" />
+                    <span>Desktop</span>
+                  </button>
+                  <button
+                    onClick={() => { sfx.toggle(); setDevice('mobile'); }}
+                    className={`inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
+                      device === 'mobile'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                    }`}
+                    title="Mobile viewport simulation"
+                  >
+                    <Smartphone className="w-4 h-4" />
+                    <span>Mobile</span>
+                  </button>
+                  <button
+                    onClick={() => { sfx.toggle(); setDevice('code'); }}
+                    className={`inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
+                      device === 'code'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                    }`}
+                    title="View raw HTML code file"
+                  >
+                    <Code2 className="w-4 h-4" />
+                    <span>Code View</span>
+                  </button>
+                </div>
+
+                {/* Sidebar toggle button */}
+                <button
+                  onClick={() => { sfx.tap(); setSidebarCollapsed(!sidebarCollapsed); }}
+                  className="p-2 sm:p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 hover:text-slate-900 transition-all shrink-0"
+                  title={sidebarCollapsed ? "Open Vibe Assistant Sidebar" : "Collapse Sidebar for Wider Canvas"}
+                >
+                  {sidebarCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+                </button>
+
+                {/* Website Title Editor */}
+                <div className="flex items-center min-w-0 max-w-[140px] sm:max-w-[200px] shrink overflow-hidden">
+                  {editingTitle ? (
+                    <input
+                      autoFocus
+                      value={titleDraft}
+                      onChange={e => setTitleDraft(e.target.value)}
+                      onBlur={commitTitle}
+                      onKeyDown={e => { if (e.key === 'Enter') commitTitle(); }}
+                      className="px-2.5 sm:px-3 py-1.5 rounded-xl border-2 border-blue-600 bg-white text-xs sm:text-sm font-bold text-slate-900 focus:outline-none shadow-sm max-w-full"
+                    />
+                  ) : (
+                    <button
+                      onClick={startEditTitle}
+                      className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-bold text-slate-800 hover:text-blue-600 px-2 sm:px-3 py-1.5 rounded-xl hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-all min-w-0 max-w-full overflow-hidden"
+                      title="Click to rename website"
+                    >
+                      <FlaskConical className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span className="truncate">{title || 'Vibe Website'}</span>
+                      <span className="text-slate-400 text-xs font-normal shrink-0">✎</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Right Action Controls - Guaranteed shrink-0 to prevent clipping */}
+                <div className="ml-auto flex items-center gap-2 sm:gap-3 shrink-0 relative z-10">
+                  <button
+                    onClick={refreshPreview}
+                    className="p-2 sm:p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 hover:text-slate-900 transition-all shrink-0"
+                    title="Reload live preview"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+
+                  <BookingNoticeCard />
+
+                  <button
+                    onClick={() => { sfx.open(); setFullScreenPreview(true); }}
+                    className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 hover:text-slate-900 text-xs font-bold transition-all shadow-xs active:scale-[0.98] shrink-0"
+                    title="View preview in full screen mode"
+                  >
+                    <Maximize2 className="w-4 h-4 text-blue-600 shrink-0" />
+                    <span>Full Screen</span>
+                  </button>
+
+                  <button
+                    onClick={handleOpenSaveTemplate}
+                    disabled={streaming || isTestingRebrand}
+                    className={`inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs font-bold shadow-md hover:shadow-lg active:scale-[0.98] transition-all shrink-0 cursor-pointer ${
+                      (isTemplateValidated || hasRunTestRebrand || hasLoadedPreviousTemplate)
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                        : 'bg-slate-200 text-slate-500 hover:bg-slate-300 hover:text-slate-700 border border-slate-300'
+                    } ${(streaming || isTestingRebrand) ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
+                    title={(isTemplateValidated || hasRunTestRebrand || hasLoadedPreviousTemplate) ? "Turn into reusable template" : "Please run Test Rebrand first to unlock turning into a template"}
+                  >
+                    {!(isTemplateValidated || hasRunTestRebrand || hasLoadedPreviousTemplate) ? <Lock className="w-4 h-4 text-slate-500 shrink-0" /> : <BookmarkPlus className="w-4 h-4 shrink-0" />}
+                    <span>Turn into Template</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Viewport / Code View Area */}
+              <div className="flex-1 w-full h-full min-h-0 overflow-hidden flex flex-col bg-slate-100">
+                {device === 'desktop' ? (
+                  <div className="w-full h-full flex-1 flex flex-col min-h-0 bg-white overflow-hidden relative">
+                    {streaming && !previewHtml && (
+                      <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-50/95 backdrop-blur-xs p-6 text-center animate-editor-fade">
+                        <div className="w-14 h-14 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center mb-4 shadow-sm">
+                          <Loader2 className="w-7 h-7 text-blue-600 animate-spin" />
+                        </div>
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold mb-2">
+                          <Cpu className="w-3.5 h-3.5" />
+                          <span>{selectedModel} is coding live</span>
+                        </div>
+                        <h4 className="text-base font-bold text-slate-800 mb-1">
+                          Crafting "{title || 'Bespoke Website'}"
+                        </h4>
+                        <p className="text-xs text-slate-500 max-w-md leading-relaxed">
+                          Generating responsive layout, mobile-ready components, and tailored local styling. The preview will compile immediately once generation is complete.
+                        </p>
+                      </div>
+                    )}
+                    <iframe
+                      ref={iframeRef}
+                      srcdoc={previewHtml || BLANK_CANVAS}
+                      title="Vibe Website Preview"
+                      className="w-full h-full flex-1 border-0 bg-white block"
+                      style={{ height: '100%', width: '100%', minHeight: '100%', display: 'block' }}
+                    />
+                  </div>
+                ) : device === 'mobile' ? (
+                  <div className="w-full h-full flex-1 min-h-0 flex items-center justify-center p-2 sm:p-4 overflow-hidden relative">
+                    <div className="w-full max-w-[390px] h-full max-h-[820px] bg-white rounded-2xl sm:rounded-3xl border-2 sm:border-4 border-slate-800 shadow-2xl flex flex-col overflow-hidden relative">
+                      <div className="h-6 bg-slate-800 flex items-center justify-center shrink-0">
+                        <div className="w-16 h-3 bg-slate-700 rounded-full" />
+                      </div>
+                      {streaming && !previewHtml && (
+                        <div className="absolute inset-0 top-6 z-10 flex flex-col items-center justify-center bg-slate-50/95 p-6 text-center">
+                          <Loader2 className="w-6 h-6 text-blue-600 animate-spin mb-3" />
+                          <p className="text-xs font-bold text-slate-800">{selectedModel} is coding live...</p>
+                        </div>
+                      )}
+                      <iframe
+                        ref={iframeRef}
+                        srcdoc={previewHtml || BLANK_CANVAS}
+                        title="Vibe Website Preview Mobile"
+                        className="w-full h-full flex-1 border-0 bg-white block"
+                        style={{ height: '100%', width: '100%' }}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-full h-full flex-1 min-h-0 flex flex-col bg-slate-900 p-3 sm:p-6 overflow-hidden">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3 shrink-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Code2 className="w-4 h-4 text-blue-400 shrink-0" />
+                        <span className="text-xs font-mono font-bold text-white truncate">Generated Single-File HTML / CSS Source Code</span>
+                        {streaming && (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] font-mono shrink-0">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping" /> Streaming live
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(previewHtml || (html !== BLANK_CANVAS ? html : '') || BLANK_CANVAS);
+                          flashToast({ type: 'success', text: 'HTML source code copied to clipboard!' });
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shrink-0"
+                      >
+                        Copy HTML Code
+                      </button>
+                    </div>
+                    <textarea
+                      readOnly
+                      value={previewHtml || (html !== BLANK_CANVAS ? html : '') || BLANK_CANVAS}
+                      className="w-full flex-1 font-mono text-xs text-emerald-400 bg-slate-950 p-3 sm:p-4 rounded-xl border border-slate-800 focus:outline-none resize-none leading-relaxed shadow-inner"
+                    />
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+        </div>
+      </div>
+
+      {/* ================= TURN INTO TEMPLATE MODAL (White & Blue) ================= */}
+      {saveOpen && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-sm animate-editor-fade"
+          onClick={e => { if (e.target === e.currentTarget) setSaveOpen(false); }}
+        >
+          <div
+            className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-6 max-h-[92dvh] overflow-y-auto text-slate-900 animate-editor-rise"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-4 sm:mb-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0">
+                  <BookmarkPlus className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900">Turn into Template</h3>
+                  <p className="text-xs text-slate-500">Instantly publish to Templates Gallery & Campaigns</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSaveOpen(false)}
+                className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-900 transition-all shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Template Name *</label>
+                <input
+                  value={saveName}
+                  onChange={e => setSaveName(e.target.value)}
+                  placeholder="e.g. Austin Luxury Barbershop"
+                  className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-slate-300 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 transition-all"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Description (Optional)</label>
+                <textarea
+                  value={saveDescription}
+                  onChange={e => setSaveDescription(e.target.value)}
+                  placeholder="Brief description of the target niche and features…"
+                  rows={2}
+                  className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-slate-300 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 transition-all resize-none"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-semibold text-slate-700">Select Niche Industry *</label>
+                  <span className="text-[11px] text-slate-500">{(allNiches || []).length} Niches Synced</span>
+                </div>
+                <div className="flex flex-wrap gap-2 mb-3 transition-all animate-editor-fade max-h-48 overflow-y-auto pr-1">
+                  {(allNiches || []).map(n => (
+                    <button
+                      key={n.id}
+                      type="button"
+                      onClick={() => { setSelectedSaveNiche(n.id); setShowNewCat(false); }}
+                      className={`px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-bold transition-all border flex items-center gap-1.5 ${
+                        selectedSaveNiche === n.id ? 'bg-blue-600 text-white border-blue-600 shadow-sm scale-105' : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      <span className="text-sm">{n.emoji || getNicheEmoji(n.id)}</span>
+                      {n.label || n.id}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => { setShowNewCat(!showNewCat); }}
+                    className="px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-bold bg-slate-100 border border-dashed border-slate-300 text-blue-600 hover:text-blue-700 flex items-center gap-1 hover:bg-blue-50 transition-all"
+                  >
+                    <Plus className="w-3 h-3" /> Create New Niche
+                  </button>
+                </div>
+
+                {showNewCat && (
+                  <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5 animate-editor-fade">
+                    <div className="flex gap-2">
+                      <input
+                        value={saveNewCat}
+                        onChange={e => setSaveNewCat(e.target.value)}
+                        onKeyDown={async e => {
+                          if (e.key === 'Enter' && saveNewCat.trim()) {
+                            e.preventDefault();
+                            const clean = saveNewCat.trim();
+                            const created = await addNiche(clean);
+                            setSelectedSaveNiche(created.id);
+                            setSaveNewCat('');
+                            setShowNewCat(false);
+                            flashToast({ type: 'success', text: `Niche "${created.id}" created & synced across platform!` });
+                          }
+                        }}
+                        placeholder="New niche name (e.g. Pet Grooming, Accounting)…"
+                        className="flex-1 px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (saveNewCat.trim()) {
+                            const clean = saveNewCat.trim();
+                            const created = await addNiche(clean);
+                            setSelectedSaveNiche(created.id);
+                            setSaveNewCat('');
+                            setShowNewCat(false);
+                            flashToast({ type: 'success', text: `Niche "${created.id}" created & synced across platform!` });
+                          }
+                        }}
+                        className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm"
+                      >
+                        Add Niche
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-3 flex gap-3">
+                <button
+                  onClick={() => setSaveOpen(false)}
+                  className="flex-1 py-2.5 sm:py-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 text-xs sm:text-sm font-semibold hover:bg-slate-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving || !saveName.trim()}
+                  className="flex-1 py-2.5 sm:py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold shadow-md active:scale-[0.98] transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+                >
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  {saving ? 'Publishing…' : 'Publish Template'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingNicheMove && (
+        <div className="fixed inset-0 z-[190] flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-sm animate-editor-fade">
+          <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl sm:rounded-[2rem] shadow-2xl p-5 sm:p-8 text-slate-900 animate-editor-rise text-center space-y-5 relative">
+            <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 mx-auto">
+              <AlertCircle className="w-8 h-8" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-xl font-bold font-sans text-slate-900">Confirm Niche Reassignment</h3>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Are you sure you want to remove this template from <strong className="text-slate-900">{pendingNicheMove.fromNiche}</strong> and assign it to <strong className="text-blue-600">{pendingNicheMove.toNiche}</strong>?
+              </p>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setPendingNicheMove(null)}
+                className="flex-1 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  sfx.primary();
+                  await executeSave(pendingNicheMove.toNiche, pendingNicheMove.fromNiche);
+                }}
+                className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md transition-all active:scale-95"
+              >
+                Yes, Move Template
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {successMsg && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg bg-white border border-green-100 rounded-2xl sm:rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] p-6 sm:p-10 text-center space-y-5 sm:space-y-6 animate-celebrate-in relative">
+            <button
+              onClick={() => setSuccessMsg(null)}
+              className="absolute top-5 right-5 w-9 h-9 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-800 transition-all cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="w-20 h-20 rounded-full bg-green-50 border-4 border-green-100 flex items-center justify-center text-green-500 mx-auto animate-bounce">
+              <Check className="w-10 h-10 stroke-[3]" />
+            </div>
+            <div className="space-y-3">
+              <h3 className="text-2xl font-extrabold font-sans text-slate-900">Template Published!</h3>
+              <p className="text-sm font-semibold text-slate-600">"{successMsg.title}"</p>
+              <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-green-50 border border-green-100 text-sm font-bold text-green-700">
+                <span>Niche: {successMsg.niche}</span>
+              </div>
+            </div>
+            <p className="text-sm text-slate-500 leading-relaxed max-w-sm mx-auto">
+              Now live and synced across your Templates Gallery, Outreach Campaigns, and Site Deploy manager.
+            </p>
+            <button
+              onClick={() => setSuccessMsg(null)}
+              className="w-full py-4 rounded-2xl bg-green-600 hover:bg-green-700 text-white text-base font-bold shadow-lg shadow-green-500/20 transition-all active:scale-95 cursor-pointer"
+            >
+              Continue Vibe Coding
+            </button>
+          </div>
+        </div>
+      )}
+
+      {fullScreenPreview && (
+        <div className="fixed inset-0 z-[200] w-screen h-screen bg-white overflow-hidden animate-editor-fade">
+          {/* Zoom Out / Exit Full Screen button at TOP LEFT CORNER */}
+          <div className="absolute top-4 left-4 z-[210]">
+            <button
+              onClick={() => { sfx.close(); setFullScreenPreview(false); }}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/95 hover:bg-white text-slate-800 hover:text-blue-600 border border-slate-200/90 shadow-2xl backdrop-blur-md text-xs font-bold transition-all hover:scale-105 active:scale-95 group cursor-pointer"
+              title="Zoom out and exit full screen"
+            >
+              <Minimize2 className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
+              <span>Zoom Out</span>
+            </button>
+          </div>
+
+          <iframe
+            srcdoc={previewHtml || BLANK_CANVAS}
+            title="Full Screen Preview"
+            className="w-full h-full border-0 bg-white block"
+            style={{ width: '100vw', height: '100vh', border: 0 }}
+          />
+        </div>
+      )}
+
+      {generatingNewSite && (
+        <div className="fixed inset-0 z-[220] flex items-center justify-center bg-slate-900/40 backdrop-blur-md animate-editor-fade p-3 sm:p-4">
+          <div className="w-full max-w-md rounded-2xl sm:rounded-3xl bg-white border border-slate-200/90 p-5 sm:p-8 shadow-2xl text-center space-y-5 sm:space-y-6 animate-editor-rise">
+            <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center mx-auto text-blue-600 relative">
+              <div className="absolute inset-0 rounded-2xl bg-blue-500/10 animate-ping" />
+              <Code2 className="w-8 h-8 text-blue-600 relative z-10" />
+            </div>
+            
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-[11px] font-bold text-blue-700 uppercase tracking-widest">
+                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                {selectedModel} Synthesis Engine
+              </div>
+              <h3 className="text-xl font-bold font-serif text-slate-900 tracking-tight">
+                Synthesizing Bespoke Website
+              </h3>
+
+              {/* Website Name Box - Derived instantaneously from prompt while loading */}
+              <div className="px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-center gap-2 shadow-xs">
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Website:</span>
+                <span className="text-sm font-bold text-slate-900 truncate max-w-[260px]">
+                  {title || 'Bespoke Business Website'}
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-600 font-sans min-h-[28px] flex items-center justify-center">
+                {generatingStepText}
+              </p>
+            </div>
+
+            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden p-0.5">
+              <div className="bg-blue-600 h-full rounded-full animate-pulse w-3/4 transition-all duration-500" />
+            </div>
+
+            <p className="text-[11px] text-slate-500 italic">
+              Preparing live interactive workspace & code generation environment…
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Rebranding Tests & Readiness Inspection Modal */}
+      {showRebrandModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-editor-fade">
+          <div className="w-full max-w-4xl max-h-[94dvh] sm:max-h-[92vh] flex flex-col bg-white border border-slate-200 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden animate-editor-rise">
+            
+            {/* Modal Header */}
+            <div className="flex items-start sm:items-center justify-between gap-2 px-4 py-3 sm:px-6 sm:py-4 bg-white border-b border-slate-200 shrink-0">
+              <div className="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0">
+                <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 ${
+                  isTemplateValidated ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-purple-50 text-purple-600 border border-purple-200'
+                }`}>
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900">Automated Rebranding & Readiness Suite</h3>
+                    {isTemplateValidated ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] sm:text-xs font-semibold">
+                        <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[2.5]" /> Approved for Saving
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[11px] sm:text-xs font-semibold">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-600" /> Verification Pending
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
+                    Verify complete dynamic rebranding fidelity, multi-market adaptability, and seamless client personalization.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowRebrandModal(false);
+                  setRebrandResultBiz1(null);
+                  setRebrandResultBiz2(null);
+                  setRebrandSuite(null);
+                  setReadinessScan(null);
+                  setTestRebrandMobileView(false);
+                }}
+                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-all cursor-pointer shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4 sm:space-y-6">
+              
+              {/* Readiness Score Card */}
+              {readinessScan && (
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-700">Readiness Score</span>
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                        readinessScan.isReady ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white'
+                      }`}>
+                        {readinessScan.score}%
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setShowReadinessDetails(!showReadinessDetails)}
+                      className="text-xs text-blue-600 hover:underline font-semibold cursor-pointer"
+                    >
+                      {showReadinessDetails ? 'Hide Checklist' : 'View Detailed Checklist'}
+                    </button>
+                  </div>
+
+                  {/* Certified 100% Fully Rebrandable Callout Card */}
+                  {readinessScan.isReady && (
+                    <div className="p-4 rounded-2xl bg-white border border-emerald-200/90 shadow-xs flex items-center gap-3.5">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center shrink-0">
+                        <Check className="w-5 h-5 stroke-[2.5]" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-slate-900 leading-tight">
+                          The template is fully dynamic, achieves a 100% score, and is approved for instant client rebranding.
+                        </p>
+                        <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                          All company branding, direct contact channels, and localized service regions dynamically personalize with complete fidelity.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Checklist Breakdown */}
+                  {showReadinessDetails && (
+                    <div className="space-y-3 pt-2 border-t border-slate-200">
+                      {readinessScan.failed.length > 0 && (
+                        <div className="space-y-2">
+                          <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Suggested AI Fixes:</span>
+                          {readinessScan.failed.map((f, i) => {
+                            const fixPrompt = getCleanFixPrompt(`${f.label} ${f.explanation}`);
+                            return (
+                              <div key={i} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-xl bg-white border border-slate-200">
+                                <div className="text-xs text-slate-800 font-medium leading-relaxed flex-1">
+                                  {fixPrompt}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setInput(fixPrompt);
+                                    setShowRebrandModal(false);
+                                    setRebrandSuite(null);
+                                    setReadinessScan(null);
+                                    setTestRebrandMobileView(false);
+                                    flashToast({ type: 'success', text: 'Fix prompt loaded into chat! Press apply edit.' });
+                                    sfx.tap();
+                                  }}
+                                  className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shrink-0 cursor-pointer shadow-xs active:scale-[0.98]"
+                                >
+                                  Fix with AI in Chat
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {readinessScan.passed.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Verified Rebranding Benchmarks:</span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {readinessScan.passed.map((p, i) => (
+                              <div key={i} className="flex items-center gap-2 text-xs text-slate-800 bg-white border border-slate-200/90 px-3 py-2 rounded-xl">
+                                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 stroke-[2.5]" />
+                                <span className="truncate font-medium">{sanitizeCheckLabel(p.label)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Editable Test Business Details Form */}
+              <div className="p-3.5 sm:p-5 rounded-2xl bg-blue-50/50 border border-blue-100 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-blue-900">Configurable Test Business Profiles</h4>
+                    <p className="text-[11px] text-slate-500">Edit business info below and click Run Rebrand Test to verify dynamic rebranding.</p>
+                  </div>
+                  <div className="grid grid-cols-2 sm:flex items-center gap-1 bg-white p-1 rounded-xl border border-blue-200 w-full sm:w-auto">
+                    <button
+                      onClick={() => setActiveRebrandTab('biz1')}
+                      className={`px-2.5 sm:px-3 py-1.5 sm:py-1 rounded-lg text-xs font-bold transition-all cursor-pointer truncate text-center ${
+                        activeRebrandTab === 'biz1' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
+                      }`}
+                    >
+                      Business 1: {testBiz1.name.slice(0, 15)}...
+                    </button>
+                    <button
+                      onClick={() => setActiveRebrandTab('biz2')}
+                      className={`px-2.5 sm:px-3 py-1.5 sm:py-1 rounded-lg text-xs font-bold transition-all cursor-pointer truncate text-center ${
+                        activeRebrandTab === 'biz2' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
+                      }`}
+                    >
+                      Business 2: {testBiz2.name.slice(0, 15)}...
+                    </button>
+                  </div>
+                </div>
+
+                {activeRebrandTab === 'biz1' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-blue-200 shadow-xs">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Business Name 1</label>
+                      <input
+                        type="text"
+                        value={testBiz1.name}
+                        onChange={e => {
+                          setTestBiz1({ ...testBiz1, name: e.target.value });
+                          setRebrandResultBiz1(null);
+                        }}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Phone Number</label>
+                      <input
+                        type="text"
+                        value={testBiz1.phone}
+                        onChange={e => {
+                          setTestBiz1({ ...testBiz1, phone: e.target.value });
+                          setRebrandResultBiz1(null);
+                        }}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">City, State</label>
+                      <input
+                        type="text"
+                        value={testBiz1.city}
+                        onChange={e => {
+                          setTestBiz1({ ...testBiz1, city: e.target.value });
+                          setRebrandResultBiz1(null);
+                        }}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Street Address</label>
+                      <input
+                        type="text"
+                        value={testBiz1.address}
+                        onChange={e => {
+                          setTestBiz1({ ...testBiz1, address: e.target.value });
+                          setRebrandResultBiz1(null);
+                        }}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-blue-200 shadow-xs">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Business Name 2</label>
+                      <input
+                        type="text"
+                        value={testBiz2.name}
+                        onChange={e => {
+                          setTestBiz2({ ...testBiz2, name: e.target.value });
+                          setRebrandResultBiz2(null);
+                        }}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Phone Number</label>
+                      <input
+                        type="text"
+                        value={testBiz2.phone}
+                        onChange={e => {
+                          setTestBiz2({ ...testBiz2, phone: e.target.value });
+                          setRebrandResultBiz2(null);
+                        }}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">City, State</label>
+                      <input
+                        type="text"
+                        value={testBiz2.city}
+                        onChange={e => {
+                          setTestBiz2({ ...testBiz2, city: e.target.value });
+                          setRebrandResultBiz2(null);
+                        }}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Street Address</label>
+                      <input
+                        type="text"
+                        value={testBiz2.address}
+                        onChange={e => {
+                          setTestBiz2({ ...testBiz2, address: e.target.value });
+                          setRebrandResultBiz2(null);
+                        }}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {(() => {
+                  const currentRebrandResult = activeRebrandTab === 'biz1' ? rebrandResultBiz1 : rebrandResultBiz2;
+                  return (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
+                      <span className="text-xs text-slate-500">
+                        {currentRebrandResult ? (
+                          <span className="inline-flex items-center gap-1.5 font-bold text-emerald-700">
+                            <Check className="w-3.5 h-3.5 stroke-[2.5] text-emerald-600" /> Rebrand verification completed for {activeRebrandTab === 'biz1' ? 'Business 1' : 'Business 2'}.
+                          </span>
+                        ) : (
+                          <span>Ready to test {activeRebrandTab === 'biz1' ? 'Business 1' : 'Business 2'} ({activeRebrandTab === 'biz1' ? testBiz1.name : testBiz2.name}).</span>
+                        )}
+                      </span>
+                      <button
+                        onClick={handleRunRebrandTests}
+                        disabled={isTestingRebrand}
+                        className="w-full sm:w-auto justify-center inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {isTestingRebrand ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <Play className="w-4 h-4" />}
+                        <span>
+                          {isTestingRebrand
+                            ? 'Rebranding in Progress…'
+                            : currentRebrandResult
+                            ? 'Re-test Current Business'
+                            : `Run Rebrand Test for ${activeRebrandTab === 'biz1' ? 'Business 1' : 'Business 2'}`}
+                        </span>
+                      </button>
+                    </div>
+                  );
+                })()}
+
+                {/* Rebranding In-Progress Card with Animated Progress and White Brand-Consistent Logs */}
+                {isTestingRebrand && (
+                  <div className="p-5 rounded-2xl bg-white border border-blue-200 shadow-sm space-y-4 animate-fade-in mt-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0">
+                          <Layers className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200/60">
+                              Rebrand Engine
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-medium truncate">
+                              Multi-Brand Synthesis
+                            </span>
+                          </div>
+                          <h4 className="text-sm font-bold text-slate-900 mt-0.5 leading-tight">
+                            Rebranding site in progress…
+                          </h4>
+                          <p className="text-xs text-slate-600 truncate font-sans">
+                            {rebrandLogStep}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-bold">Progress</span>
+                          <span className="text-xl font-bold font-mono text-blue-600 leading-none">{rebrandProgressPercent}%</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden p-0.5 border border-slate-200 shadow-inner">
+                      <div
+                        className="bg-gradient-to-r from-blue-600 to-indigo-600 h-full rounded-full transition-all duration-200 ease-out"
+                        style={{ width: `${rebrandProgressPercent}%` }}
+                      />
+                    </div>
+
+                    {/* White, Brand-Consistent Live Streaming Logs Box */}
+                    <div className="rounded-xl bg-slate-50/90 text-slate-800 p-3.5 font-mono text-xs shadow-inner space-y-1.5 border border-slate-200 max-h-48 overflow-y-auto">
+                      <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200 text-[11px] text-slate-500 font-sans">
+                        <div className="flex items-center gap-2 font-mono">
+                          <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+                          <span className="font-semibold text-slate-700 text-[11px]">lunao-rebrand-engine.log</span>
+                        </div>
+                        <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200/50">
+                          Live Stream
+                        </span>
+                      </div>
+                      {rebrandLogs.map((log, idx) => (
+                        <div key={idx} className="flex items-start gap-2 leading-relaxed animate-fade-in">
+                          <span className="text-slate-400 select-none text-[10px] shrink-0 font-mono">
+                            {new Date().toISOString().slice(11, 19)}
+                          </span>
+                          <span className={log.includes('[Certified]') ? 'text-emerald-700 font-bold' : log.includes('Synthesizing') ? 'text-blue-700 font-medium' : 'text-slate-700'}>
+                            {log}
+                          </span>
+                        </div>
+                      ))}
+                      <div className="flex items-center gap-2 text-blue-600 pt-1 text-[11px] font-sans">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                        <span className="animate-pulse">Synthesizing personalized branding and layout coordinates…</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Active Business Rebrand Test Result & Live Simulation Preview */}
+              {(() => {
+                const currentTest = activeRebrandTab === 'biz1' ? rebrandResultBiz1 : rebrandResultBiz2;
+                if (!currentTest) return null;
+
+                return (
+                  <div className="space-y-4 pt-2 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-bold text-slate-900">Rebranding Verification Results & Live Simulation</h4>
+                    </div>
+
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-xs space-y-4 p-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-slate-900">{currentTest.business.name}</span>
+                            <span className="text-xs text-slate-500">• {currentTest.business.city}</span>
+                          </div>
+                          <div className="text-xs text-slate-600 font-medium mt-1 flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                            <span>Live Brand Simulation Preview</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+                            <button
+                              onClick={() => setTestRebrandMobileView(false)}
+                              className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                                !testRebrandMobileView ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                            >
+                              Desktop
+                            </button>
+                            <button
+                              onClick={() => setTestRebrandMobileView(true)}
+                              className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                                testRebrandMobileView ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                            >
+                              <span className="inline-flex items-center gap-1">
+                                <Smartphone className="w-3 h-3" /> Mobile View
+                              </span>
+                            </button>
+                          </div>
+                          {currentTest.passed ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold">
+                              <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[2.5]" /> Rebrand Verified
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-100 text-red-800 text-xs font-bold">
+                              <AlertCircle className="w-3.5 h-3.5" /> Issues Found ({currentTest.issues.length})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {currentTest.issues.length > 0 && (
+                        <div className="space-y-2">
+                          {currentTest.issues.map((iss, i) => {
+                            const fixPrompt = getCleanFixPrompt(iss);
+                            return (
+                              <div key={i} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                                <div className="text-xs text-slate-800 font-medium leading-relaxed flex-1">
+                                  {fixPrompt}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setInput(fixPrompt);
+                                    setShowRebrandModal(false);
+                                    setRebrandResultBiz1(null);
+                                    setRebrandResultBiz2(null);
+                                    setRebrandSuite(null);
+                                    setReadinessScan(null);
+                                    setTestRebrandMobileView(false);
+                                    flashToast({ type: 'success', text: 'Fix prompt loaded into chat! Press apply edit.' });
+                                    sfx.tap();
+                                  }}
+                                  className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shrink-0 cursor-pointer shadow-xs active:scale-[0.98]"
+                                >
+                                  Fix with AI in Chat
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Interactive Rebranded Preview iframe with Mobile / Desktop toggle */}
+                      <div className="space-y-1.5 flex flex-col items-center">
+                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider self-start">Live Rebranded Output Simulation ({currentTest.business.name}):</span>
+                        <div className={`transition-all duration-300 border border-slate-200 rounded-2xl overflow-hidden bg-slate-50 relative shadow-inner ${
+                          testRebrandMobileView ? 'w-full max-w-[375px] sm:w-[375px] h-[480px] sm:h-[600px] shadow-2xl border-slate-400 ring-4 sm:ring-8 ring-slate-900/10 my-2' : 'w-full h-80'
+                        }`}>
+                          {testRebrandMobileView && (
+                            <div className="w-full bg-slate-900 text-white text-[10px] py-1 px-3 flex items-center justify-between font-mono shrink-0">
+                              <span>iPhone 15 Pro</span>
+                              <div className="w-12 h-1.5 bg-slate-700 rounded-full" />
+                              <span>9:41 AM</span>
+                            </div>
+                          )}
+                          <iframe
+                            srcdoc={currentTest.rebrandedHtml}
+                            title={`Rebrand Preview ${currentTest.testNumber}`}
+                            className="w-full h-full border-0"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 px-4 py-3.5 sm:px-6 sm:py-4 bg-slate-50 border-t border-slate-200 shrink-0">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleRunRebrandTests}
+                  disabled={isTestingRebrand}
+                  className="w-full sm:w-auto justify-center inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-50 border border-blue-300 text-blue-700 hover:bg-blue-100 text-xs font-bold transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isTestingRebrand ? <Loader2 className="w-4 h-4 animate-spin text-blue-600" /> : <RefreshCw className="w-4 h-4 text-blue-600" />}
+                  <span>{isTestingRebrand ? 'AI Rebranding in Progress…' : 'Re-test Both Businesses'}</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setShowRebrandModal(false);
+                    setRebrandResultBiz1(null);
+                    setRebrandResultBiz2(null);
+                    setRebrandSuite(null);
+                    setReadinessScan(null);
+                    setTestRebrandMobileView(false);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-300 transition-all cursor-pointer text-center"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setShowRebrandModal(false);
+                    setRebrandResultBiz1(null);
+                    setRebrandResultBiz2(null);
+                    setRebrandSuite(null);
+                    setReadinessScan(null);
+                    setTestRebrandMobileView(false);
+                    openSave();
+                  }}
+                  disabled={!isTemplateValidated}
+                  className={`justify-center inline-flex items-center gap-2 px-3 sm:px-5 py-2.5 rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer ${
+                    isTemplateValidated
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                      : 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-60'
+                  }`}
+                >
+                  {!isTemplateValidated && <Lock className="w-3.5 h-3.5 shrink-0" />}
+                  <span className="truncate">Publish to Templates</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};

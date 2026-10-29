@@ -1,0 +1,692 @@
+================================================================================
+  LUNAO — COMPLETE PRODUCT FEATURES & CONTEXT GUIDE
+  For: Social Media Content Planning & LLM Context
+  Last Updated: June 2026
+================================================================================
+
+This file contains every feature, capability, and value proposition of Lunao.
+Use this as the master context file when planning social media content,
+writing Instagram captions, or feeding to an LLM before creating posts.
+
+Lunao is NOT just a website builder — it is a full client acquisition,
+retention, and scaling system for local service agencies.
+
+The product has three major pillars:
+  1. FIND clients (lead discovery + outreach)
+  2. WIN clients (instant website generation + SMS pitching)
+  3. KEEP clients (mobile app, bookings, chatbot, site editing, scaling tools)
+
+Every feature below plays an equally important role in this system.
+
+────────────────────────────────────────────────────────────────────────────────
+  THE CORE PROBLEM LUNAO SOLVES
+────────────────────────────────────────────────────────────────────────────────
+
+Local digital marketing agencies waste countless hours doing three painful
+things manually:
+
+  1. FINDING leads — Scrolling through Google Maps one by one, copying phone
+     numbers into spreadsheets, trying to figure out which businesses don't
+     have websites or have bad ones.
+
+  2. PITCHING leads — Manually building demo websites for each prospect,
+     writing personalized messages, sending texts one by one, tracking who
+     replied and who didn't.
+
+  3. RETAINING clients — After landing the client, juggling emails, calls,
+     missed bookings, no way for the client to manage their own site, no
+     chatbot, no booking system. Client churns in 3 months.
+
+Lunao solves all three in one dashboard. Find → Win → Keep.
+
+The result: agencies go from closing 2-3 clients a month (with 40+ hours of
+manual work) to closing 10-50+ clients a month with a fraction of the effort.
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 1: LEAD DISCOVERY & TARGETING
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - Agencies pick a niche (Barber, Salon, Dentist, HVAC, Gym, Roofing,
+    Real Estate — or any local service) and a city.
+  - Lunao scans local business databases and surfaces high-intent prospects:
+    businesses that don't have a website, have a bad one, or aren't
+    optimized for mobile.
+  - Each lead comes with the business name, owner, phone number, address,
+    Google rating, review count, and current website status.
+
+Pain point it solves:
+  - No more spending 3 hours on Google Maps per city copying business info
+    into a spreadsheet. Lunao does it in seconds.
+  - Only surfaces businesses that NEED help — not ones that already have
+    great websites. Every lead is pre-qualified.
+
+Why agencies love it:
+  - They can target specific cities and provinces — from Toronto to Austin
+    to Vancouver. Full geographic control.
+  - They can see exactly how many prospects are available before spending
+    any resources.
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 2: INSTANT WEBSITE GENERATION
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - Lunao generates a complete, premium, fully responsive website for any
+    local business in under 30 seconds.
+  - The site is personalized with the business's real name, city, phone
+    number, address, Google rating, reviews — everything pulled from the
+    lead data.
+  - 8 built-in industry-specific premium templates: Barber, Salon, Dentist,
+    HVAC, Gym, Roofing, Real Estate, and a second Barber variant.
+  - Each template is hand-designed with luxury aesthetics: custom Google
+    Fonts, niche-appropriate color palettes, smooth animations, full mobile
+    responsiveness, and professional copywriting.
+
+Pain point it solves:
+  - Agencies no longer need to hire a designer or spend hours in WordPress
+    building a demo site for each prospect. Lunao builds it automatically.
+  - The site looks so polished that prospects think the agency spent days
+    designing it — but it took 30 seconds.
+
+Why agencies love it:
+  - They can generate 50 unique, personalized websites in one campaign run
+    and have them all live on the internet immediately.
+  - Every site is deployed on a global edge CDN (Cloudflare Pages) with
+    instant SSL — loads blazing fast on any phone.
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 3: TEMPLATE LAB — AI-POWERED CUSTOM TEMPLATES
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - Beyond the 8 built-in templates, agencies can create unlimited custom
+    website templates using AI.
+  - Describe what you want in plain English: "A luxury dental clinic with
+    warm amber tones, a hero section with a booking CTA, and patient
+    testimonials." AI writes the complete HTML from scratch.
+  - Live preview updates in real-time as the AI builds. You see the site
+    appear section by section.
+  - Conversational editing: after the first generation, keep chatting to
+    make changes. "Make the hero taller." "Change the color to navy."
+    "Add a pricing section." Each instruction updates the live preview
+    instantly.
+  - Upload your own HTML: if you already have a website file, upload it
+    and AI automatically converts it into a Lunao-compatible template with
+    all the personalization tokens built in.
+  - Save any creation as a reusable template with categories and organize
+    them however you want.
+
+Pain point it solves:
+  - Not limited to 8 designs. Agencies can create templates for ANY niche,
+    ANY style, ANY industry — without touching code.
+  - No more paying freelance designers $200-500 per template.
+
+Why agencies love it:
+  - They can match any prospect's brand style in minutes.
+  - Custom templates are usable in campaigns just like built-in ones.
+  - Organized with categories: "Medical," "Home Services," "Luxury," etc.
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 4: SMS OUTREACH & AUTOMATED CAMPAIGNS
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - After generating websites for a batch of prospects, Lunao automatically
+    sends a personalized SMS to each business owner with a link to their
+    custom website.
+  - The message is fully customizable with dynamic tokens: the business
+    name, city, and live site URL are auto-inserted for each recipient.
+  - Example pitch: "Hi, we noticed {{business_name}} doesn't have a
+    website yet to showcase your services in {{city}}. We built a custom
+    preview for you — take a look: {{site_url}}. Reply YES to publish!"
+  - Real SMS delivery through professional telecom infrastructure.
+  - Delivery tracking: every message is tracked — sent, delivered, failed,
+    or replied.
+  - Automatic refunds: if a message fails to send (bad number, opt-out),
+    the credits are automatically refunded.
+
+Pain point it solves:
+  - No more copying phone numbers and sending texts one by one from your
+    personal phone.
+  - No more guessing whether the message was delivered — full transparency.
+  - No wasted money: failed sends = automatic refund.
+
+Why agencies love it:
+  - They can pitch 50 businesses in one click with personalized messages
+    and live website links. Response rates are dramatically higher than
+    cold emails because the prospect sees a live site built JUST for them.
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 5: CSV LEAD IMPORT
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - Agencies can upload a CSV spreadsheet of business leads (business name,
+    phone, city) and run campaigns against their own lists.
+  - Real-time validation: Lunao checks every row for required fields,
+    valid phone numbers, and duplicates before allowing a campaign launch.
+  - Works alongside the built-in lead finder — agencies can mix and match.
+
+Pain point it solves:
+  - Agencies who already have lead lists (from other tools, purchased
+    lists, or manual research) can immediately put them to work.
+  - No manual re-entry — drag, drop, launch.
+
+Why agencies love it:
+  - Flexibility. Use Lunao's lead finder OR your own lists — or both.
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 6: CAMPAIGN WIZARD (STEP-BY-STEP LAUNCH)
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - A guided 4-step wizard that walks agencies through launching a campaign:
+    Step 1: Pick the niche and template.
+    Step 2: Upload leads (CSV) or find them with the lead discovery tool.
+    Step 3: Write the SMS pitch with dynamic tokens.
+    Step 4: Review everything and launch.
+  - Real-time progress: after launch, watch sites deploy and messages send
+    in a live feed with status updates for each lead.
+  - Credit guard: the system blocks launches if you don't have enough
+    credits, showing exactly how many you need vs. what you have.
+  - Celebration animation when the campaign completes successfully.
+
+Pain point it solves:
+  - Even non-technical people can run sophisticated outreach campaigns.
+  - No confusing settings — just follow the steps.
+
+Why agencies love it:
+  - From zero to "50 businesses pitched with live websites" in under
+    5 minutes. That's the power of the wizard.
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 7: AI SITE EDITOR
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - After a site is deployed, the agency can open it in the built-in editor.
+  - Direct editing: click any text on the site to edit it. Click any image
+    to replace it (paste a URL or upload from your computer).
+  - AI editing: type an instruction in natural language — "Change the
+    headline to 'Austin's Premier Barber'" or "Make the call-to-action
+    button bigger and orange" — and AI rewrites the site live.
+  - Desktop/mobile preview toggle: see how the site looks on both devices
+    before redeploying.
+  - One-click redeploy: after editing, push the updated site live instantly.
+
+Pain point it solves:
+  - No need to know HTML, CSS, or use WordPress. Anyone can edit a live
+    website with text instructions or point-and-click.
+  - Clients can request changes ("make my phone number bigger") and the
+    agency can do it in 10 seconds, not 30 minutes.
+
+Why agencies love it:
+  - Impress clients with instant turnaround on site edits.
+  - AI handles the code — the agency just describes what they want.
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 8: BOOKING WIDGET (ADD-ON FOR CLIENT SITES)
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - With one toggle, Lunao injects a professional booking widget into any
+    deployed client site.
+  - The widget matches the site's brand: same colors, fonts, and styling.
+    It doesn't look like a third-party plugin — it looks native.
+  - Visitors to the business's website can book appointments directly:
+    name, phone, service, date, and time.
+  - Bookings are stored in the Lunao dashboard and the Owner App.
+  - Per-niche service menus: each industry gets relevant service options
+    (haircuts for barbers, cleanings for dentists, AC repair for HVAC, etc.)
+
+Pain point it solves:
+  - Businesses don't need to pay $30-50/month for a separate booking tool
+    like Calendly or Acuity. It's built into their Lunao site.
+  - The agency adds more value to their service — it's not just a website,
+    it's a website WITH a booking system.
+
+Why agencies love it:
+  - Higher client retention: when the client's customers are booking
+    through the site, the client can't leave without losing their
+    booking system.
+  - One-click activation. No configuration needed.
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 9: AI CHATBOT (ADD-ON FOR CLIENT SITES)
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - A smart chatbot that appears on the client's website and guides
+    visitors through the booking process conversationally.
+  - Collects: name → service → date → time → phone number, one step
+    at a time, in a natural chat flow.
+  - When powered by Gemini AI, responses are warm, persuasive, and natural.
+    Without AI, a reliable rule-based system still works perfectly.
+  - Automatically creates a booking when all details are collected.
+  - Conversation transcripts are saved and viewable in the dashboard.
+
+Pain point it solves:
+  - 70%+ of website visitors leave without taking action. The chatbot
+    engages them before they bounce.
+  - Small businesses can't afford to hire a receptionist to answer every
+    inquiry 24/7. The chatbot does it automatically.
+
+Why agencies love it:
+  - The chatbot makes the agency's offering more premium: "We don't just
+    build you a website — we give you a 24/7 AI receptionist."
+  - More bookings = happier clients = longer retention.
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 10: OWNER APP (MOBILE COMPANION FOR CLIENTS)
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - A premium mobile app (iOS + Android) that the agency gives to their
+    clients after building their site.
+  - The client logs in with a simple invite code (LUNAO-XXXX-XXXX) — no
+    email, no password, no friction.
+  - Home dashboard: stats, recent activity, at-a-glance health of their
+    online presence.
+  - Bookings management: see all incoming bookings, confirm or cancel,
+    call or text the customer directly.
+  - Conversations: read every chatbot transcript from their website.
+  - Site editor: preview their live site in-app, tap text or images to
+    edit, save and redeploy — all from their phone.
+  - Settings: manage their profile, notifications, sounds, and theme.
+  - Dynamic theming: the app's colors and branding automatically match
+    the client's business niche (gold for barbers, teal for dentists,
+    amber for HVAC, etc.)
+  - Sound design and haptic feedback on every interaction for a premium
+    feel.
+  - Push notifications for new bookings (coming soon — currently polls).
+  - Works even when the backend is temporarily unavailable (graceful
+    degradation with fallback states).
+
+Pain point it solves:
+  - Agencies finally have something tangible to hand the client: "Here's
+    YOUR app. Manage your website, bookings, and chats from your pocket."
+  - Clients feel like they're getting enterprise-level software, not just
+    a static website.
+  - No more "can you check my bookings?" emails — the client does it
+    themselves.
+
+Why agencies love it:
+  - Massive stickiness. Once the client is managing their business through
+    the app, switching away means losing their booking system, chatbot,
+    site editor, and data.
+  - It positions the agency as a premium provider, not just "someone who
+    made me a website."
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 11: INVITE CODE SYSTEM (CLIENT HANDOFF)
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - After building a client's site, the agency generates a unique invite
+    code (LUNAO-XXXX-XXXX) from inside the dashboard.
+  - They share this code with the client via SMS, email, or QR code.
+  - The client enters the code in the Owner App and instantly gets access
+    to their site, bookings, chatbot, and editor — scoped to THEIR
+    business only.
+  - Multi-device support: generate multiple codes for the same site
+    (owner's phone, partner's tablet, etc.)
+  - Active code tracking: see which codes are active, when they were last
+    used, and how many times they've been redeemed.
+  - Revoke anytime: if a client leaves or a device is lost, revoke the
+    code and they're locked out on next refresh.
+
+Pain point it solves:
+  - Clean, professional client handoff. No "send me your email and I'll
+    add you to the system." Just a code.
+  - Security: codes are scoped to one specific site. A client can't see
+    other businesses.
+
+Why agencies love it:
+  - The handoff moment is IMPRESSIVE. The client enters a code and
+    instantly has a fully loaded mobile app for their business.
+  - It looks like the agency built them a custom app — but it took 5
+    seconds to generate the code.
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 12: CREDIT ECONOMY & TRANSPARENT PRICING
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - Lunao runs on a simple credit system: every action costs a clear
+    number of credits.
+  - Lead discovery: 1 credit per 3 leads found.
+  - Outreach per business: 4 credits (1 for website generation + 3 for
+    SMS delivery).
+  - Custom AI template: 2 credits per generation.
+  - Full transparency: the ledger shows every charge, refund, and top-up.
+  - Automatic refunds: if an SMS fails or a site fails to generate, the
+    credits are returned instantly.
+  - 5 plan tiers:
+      Free ($0)     — 5 credits, sandbox testing.
+      Starter ($29) — 300 credits, single niche/city testing.
+      Growth ($79)  — 1,000 credits, consistent outreach.
+      Pro ($149)    — 3,000 credits, unlimited cities, bring your own API keys.
+      Agency ($299) — 7,000 credits, full automation suite, multi-client.
+
+Pain point it solves:
+  - No hidden fees. Agencies know exactly what every action costs before
+    they commit.
+  - If something fails, they get their money back automatically.
+
+Why agencies love it:
+  - Predictable costs. A 50-lead campaign costs exactly 200 credits
+    (50 × 4). No surprises.
+  - Free plan lets them test everything before committing.
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 13: REAL-TIME DASHBOARD & CAMPAIGN ANALYTICS
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - A command-center-style dashboard showing:
+    • Total sites generated (all campaigns combined).
+    • Total SMS messages sent.
+    • Recent campaigns with status (Active, Completed, Queued, Crashed).
+    • Deployed sites directory: searchable list of every live site with
+      business name, phone, niche, campaign source, and live URL.
+  - Campaign filtering: filter by status to see only active, completed,
+    queued, or failed campaigns.
+  - One-click access: click any deployed site to open it in the editor,
+    visit the live URL, or copy the link.
+
+Pain point it solves:
+  - Agencies running 10+ campaigns lose track. The dashboard gives them
+    a single pane of glass to see everything.
+
+Why agencies love it:
+  - They can pull up any client's site in 2 seconds. Perfect for client
+    calls: "Let me pull up your site right now..."
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 14: MESSAGING CENTER & SMS LOG
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - A dedicated section showing every SMS sent across all campaigns.
+  - Delivery status tracking: queued → sent → delivered (or failed).
+  - Inbound reply handling: when a prospect texts back "YES," it's logged
+    and visible.
+  - Full audit trail: Telnyx message IDs, timestamps, error codes for
+    failed sends.
+
+Pain point it solves:
+  - "Did that text actually send? Did they get it?" — Lunao shows you.
+  - No more guessing which prospects replied and which didn't.
+
+Why agencies love it:
+  - Complete visibility into their outreach pipeline. They can follow up
+    intelligently because they know exactly who received the message.
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 15: SUBSCRIPTION & BILLING MANAGEMENT
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - Full settings panel with:
+    • Profile management (name, email).
+    • Plan switching — upgrade or downgrade instantly.
+    • Live credit balance display.
+    • SMS pipeline status (LIVE, DRY-RUN, or COMING SOON).
+    • Send test SMS: enter a phone number and send a real test message
+      to verify the pipeline is working.
+    • API key configuration for advanced users (Pro/Agency plans).
+
+Pain point it solves:
+  - Self-serve plan management. No support tickets to upgrade.
+  - Test before you commit: send yourself a test SMS before running
+    a campaign.
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 16: TEMPLATE GALLERY & NICHE-SPECIFIC DESIGNS
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - A visual gallery of all available templates: 8 built-in + unlimited
+    AI-generated custom ones.
+  - Each template has a live preview: see exactly what the finished site
+    looks like before selecting it for a campaign.
+  - Desktop and mobile preview toggle.
+  - Templates are organized by niche with visual previews.
+  - Custom templates show with an "AI" badge and violet accent to
+    distinguish them from built-in ones.
+
+Pain point it solves:
+  - Agencies can preview and compare templates before deciding which one
+    to use for a campaign.
+
+Why agencies love it:
+  - They can show prospects: "We have these designs — which one matches
+    your brand?" It makes the sales conversation easier.
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 17: SITE DEPLOYMENT ON GLOBAL CDN
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - Every website Lunao generates is deployed on Cloudflare Pages — a
+    global edge network with data centers in 300+ cities worldwide.
+  - Instant SSL certificates (https://) for every site.
+  - Near-zero load times: sites load in under 1 second on any device.
+  - Each business gets a unique, clean URL.
+
+Pain point it solves:
+  - Agencies don't need to manage hosting, SSL, domains, or server
+    infrastructure. Lunao handles all of it.
+  - Sites load fast everywhere — even on slow mobile connections.
+
+Why agencies love it:
+  - When the prospect taps the link in the SMS, the site loads instantly.
+    First impressions matter.
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 18: SOUND DESIGN & MICRO-INTERACTIONS
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - Every action in the dashboard has a carefully designed sound effect:
+    button clicks, successful saves, deployments, errors, celebrations.
+  - Smooth animations throughout: fade-ins, scale transitions, slide-ups,
+    and reveal animations.
+  - The dashboard feels alive and responsive — not static or stale.
+
+Pain point it solves:
+  - Most SaaS dashboards feel lifeless. Lunao feels premium and polished.
+
+Why agencies love it:
+  - The sound design makes the product feel like a high-end app, not a
+    cheap web tool. It reinforces that they're using something premium.
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 19: MULTI-NICHE SUPPORT (8+ INDUSTRIES)
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - Lunao supports any local service niche out of the box:
+    • Barber Shops
+    • Hair Salons
+    • Dental Clinics
+    • HVAC Companies
+    • Gyms & Fitness Centers
+    • Roofing Companies
+    • Real Estate Agencies
+    • Any other local service (via AI custom templates)
+  - Each niche has its own curated template, color palette, service menu,
+    and booking labels.
+
+Pain point it solves:
+  - Agencies aren't limited to one industry. They can serve barbers in
+    the morning and dentists in the afternoon.
+
+Why agencies love it:
+  - One subscription covers ALL their clients across ALL industries.
+
+────────────────────────────────────────────────────────────────────────────────
+  FEATURE 20: MARKETING-GRADE LANDING PAGE
+────────────────────────────────────────────────────────────────────────────────
+
+What it does:
+  - A fully designed, conversion-optimized landing page for Lunao itself:
+    • Hero section with strong value proposition.
+    • Social proof and testimonials.
+    • "How it works" step-by-step explanation.
+    • Pain points section targeting agency struggles.
+    • Use cases for different industries.
+    • Pricing breakdown with plan comparison.
+    • FAQ section.
+    • Call-to-action throughout.
+
+Pain point it solves:
+  - Agencies landing on the site immediately understand what Lunao does
+    and why they need it.
+
+────────────────────────────────────────────────────────────────────────────────
+  THE BIGGER VISION (COMING SOON — FUTURE ROADMAP)
+────────────────────────────────────────────────────────────────────────────────
+
+Lunao is not just a website builder or an outreach tool. It's designed to
+be the ENTIRE operating system for local service agencies. Here's what's
+on the roadmap:
+
+  • AI Outbound Calling Agents — Automated AI phone calls to prospects
+    on behalf of the agency. The AI pitches the service, handles
+    objections, and books meetings.
+
+  • Automated Instagram DM Outreach — Connect your Instagram and let
+    Lunao auto-DM prospects with personalized messages and website links.
+
+  • Google Maps API Integration — Live, real-time lead crawling from
+    Google Maps (currently uses a simulated discovery engine).
+
+  • Multi-Client CRM — Full client relationship management: track every
+    interaction, booking, payment, and conversation across all clients
+    in one place.
+
+  • White-Label Branding — Agencies can remove the Lunao brand and
+    present the platform as their own custom software to clients.
+
+  • Client Payments & Invoicing — Bill clients directly through Lunao
+    and track revenue per client.
+
+  • Review Management — Help clients get more Google reviews and respond
+    to existing ones.
+
+  • Advanced Reporting — Analytics on campaign performance, client
+    retention, revenue attribution, and more.
+
+The goal: agencies should NEVER need to leave Lunao. Every tool they
+need to find, win, and keep clients — all in one place.
+
+────────────────────────────────────────────────────────────────────────────────
+  KEY MESSAGING THEMES FOR SOCIAL MEDIA
+────────────────────────────────────────────────────────────────────────────────
+
+When creating content, consider rotating between these angles:
+
+  1. "Find Clients Faster"
+     - Lead discovery, Google Maps scanning, CSV import.
+     - Angle: Stop scrolling Google Maps for hours. Find 50 qualified
+       leads in your city in 30 seconds.
+
+  2. "Win Clients Instantly"
+     - Instant website generation, SMS outreach, live preview links.
+     - Angle: What if you could text 50 business owners a live website
+       built JUST for them — in one click?
+
+  3. "Keep Clients Forever"
+     - Owner App, booking widget, chatbot, invite codes, site editor.
+     - Angle: Your clients don't just get a website. They get an app,
+       a booking system, and a 24/7 AI receptionist.
+
+  4. "Scale Without Hiring"
+     - AI template generation, automated campaigns, credit economy.
+     - Angle: One person. 50 websites. 50 personalized pitches.
+       All before lunch. No team needed.
+
+  5. "Look Premium, Be Premium"
+     - Luxury templates, sound design, mobile app, CDN deployment.
+     - Angle: Your clients think you have a 10-person team. It's
+       just you and Lunao.
+
+  6. "No Code Required"
+     - AI editor, point-and-click editing, natural language instructions.
+     - Angle: Don't know HTML? Neither do most of our users. Just
+       type what you want and AI builds it.
+
+  7. "All-in-One System"
+     - Not just websites. Lead gen + outreach + sites + bookings +
+       chatbot + mobile app + analytics.
+     - Angle: Stop paying for 7 different tools. Lunao replaces them all.
+
+  8. "Transparent Pricing"
+     - Credit system, automatic refunds, free tier.
+     - Angle: Know exactly what you're paying for. Failed send? Instant
+       refund. No hidden fees. Ever.
+
+  9. "The Future is Coming"
+     - AI calling agents, Instagram DMs, CRM, white-label.
+     - Angle: What we have today is just the beginning. The roadmap
+       will blow your mind.
+
+  10. "Built for Agencies, Not Freelancers"
+      - Multi-niche, multi-city, multi-client. Scale to hundreds.
+      - Angle: Whether you serve 5 clients or 500, Lunao scales with you.
+
+────────────────────────────────────────────────────────────────────────────────
+  TARGET AUDIENCE
+────────────────────────────────────────────────────────────────────────────────
+
+Primary:
+  - Local digital marketing agencies (1-10 people)
+  - Freelance web designers serving local businesses
+  - B2B SaaS resellers and white-label agencies
+
+Secondary:
+  - Solo entrepreneurs starting a local marketing agency
+  - Existing agencies looking to add website services
+  - Marketing consultants who want to offer tangible deliverables
+
+Their common traits:
+  - They serve LOCAL businesses (brick and mortar, service-based)
+  - They're tired of manual, repetitive client acquisition work
+  - They want to look bigger and more professional than they are
+  - They value speed, automation, and premium aesthetics
+  - Price-sensitive but willing to pay for tools that save real time
+
+────────────────────────────────────────────────────────────────────────────────
+  COMPETITIVE ADVANTAGES
+────────────────────────────────────────────────────────────────────────────────
+
+  1. ALL-IN-ONE: No other tool combines lead finding + instant site gen +
+     SMS outreach + booking widget + chatbot + mobile app + AI editor
+     into one platform.
+
+  2. SPEED: Generate a personalized website in 30 seconds. Most
+     competitors take hours or days.
+
+  3. PERSONALIZATION AT SCALE: Every site is unique — business name,
+     city, phone, reviews — all auto-inserted. It's not a template
+     with blanks; it's a finished product.
+
+  4. MOBILE APP FOR CLIENTS: No competitor gives agencies a mobile app
+     to hand to their clients. This is a massive retention advantage.
+
+  5. AI EVERYWHERE: AI builds templates, AI edits sites, AI powers the
+     chatbot, AI will soon make phone calls. The platform gets smarter
+     over time.
+
+  6. PREMIUM AESTHETICS: The dashboard, the templates, the mobile app —
+     everything looks and feels premium. Sound design, animations,
+     luxury typography. It doesn't feel like a cheap tool.
+
+  7. TRANSPARENT PRICING: Credit-based with automatic refunds. No
+     hidden fees, no surprise charges.
+
+================================================================================
+  END OF FEATURES CONTEXT FILE
+================================================================================

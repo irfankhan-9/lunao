@@ -1,0 +1,2965 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
+  <title>Premium Luxury Fitness Facility | Iron Grit Fitness Brooklyn, NY</title>
+  <meta name="description" content="Reach your ultimate fitness goals with Iron Grit Fitness in Brooklyn, NY. State-of-the-art equipment, elite 1-on-1 personal training, group HIIT, and flexible membership programs. Claim your free pass today!">
+  <meta name="robots" content="index, follow">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Join Iron Grit Fitness | Premium Brooklyn, NY Gym">
+  <meta property="og:description" content="Transform your life with state-of-the-art equipment, master athletic trainers, and a high-performance fitness community.">
+  <meta property="og:type" content="website">
+
+  <!-- Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    /* -------------------------------------
+       CSS RESET & VARIABLES
+       ------------------------------------- */
+    :root {
+      --primary: #111827;       /* Dark charcoal slate */
+      --secondary: #EF4444;     /* Energy Red */
+      --secondary-hover: #DC2626;
+      --accent: #F59E0B;        /* Gold Peak */
+      --success: #22C55E;       /* High performance green */
+      --light: #F8FAFC;         /* Crisp premium light grey */
+      --white: #FFFFFF;
+      --white-mid: #94A3B8;     /* Muted body text */
+      --rule: 1px solid rgba(255, 255, 255, 0.1);
+      
+      --font-bebas: 'Bebas Neue', sans-serif;
+      --font-inter: 'Inter', sans-serif;
+      
+      --r-sm: 8px;
+      --r-md: 16px;
+      --r-lg: 24px;
+      --r-pill: 9999px;
+      
+      --t-base: 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      background-color: #0B0F19; /* High luxury depth black */
+      color: var(--white);
+      font-family: var(--font-inter);
+      overscroll-behavior-y: none;
+    }
+
+    body {
+      background-color: #0B0F19;
+      color: var(--white);
+      overflow-x: hidden;
+      line-height: 1.6;
+      font-size: 15px;
+      touch-action: pan-y;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    /* Luxury Separator Rule */
+    .sec-divider {
+      border-top: var(--rule);
+      width: 100%;
+    }
+
+    /* Container Standard */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 90px 24px;
+      width: 100%;
+    }
+
+    @media (max-width: 768px) {
+      .container {
+        padding: 56px 20px;
+      }
+    }
+
+    /* Typography */
+    h1, h2, h3, h4, .font-heading {
+      font-family: var(--font-bebas);
+      letter-spacing: 0.03em;
+      line-height: 1;
+      font-weight: 400;
+    }
+
+    /* Section Headers */
+    .section-num {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--secondary);
+      letter-spacing: 0.15em;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+
+    .section-title {
+      font-size: clamp(38px, 6vw, 72px);
+      text-transform: uppercase;
+      margin-bottom: 16px;
+      line-height: 0.95;
+    }
+
+    .section-desc {
+      font-size: 16px;
+      color: var(--white-mid);
+      max-width: 650px;
+      margin-bottom: 48px;
+    }
+
+    /* Button System */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 18px 32px;
+      border-radius: var(--r-sm);
+      text-decoration: none;
+      cursor: pointer;
+      transition: all var(--t-base);
+      border: none;
+      text-align: center;
+    }
+
+    .btn-primary {
+      background: var(--secondary);
+      color: var(--white);
+      box-shadow: 0 4px 20px rgba(239, 68, 68, 0.35);
+    }
+
+    .btn-primary:hover {
+      background: var(--secondary-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(239, 68, 68, 0.5);
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--white);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+    }
+
+    .btn-outline:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: var(--white);
+      transform: translateY(-2px);
+    }
+
+    /* -------------------------------------
+       SECTION 01 — LIMITED-TIME OFFER BAR
+       ------------------------------------- */
+    .promo-bar {
+      background: linear-gradient(90deg, #1E3A8A 0%, var(--secondary) 100%);
+      color: var(--white);
+      padding: 12px 16px;
+      text-align: center;
+      font-size: 13.5px;
+      font-weight: 700;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+      max-height: 80px;
+      opacity: 1;
+      transform: translateY(0);
+      transition: max-height 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease, padding 0.4s ease, transform 0.4s ease;
+      overflow: hidden;
+    }
+
+    .promo-bar.scrolled {
+      max-height: 0 !important;
+      opacity: 0 !important;
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+      transform: translateY(-100%);
+      pointer-events: none;
+    }
+
+    .promo-content {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .promo-badge {
+      background: var(--accent);
+      color: var(--primary);
+      padding: 2px 8px;
+      border-radius: var(--r-pill);
+      font-size: 10px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .promo-btn {
+      background: var(--white);
+      color: var(--primary);
+      font-size: 11px;
+      font-weight: 850;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 4px;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+
+    .promo-btn:hover {
+      background: var(--accent);
+      color: var(--primary);
+    }
+
+    @media (max-width: 640px) {
+      .promo-bar {
+        font-size: 11.5px;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px 12px;
+        max-height: 120px;
+      }
+      .promo-btn {
+        font-size: 10px;
+        padding: 3px 10px;
+      }
+    }
+
+    /* -------------------------------------
+       SECTION 02 — HEADER & NAVIGATION
+       ------------------------------------- */
+    header.site-header {
+      background: rgba(11, 15, 25, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: var(--rule);
+      position: sticky;
+      top: 45px; /* Offset for promo strip */
+      z-index: 999;
+      transition: top 0.4s cubic-bezier(0.16, 1, 0.3, 1), background var(--t-base);
+    }
+
+    @media (max-width: 640px) {
+      header.site-header {
+        top: 65px;
+      }
+    }
+
+    header.site-header.scrolled {
+      top: 0 !important;
+    }
+
+    .header-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 80px;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .logo {
+      font-family: var(--font-bebas);
+      font-size: 32px;
+      color: var(--white);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo-pt1 {
+      color: var(--white);
+    }
+
+    .logo-pt2 {
+      color: var(--secondary);
+    }
+
+    .desktop-nav {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+    }
+
+    .desktop-nav a {
+      color: var(--white-mid);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      transition: color var(--t-base);
+    }
+
+    .desktop-nav a:hover {
+      color: var(--white);
+    }
+
+    /* Hamburger Menu Toggle */
+    .hamburger {
+      display: none;
+      flex-direction: column;
+      justify-content: space-between;
+      width: 24px;
+      height: 18px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      z-index: 101;
+    }
+
+    .hamburger span {
+      display: block;
+      width: 100%;
+      height: 2px;
+      background: var(--white);
+      transition: all var(--t-base);
+    }
+
+    .hamburger.active span:nth-child(1) {
+      transform: translateY(8px) rotate(45deg);
+    }
+
+    .hamburger.active span:nth-child(2) {
+      opacity: 0;
+    }
+
+    .hamburger.active span:nth-child(3) {
+      transform: translateY(-8px) rotate(-45deg);
+    }
+
+    /* Mobile Nav Panel */
+    .mobile-menu {
+      position: absolute;
+      top: 100%;
+      left: 0; right: 0;
+      height: 100vh;
+      background: rgba(11, 15, 25, 0.98);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      display: flex;
+      flex-direction: column;
+      padding: 40px 24px;
+      gap: 24px;
+      transform: translateX(100%);
+      transition: transform var(--t-base);
+      border-top: var(--rule);
+      z-index: 98;
+    }
+
+    .mobile-menu.open {
+      transform: translateX(0);
+    }
+
+    .mobile-menu a {
+      font-size: 20px;
+      color: var(--white);
+      text-decoration: none;
+      font-weight: 700;
+      border-bottom: var(--rule);
+      padding-bottom: 12px;
+    }
+
+    @media (max-width: 768px) {
+      .desktop-nav {
+        display: none;
+      }
+      .hamburger {
+        display: flex;
+      }
+    }
+
+    /* -------------------------------------
+       SECTION 03 — HERO SECTION
+       ------------------------------------- */
+    .hero {
+      position: relative;
+      background: linear-gradient(to bottom, rgba(11, 15, 25, 0.45) 0%, rgba(11, 15, 25, 0.95) 100%),
+                  url('https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=1920&q=80') center/cover no-repeat;
+      min-height: 90vh;
+      display: flex;
+      align-items: center;
+      padding-top: 60px;
+    }
+
+    .hero-container {
+      position: relative;
+      z-index: 2;
+    }
+
+    .hero-content {
+      max-width: 800px;
+    }
+
+    .hero-title {
+      font-size: clamp(52px, 8vw, 110px);
+      text-transform: uppercase;
+      line-height: 0.9;
+      margin-bottom: 20px;
+      font-family: var(--font-bebas);
+    }
+
+    .hero-sub {
+      font-size: clamp(16px, 3.5vw, 24px);
+      color: var(--accent);
+      font-weight: 700;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+      letter-spacing: 0.05em;
+    }
+
+    .hero-bullets {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px 24px;
+      margin-bottom: 40px;
+      max-width: 600px;
+    }
+
+    .hero-bullet {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+      font-size: 16px;
+    }
+
+    .hero-bullet .check {
+      color: var(--secondary);
+      font-size: 18px;
+    }
+
+    .hero-btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 60px;
+    }
+
+    /* Trust Metric Row */
+    .hero-trust {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 40px;
+      border-top: var(--rule);
+      padding-top: 32px;
+    }
+
+    .trust-stat {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .trust-val {
+      font-family: var(--font-bebas);
+      font-size: 32px;
+      color: var(--white);
+    }
+
+    .trust-lbl {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--white-mid);
+    }
+
+    @media (max-width: 640px) {
+      .hero-bullets {
+        grid-template-columns: 1fr;
+      }
+      .hero-trust {
+        gap: 24px;
+      }
+    }
+
+    /* -------------------------------------
+       SECTION 04 — SOCIAL PROOF BAR
+       ------------------------------------- */
+    .social-bar {
+      background: #111827;
+      border-top: var(--rule);
+      border-bottom: var(--rule);
+      padding: 32px 24px;
+    }
+
+    .social-bar-grid {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      text-align: center;
+    }
+
+    .social-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .social-title {
+      font-family: var(--font-bebas);
+      font-size: clamp(32px, 4vw, 54px);
+      line-height: 1;
+      margin-bottom: 4px;
+      color: var(--secondary);
+    }
+
+    .social-subtitle {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: var(--white-mid);
+      letter-spacing: 0.1em;
+      font-weight: 700;
+    }
+
+    @media (max-width: 768px) {
+      .social-bar {
+        padding: 24px 16px;
+        overflow: hidden;
+      }
+      .social-bar-grid {
+        display: flex;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        gap: 16px;
+        padding: 4px 4px 12px 4px;
+        scrollbar-width: none; /* Hide scrollbars */
+        -webkit-overflow-scrolling: touch;
+        justify-content: flex-start;
+        text-align: center;
+      }
+      .social-bar-grid::-webkit-scrollbar {
+        display: none;
+      }
+      .social-item {
+        scroll-snap-align: start;
+        flex: 0 0 calc(70% - 8px); /* Card-like structure */
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 24px 16px;
+        border-radius: var(--r-md);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        transition: transform 0.2s ease;
+      }
+      .social-item:active {
+        transform: scale(0.98);
+      }
+    }
+
+    /* -------------------------------------
+       SECTION 05 — WHY CHOOSE US
+       ------------------------------------- */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+
+    .feature-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: var(--rule);
+      border-radius: var(--r-md);
+      padding: 40px 32px;
+      transition: all var(--t-base);
+    }
+
+    .feature-card:hover {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: var(--secondary);
+      transform: translateY(-4px);
+    }
+
+    .feature-icon {
+      font-size: 36px;
+      margin-bottom: 24px;
+    }
+
+    .feature-name {
+      font-size: 24px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      color: var(--white);
+    }
+
+    .feature-desc {
+      font-size: 14px;
+      color: var(--white-mid);
+    }
+
+    @media (max-width: 992px) {
+      .features-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+    @media (max-width: 640px) {
+      .features-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* -------------------------------------
+       SECTION 06 — MEMBERSHIP OPTIONS
+       ------------------------------------- */
+    .plans-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+      align-items: stretch;
+    }
+
+    .plan-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: var(--rule);
+      border-radius: var(--r-lg);
+      padding: 48px 32px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      transition: all var(--t-base);
+    }
+
+    .plan-card.highlight {
+      background: rgba(239, 68, 68, 0.03);
+      border-color: var(--secondary);
+      box-shadow: 0 8px 32px rgba(239, 68, 68, 0.08);
+    }
+
+    .plan-card:hover {
+      transform: translateY(-8px);
+    }
+
+    .plan-badge {
+      position: absolute;
+      top: 24px;
+      right: 24px;
+      background: var(--accent);
+      color: var(--primary);
+      text-transform: uppercase;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.1em;
+      padding: 4px 12px;
+      border-radius: var(--r-pill);
+    }
+
+    .plan-name {
+      font-size: 32px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .plan-desc {
+      font-size: 14px;
+      color: var(--white-mid);
+      margin-bottom: 32px;
+      min-height: 48px;
+    }
+
+    .plan-pricing {
+      margin-bottom: 32px;
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+
+    .plan-price {
+      font-family: var(--font-bebas);
+      font-size: 64px;
+      line-height: 1;
+      color: var(--white);
+    }
+
+    .plan-period {
+      font-size: 14px;
+      color: var(--white-mid);
+      font-weight: 600;
+    }
+
+    .plan-features {
+      list-style: none;
+      margin-bottom: 40px;
+      flex-grow: 1;
+    }
+
+    .plan-features li {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      color: var(--white-mid);
+      margin-bottom: 16px;
+    }
+
+    .plan-features li .yes {
+      color: var(--success);
+      font-weight: 850;
+    }
+
+    .plan-features li .no {
+      color: var(--secondary);
+      opacity: 0.5;
+    }
+
+    @media (max-width: 992px) {
+      .plans-grid {
+        grid-template-columns: 1fr;
+        max-width: 500px;
+        margin: 0 auto;
+      }
+    }
+
+    /* -------------------------------------
+       SECTION 07 — FITNESS SERVICES
+       ------------------------------------- */
+    .services-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+
+    .service-card {
+      background: rgba(255, 255, 255, 0.01);
+      border: var(--rule);
+      border-radius: var(--r-md);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: all var(--t-base);
+    }
+
+    .service-card:hover {
+      border-color: var(--secondary);
+      transform: translateY(-4px);
+    }
+
+    .service-img {
+      width: 100%;
+      height: 240px;
+      object-fit: cover;
+    }
+
+    .service-body {
+      padding: 32px;
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .service-title {
+      font-size: 28px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .service-desc {
+      font-size: 14px;
+      color: var(--white-mid);
+      margin-bottom: 24px;
+    }
+
+    @media (max-width: 992px) {
+      .services-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+    @media (max-width: 640px) {
+      .services-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* -------------------------------------
+       SECTION 08 — TRANSFORMATION GALLERY
+       ------------------------------------- */
+    .gallery-outer {
+      background: linear-gradient(180deg, rgba(11,15,25,1) 0%, rgba(17,24,39,1) 100%);
+    }
+
+    .slider-holder {
+      max-width: 800px;
+      margin: 0 auto;
+      position: relative;
+      aspect-ratio: 16 / 10;
+      border-radius: var(--r-lg);
+      overflow: hidden;
+      border: var(--rule);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    }
+
+    .slider-img {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      pointer-events: none;
+    }
+
+    .after-img {
+      z-index: 1;
+    }
+
+    .before-img-wrap {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+      overflow: hidden;
+      clip-path: polygon(0 0, 50% 0, 50% 100%, 0% 100%);
+    }
+
+    .before-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .slider-drag-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      width: 2px;
+      background: var(--secondary);
+      cursor: ew-resize;
+      z-index: 3;
+      transform: translateX(-50%);
+    }
+
+    .drag-handle {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 44px;
+      height: 44px;
+      background: var(--secondary);
+      border: 3px solid #000;
+      border-radius: var(--r-pill);
+      color: var(--white);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform: translate(-50%, -50%);
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+
+    .slider-label {
+      position: absolute;
+      bottom: 24px;
+      background: rgba(11, 15, 25, 0.85);
+      backdrop-filter: blur(8px);
+      padding: 6px 14px;
+      border-radius: var(--r-sm);
+      font-weight: 700;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      z-index: 4;
+    }
+
+    .label-before {
+      left: 24px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .label-after {
+      right: 24px;
+      border: 1px solid var(--secondary);
+    }
+
+    /* -------------------------------------
+       SECTION 09 — TRAINER SPOTLIGHT
+       ------------------------------------- */
+    .trainers-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+    }
+
+    .trainer-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: var(--rule);
+      border-radius: var(--r-md);
+      overflow: hidden;
+      transition: all var(--t-base);
+    }
+
+    .trainer-card:hover {
+      border-color: var(--secondary);
+      transform: translateY(-4px);
+    }
+
+    .trainer-media {
+      position: relative;
+      height: 320px;
+      overflow: hidden;
+    }
+
+    .trainer-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .trainer-info {
+      padding: 24px;
+    }
+
+    .trainer-specialty {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 4px;
+    }
+
+    .trainer-name {
+      font-size: 26px;
+      line-height: .95;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .trainer-certs {
+      font-size: 11px;
+      color: var(--white-mid);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .trainer-bio {
+      font-size: 13px;
+      color: var(--white-mid);
+      line-height: 1.5;
+    }
+
+    @media (max-width: 992px) {
+      .trainers-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+    @media (max-width: 640px) {
+      .trainers-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* -------------------------------------
+       SECTION 10 — MEMBER REVIEWS
+       ------------------------------------- */
+    .reviews-carousel-outer {
+      background: #111827;
+      overflow-x: hidden;
+    }
+
+    .reviews-wrapper {
+      position: relative;
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 20px 0;
+    }
+
+    .reviews-carousel {
+      display: flex;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      transition: all 0.5s ease;
+    }
+
+    .reviews-carousel::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* Absolute circular design requested for mobile viewports */
+    .review-card {
+      min-width: 100%;
+      scroll-snap-align: center;
+      flex: 0 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px;
+      position: relative;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Circle design container for text matching mobile UI guidelines */
+    .review-circle-bg {
+      width: 440px;
+      height: 440px;
+      background: radial-gradient(circle at center, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+      border: 3px solid rgba(239, 68, 68, 0.25);
+      border-radius: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 48px;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+      transition: transform var(--t-base);
+    }
+
+    @media (max-width: 500px) {
+      .review-circle-bg {
+        width: 320px;
+        height: 320px;
+        padding: 24px;
+        border-width: 2px;
+      }
+    }
+
+    .review-author-avatar {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid var(--secondary);
+      margin-bottom: 16px;
+    }
+
+    @media (max-width: 500px) {
+      .review-author-avatar {
+        width: 52px;
+        height: 52px;
+        margin-bottom: 8px;
+      }
+    }
+
+    .review-author-name {
+      font-family: var(--font-bebas);
+      font-size: 24px;
+      line-height: 1;
+      margin-bottom: 4px;
+      color: var(--white);
+    }
+
+    .review-author-goal {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 14px;
+      font-weight: 700;
+    }
+
+    .review-text {
+      font-size: 13.5px;
+      color: var(--white-mid);
+      line-height: 1.5;
+      font-style: italic;
+      display: -webkit-box;
+      -webkit-line-clamp: 5;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+
+    @media (max-width: 500px) {
+      .review-text {
+        font-size: 11px;
+        -webkit-line-clamp: 4;
+        margin-bottom: 8px;
+      }
+    }
+
+    .review-stars-block {
+      color: var(--accent);
+      font-size: 15px;
+    }
+
+    /* Left - Right absolute controls */
+    .reviewer-nav {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 50px;
+      height: 50px;
+      border-radius: var(--r-sm);
+      background: var(--primary);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: var(--white);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 5;
+      font-size: 22px;
+      transition: all var(--t-base);
+    }
+
+    .reviewer-nav.prev-btn {
+      left: -20px;
+    }
+
+    .reviewer-nav.next-btn {
+      right: -20px;
+    }
+
+    .reviewer-nav:hover {
+      background: var(--secondary);
+      border-color: var(--secondary);
+      color: white;
+    }
+
+    @media (max-width: 768px) {
+      .reviewer-nav {
+        display: none;
+      }
+    }
+
+    /* Dots indicator */
+    .review-dots {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .dots-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.2);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .dots-indicator.active {
+      background: var(--secondary);
+      transform: scale(1.2);
+    }
+
+    /* -------------------------------------
+       SECTION 11 — FREE TRIAL FORM
+       ------------------------------------- */
+    .form-section {
+      background: linear-gradient(135deg, rgba(11,15,25,1) 0%, rgba(31,41,55,0.3) 100%);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: center;
+    }
+
+    .form-box {
+      background: rgba(255,255,255,0.02);
+      border: var(--rule);
+      border-radius: var(--r-lg);
+      padding: 48px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.3);
+      position: relative;
+    }
+
+    .form-box label {
+      display: block;
+      font-weight: 700;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+      color: var(--white);
+    }
+
+    .form-group {
+      margin-bottom: 24px;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 16px 20px;
+      background: rgba(11, 15, 25, 0.7);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: var(--r-sm);
+      color: var(--white);
+      font-family: inherit;
+      font-size: 14px;
+      transition: all var(--t-base);
+    }
+
+    .form-control:focus {
+      outline: none;
+      border-color: var(--secondary);
+      background: rgba(11, 15, 25, 0.95);
+    }
+
+    .success-alert {
+      display: none;
+      text-align: center;
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid var(--success);
+      padding: 24px;
+      border-radius: var(--r-md);
+      color: var(--white);
+      margin-bottom: 24px;
+    }
+
+    .success-alert h3 {
+      font-size: 28px;
+      margin-bottom: 8px;
+    }
+
+    @media (max-width: 992px) {
+      .form-grid {
+        grid-template-columns: 1fr;
+        gap: 40px;
+      }
+    }
+    @media (max-width: 640px) {
+      .form-box {
+        padding: 24px;
+      }
+    }
+
+    /* -------------------------------------
+       SECTION 12 — FAQ
+       ------------------------------------- */
+    .faq-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      align-items: start;
+    }
+
+    .faq-col {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .faq-item {
+      background: rgba(255, 255, 255, 0.02);
+      border: var(--rule);
+      border-radius: var(--r-md);
+      overflow: hidden;
+      transition: all var(--t-base);
+    }
+
+    .faq-head {
+      padding: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .faq-head p {
+      font-weight: 700;
+      font-size: 16px;
+    }
+
+    .faq-icon {
+      font-size: 18px;
+      transition: transform var(--t-base);
+      color: var(--secondary);
+    }
+
+    .faq-body {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height var(--t-base);
+    }
+
+    .faq-content {
+      padding: 0 24px 24px 24px;
+      font-size: 14px;
+      color: var(--white-mid);
+      line-height: 1.6;
+    }
+
+    .faq-item.active {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    .faq-item.active .faq-icon {
+      transform: rotate(45deg);
+    }
+
+    @media (max-width: 768px) {
+      .faq-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* -------------------------------------
+       SECTION 13 — BLOG CENTER
+       ------------------------------------- */
+    .blogs-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+    }
+
+    .blog-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: var(--rule);
+      border-radius: var(--r-md);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      transition: all var(--t-base);
+      cursor: pointer;
+    }
+
+    .blog-card:hover {
+      border-color: var(--secondary);
+      transform: translateY(-4px);
+    }
+
+    .blog-header {
+      height: 200px;
+      position: relative;
+    }
+
+    .blog-hero {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .blog-tag {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      background: var(--secondary);
+      padding: 4px 10px;
+      border-radius: var(--r-pill);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .blog-info {
+      padding: 24px;
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .blog-title {
+      font-size: 26px;
+      text-transform: uppercase;
+      line-height: 1.05;
+      margin-bottom: 12px;
+    }
+
+    .blog-excerpt {
+      font-size: 13.5px;
+      color: var(--white-mid);
+      margin-bottom: 20px;
+      line-clamp: 3;
+    }
+
+    .blog-meta {
+      font-family: var(--font-bebas);
+      font-size: 14px;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    @media (max-width: 992px) {
+      .blogs-grid {
+        grid-template-columns: 1fr;
+        max-width: 500px;
+        margin: 0 auto;
+      }
+    }
+
+    /* Modal Overlay */
+    #blog-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(11, 15, 25, 0.98);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      z-index: 2000;
+      transform: translateY(100%);
+      transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #blog-overlay.open {
+      transform: translateY(0);
+    }
+
+    .blog-close-btn {
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--secondary);
+      border: none;
+      color: var(--white);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2010;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    .blog-modal-header {
+      background-size: cover;
+      background-position: center;
+      padding: 120px 24px;
+      position: relative;
+      text-align: center;
+    }
+
+    .blog-modal-header::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(0deg, rgba(11,15,25,1) 0%, rgba(11,15,25,0.4) 100%);
+    }
+
+    .blog-modal-container {
+      max-width: 800px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 2;
+    }
+
+    .blog-modal-body {
+      padding: 60px 24px;
+      font-size: 16px;
+      line-height: 1.8;
+      color: var(--white-mid);
+    }
+
+    .blog-modal-body h1, .blog-modal-body h2, .blog-modal-body h3 {
+      font-family: var(--font-bebas);
+      font-size: clamp(28px, 4vw, 44px);
+      color: var(--white);
+      margin: 32px 0 16px;
+      text-transform: uppercase;
+    }
+
+    .blog-modal-body p {
+      margin-bottom: 24px;
+    }
+
+    /* -------------------------------------
+       SECTION 14 — FACILITY LOCATION
+       ------------------------------------- */
+    .map-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      align-items: center;
+    }
+
+    .map-placeholder {
+      width: 100%;
+      height: 400px;
+      background: radial-gradient(circle at center, rgba(30,41,59,0.8) 0%, rgba(15,23,42,0.95) 100%);
+      border: var(--rule);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .map-backdrop {
+      width: 100%;
+      height: 100%;
+      background-image: url('https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=1200&q=80');
+      background-size: cover;
+      background-position: center;
+      opacity: 0.15;
+      filter: grayscale(1);
+    }
+
+    .map-pin {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      z-index: 2;
+    }
+
+    .map-pin-icon {
+      font-size: 40px;
+      animation: bounce 2s infinite;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+
+    .map-label {
+      background: var(--primary);
+      border: 1px solid var(--secondary);
+      padding: 8px 16px;
+      border-radius: var(--r-sm);
+      margin-top: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .landmark-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .landmark-item {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .landmark-icon {
+      font-size: 20px;
+      background: rgba(239, 68, 68, 0.1);
+      padding: 8px;
+      border-radius: 8px;
+      color: var(--secondary);
+    }
+
+    @media (max-width: 768px) {
+      .map-grid {
+        grid-template-columns: 1fr;
+        gap: 40px;
+      }
+    }
+
+    /* -------------------------------------
+       SECTION 15 — FOOTER
+       ------------------------------------- */
+    footer {
+      background: #080A11;
+      border-top: var(--rule);
+      padding: 80px 24px 40px 24px;
+    }
+
+    .footer-grid {
+      max-width: 1200px;
+      margin: 0 auto 60px auto;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 40px;
+    }
+
+    .footer-col h4 {
+      font-size: 24px;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+
+    .footer-col ul {
+      list-style: none;
+    }
+
+    .footer-col ul li {
+      margin-bottom: 12px;
+    }
+
+    .footer-col ul li a {
+      color: var(--white-mid);
+      text-decoration: none;
+      font-size: 14px;
+      transition: color var(--t-base);
+    }
+
+    .footer-col ul li a:hover {
+      color: var(--white);
+    }
+
+    .footer-info-row {
+      color: var(--white-mid);
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+
+    .footer-bottom {
+      max-width: 1200px;
+      margin: 0 auto;
+      border-top: var(--rule);
+      padding-top: 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--white-mid);
+      font-size: 12px;
+    }
+
+    @media (max-width: 992px) {
+      .footer-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+    @media (max-width: 640px) {
+      .footer-grid {
+        grid-template-columns: 1fr;
+      }
+      .footer-bottom {
+        flex-direction: column;
+        gap: 16px;
+        text-align: center;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==============================================
+       SECTION 01 — LIMITED-TIME OFFER BAR (STICKY)
+       ============================================== -->
+  <div class="promo-bar" id="promo-announcement">
+    <div class="promo-content">
+      <span class="promo-badge">🔥 Urgent Offer</span>
+      <span>Join Iron Grit Fitness Today &amp; Get Your First Week Free!</span>
+    </div>
+    <a href="#contact" class="promo-btn" onclick="Sound.click()">Claim Offer</a>
+  </div>
+
+
+  <!-- ==============================================
+       SECTION 02 — HEADER & NAVIGATION
+       ============================================== -->
+  <header class="site-header">
+    <div class="header-container">
+      <a href="#" class="logo" onclick="Sound.click()">
+        <span class="logo-pt1">Iron Grit Fitness</span><span class="logo-pt2">FIT</span>
+      </a>
+
+      <nav class="desktop-nav">
+        <a href="#" onclick="Sound.click()">Home</a>
+        <a href="#memberships" onclick="Sound.click()">Memberships</a>
+        <a href="#services" onclick="Sound.click()">Classes</a>
+        <a href="#trainers" onclick="Sound.click()">Trainers</a>
+        <a href="#reviews" onclick="Sound.click()">Reviews</a>
+        <a href="#blog" onclick="Sound.click()">Blog</a>
+        <a href="#contact" class="btn btn-primary" style="padding: 10px 20px; font-size: 12px;" onclick="Sound.click()">Start Free Trial</a>
+      </nav>
+
+      <button class="hamburger" id="nav-toggle" aria-label="Toggle navigation menu" onclick="toggleMenu()">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+
+    <!-- Mobile Navigation Drawer -->
+    <div class="mobile-menu" id="mobile-menu-element">
+      <a href="#" onclick="toggleMenu(); Sound.click()">Home</a>
+      <a href="#memberships" onclick="toggleMenu(); Sound.click()">Memberships</a>
+      <a href="#services" onclick="toggleMenu(); Sound.click()">Classes</a>
+      <a href="#trainers" onclick="toggleMenu(); Sound.click()">Trainers</a>
+      <a href="#reviews" onclick="toggleMenu(); Sound.click()">Reviews</a>
+      <a href="#blog" onclick="toggleMenu(); Sound.click()">Blog</a>
+      <a href="#contact" class="btn btn-primary" style="margin-top: 16px; padding: 14px 24px;" onclick="toggleMenu(); Sound.click()">Start Free Trial</a>
+    </div>
+  </header>
+
+
+  <!-- ==============================================
+       SECTION 03 — HERO SECTION
+       ============================================== -->
+  <section class="hero">
+    <div class="container hero-container">
+      <div class="hero-content">
+        <span class="section-num" style="color: var(--accent);">03 — PREMIER TRAINING AREA</span>
+        <h1 class="hero-title">Transform Your Body At Brooklyn, NY's Premier Fitness Facility</h1>
+        <p class="hero-sub">Helping Members Achieve Life-Changing Results Since 2015</p>
+        
+        <div class="hero-bullets">
+          <div class="hero-bullet"><span class="check">✅</span> <span>Elite Personal Trainers</span></div>
+          <div class="hero-bullet"><span class="check">✅</span> <span>State-Of-The-Art Equipment</span></div>
+          <div class="hero-bullet"><span class="check">✅</span> <span>Unlimited Premium Classes</span></div>
+          <div class="hero-bullet"><span class="check">✅</span> <span>Highly Supportive Community</span></div>
+        </div>
+
+        <div class="hero-btn-row">
+          <a href="#contact" class="btn btn-primary" onclick="Sound.click()">Start Free Trial</a>
+          <a href="#contact" class="btn btn-outline" onclick="Sound.click()">Schedule Free Tour</a>
+        </div>
+
+        <div class="hero-trust">
+          <div class="trust-stat">
+            <span class="trust-val">⭐ 4.9 / 5.0</span>
+            <span class="trust-lbl">Trust Score (127 Reviews)</span>
+          </div>
+          <div class="trust-stat">
+            <span class="trust-val">2,400 +</span>
+            <span class="trust-lbl">Active Local Members</span>
+          </div>
+          <div class="trust-stat">
+            <span class="trust-val">100%</span>
+            <span class="trust-lbl">Satisfaction Guarantee</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ==============================================
+       SECTION 04 — SOCIAL PROOF BAR
+       ============================================== -->
+  <div class="social-bar">
+    <div class="social-bar-grid">
+      <div class="social-item">
+        <div class="social-title">★ 4.9</div>
+        <div class="social-subtitle">Google Rating</div>
+      </div>
+      <div class="social-item">
+        <div class="social-title">127</div>
+        <div class="social-subtitle">Verified Reviews</div>
+      </div>
+      <div class="social-item">
+        <div class="social-title">2,400</div>
+        <div class="social-subtitle">Active Athletes</div>
+      </div>
+      <div class="social-item">
+        <div class="social-title">18</div>
+        <div class="social-subtitle">Expert Coaches</div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ==============================================
+       SECTION 05 — WHY CHOOSE US
+       ============================================== -->
+  <section class="sec-divider">
+    <div class="container">
+      <div class="section-num">05 — OUR ADVANTAGES</div>
+      <h2 class="section-title">Why Athletes Choose Iron Grit Fitness</h2>
+      <p class="section-desc">We build unmatched spaces designed to help you cross boundaries, smash personal limits, and look and feel your supreme absolute best.</p>
+
+      <div class="features-grid">
+        <!-- Feature 1 -->
+        <div class="feature-card">
+          <div class="feature-icon">💪</div>
+          <h3 class="feature-name">Expert Coaches</h3>
+          <p class="feature-desc">Active professional body athletes certified to coordinate precision structural training blocks specifically for your physique.</p>
+        </div>
+        <!-- Feature 2 -->
+        <div class="feature-card">
+          <div class="feature-icon">🏋️</div>
+          <h3 class="feature-name">Elite Equipment</h3>
+          <p class="feature-desc">Premium Rogue rack systems, Eleiko plates, Watson dumbbells, and the latest biomechanical selectorized weight machine setups.</p>
+        </div>
+        <!-- Feature 3 -->
+        <div class="feature-card">
+          <div class="feature-icon">🔥</div>
+          <h3 class="feature-name">Result Programs</h3>
+          <p class="feature-desc">Dynamic interval coaching, functional lifting progressions, and metabolic sweeps to expedite daily progress trackers.</p>
+        </div>
+        <!-- Feature 4 -->
+        <div class="feature-card">
+          <div class="feature-icon">🛡️</div>
+          <h3 class="feature-name">Clean &amp; Protected</h3>
+          <p class="feature-desc">Medical-grade air filtering, high-frequency sanitization protocols, and beautifully kept recovery amenities.</p>
+        </div>
+        <!-- Feature 5 -->
+        <div class="feature-card">
+          <div class="feature-icon">👥</div>
+          <h3 class="feature-name">Supportive Tribe</h3>
+          <p class="feature-desc">Enter a motivating arena of highly driven, growth-obsessed local community members dedicated to success.</p>
+        </div>
+        <!-- Feature 6 -->
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3 class="feature-name">Flexible Passes</h3>
+          <p class="feature-desc">Clear price configurations, straightforward cancellation options, and zero surprise signup or operational fees.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ==============================================
+       SECTION 06 — MEMBERSHIP OPTIONS
+       ============================================== -->
+  <section id="memberships" class="sec-divider" style="background: rgba(11, 15, 25, 0.4);">
+    <div class="container">
+      <div class="section-num">06 — PRICING SCHEMES</div>
+      <h2 class="section-title">Select Your Membership Plan</h2>
+      <p class="section-desc">Transparent agreements structured for high-intensity fitness lovers. Achieve supreme momentum with our flexible setups.</p>
+
+      <div class="plans-grid">
+        <!-- Plan 1 -->
+        <div class="plan-card" onmouseenter="Sound.hover()">
+          <h3 class="plan-name">Starter</h3>
+          <p class="plan-desc">Perfect for dedicated self-guided training on open warehouse floors.</p>
+          <div class="plan-pricing">
+            <span class="plan-price">$29</span>
+            <span class="plan-period">/ month</span>
+          </div>
+          <ul class="plan-features">
+            <li><span class="yes">✅</span> <span>24/7 Facility Access</span></li>
+            <li><span class="yes">✅</span> <span>All Strength &amp; Cardio Areas</span></li>
+            <li><span class="yes">✅</span> <span>Luxury Locker/Shower Spaces</span></li>
+            <li><span class="no">❌</span> <span>Unlimited Group HIIT Classes</span></li>
+            <li><span class="no">❌</span> <span>1-on-1 Nutrition Customizer</span></li>
+          </ul>
+          <a href="#contact" class="btn btn-outline" onclick="Sound.click()">Select Starter Pass</a>
+        </div>
+        
+        <!-- Plan 2 -->
+        <div class="plan-card highlight" onmouseenter="Sound.hover()">
+          <span class="plan-badge">Popular Focus</span>
+          <h3 class="plan-name">Premium</h3>
+          <p class="plan-desc">For growth-focused athletes needing top-tier classes and metabolic coaching guidance.</p>
+          <div class="plan-pricing">
+            <span class="plan-price">$59</span>
+            <span class="plan-period">/ month</span>
+          </div>
+          <ul class="plan-features">
+            <li><span class="yes">✅</span> <span>24/7 Facility Access</span></li>
+            <li><span class="yes">✅</span> <span>All Strength &amp; Cardio Areas</span></li>
+            <li><span class="yes">✅</span> <span>Unlimited Group HIIT Classes</span></li>
+            <li><span class="yes">✅</span> <span>2 Multi-Zone Recovery passes</span></li>
+            <li><span class="no">❌</span> <span>1-on-1 Customized Master Coach</span></li>
+          </ul>
+          <a href="#contact" class="btn btn-primary" onclick="Sound.click()">Select Premium Pass</a>
+        </div>
+        
+        <!-- Plan 3 -->
+        <div class="plan-card" onmouseenter="Sound.hover()">
+          <h3 class="plan-name">Elite</h3>
+          <p class="plan-desc">Our absolute peak tier including direct personal access and elite custom conditioning.</p>
+          <div class="plan-pricing">
+            <span class="plan-price">$99</span>
+            <span class="plan-period">/ month</span>
+          </div>
+          <ul class="plan-features">
+            <li><span class="yes">✅</span> <span>24/7 Facility Access</span></li>
+            <li><span class="yes">✅</span> <span>Unlimited Premium Class Sweeps</span></li>
+            <li><span class="yes">✅</span> <span>Unlimited Cryo-Infusion Saunas</span></li>
+            <li><span class="yes">✅</span> <span>1-on-1 Customized Master Coach</span></li>
+            <li><span class="yes">✅</span> <span>Precision Macros Food Plan</span></li>
+          </ul>
+          <a href="#contact" class="btn btn-outline" onclick="Sound.click()">Select Elite Pass</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ==============================================
+       SECTION 07 — FITNESS SERVICES
+       ============================================== -->
+  <section id="services" class="sec-divider">
+    <div class="container">
+      <div class="section-num">07 — SPECIALTY SERVICES</div>
+      <h2 class="section-title">Our Fitness Solutions</h2>
+      <p class="section-desc">Tailored classes and training frameworks built around biomechanics, energy depletion, and targeted fat burning programs.</p>
+
+      <div class="services-grid">
+        <!-- Card 1 -->
+        <div class="service-card">
+          <img src="https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?auto=format&fit=crop&w=800&q=80" alt="Personal Training Session" class="service-img" loading="lazy">
+          <div class="service-body">
+            <div>
+              <h3 class="service-title">Personal Training</h3>
+              <p class="service-desc">Targeted, metrics-backed one-on-one sessions led by certified industry master coaches to optimize and refine your form alignment.</p>
+            </div>
+            <a href="#contact" class="btn btn-outline" style="padding: 12px 20px; font-size: 11px;" onclick="Sound.click()">Consult Coach</a>
+          </div>
+        </div>
+        <!-- Card 2 -->
+        <div class="service-card">
+          <img src="https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=800&q=80" alt="Group Exercise Class" class="service-img" loading="lazy">
+          <div class="service-body">
+            <div>
+              <h3 class="service-title">Group Fitness</h3>
+              <p class="service-desc">Energetic, high-bpm group workouts utilizing functional weight drops, kettlebells, and body weight resistance splits.</p>
+            </div>
+            <a href="#contact" class="btn btn-outline" style="padding: 12px 20px; font-size: 11px;" onclick="Sound.click()">Review Schedule</a>
+          </div>
+        </div>
+        <!-- Card 3 -->
+        <div class="service-card">
+          <img src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=800&q=80" alt="Olympic Training Setup" class="service-img" loading="lazy">
+          <div class="service-body">
+            <div>
+              <h3 class="service-title">Strength Training</h3>
+              <p class="service-desc">Strategic heavy-lifting protocols designed specifically to rebuild motor patterns, expand power blocks, and isolate mass.</p>
+            </div>
+            <a href="#contact" class="btn btn-outline" style="padding: 12px 20px; font-size: 11px;" onclick="Sound.click()">Learn Progressions</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ==============================================
+       SECTION 08 — TRANSFORMATION GALLERY
+       ============================================== -->
+  <section class="sec-divider gallery-outer">
+    <div class="container" style="position: relative;">
+      <div class="section-num">08 — VISUAL RESULTS</div>
+      <h2 class="section-title" style="text-align: center;">Transformations Speaker</h2>
+      <p class="section-desc" style="text-align: center; margin-left: auto; margin-right: auto;">Drag or swipe the center slider to inspect the exact visible structural muscular enhancements accomplished in under 12 weeks here.</p>
+
+      <div class="slider-holder" id="before-after-slider">
+        <!-- AFTER image (Standard background layer) -->
+        <img src="https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=1200&q=80" alt="After Athletic Body Shape" class="slider-img after-img">
+        <span class="slider-label label-after">After (12 Weeks)</span>
+
+        <!-- BEFORE image (Interactive top clipped layer) -->
+        <div class="before-img-wrap" id="before-mask">
+          <img src="https://images.unsplash.com/photo-1505230572457-416550742127?auto=format&fit=crop&w=1200&q=80" alt="Before Shape Workout" class="before-img" id="before-full-photo">
+          <span class="slider-label label-before">Before Shape</span>
+        </div>
+
+        <!-- Sliding Line / Drag Anchor -->
+        <div class="slider-drag-line" id="drag-line">
+          <div class="drag-handle">↔</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ==============================================
+       SECTION 09 — TRAINER SPOTLIGHT
+       ============================================== -->
+  <section id="trainers" class="sec-divider">
+    <div class="container">
+      <div class="section-num">09 — ELITE COACHES</div>
+      <h2 class="section-title">Meet Our Master Trainers</h2>
+      <p class="section-desc">Active fitness leaders with verified university science credentials and high-competition track records in the athletic space.</p>
+
+      <div class="trainers-grid">
+        <!-- Trainer 1 -->
+        <div class="trainer-card">
+          <div class="trainer-media">
+            <img src="https://images.unsplash.com/photo-1567013127542-490d757e51fc?auto=format&fit=crop&w=400&q=80" alt="Coach Sarah Jenkins" class="trainer-img" loading="lazy">
+          </div>
+          <div class="trainer-info">
+            <div class="trainer-specialty">Strength &amp; Conditioning</div>
+            <h3 class="trainer-name">Sarah Jenkins</h3>
+            <p class="trainer-certs">M.S. Kinesiology, CSCS</p>
+            <p class="trainer-bio">Over 10 years coaching Olympic lifters. Expert in motor learning biomechanics and barbell efficiency.</p>
+          </div>
+        </div>
+        <!-- Trainer 2 -->
+        <div class="trainer-card">
+          <div class="trainer-media">
+            <img src="https://images.unsplash.com/photo-1548690312-e3b507d8c110?auto=format&fit=crop&w=400&q=80" alt="Coach Brad Evans" class="trainer-img" loading="lazy">
+          </div>
+          <div class="trainer-info">
+            <div class="trainer-specialty">HIIT &amp; Fat Loss</div>
+            <h3 class="trainer-name">Brad Evans</h3>
+            <p class="trainer-certs">B.S. Sports Health, NASM-PES</p>
+            <p class="trainer-bio">Specialist in metabolic conditioning systems, helping hundreds safely shred extra fat stores.</p>
+          </div>
+        </div>
+        <!-- Trainer 3 -->
+        <div class="trainer-card">
+          <div class="trainer-media">
+            <img src="https://images.unsplash.com/photo-1541534741688-6078c6bfb5c5?auto=format&fit=crop&w=400&q=80" alt="Coach Marcus Miller" class="trainer-img" loading="lazy">
+          </div>
+          <div class="trainer-info">
+            <div class="trainer-specialty">Sports Performance</div>
+            <h3 class="trainer-name">Marcus Miller</h3>
+            <p class="trainer-certs">USAW Level 2 Coach, NASM-CPT</p>
+            <p class="trainer-bio">Coaches high-school and adult elite division athletes for rapid speed, power, and tracking metrics.</p>
+          </div>
+        </div>
+        <!-- Trainer 4 -->
+        <div class="trainer-card">
+          <div class="trainer-media">
+            <img src="https://images.unsplash.com/photo-1518310383802-640c2de311b2?auto=format&fit=crop&w=400&q=80" alt="Coach Diana Prince" class="trainer-img" loading="lazy">
+          </div>
+          <div class="trainer-info">
+            <div class="trainer-specialty">Mobility &amp; Recovery</div>
+            <h3 class="trainer-name">Diana Prince</h3>
+            <p class="text-xs text-slate-400 font-mono">RYT-500, Functional Range Assessment</p>
+            <p class="trainer-bio">Corrects joint alignments, removes mobility blockages, and structures post-workout tissue repair.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ==============================================
+       SECTION 10 — MEMBER REVIEWS
+       ============================================== -->
+  <section id="reviews" class="sec-divider reviews-carousel-outer">
+    <div class="container">
+      <div class="section-num">10 — MEMBER SUCCESS STORIES</div>
+      <h2 class="section-title">What Our Community Achieved</h2>
+      <p class="section-desc">Real transformations. Unedited reports on power, physical form, mental focus, and elevated high energy states.</p>
+
+      <div class="reviews-wrapper">
+        <button class="reviewer-nav prev-btn" id="reviews-prev" onclick="scrollReviews('left')">←</button>
+        <button class="reviewer-nav next-btn" id="reviews-next" onclick="scrollReviews('right')">→</button>
+
+        <div class="reviews-carousel" id="reviews-carousel-node">
+          <!-- Review 1 -->
+          <div class="review-card">
+            <div class="review-circle-bg">
+              <img src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80" alt="Sarah Johnson" class="review-author-avatar">
+              <h4 class="review-author-name">Sarah Johnson</h4>
+              <p class="review-author-goal">Lost 28 lbs · Brooklyn, NY</p>
+              <p class="review-text">"I entered Iron Grit Fitness feeling tired and disconnected from my physical health. Under the guidance of Coach Sarah, I redesigned my structural training approach and shed 28 lbs in under 4 months. The energy level in HIIT group classes is totally infectious and incredible!"</p>
+              <div class="review-stars-block">★★★★★</div>
+            </div>
+          </div>
+          
+          <!-- Review 2 -->
+          <div class="review-card">
+            <div class="review-circle-bg">
+              <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80" alt="Marcus Thompson" class="review-author-avatar">
+              <h4 class="review-author-name">Marcus Thompson</h4>
+              <p class="review-author-goal">Gained 15 lbs Muscle</p>
+              <p class="review-text">"Unmatched precision weight training floor configurations. Watson luxury weights align with biomechanical standards. The master coaches really diagnose your motor patterns. I increased my raw lifting block and structured my recovery routines cleanly."</p>
+              <div class="review-stars-block">★★★★★</div>
+            </div>
+          </div>
+          
+          <!-- Review 3 -->
+          <div class="review-card">
+            <div class="review-circle-bg">
+              <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80" alt="Amanda Wilson" class="review-author-avatar">
+              <h4 class="review-author-name">Amanda Wilson</h4>
+              <p class="review-author-goal">Enhanced Joint Health</p>
+              <p class="review-text">"As an adult track athlete in Brooklyn, NY, joint wear is an issue. Coach Diana fully structured my mobility patterns and joint preservation routes. Now I am pain-free, sprint faster, and track heavier loads without localized swelling or chronic aches."</p>
+              <div class="review-stars-block">★★★★★</div>
+            </div>
+          </div>
+
+          <!-- Review 4 -->
+          <div class="review-card">
+            <div class="review-circle-bg">
+              <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80" alt="James Castillo" class="review-author-avatar">
+              <h4 class="review-author-name">James Castillo</h4>
+              <p class="review-author-goal">Metabolic Athletic Shape</p>
+              <p class="review-text">"Unbelievable recovery facility standards! The customized food macro matrices and continuous coaching checks gave me real physical confidence. My metabolic statistics are the absolute best they have been in my life."</p>
+              <div class="review-stars-block">★★★★★</div>
+            </div>
+          </div>
+
+          <!-- Review 5 -->
+          <div class="review-card">
+            <div class="review-circle-bg">
+              <img src="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=150&q=80" alt="Emily Ross" class="review-author-avatar">
+              <h4 class="review-author-name">Emily Ross</h4>
+              <p class="review-author-goal">Powerlifting Focus</p>
+              <p class="review-text">"A community that supports you at every weight drop! The physical culture at Iron Grit Fitness lacks high-tech larping and focuses purely on high-intensity growth work. Exceptional heavy barbell gear and deep, supportive local vibes."</p>
+              <div class="review-stars-block">★★★★★</div>
+            </div>
+          </div>
+
+          <!-- Review 6 -->
+          <div class="review-card">
+            <div class="review-circle-bg">
+              <img src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=150&q=80" alt="Daniel O'Connor" class="review-author-avatar">
+              <h4 class="review-author-name">Daniel O'Connor</h4>
+              <p class="review-author-goal">Weight Management</p>
+              <p class="review-text">"Truly customized focus patterns. Clean lockers, fresh air ventilation, and state of the art Watson tracks. Best gym setup around Brooklyn, NY. If you want to see actual, visible transformation, join today!"</p>
+              <div class="review-stars-block">★★★★★</div>
+            </div>
+          </div>
+
+          <!-- Review 7 -->
+          <div class="review-card">
+            <div class="review-circle-bg">
+              <img src="https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=150&q=80" alt="Natasha Romanov" class="review-author-avatar">
+              <h4 class="review-author-name">Natasha Romanov</h4>
+              <p class="review-author-goal">Agility Coaching</p>
+              <p class="review-text">"Precision training floor space, amazing spin classes, and highly personalized nutrition matrices. The staff is remarkably welcoming and coaches are constantly fine-tuning your joint alignment."</p>
+              <div class="review-stars-block">★★★★★</div>
+            </div>
+          </div>
+
+          <!-- Review 8 -->
+          <div class="review-card">
+            <div class="review-circle-bg">
+              <img src="https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=150&q=80" alt="Liam Neeson" class="review-author-avatar">
+              <h4 class="review-author-name">Liam Neeson</h4>
+              <p class="review-author-goal">Core Stamina Progress</p>
+              <p class="review-text">"High value, premium performance equipment. Group classes push you past your comfortable boundaries with highly addictive music and team drive. I highly recommend taking their Starter trial!"</p>
+              <div class="review-stars-block">★★★★★</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dots Navigation -->
+        <div class="review-dots" id="carousel-dots-wrapper"></div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ==============================================
+       SECTION 11 — FREE TRIAL FORM (CONVERSION FOCUS)
+       ============================================== -->
+  <section id="contact" class="sec-divider form-section">
+    <div class="container">
+      <div class="form-grid">
+        <div>
+          <div class="section-num">11 — IMMEDIATE START</div>
+          <h2 class="section-title">Claim Your Free Week Class Pass</h2>
+          <p class="section-desc">Experience our modern weight training space, group classes, and locker recoveries. We respond inside 15 minutes.</p>
+
+          <div style="display: flex; flex-direction: column; gap: 24px;">
+            <div style="display: flex; gap: 16px; align-items: center;">
+              <span style="font-size: 24px;">🛡️</span>
+              <div>
+                <h4 style="font-size: 18px; text-transform: uppercase;">Zero Obligation Start</h4>
+                <p style="font-size: 13.5px; color: var(--white-mid);">Check our state-of-the-art weights floor before matching standard price schedules.</p>
+              </div>
+            </div>
+            <div style="display: flex; gap: 16px; align-items: center;">
+              <span style="font-size: 24px;">📈</span>
+              <div>
+                <h4 style="font-size: 18px; text-transform: uppercase;">Instant Action Assessment</h4>
+                <p style="font-size: 13.5px; color: var(--white-mid);">Includes free body mass percentage scans and mobility metrics reviews with coaches.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="form-box">
+            <div class="success-alert" id="success-message">
+              <h3>🎉 Profile Registered!</h3>
+              <p>Your free week intake ticket was submitted. Check your text messages for confirmation details inside 15 mins.</p>
+            </div>
+
+            <form id="lead-form" onsubmit="handleFormSubmission(event)">
+              <div class="form-group">
+                <label for="form-name">Your Full Name</label>
+                <input type="text" id="form-name" class="form-control" placeholder="Sarah Jenkins" required>
+              </div>
+
+              <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div class="form-group">
+                  <label for="form-phone">Mobile Phone</label>
+                  <input type="tel" id="form-phone" class="form-control" placeholder="(512) 555-0198" required>
+                </div>
+                <div class="form-group">
+                  <label for="form-email">Email Address</label>
+                  <input type="email" id="form-email" class="form-control" placeholder="sarah@gmail.com" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="form-goal">Your Core Fitness Goal</label>
+                <select id="form-goal" class="form-control" required style="appearance: none;">
+                  <button class="form-control" style="text-align: left;">Please Select One</button>
+                  <option value="Fat Loss">🔥 Extreme Fat Burning / Weight Loss</option>
+                  <option value="Muscle Gain">💪 Strength Growth &amp; Muscle Density</option>
+                  <option value="Athletic Speed">🏃 Sports Agility &amp; Cardiorespiratory</option>
+                  <option value="Joint Mobility">🧘 Corrective Rehabilitation &amp; Mobility</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="form-desc">Additional Workout Background (Optional)</label>
+                <textarea id="form-desc" class="form-control" rows="3" placeholder="Tell us if you have lifting history or injury markers..."></textarea>
+              </div>
+
+              <button type="submit" class="btn btn-primary" style="width: 100%;">Start My Transformation ⚡</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ==============================================
+       SECTION 12 — FAQ (SEO STRONGLY LOCALIZED)
+       ============================================== -->
+  <section class="sec-divider">
+    <div class="container">
+      <div class="section-num">12 — FREQUENT CURIOSITIES</div>
+      <h2 class="section-title">Common Fitness Inquiries</h2>
+      <p class="section-desc">Everything athletes inquire regarding memberships, trainer booking, and facility parking in Brooklyn, NY.</p>
+
+      <div class="faq-grid">
+        <div class="faq-col">
+          <!-- Item 1 -->
+          <div class="faq-item" onclick="toggleFAQ(this)">
+            <div class="faq-head">
+              <p>How does the free week transition package operate?</p>
+              <span class="faq-icon">+</span>
+            </div>
+            <div class="faq-body">
+              <div class="faq-content">
+                Every Brooklyn, NY resident gets 7 full consecutive days of warehouse floor and class pass entries. This enables you to try our elite coaches, inspect barbell gear sets, and check our lockers free of commitments.
+              </div>
+            </div>
+          </div>
+          <!-- Item 2 -->
+          <div class="faq-item" onclick="toggleFAQ(this)">
+            <div class="faq-head">
+              <p>Is there on-site parking at your Brooklyn, NY gym?</p>
+              <span class="faq-icon">+</span>
+            </div>
+            <div class="faq-body">
+              <div class="faq-content">
+                Yes. We support over 120 dedicated off-street customer parking stalls located directly at our main facility gate. Entry passes are free for verified active members and guests.
+              </div>
+            </div>
+          </div>
+          <!-- Item 3 -->
+          <div class="faq-item" onclick="toggleFAQ(this)">
+            <div class="faq-head">
+              <p>Do you require long-term membership contracts?</p>
+              <span class="faq-icon">+</span>
+            </div>
+            <div class="faq-body">
+              <div class="faq-content">
+                No. Our primary pricing programs operate on a direct month-to-month schedule. You can lock or adjust your membership tiers cleanly at any time online without paying any sneaky termination penalties.
+              </div>
+            </div>
+          </div>
+          <!-- Item 4 -->
+          <div class="faq-item" onclick="toggleFAQ(this)">
+            <div class="faq-head">
+              <p>Are group workouts included inside Starter pricing?</p>
+              <span class="faq-icon">+</span>
+            </div>
+            <div class="faq-body">
+              <div class="faq-content">
+                Starter passes focus purely on raw self-guided weight room access. If you wish to join our elite coached HIIT or spinning schedules, we recommend our premium tier which contains unlimited bookings.
+              </div>
+            </div>
+          </div>
+          <!-- Item 5 -->
+          <div class="faq-item" onclick="toggleFAQ(this)">
+            <div class="faq-head">
+              <p>Do you support beginner progression programs?</p>
+              <span class="faq-icon">+</span>
+            </div>
+            <div class="faq-body">
+              <div class="faq-content">
+                Absolutely. Over 40% of our local Brooklyn, NY members began as absolute newcomers. Every single member receives a complimentary baseline movement pattern assessment to ensure safety first.
+              </div>
+            </div>
+          </div>
+          <!-- Item 6 -->
+          <div class="faq-item" onclick="toggleFAQ(this)">
+            <div class="faq-head">
+              <p>How do I register classes using mobile interfaces?</p>
+              <span class="faq-icon">+</span>
+            </div>
+            <div class="faq-body">
+              <div class="faq-content">
+                Once registered, we dispatch a personalized mobile tracking profile directly to your SMS thread. You can book classes, see coach schedules, and track weights with a simple thumb tap.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="faq-col">
+          <!-- Item 7 -->
+          <div class="faq-item" onclick="toggleFAQ(this)">
+            <div class="faq-head">
+              <p>What certifications do your personal coaches possess?</p>
+              <span class="faq-icon">+</span>
+            </div>
+            <div class="faq-body">
+              <div class="faq-content">
+                Every personal instructor at Iron Grit Fitness holds NCAA-accredited personal training qualifications (such as NASM, NSCA, or ACSM) or four-year university sports health science degrees.
+              </div>
+            </div>
+          </div>
+          <!-- Item 8 -->
+          <div class="faq-item" onclick="toggleFAQ(this)">
+            <div class="faq-head">
+              <p>Do you possess physical locker room facilities?</p>
+              <span class="faq-icon">+</span>
+            </div>
+            <div class="faq-body">
+              <div class="faq-content">
+                Yes! We built premium luxury dressing rooms featuring secure digital entry key systems, fresh high-speed shower blocks, vanity spaces, and clean towel services.
+              </div>
+            </div>
+          </div>
+          <!-- Item 9 -->
+          <div class="faq-item" onclick="toggleFAQ(this)">
+            <div class="faq-head">
+              <p>Can I coordinate guest entries under my account?</p>
+              <span class="faq-icon">+</span>
+            </div>
+            <div class="faq-body">
+              <div class="faq-content">
+                Yes, Premium and Elite membership tiers include 2 free monthly single-day guest passes, enabling you to bring a workout partner anytime.
+              </div>
+            </div>
+          </div>
+          <!-- Item 10 -->
+          <div class="faq-item" onclick="toggleFAQ(this)">
+            <div class="faq-head">
+              <p>What does Cryo-Infusion Sauna treatment include?</p>
+              <span class="faq-icon">+</span>
+            </div>
+            <div class="faq-body">
+              <div class="faq-content">
+                Elite members gain access to custom localized temperature-controlled therapeutic drops to clear muscle soreness, boost blood flow, and accelerate recovery.
+              </div>
+            </div>
+          </div>
+          <!-- Item 11 -->
+          <div class="faq-item" onclick="toggleFAQ(this)">
+            <div class="faq-head">
+              <p>How are weight floors organized visually?</p>
+              <span class="faq-icon">+</span>
+            </div>
+            <div class="faq-body">
+              <div class="faq-content">
+                We layout distinct focus sections: heavy powerlifting cages, dedicated kettlebells and dumbbell floors, functional training astro-turf tracks, and partitioned cardio tiers.
+              </div>
+            </div>
+          </div>
+          <!-- Item 12 -->
+          <div class="faq-item" onclick="toggleFAQ(this)">
+            <div class="faq-head">
+              <p>Are child care centers available inside the facility?</p>
+              <span class="faq-icon">+</span>
+            </div>
+            <div class="faq-body">
+              <div class="faq-content">
+                Yes, we offer monitored child monitoring spaces for children ages 2 to 10 for parents attending custom group slots or individual personal training bookings.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ==============================================
+       SECTION 13 — BLOG CENTER (FULLY WRITTEN ARTICLES)
+       ============================================== -->
+  <section id="blog" class="sec-divider">
+    <div class="container">
+      <div class="section-num">13 — LOCAL INTELLECT</div>
+      <h2 class="section-title">Fitness Education Center</h2>
+      <p class="section-desc">Fully researched, localized guidance written specifically by our master training crew to help you build physical momentum safely.</p>
+
+      <div class="blogs-grid">
+        <!-- Blog 1 -->
+        <div class="blog-card" onclick="openBlog('b1')">
+          <div class="blog-header">
+            <img src="https://images.unsplash.com/photo-1540497077202-7c8a3999166f?auto=format&fit=crop&w=500&q=80" alt="Intense fitness center" class="blog-hero" loading="lazy">
+            <span class="blog-tag">Beginners</span>
+          </div>
+          <div class="blog-info">
+            <div>
+              <h3 class="blog-title">Starting Your Fitness Journey in Brooklyn, NY</h3>
+              <p class="blog-excerpt">Uncover exactly how to select targets, configure local gym programs, and maintain physical momentum without burnout cycles...</p>
+            </div>
+            <span class="blog-meta">Read Article →</span>
+          </div>
+        </div>
+        
+        <!-- Blog 2 -->
+        <div class="blog-card" onclick="openBlog('b2')">
+          <div class="blog-header">
+            <img src="https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=500&q=80" alt="Lifting weights barbell" class="blog-hero" loading="lazy">
+            <span class="blog-tag">Weight Loss</span>
+          </div>
+          <div class="blog-info">
+            <div>
+              <h3 class="blog-title">Strength Training Accelerates Fat Loss</h3>
+              <p class="blog-excerpt">Why lift weights over doing raw endless cardio? Discover the metabolic science behind EPOC and structural tissue burn rates...</p>
+            </div>
+            <span class="blog-meta">Read Article →</span>
+          </div>
+        </div>
+
+        <!-- Blog 3 -->
+        <div class="blog-card" onclick="openBlog('b3')">
+          <div class="blog-header">
+            <img src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=500&q=80" alt="Coaching session alignment" class="blog-hero" loading="lazy">
+            <span class="blog-tag">Mindset</span>
+          </div>
+          <div class="blog-info">
+            <div>
+              <h3 class="blog-title">Consistency Beats Motivation Every Time</h3>
+              <p class="blog-excerpt">Fine-tuning the mental routines that transform momentary gym vibes into long-term biological habits for life...</p>
+            </div>
+            <span class="blog-meta">Read Article →</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- Blog Overlay Drawer / Modal System -->
+  <div id="blog-overlay">
+    <button class="blog-close-btn" onclick="closeBlog()" aria-label="Close article modal">
+      <span style="font-size: 20px;">✕</span>
+    </button>
+    
+    <div class="blog-modal-header" id="blog-modal-header-bg">
+      <div class="blog-modal-container">
+        <span id="blog-modal-category" style="font-size: 11px; font-weight: 800; color: var(--accent); background: rgba(245,158,11,0.15); padding: 6px 14px; border-radius: var(--r-pill); text-transform: uppercase; letter-spacing: 0.05em;">GUIDE</span>
+        <h1 id="blog-modal-title" style="font-size: clamp(32px, 5vw, 68px); font-weight: 400; color: var(--white); margin: 20px 0 16px; line-height: 1.05; letter-spacing: -0.01em;">Article Title</h1>
+        <div id="blog-modal-date" style="font-size: 13px; color: var(--white-mid); font-weight: 600; text-transform: uppercase;">Iron Grit Fitness Active Team · Brooklyn, NY</div>
+      </div>
+    </div>
+
+    <div class="blog-modal-body blog-modal-container" id="blog-modal-content">
+      <!-- Loaded dynamically by Javascript to prevent token limits -->
+    </div>
+  </div>
+
+
+  <!-- ==============================================
+       SECTION 14 — FACILITY LOCATION
+       ============================================== -->
+  <section class="sec-divider">
+    <div class="container map-grid">
+      <div>
+        <div class="section-num">14 — LOCALISED HEADQUARTERS</div>
+        <h2 class="section-title">Our Facility Center</h2>
+        <p class="section-desc">Located cleanly within the central local districts of Brooklyn, NY for rapid access from nearby residential zones. Open 24/7 for premium key holders.</p>
+
+        <div class="landmark-list">
+          <div class="landmark-item">
+            <span class="landmark-icon">📍</span>
+            <div>
+              <h4 style="font-size: 16px; text-transform: uppercase; margin-bottom: 2px;">Main Address</h4>
+              <p style="font-size: 14px; color: var(--white-mid);">Downtown Brooklyn, Brooklyn, NY, NY</p>
+            </div>
+          </div>
+          <div class="landmark-item">
+            <span class="landmark-icon">🚗</span>
+            <div>
+              <h4 style="font-size: 16px; text-transform: uppercase; margin-bottom: 2px;">Nearby Landmarks</h4>
+              <p style="font-size: 14px; color: var(--white-mid);">Directly opposite the Brooklyn, NY Public Library, just 2 blocks south of the Central Transit Station complex.</p>
+            </div>
+          </div>
+          <div class="landmark-item">
+            <span class="landmark-icon">🤝</span>
+            <div>
+              <h4 style="font-size: 16px; text-transform: uppercase; margin-bottom: 2px;">Priority Access</h4>
+              <p style="font-size: 14px; color: var(--white-mid);">Convenient electronic entry lock pads for nightlifers from 10 PM to 5 AM daily.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="map-placeholder">
+          <div class="map-backdrop"></div>
+          <div class="map-pin">
+            <div class="map-pin-icon">📍</div>
+            <div class="map-label">Iron Grit Fitness HQ</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ==============================================
+       SECTION 15 — FOOTER
+       ============================================== -->
+  <footer>
+    <div class="footer-grid">
+      <div class="footer-col">
+        <h4 style="color: var(--white);">Iron Grit FitnessFIT</h4>
+        <p style="color: var(--white-mid); font-size: 14px; margin-bottom: 16px;">Elite fitness facility tracking high physical performance metrics, premium weights, and localized personal programs.</p>
+        <span style="color: var(--accent); font-weight: 700; font-size: 14px;">💪 NO TECH-LARPING · JUST PROGRESS</span>
+      </div>
+
+      <div class="footer-col">
+        <h4>Navigation</h4>
+        <ul>
+          <li><a href="#" onclick="Sound.click()">Home</a></li>
+          <li><a href="#memberships" onclick="Sound.click()">Memberships</a></li>
+          <li><a href="#services" onclick="Sound.click()">Fitness Solutions</a></li>
+          <li><a href="#trainers" onclick="Sound.click()">Expert Coaches</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>Support &amp; SEO</h4>
+        <ul>
+          <li><a href="#reviews" onclick="Sound.click()">Verified Reviews</a></li>
+          <li><a href="#blog" onclick="Sound.click()">Educational Center</a></li>
+          <li><a href="#contact" onclick="Sound.click()">Free Class Intake</a></li>
+          <li><a href="#contact" onclick="Sound.click()">Local Sitemap</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>Contact Desk</h4>
+        <div class="footer-info-row">📞 5125551234</div>
+        <div class="footer-info-row">✉️ hello@irongritfitness.com</div>
+        <div class="footer-info-row">📍 Downtown Brooklyn, Brooklyn, NY</div>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <span>&copy; 2026 Iron Grit Fitness. All Rights Reserved. Built securely in local Brooklyn, NY.</span>
+      <span>⭐ Rated 4.9 locally with over 127 customer rating votes.</span>
+    </div>
+  </footer>
+
+
+  <!-- ==============================================
+       WEB AUDIO API PROGRAMMATIC SOUNDS ENGINE
+       ============================================== -->
+  <script>
+    const Sound = {
+      _ctx: null,
+      _init() {
+        if (!this._ctx) {
+          this._ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        return this._ctx;
+      },
+
+      // Soft click micro tactile feedback
+      click() {
+        try {
+          const ctx = this._init();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(600, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(120, ctx.currentTime + 0.08);
+          
+          gain.gain.setValueAtTime(0.04, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+          
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          
+          osc.start();
+          osc.stop(ctx.currentTime + 0.08);
+        } catch(e) {}
+      },
+
+      // Tiny soft hover tone
+      hover() {
+        try {
+          const ctx = this._init();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(800, ctx.currentTime);
+          osc.frequency.setValueAtTime(1000, ctx.currentTime + 0.01);
+          
+          gain.gain.setValueAtTime(0.008, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.03);
+          
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          
+          osc.start();
+          osc.stop(ctx.currentTime + 0.03);
+        } catch(e) {}
+      },
+
+      // Soft accordion tap sound
+      tap() {
+        try {
+          const ctx = this._init();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(220, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.12);
+          
+          gain.gain.setValueAtTime(0.05, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+          
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          
+          osc.start();
+          osc.stop(ctx.currentTime + 0.12);
+        } catch(e) {}
+      },
+
+      // Panel drawer sweep swoosh
+      swoosh(isReverse = false) {
+        try {
+          const ctx = this._init();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          
+          osc.type = 'sine';
+          if (isReverse) {
+            osc.frequency.setValueAtTime(120, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.25);
+          } else {
+            osc.frequency.setValueAtTime(400, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(120, ctx.currentTime + 0.25);
+          }
+          
+          gain.gain.setValueAtTime(0.03, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+          
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          
+          osc.start();
+          osc.stop(ctx.currentTime + 0.25);
+        } catch(e) {}
+      },
+
+      // Elegant lift sound when opening modal
+      liftSound() {
+        try {
+          const ctx = this._init();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(300, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(900, ctx.currentTime + 0.35);
+          
+          gain.gain.setValueAtTime(0.02, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+          
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          
+          osc.start();
+          osc.stop(ctx.currentTime + 0.35);
+        } catch(e) {}
+      },
+
+      // Muted fade sound when closing modals
+      fadeSound() {
+        try {
+          const ctx = this._init();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(500, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.2);
+          
+          gain.gain.setValueAtTime(0.015, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+          
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          
+          osc.start();
+          osc.stop(ctx.currentTime + 0.2);
+        } catch(e) {}
+      },
+
+      // Form submission chime sequence
+      successChime() {
+        try {
+          const ctx = this._init();
+          const now = ctx.currentTime;
+          const notes = [440, 554.37, 659.25, 880];
+          notes.forEach((freq, idx) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now + idx * 0.1);
+            
+            gain.gain.setValueAtTime(0.03, now + idx * 0.1);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.1 + 0.25);
+            
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.start(now + idx * 0.1);
+            osc.stop(now + idx * 0.1 + 0.25);
+          });
+        } catch(e) {}
+      }
+    };
+
+
+    /* -------------------------------------
+       INTERACTIVE MOBILE HAMBURGER TOGGLE
+       ------------------------------------- */
+    function toggleMenu() {
+      const toggle = document.getElementById('nav-toggle');
+      const menu = document.getElementById('mobile-menu-element');
+      const becameActive = toggle.classList.toggle('active');
+      menu.classList.toggle('open');
+      Sound.swoosh(!becameActive);
+    }
+
+
+    /* -------------------------------------
+       INTERACTIVE BEFORE-AFTER SLIDER (SWIPE / MOVE)
+       ------------------------------------- */
+    const beforeSlider = document.getElementById('before-after-slider');
+    const beforeMask = document.getElementById('before-mask');
+    const dragLine = document.getElementById('drag-line');
+    
+    if (beforeSlider && beforeMask && dragLine) {
+      const startSliderDrag = (e) => {
+        const moveSlider = (moveEvent) => {
+          const bounding = beforeSlider.getBoundingClientRect();
+          const clientX = moveEvent.touches ? moveEvent.touches[0].clientX : moveEvent.clientX;
+          let calculatedX = clientX - bounding.left;
+          if (calculatedX < 0) calculatedX = 0;
+          if (calculatedX > bounding.width) calculatedX = bounding.width;
+          
+          const percentage = (calculatedX / bounding.width) * 100;
+          beforeMask.style.clipPath = `polygon(0 0, ${percentage}% 0, ${percentage}% 100%, 0% 100%)`;
+          dragLine.style.left = `${percentage}%`;
+        };
+        
+        const stopSliderDrag = () => {
+          window.removeEventListener('mousemove', moveSlider);
+          window.removeEventListener('mouseup', stopSliderDrag);
+          window.removeEventListener('touchmove', moveSlider);
+          window.removeEventListener('touchend', stopSliderDrag);
+        };
+        
+        window.addEventListener('mousemove', moveSlider);
+        window.addEventListener('mouseup', stopSliderDrag);
+        window.addEventListener('touchmove', moveSlider, { passive: true });
+        window.addEventListener('touchend', stopSliderDrag);
+        
+        Sound.liftSound();
+      };
+      
+      dragLine.addEventListener('mousedown', startSliderDrag);
+      dragLine.addEventListener('touchstart', startSliderDrag, { passive: true });
+    }
+
+
+    /* -------------------------------------
+       CIRCULAR REVIEWS CAROUSEL SWIPING (MOBILE-FIRST)
+       ------------------------------------- */
+    const carouselNode = document.getElementById('reviews-carousel-node');
+    const dotsWrapper = document.getElementById('carousel-dots-wrapper');
+    const cards = document.querySelectorAll('.review-card');
+    
+    // Create navigation dots
+    if (carouselNode && dotsWrapper) {
+      cards.forEach((_, idx) => {
+        const dot = document.createElement('div');
+        dot.className = `dots-indicator ${idx === 0 ? 'active' : ''}`;
+        dot.addEventListener('click', () => {
+          carouselNode.scrollTo({
+            left: idx * carouselNode.clientWidth,
+            behavior: 'smooth'
+          });
+          Sound.tap();
+        });
+        dotsWrapper.appendChild(dot);
+      });
+      
+      // Update dots on scroll
+      carouselNode.addEventListener('scroll', () => {
+        const scrollIndex = Math.round(carouselNode.scrollLeft / carouselNode.clientWidth);
+        const dots = document.querySelectorAll('.dots-indicator');
+        dots.forEach((dot, idx) => {
+          dot.classList.toggle('active', idx === scrollIndex);
+        });
+      });
+    }
+
+    function scrollReviews(direction) {
+      if (!carouselNode) return;
+      const width = carouselNode.clientWidth;
+      if (direction === 'left') {
+        carouselNode.scrollBy({ left: -width, behavior: 'smooth' });
+      } else {
+        carouselNode.scrollBy({ left: width, behavior: 'smooth' });
+      }
+      Sound.tap();
+    }
+
+
+    /* -------------------------------------
+       INTERACTIVE FAQ ACCORDION OPEN/CLOSE
+       ------------------------------------- */
+    function toggleFAQ(itemElement) {
+      const body = itemElement.querySelector('.faq-body');
+      const isActive = itemElement.classList.contains('active');
+      
+      // Close all other items first
+      document.querySelectorAll('.faq-item').forEach(other => {
+        if (other !== itemElement) {
+          other.classList.remove('active');
+          other.querySelector('.faq-body').style.maxHeight = null;
+        }
+      });
+      
+      if (isActive) {
+        itemElement.classList.remove('active');
+        body.style.maxHeight = null;
+      } else {
+        itemElement.classList.add('active');
+        body.style.maxHeight = body.scrollHeight + 'px';
+      }
+      Sound.tap();
+    }
+
+
+    /* -------------------------------------
+       SEO BLOG ARTICLES MODAL DATA LOADER
+       ------------------------------------- */
+    const blogDatabase = {
+      b1: {
+        title: "Starting Your Fitness Journey in Brooklyn, NY",
+        category: "Beginners Guide",
+        hero: "https://images.unsplash.com/photo-1540497077202-7c8a3999166f?auto=format&fit=crop&w=1200&q=80",
+        content: `
+          <h3>The Anatomy of Starting Your Gym Habits Correctly</h3>
+          <p>Many prospective athletes around local Brooklyn, NY fail to achieve their weight loss or muscular targets because of standard habit burnout. They enter the weights floor at 100% velocity, strain joint structures, starve metabolic macros, and quit inside 20 days. At Iron Grit Fitness, we believe in structural alignment patterns first.</p>
+          
+          <h3>Step 1: Set Realistic Progression Vectors</h3>
+          <p>Do not expect to shift 30 lbs in a week. Progressive sports diagnostics require gradual tracking. Start with 3 manageable fitness session alignments per week, prioritizing consistency over extreme exhaustion.</p>
+          
+          <h3>Step 2: Understand Compound Movement Alignment</h3>
+          <p>Compound weights drops (such as barbell squats, overhead shoulder pushes, and trap rack lifts) stimulate multiple motor nervous connections simultaneously, leading to 250% higher growth hormone outputs over isolated weight machine curls. Consult Iron Grit Fitness's coach Diana Prince to verify your angles cleanly.</p>
+          
+          <h3>Step 3: Track Real Macro Nutrition Configurations</h3>
+          <p>Training represents 30% of physical progression; nutrition accounts for the remaining 70%. Ensure you record sufficient clean proteins to repair micro-damaged fibers and sustain consistent recovery sleep patterns.</p>
+        `
+      },
+      b2: {
+        title: "How Strength Training Accelerates Fat Loss",
+        category: "Weight Loss Science",
+        hero: "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=1200&q=80",
+        content: `
+          <h3>The Metabolic Engine Principle Explained</h3>
+          <p>When searching for weight loss in Brooklyn, NY, most homeowners automatically jump on endless cardio treadmills. While cardio burns immediate calories, it fails to optimize long-term basal metabolic rates. Heavy barbell resistance lifting stimulates a superior biological effect known as EPOC: Excess Post-Exercise Oxygen Consumption.</p>
+          
+          <h3>Why Active Muscle Fiber Burns Fat Automatically</h3>
+          <p>Active muscular mass acts as a direct biological furnace. One pound of clean muscle burns approximately 3 times more resting calories than a pound of adipose tissue. By adding dense skeletal fibers under our custom Rogue cage sets, you increase your resting metabolism cleanly for 24 hours a day.</p>
+          
+          <h3>EPOC: The Afternoon Burn Effect</h3>
+          <p>When you perform progressive strength sessions at Iron Grit Fitness, your skeletal structures trigger recovery repairs for up to 36 hours. This continuous process elevates oxygen tracking, burning lipids long after your workout wraps up.</p>
+        `
+      },
+      b3: {
+        title: "Why Consistency Beats Motivation Every Time",
+        category: "Sports Psychology",
+        hero: "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=1200&q=80",
+        content: `
+          <h3>The Habits Trap for Fitness Beginners</h3>
+          <p>Motivation is a transient emotional chemical. It spikes after a movie or a January resolution checklist, and vanishes when facing early 5 AM alarm clocks in Brooklyn, NY. Professional training is not based on feeling motivated. It is built on structured operational discipline blocks.</p>
+          
+          <h3>Building Automatic Habit Paths</h3>
+          <p>Shedding fat or lifting Watson weights is identical to brushing teeth. Design clear pre-session routines. Schedule your workout alignments inside digital calendars like automatic meetings. Remove friction points—pack training bags the night before.</p>
+          
+          <h3>Community Drives Lifelong Consistency</h3>
+          <p>Surrounding your mindset with other highly driven local athletes in Iron Grit Fitness removes mental resistance during days of heavy tiredness. Enter a high performance space designed specifically to claim results safely.</p>
+        `
+      }
+    };
+
+    function openBlog(id) {
+      const data = blogDatabase[id];
+      if (!data) return;
+      
+      document.getElementById('blog-modal-header-bg').style.backgroundImage = `url('${data.hero}')`;
+      document.getElementById('blog-modal-category').innerText = data.category;
+      document.getElementById('blog-modal-title').innerText = data.title;
+      document.getElementById('blog-modal-content').innerHTML = data.content + `<br><center><a href="#contact" class="btn btn-primary" onclick="closeBlog(); Sound.click()">Claim Free Week Pass To Apply Now ⚡</a></center>`;
+      
+      document.getElementById('blog-overlay').classList.add('open');
+      document.body.style.overflow = 'hidden';
+      Sound.liftSound();
+    }
+
+    function closeBlog() {
+      document.getElementById('blog-overlay').classList.remove('open');
+      document.body.style.overflow = '';
+      Sound.fadeSound();
+    }
+
+
+    /* -------------------------------------
+       LEAD FORM CAPTURE & SUCCESS ALERTS
+       ------------------------------------- */
+    function handleFormSubmission(event) {
+      event.preventDefault();
+      
+      _gaq = window._gaq || [];
+      _gaq.push(['_trackEvent', 'Form', 'Submit', 'Gym Lead Pass']);
+
+      // Simple UX success sequence
+      document.getElementById('lead-form').style.display = 'none';
+      document.getElementById('success-message').style.display = 'block';
+      Sound.successChime();
+    }
+
+    /* -------------------------------------
+       SCROLL HIDDEN PROMO STRIP & COMPACT HEADER
+       ------------------------------------- */
+    window.addEventListener('scroll', () => {
+      const promo = document.querySelector('.promo-bar');
+      const header = document.querySelector('header.site-header');
+      if (!promo || !header) return;
+      if (window.scrollY > 25) {
+        promo.classList.add('scrolled');
+        header.classList.add('scrolled');
+      } else {
+        promo.classList.remove('scrolled');
+        header.classList.remove('scrolled');
+      }
+    }, { passive: true });
+  </script>
+</body>
+</html>

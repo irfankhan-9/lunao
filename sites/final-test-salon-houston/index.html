@@ -1,0 +1,3918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Final Test Salon — Hair Studio & Atelier</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,600;0,700;1,300;1,400;1,600&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* Backgrounds */
+      --cream:         #FAF8F4;      /* main background — warm white */
+      --parchment:     #F3EFE7;      /* alternating sections */
+      --linen:         #EDE8DE;      /* deeper warm surface */
+      --card-bg:       #FFFFFF;      /* pure white for cards */
+
+      /* Text */
+      --ink:           #1C1A17;      /* near-black for headings */
+      --ink-mid:       #4A4540;      /* body text */
+      --ink-muted:     #8C8680;      /* secondary text, captions */
+      --ink-ghost:     #C2BBB2;      /* placeholders, light borders */
+
+      /* Accent */
+      --rose:          #C4856A;      /* the accent — dusty rose */
+      --rose-light:    #D9A48C;      /* hover state */
+      --rose-tint:     #FAF0EB;      /* background tint */
+      --rose-dark:     #A06850;      /* active/pressed */
+
+      /* Borders */
+      --rule:          1px solid #D6CFC5;    /* primary section divider */
+      --rule-light:    1px solid #E8E3DB;    /* between items within a section */
+      --rule-ghost:    1px solid #F0EBE4;    /* inside cards */
+
+      /* Shadows */
+      --shadow-xs:     0 1px 4px rgba(28,26,23,0.06);
+      --shadow-sm:     0 2px 12px rgba(28,26,23,0.08);
+      --shadow-md:     0 8px 32px rgba(28,26,23,0.10);
+
+      /* Radii */
+      --r-xs:  2px;
+      --r-sm:  4px;
+      --r-md:  8px;
+      --r-lg:  16px;
+      --r-xl:  28px;
+      --r-pill:100px;
+
+      /* Transitions */
+      --t-fast:   0.15s ease;
+      --t-base:   0.25s ease;
+      --t-slow:   0.45s ease;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      background-color: var(--cream);
+      font-family: 'Jost', sans-serif;
+      color: var(--ink-mid);
+      overflow-x: hidden;
+      line-height: 1.5;
+    }
+
+    a {
+      text-decoration: none;
+      color: inherit;
+      transition: color var(--t-fast);
+    }
+
+    button, select, input, textarea {
+      font-family: inherit;
+      outline: none;
+    }
+
+    /* TYPOGRAPHY UTILITIES */
+    .font-serif {
+      font-family: 'Fraunces', serif;
+    }
+    
+    .text-ink { color: var(--ink); }
+    .text-muted { color: var(--ink-muted); }
+    .text-rose { color: var(--rose); }
+
+    /* UTILITY LAYOUT BACKGROUNDS */
+    .bg-cream { background-color: var(--cream); }
+    .bg-parchment { background-color: var(--parchment); }
+    .bg-linen { background-color: var(--linen); }
+
+    /* CONSTANT SECTION BOUNDARY STRUCTURE */
+    section {
+      border-top: var(--rule);
+      padding: 64px 24px;
+      position: relative;
+    }
+
+    @media (min-width: 768px) {
+      section {
+        padding: 96px 48px;
+      }
+    }
+
+    /* SECTION HEADER STYLE */
+    .section-header {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 48px;
+      text-align: left;
+    }
+
+    @media (min-width: 768px) {
+      .section-header {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: flex-end;
+        border-bottom: var(--rule-light);
+        padding-bottom: 24px;
+      }
+    }
+
+    .section-eyebrow {
+      font-size: 11px;
+      font-weight: 400;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--rose);
+    }
+
+    .section-title {
+      font-size: clamp(32px, 4.5vw, 48px);
+      font-weight: 600;
+      line-height: 1.1;
+      color: var(--ink);
+    }
+
+    /* SCROLL REVEAL EFFECT */
+    [data-reveal] {
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity var(--t-slow), transform var(--t-slow);
+    }
+
+    [data-reveal].revealed {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* NAVIGATION */
+    .nav-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 56px;
+      background: var(--cream);
+      border-bottom: var(--rule);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      z-index: 1000;
+      transition: background 0.35s ease, box-shadow var(--t-base), border-color 0.35s ease;
+    }
+    
+    .nav-bar.menu-open {
+      background: var(--cream);
+      box-shadow: none;
+      border-bottom-color: transparent;
+    }
+
+    @media (min-width: 768px) {
+      .nav-bar {
+        height: 64px;
+        padding: 0 48px;
+      }
+    }
+
+    .nav-bar.scrolled {
+      box-shadow: 0 1px 0 var(--rule), var(--shadow-xs);
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .nav-actions-container {
+      display: flex;
+      align-items: center;
+      gap: 4px; /* brought closer to book now */
+    }
+
+    @media (min-width: 480px) {
+      .nav-actions-container {
+        gap: 8px;
+      }
+    }
+
+    .nav-bar.menu-open .logo-container {
+      opacity: 0;
+      transform: translateX(-15px);
+      pointer-events: none;
+    }
+
+    .nav-bar.menu-open .nav-cta-btn {
+      opacity: 0;
+      transform: translateX(15px);
+      pointer-events: none;
+    }
+
+    .logo-mark {
+      width: 28px;
+      height: 28px;
+      border: 1.5px solid var(--rose);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .logo-mark::after {
+      content: '';
+      width: 8px;
+      height: 8px;
+      background: var(--rose);
+      border-radius: 50%;
+    }
+
+    .logo-text {
+      font-size: 18px;
+      font-weight: 300;
+      font-style: italic;
+      color: var(--ink);
+    }
+
+    .nav-links-desktop {
+      display: none;
+    }
+
+    @media (min-width: 1024px) {
+      .nav-links-desktop {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .nav-link {
+        font-size: 13px;
+        font-weight: 400;
+        letter-spacing: 0.05em;
+        color: var(--ink-mid);
+        padding: 4px 6px;
+      }
+
+      .nav-link:hover, .nav-link.active {
+        color: var(--rose);
+      }
+
+      .nav-link-dot {
+        color: var(--ink-ghost);
+        font-size: 12px;
+        user-select: none;
+      }
+    }
+
+    .nav-cta-btn {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      background: var(--rose);
+      color: #FFFFFF;
+      border: none;
+      padding: 6px 12px;
+      border-radius: var(--r-sm);
+      cursor: pointer;
+      transition: background var(--t-fast), opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      white-space: nowrap;
+    }
+
+    @media (min-width: 768px) {
+      .nav-cta-btn {
+        font-size: 13px;
+        padding: 10px 22px;
+      }
+    }
+
+    .nav-cta-btn:hover {
+      background: var(--rose-dark);
+    }
+
+    .menu-toggle {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 8px;
+      z-index: 1001;
+      width: 44px;
+      height: 44px;
+      align-items: center;
+      justify-content: center;
+      margin-right: -8px;
+    }
+
+    @media (min-width: 1024px) {
+      .menu-toggle {
+        display: none;
+      }
+    }
+
+    .menu-toggle span {
+      width: 22px;
+      height: 1.5px;
+      background-color: var(--ink);
+      display: block;
+      transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+      transform-origin: center;
+    }
+
+    .menu-toggle.is-active span:nth-child(1) {
+      transform: translateY(6.5px) rotate(45deg);
+    }
+    .menu-toggle.is-active span:nth-child(2) {
+      opacity: 0;
+    }
+    .menu-toggle.is-active span:nth-child(3) {
+      transform: translateY(-6.5px) rotate(-45deg);
+    }
+
+    /* MOBILE NAV OVERLAY */
+    .mobile-menu-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: var(--cream);
+      z-index: 999;
+      transform: translateY(-100%);
+      transition: transform 0.5s cubic-bezier(0.7, 0, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 80px 32px 40px;
+      overflow-y: auto;
+    }
+
+    .mobile-menu-overlay.open {
+      transform: translateY(0);
+    }
+
+    .mobile-nav-links {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-width: 440px; /* beautiful bound */
+      gap: 0;
+      margin: 0 auto;
+    }
+
+    .mobile-nav-link {
+      font-family: 'Fraunces', serif;
+      font-weight: 300;
+      font-style: italic;
+      font-size: 26px; /* perfectly elegant size */
+      color: var(--ink);
+      text-decoration: none;
+      width: 100%;
+      text-align: center;
+      padding: 12px 0;
+      border-bottom: var(--rule-light); /* skinny brand-consistent separators */
+      opacity: 0;
+      transform: translateY(20px);
+      transition: color var(--t-base), opacity 0.4s ease, transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .mobile-nav-link:last-child {
+      border-bottom: none;
+    }
+    
+    .mobile-menu-overlay.open .mobile-nav-link {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    
+    .mobile-menu-overlay.open .mobile-nav-link:nth-child(1) { transition-delay: 0.1s; }
+    .mobile-menu-overlay.open .mobile-nav-link:nth-child(2) { transition-delay: 0.14s; }
+    .mobile-menu-overlay.open .mobile-nav-link:nth-child(3) { transition-delay: 0.18s; }
+    .mobile-menu-overlay.open .mobile-nav-link:nth-child(4) { transition-delay: 0.22s; }
+    .mobile-menu-overlay.open .mobile-nav-link:nth-child(5) { transition-delay: 0.26s; }
+    .mobile-menu-overlay.open .mobile-nav-link:nth-child(6) { transition-delay: 0.3s; }
+    .mobile-menu-overlay.open .mobile-nav-link:nth-child(7) { transition-delay: 0.34s; }
+    .mobile-menu-overlay.open .mobile-nav-link:nth-child(8) { transition-delay: 0.38s; }
+    .mobile-menu-overlay.open .mobile-nav-link:nth-child(9) { transition-delay: 0.42s; }
+
+    .mobile-nav-link:hover {
+      color: var(--rose);
+      transform: scale(1.03);
+    }
+
+    /* SECTION 01: HERO */
+    #home {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+      border-top: none;
+    }
+
+    .hero-split {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    @media (min-width: 1024px) {
+      .hero-split {
+        flex-direction: row;
+        min-height: calc(100vh - 110px);
+      }
+    }
+
+    .hero-content {
+      padding: 96px 24px 48px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    @media (min-width: 768px) {
+      .hero-content {
+        padding: 120px 48px 64px;
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .hero-content {
+        width: 60%;
+        padding: 140px 64px 80px;
+      }
+    }
+
+    .hero-eyebrow {
+      font-size: 11px;
+      font-weight: 300;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--rose);
+      margin-bottom: 24px;
+    }
+
+    .hero-title-container {
+      margin-bottom: 32px;
+    }
+
+    .hero-title-1 {
+      font-style: italic;
+      font-weight: 300;
+      font-size: clamp(36px, 6vw, 68px);
+      color: var(--ink);
+      line-height: 1.0;
+      display: block;
+    }
+
+    .hero-title-2 {
+      font-weight: 700;
+      font-size: clamp(38px, 6vw, 70px);
+      color: var(--ink);
+      line-height: 1.05;
+      display: block;
+    }
+
+    .hero-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    .hero-divider-line {
+      width: 56px;
+      height: 1px;
+      background-color: var(--rose);
+    }
+
+    .hero-divider-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: var(--rose);
+    }
+
+    .hero-description {
+      font-size: 15px;
+      font-weight: 300;
+      color: var(--ink-mid);
+      line-height: 1.75;
+      max-width: 440px;
+      margin-bottom: 40px;
+    }
+
+    .hero-cta-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .hero-btn-primary {
+      background: var(--ink);
+      color: var(--cream);
+      padding: 14px 32px;
+      border-radius: var(--r-sm);
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      border: none;
+      cursor: pointer;
+      transition: background var(--t-fast);
+    }
+
+    .hero-btn-primary:hover {
+      background: var(--rose);
+    }
+
+    .hero-btn-secondary {
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--rose);
+      border-bottom: 1px solid var(--rose);
+      padding-bottom: 2px;
+      background: transparent;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+      cursor: pointer;
+    }
+
+    .hero-btn-secondary:hover {
+      color: var(--rose-dark);
+      border-bottom-color: var(--rose-dark);
+    }
+
+    /* HERO ARTWORK SIDE (DESKTOP ONLY) */
+    .hero-illustration {
+      display: none;
+    }
+
+    @media (min-width: 1024px) {
+      .hero-illustration {
+        display: block;
+        width: 40%;
+        position: relative;
+        background: var(--parchment);
+        overflow: hidden;
+        border-left: var(--rule);
+        min-height: 500px;
+      }
+
+      .artwork-oval-head {
+        position: absolute;
+        width: 240px;
+        height: 240px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--linen), var(--parchment));
+        top: 20%;
+        left: 50%;
+        transform: translateX(-50%);
+        box-shadow: var(--shadow-md);
+      }
+
+      .artwork-hair-line {
+        position: absolute;
+        width: 1px;
+        height: 48%;
+        background: linear-gradient(to bottom, var(--rose), transparent);
+        top: 32%;
+        left: 56%;
+      }
+
+      .artwork-back-wave {
+        position: absolute;
+        width: 180px;
+        height: 380px;
+        border: 1px solid var(--rose-light);
+        border-radius: 40% 60% 30% 70% / 50% 60% 40% 50%;
+        top: 15%;
+        left: 42%;
+        opacity: 0.35;
+      }
+
+      .artwork-decor-dot {
+        position: absolute;
+        width: 8px;
+        height: 8px;
+        background-color: var(--rose);
+        border-radius: 50%;
+        top: 25%;
+        left: 32%;
+      }
+
+      .artwork-decor-line-h {
+        position: absolute;
+        width: 40px;
+        height: 1px;
+        background-color: var(--icon-ghost, var(--ink-ghost));
+        top: 48%;
+        left: 20%;
+      }
+    }
+
+    /* HERO STATS BOTTOM BAR */
+    .hero-stats-strip {
+      border-top: var(--rule);
+      padding: 32px 24px;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .hero-stats-strip {
+        grid-template-columns: repeat(4, 1fr);
+        padding: 24px 48px;
+        align-items: center;
+      }
+    }
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    @media (min-width: 768px) {
+      .stat-item:not(:first-child) {
+        border-left: var(--rule);
+        padding-left: 24px;
+      }
+    }
+
+    .stat-number {
+      font-size: 32px;
+      font-weight: 600;
+      color: var(--ink);
+      line-height: 1.1;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      font-weight: 300;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--ink-muted);
+    }
+
+    /* SECTION 02: SERVICES (TABBED) */
+    .tabs-wrapper {
+      width: 100%;
+      overflow-x: auto;
+      border-bottom: var(--rule);
+      margin-bottom: 24px;
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-x; /* Prevent vertical bouncing */
+    }
+
+    .tabs-wrapper::-webkit-scrollbar {
+      display: none;
+    }
+
+    .tabs-container {
+      display: flex;
+      padding: 0 24px;
+      min-width: max-content;
+    }
+
+    @media (min-width: 768px) {
+      .tabs-container {
+        padding: 0;
+      }
+    }
+
+    .tab-btn {
+      font-size: 13px;
+      font-weight: 400;
+      letter-spacing: 0.06em;
+      padding: 16px 0;
+      margin-right: 40px;
+      color: var(--ink-muted);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .tab-btn.active {
+      color: var(--ink);
+      font-weight: 500;
+    }
+
+    .tab-btn.active::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background-color: var(--rose);
+      z-index: 2;
+    }
+
+    .services-pane {
+      display: none;
+    }
+
+    .services-pane.active {
+      display: block;
+    }
+
+    .service-row {
+      border-bottom: var(--rule-light);
+      padding: 20px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      transition: background-color var(--t-fast);
+    }
+
+    @media (min-width: 768px) {
+      .service-row {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: baseline;
+        padding: 24px 16px;
+      }
+    }
+
+    .service-row:hover {
+      background-color: var(--rose-tint);
+    }
+
+    .service-meta {
+      display: flex;
+      flex-direction: column;
+    }
+
+    @media (min-width: 768px) {
+      .service-meta {
+        flex-direction: row;
+        align-items: baseline;
+        gap: 12px;
+        max-width: 80%;
+      }
+    }
+
+    .service-name {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .service-row:hover .service-name {
+      color: var(--rose);
+    }
+
+    .service-separator {
+      display: none;
+    }
+
+    @media (min-width: 768px) {
+      .service-separator {
+        display: inline;
+        color: var(--ink-ghost);
+      }
+    }
+
+    .service-desc {
+      font-size: 13px;
+      font-weight: 300;
+      color: var(--ink-muted);
+      line-height: 1.6;
+    }
+
+    .service-price {
+      font-size: 18px;
+      font-weight: 300;
+      font-style: italic;
+      color: var(--ink-mid);
+      align-self: flex-start;
+    }
+
+    @media (min-width: 768px) {
+      .service-price {
+        align-self: baseline;
+      }
+    }
+
+    /* SECTION 03: THE TEAM */
+    .team-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1px;
+      background-color: var(--rule-light);
+    }
+
+    @media (min-width: 640px) {
+      .team-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .team-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    .team-card {
+      background-color: var(--cream);
+      padding: 32px 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: transform var(--t-base);
+    }
+
+    .team-card:hover {
+      background-color: var(--card-bg);
+    }
+
+    .stylist-avatar-container {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      position: relative;
+      margin-bottom: 20px;
+      border: 1px solid var(--rule-light);
+    }
+
+    .stylist-avatar-inner {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+    }
+
+    .stylist-shape-arc {
+      position: absolute;
+      width: 60%;
+      height: 40%;
+      border-radius: 50%;
+      border-top: 1px solid var(--rose);
+      bottom: 25%;
+      left: 20%;
+      opacity: 0.45;
+    }
+
+    .stylist-details-top {
+      margin-bottom: 16px;
+    }
+
+    .stylist-name {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--ink);
+      margin-bottom: 2px;
+    }
+
+    .stylist-role {
+      font-size: 11px;
+      font-weight: 400;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--rose);
+      display: block;
+      margin-bottom: 12px;
+    }
+
+    .stylist-bio {
+      font-size: 13px;
+      font-weight: 300;
+      color: var(--ink-muted);
+      line-height: 1.65;
+      margin-bottom: 16px;
+    }
+
+    .stylist-tenure {
+      font-size: 12px;
+      color: var(--ink-ghost);
+    }
+
+    .stylist-divider {
+      border-top: var(--rule-ghost);
+      margin: 16px 0;
+    }
+
+    .stylist-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .stylist-tag {
+      background-color: var(--rose-tint);
+      color: var(--rose-dark);
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: var(--r-pill);
+      font-weight: 400;
+    }
+
+    /* SECTION 04: GALLERY (Work Portfolio) */
+    .filter-wrapper {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 32px;
+      justify-content: flex-start;
+    }
+
+    .filter-btn {
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 6px 16px;
+      border: 1px solid var(--rule);
+      background: transparent;
+      color: var(--ink-muted);
+      border-radius: var(--r-sm);
+      cursor: pointer;
+      transition: all var(--t-fast);
+    }
+
+    .filter-btn.active {
+      background: var(--ink);
+      color: var(--cream);
+      border-color: var(--ink);
+    }
+
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2px;
+      background-color: var(--rule);
+    }
+
+    @media (min-width: 640px) {
+      .gallery-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .gallery-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    .gallery-item {
+      aspect-ratio: 3 / 4;
+      position: relative;
+      overflow: hidden;
+      transition: all var(--t-base);
+      background-size: cover;
+      background-position: center;
+    }
+
+    .gallery-item.filtered-out {
+      opacity: 0;
+      transform: scale(0.9);
+      pointer-events: none;
+      position: absolute;
+      visibility: hidden;
+    }
+
+    /* CSS Geometric Portraits (Fallback or decorative overlays if needed) */
+    .gallery-hair-head {
+      position: absolute;
+      width: 55%;
+      height: 40%;
+      border-radius: 50%;
+      top: 22%;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .gallery-shoulder-line {
+      position: absolute;
+      width: 50%;
+      height: 1px;
+      background-color: rgba(255, 255, 255, 0.4);
+      top: 62%;
+      left: 25%;
+    }
+
+    .gallery-overlay {
+      position: absolute;
+      inset: 0;
+      background-color: rgba(28, 26, 23, 0.45);
+      opacity: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity var(--t-base);
+      z-index: 5;
+    }
+
+    .gallery-item:hover .gallery-overlay {
+      opacity: 1;
+    }
+
+    .gallery-label {
+      color: #FFFFFF;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 8px 16px;
+    }
+
+    /* SECTION 05: SPECIAL OFFERS */
+    .offers-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 32px;
+    }
+
+    @media (min-width: 1024px) {
+      .offers-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    /* Hero Offer 1 */
+    .offer-card-large {
+      background: var(--ink);
+      color: var(--cream);
+      padding: 48px 32px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .offer-card-large {
+        padding: 56px 48px;
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .offer-card-large {
+        grid-column: span 2;
+      }
+    }
+
+    .offer-tag {
+      font-size: 10px;
+      font-weight: 550;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--rose-light);
+    }
+
+    .offer-title-lg {
+      font-size: clamp(30px, 4vw, 44px);
+      line-height: 1.1;
+      margin-bottom: 12px;
+    }
+
+    .offer-desc-lg {
+      font-size: 14px;
+      font-weight: 300;
+      line-height: 1.65;
+      color: rgba(250, 248, 244, 0.7);
+      max-width: 600px;
+    }
+
+    .offer-action-row {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    @media (min-width: 640px) {
+      .offer-action-row {
+        flex-direction: row;
+        align-items: baseline;
+        justify-content: space-between;
+      }
+    }
+
+    .offer-price {
+      font-size: 40px;
+      font-weight: 300;
+      font-style: italic;
+      color: var(--rose-light);
+    }
+
+    .offer-cta-link {
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--rose-light);
+      border-bottom: 1px solid var(--rose);
+      padding-bottom: 2px;
+      align-self: flex-start;
+    }
+
+    .offer-cta-link:hover {
+      color: #FFFFFF;
+      border-bottom-color: #FFFFFF;
+    }
+
+    /* Small secondary offers */
+    .offer-card-rose {
+      background-color: var(--rose-tint);
+      border: 1px solid var(--rose);
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .offer-card-light {
+      background-color: var(--card-bg);
+      border: var(--rule);
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .offer-title-sm {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .offer-desc-sm {
+      font-size: 13.5px;
+      font-weight: 300;
+      line-height: 1.6;
+      color: var(--ink-mid);
+    }
+
+    .offer-price-sm {
+      font-size: 24px;
+      font-weight: 300;
+      font-style: italic;
+      color: var(--ink);
+    }
+
+    /* SECTION 06: REVIEWS (CAROUSEL) */
+    .reviews-info-strip {
+      font-size: 13px;
+      color: var(--ink-muted);
+      margin-bottom: 32px;
+    }
+
+    /* CAROUSEL FLOW CONTROLS */
+    .reviews-carousel-wrapper {
+      position: relative;
+      width: 100%;
+    }
+
+    .carousel-nav-container {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    @media (min-width: 1024px) {
+      .carousel-nav-container {
+        display: none !important;
+      }
+    }
+
+    .carousel-nav-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background-color: var(--cream);
+      border: var(--rule);
+      color: var(--ink);
+      font-size: 24px;
+      line-height: 1;
+      cursor: pointer;
+      z-index: 10;
+      box-shadow: var(--shadow-sm);
+      transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .carousel-nav-btn:hover {
+      background-color: var(--card-bg);
+      color: var(--rose);
+      border-color: var(--rose-light);
+    }
+
+    .carousel-nav-btn.hidden-btn {
+      opacity: 0.5;
+      pointer-events: none;
+      transform: scale(0.9);
+    }
+
+    .reviews-viewport {
+      width: 100%;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 16px;
+    }
+
+    .reviews-viewport::-webkit-scrollbar {
+      display: none;
+    }
+
+    .reviews-container {
+      display: flex;
+      gap: 16px;
+    }
+
+    @media (min-width: 1024px) {
+      .reviews-viewport {
+        overflow-x: visible;
+        padding-bottom: 0;
+      }
+
+      .reviews-container {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+      }
+    }
+
+    .review-card {
+      background: var(--card-bg);
+      border: var(--rule);
+      padding: 32px;
+      flex: 0 0 85vw;
+      scroll-snap-align: start;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 20px;
+      box-shadow: var(--shadow-xs);
+    }
+
+    @media (min-width: 768px) {
+      .review-card {
+        flex-basis: 45vw;
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .review-card {
+        flex: none;
+        width: auto;
+      }
+    }
+
+    .star-rating {
+      display: flex;
+      gap: 6px;
+    }
+
+    .star-shape {
+      width: 10px;
+      height: 10px;
+      background-color: var(--rose);
+      transform: rotate(45deg);
+    }
+
+    .star-shape.empty {
+      background-color: var(--ink-ghost);
+    }
+
+    .review-quote {
+      font-size: 16px;
+      font-weight: 400;
+      font-style: italic;
+      line-height: 1.75;
+      color: var(--ink-mid);
+    }
+
+    .review-author {
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--ink);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .review-author-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .review-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background-size: cover;
+      background-position: center;
+      border: 1px solid var(--rule-light);
+    }
+
+    .review-source {
+      font-size: 11px;
+      color: var(--ink-ghost);
+    }
+
+    /* SECTION 07: RESERVATIONS */
+    .book-split {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 48px;
+    }
+
+    @media (min-width: 1024px) {
+      .book-split {
+        grid-template-columns: 1fr 380px;
+      }
+    }
+
+    /* Booking Form Fields */
+    .form-group-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 640px) {
+      .form-group-row {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .form-field-container {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      position: relative;
+    }
+
+    .form-label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--ink-muted);
+    }
+
+    .input-underlined {
+      border: none;
+      border-bottom: 1px solid var(--ink-ghost);
+      background: transparent;
+      padding: 10px 0;
+      font-size: 15px;
+      color: var(--ink);
+      width: 100%;
+      border-radius: 0;
+      transition: border-bottom-color var(--t-fast);
+    }
+
+    .input-underlined:focus {
+      border-bottom-width: 1.5px;
+      border-bottom-color: var(--rose);
+    }
+
+    .input-underlined::placeholder {
+      color: var(--ink-ghost);
+    }
+
+    .input-underlined.has-error {
+      border-bottom-color: #E05C5C !important;
+    }
+
+    .form-submit-container {
+      margin-top: 32px;
+    }
+
+    .form-submit-btn {
+      width: 100%;
+      background: var(--ink);
+      color: var(--cream);
+      padding: 16px;
+      border-radius: var(--r-sm);
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      border: none;
+      cursor: pointer;
+      transition: background var(--t-fast);
+    }
+
+    .form-submit-btn:hover {
+      background: var(--rose);
+    }
+
+    .booking-acknowledgment {
+      font-size: 11.5px;
+      color: var(--ink-ghost);
+      margin-top: 12px;
+    }
+
+    /* Success box */
+    .booking-success-wrapper {
+      display: none;
+      border: var(--rule);
+      background-color: var(--cream);
+      padding: 32px;
+      text-align: center;
+      animation: tab-jiggle 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1) forwards;
+    }
+
+    /* BOOKING SIDEBAR */
+    .book-sidebar {
+      background-color: var(--cream);
+      border: var(--rule);
+      padding: 32px;
+    }
+
+    .book-sidebar-title {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--ink);
+      margin-bottom: 24px;
+    }
+
+    .notice-item {
+      border-bottom: var(--rule-ghost);
+      padding: 16px 0;
+    }
+
+    .notice-item:first-child {
+      padding-top: 0;
+    }
+
+    .notice-label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--rose);
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    .notice-content {
+      font-size: 13px;
+      font-weight: 300;
+      color: var(--ink-muted);
+      line-height: 1.6;
+    }
+
+    .notice-hours {
+      margin: 24px 0;
+    }
+
+    .hours-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13.5px;
+      padding: 4px 0;
+    }
+
+    .hours-day {
+      font-style: italic;
+      font-family: 'Fraunces', serif;
+    }
+
+    .sidebar-phone-link {
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--ink);
+      display: block;
+      margin-top: 16px;
+    }
+
+    .sidebar-phone-link:hover {
+      color: var(--rose);
+    }
+
+    /* SECTION 08: THE JOURNAL (BLOG) */
+    .blog-journal {
+      font-size: 13.5px;
+      color: var(--ink-muted);
+      margin-bottom: 40px;
+    }
+
+    .blog-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+      width: 100%;
+      max-width: 440px;
+      margin: 0 auto;
+    }
+
+    @media (min-width: 1024px) {
+      .blog-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 32px;
+        max-width: none;
+        margin: 0;
+      }
+    }
+
+    .blog-card {
+      background: var(--card-bg);
+      border: var(--rule);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 440px;
+      margin: 0 auto;
+    }
+
+    @media (min-width: 1024px) {
+      .blog-card {
+        max-width: none;
+        margin: 0;
+      }
+    }
+
+    .blog-card-image-box {
+      height: 200px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* CSS Geometric representations for blog headers */
+    .blog-css-circle {
+      width: 60px;
+      height: 60px;
+      border: 1px solid var(--rule);
+      border-radius: 50%;
+      position: relative;
+    }
+
+    .blog-css-circle::after {
+      content: '';
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      background-color: var(--rose);
+      border-radius: 50%;
+      top: 25%;
+      left: 25%;
+    }
+
+    .blog-css-diagonal {
+      width: 80px;
+      height: 1px;
+      background-color: var(--rose-light);
+      transform: rotate(-30deg);
+      opacity: 0.5;
+    }
+
+    .blog-css-cross {
+      width: 80px;
+      height: 80px;
+      position: relative;
+    }
+
+    .blog-css-cross::before, .blog-css-cross::after {
+      content: '';
+      position: absolute;
+      background-color: var(--ink-ghost);
+    }
+
+    .blog-css-cross::before {
+      width: 100%;
+      height: 1px;
+      top: 50%;
+    }
+
+    .blog-css-cross::after {
+      width: 1px;
+      height: 100%;
+      left: 50%;
+    }
+
+    .blog-body {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .blog-badge-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .blog-tag {
+      font-size: 10px;
+      font-weight: 550;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      background-color: var(--rose-tint);
+      color: var(--rose-dark);
+      padding: 4px 10px;
+      border-radius: var(--r-pill);
+    }
+
+    .blog-date {
+      font-size: 11px;
+      color: var(--ink-ghost);
+      letter-spacing: 0.06em;
+    }
+
+    .blog-title {
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--ink);
+    }
+
+    .blog-excerpt {
+      font-size: 13.5px;
+      font-weight: 300;
+      line-height: 1.65;
+      color: var(--ink-muted);
+    }
+
+    .blog-read-more {
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--rose);
+      border: none;
+      background: none;
+      border-bottom: 1px solid var(--rose);
+      padding: 0;
+      padding-bottom: 2px;
+      align-self: flex-start;
+      margin-top: 12px;
+      cursor: pointer;
+      font-family: 'Jost', sans-serif;
+      transition: color var(--t-fast), border-color var(--t-fast);
+    }
+
+    .blog-read-more:hover {
+      color: var(--rose-dark);
+      border-bottom-color: var(--rose-dark);
+    }
+
+    /* PREMIUM BLOG READER OVERLAY CSS */
+    .blog-reader-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: var(--cream);
+      z-index: 2000;
+      overflow-y: auto;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(30px);
+      transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .blog-reader-overlay.visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .blog-reader-header {
+      position: sticky;
+      top: 0;
+      width: 100%;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      background-color: var(--cream);
+      border-bottom: var(--rule);
+      z-index: 2010;
+    }
+
+    @media (min-width: 768px) {
+      .blog-reader-header {
+        padding: 0 48px;
+      }
+    }
+
+    .blog-back-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: none;
+      border: none;
+      color: var(--ink-mid);
+      font-family: 'Jost', sans-serif;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 500;
+      cursor: pointer;
+      padding: 8px 0;
+      transition: color var(--t-fast), transform var(--t-fast);
+    }
+
+    .blog-back-btn:hover {
+      color: var(--rose);
+      transform: translateX(-4px);
+    }
+
+    .blog-reader-logo {
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-weight: 300;
+      font-size: 18px;
+    }
+
+    .blog-reader-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+
+    @media (min-width: 768px) {
+      .blog-reader-container {
+        padding: 60px 48px 120px;
+      }
+    }
+
+    .blog-reader-hero-image {
+      width: 100%;
+      height: 250px;
+      background-size: cover;
+      background-position: center;
+      border: var(--rule);
+      margin-bottom: 32px;
+    }
+
+    @media (min-width: 768px) {
+      .blog-reader-hero-image {
+        height: 380px;
+        margin-bottom: 48px;
+      }
+    }
+
+    .blog-reader-meta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .blog-reader-tag {
+      font-family: 'Jost', sans-serif;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      background-color: var(--rose-tint);
+      color: var(--rose-dark);
+      padding: 4px 12px;
+      border-radius: var(--r-pill);
+    }
+
+    .blog-reader-date {
+      font-family: 'Jost', sans-serif;
+      font-size: 13px;
+      color: var(--ink-muted);
+    }
+
+    .blog-reader-title {
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1.15;
+      color: var(--ink);
+      margin-bottom: 16px;
+    }
+
+    .blog-reader-subtitle {
+      font-size: clamp(16px, 2.5vw, 20px);
+      line-height: 1.5;
+      color: var(--ink-muted);
+      font-weight: 300;
+      margin-bottom: 32px;
+      border-bottom: var(--rule-light);
+      padding-bottom: 24px;
+    }
+
+    /* TYPOGRAPHY SETTINGS FOR BLOG BODY */
+    .blog-reader-body {
+      font-family: 'Jost', sans-serif;
+      font-size: 15.5px;
+      line-height: 1.85;
+      color: var(--ink-mid);
+    }
+
+    .blog-reader-body p {
+      margin-bottom: 24px;
+      font-weight: 300;
+    }
+
+    .blog-reader-body h2 {
+      font-family: 'Fraunces', serif;
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--ink);
+      margin-top: 40px;
+      margin-bottom: 16px;
+    }
+
+    .blog-reader-body h3 {
+      font-family: 'Jost', sans-serif;
+      font-size: 16px;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--rose);
+      margin-top: 28px;
+      margin-bottom: 12px;
+    }
+
+    .blog-reader-body blockquote {
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-size: 20px;
+      line-height: 1.6;
+      color: var(--rose-dark);
+      border-left: 2px solid var(--rose);
+      padding-left: 20px;
+      margin: 32px 0;
+    }
+
+    .blog-reader-body ul, .blog-reader-body ol {
+      margin-bottom: 24px;
+      padding-left: 20px;
+    }
+
+    .blog-reader-body li {
+      margin-bottom: 12px;
+      font-weight: 300;
+    }
+
+    .blog-reader-body li strong {
+      font-weight: 500;
+      color: var(--ink);
+    }
+
+    .blog-reader-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 32px 0;
+    }
+
+    .blog-reader-body th, .blog-reader-body td {
+      border: 1px solid var(--rule-ghost);
+      padding: 12px;
+      text-align: left;
+    }
+
+    .blog-reader-body th {
+      background-color: var(--parchment);
+      font-weight: 500;
+    }
+
+    .blog-reader-cta-card {
+      background-color: var(--parchment);
+      border: var(--rule);
+      border-radius: var(--r-lg);
+      padding: 32px 24px;
+      text-align: center;
+      margin-top: 48px;
+    }
+
+    .blog-reader-cta-title {
+      font-size: 22px;
+      color: var(--ink);
+      margin-bottom: 12px;
+    }
+
+    .blog-reader-cta-desc {
+      font-size: 14px;
+      color: var(--ink-muted);
+      margin-bottom: 20px;
+      font-weight: 300;
+      line-height: 1.6;
+    }
+
+    .blog-reader-cta-btn {
+      display: inline-block;
+      background-color: var(--ink);
+      color: var(--cream);
+      padding: 12px 28px;
+      border-radius: var(--r-sm);
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 500;
+      text-decoration: none;
+      transition: background var(--t-fast);
+      cursor: pointer;
+      border: none;
+    }
+
+    .blog-reader-cta-btn:hover {
+      background-color: var(--rose);
+    }
+
+    /* SECTION 09: CONTACT (FIND US) */
+    .contact-cols {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 40px;
+    }
+
+    @media (min-width: 768px) {
+      .contact-cols {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0;
+      }
+    }
+
+    .contact-col {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    @media (min-width: 768px) {
+      .contact-col:not(:first-child) {
+        border-left: var(--rule);
+        padding-left: 32px;
+      }
+    }
+
+    .contact-label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--rose);
+    }
+
+    .contact-head {
+      font-size: clamp(24px, 3.5vw, 32px);
+      font-weight: 700;
+      color: var(--ink);
+      line-height: 1.1;
+    }
+
+    .contact-btn {
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--ink);
+      border-bottom: 1px solid var(--ink);
+      align-self: flex-start;
+      padding-bottom: 2px;
+      margin-top: 12px;
+    }
+
+    .contact-btn:hover {
+      color: var(--rose);
+      border-bottom-color: var(--rose);
+    }
+
+    .contact-block-divider {
+      border-top: var(--rule-light);
+      margin: 24px 0 12px;
+    }
+
+    /* GLOBAL FOOTER */
+    footer {
+      border-top: var(--rule);
+      background-color: var(--ink);
+      color: var(--cream);
+      padding: 64px 24px 32px;
+    }
+
+    @media (min-width: 768px) {
+      footer {
+        padding: 80px 48px 40px;
+      }
+    }
+
+    .footer-top {
+      display: flex;
+      flex-direction: column;
+      gap: 48px;
+      margin-bottom: 48px;
+    }
+
+    @media (min-width: 1024px) {
+      .footer-top {
+        flex-direction: row;
+        justify-content: space-between;
+      }
+    }
+
+    .footer-brand {
+      max-width: 300px;
+    }
+
+    .footer-brand .logo-text {
+      color: var(--cream);
+      font-size: 22px;
+    }
+
+    .footer-tagline {
+      font-size: 13px;
+      font-weight: 300;
+      color: rgba(250, 248, 244, 0.45);
+      margin-top: 12px;
+    }
+
+    .footer-navs {
+      display: flex;
+      gap: 48px;
+    }
+
+    .footer-nav-col {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .footer-nav-title {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(250, 248, 244, 0.2);
+    }
+
+    .footer-nav-link {
+      font-size: 13px;
+      font-weight: 300;
+      color: rgba(250, 248, 244, 0.5);
+    }
+
+    .footer-nav-link:hover {
+      color: var(--cream);
+    }
+
+    .footer-divider {
+      border-top: 1px solid rgba(250, 248, 244, 0.08);
+      margin-bottom: 24px;
+    }
+
+    .footer-bottom {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      font-size: 12px;
+      color: rgba(250, 248, 244, 0.2);
+    }
+
+    @media (min-width: 640px) {
+      .footer-bottom {
+        flex-direction: row;
+        justify-content: space-between;
+      }
+    }
+
+    /* WHATSAPP iOS BOUNCE ANIMATION */
+    @keyframes whatsapp-bounce {
+      0% { transform: scale(1); }
+      25% { transform: scale(0.82); }
+      55% { transform: scale(1.14); }
+      78% { transform: scale(0.95); }
+      100% { transform: scale(1); }
+    }
+
+    .animate-whatsapp-bounce {
+      animation: whatsapp-bounce 0.38s cubic-bezier(0.25, 0.8, 0.3, 1) forwards;
+    }
+
+    @keyframes tab-jiggle {
+      0% { transform: scale(0.95); }
+      100% { transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAVIGATION -->
+  <nav class="nav-bar" id="navbar">
+    <div class="logo-container" id="logo_trigger">
+      <div class="logo-mark"></div>
+      <span class="logo-text">Final</span>
+    </div>
+
+    <!-- Center Navigation Links (Desktop Only) -->
+    <div class="nav-links-desktop">
+      <a href="#home" class="nav-link active">🏠 Home</a>
+      <span class="nav-link-dot">·</span>
+      <a href="#services" class="nav-link">💇‍♀️ Services</a>
+      <span class="nav-link-dot">·</span>
+      <a href="#team" class="nav-link">👥 Team</a>
+      <span class="nav-link-dot">·</span>
+      <a href="#gallery" class="nav-link">📸 Gallery</a>
+      <span class="nav-link-dot">·</span>
+      <a href="#offers" class="nav-link">🏷️ Offers</a>
+      <span class="nav-link-dot">·</span>
+      <a href="#reviews" class="nav-link">⭐ Reviews</a>
+      <span class="nav-link-dot">·</span>
+      <a href="#book" class="nav-link">📅 Book</a>
+      <span class="nav-link-dot">·</span>
+      <a href="#blog" class="nav-link">📰 Blog</a>
+      <span class="nav-link-dot">·</span>
+      <a href="#contact" class="nav-link">✉️ Contact</a>
+    </div>
+
+    <div class="nav-actions-container">
+      <button class="nav-cta-btn" id="nav_book_trigger">Book Now</button>
+      <button class="menu-toggle" id="mobile_toggle_btn" aria-label="Toggle navigation menu">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- MOBILE NAV OVERLAY -->
+  <div class="mobile-menu-overlay" id="mobile_overlay">
+    <div class="mobile-nav-links">
+      <a href="#home" class="mobile-nav-link">🏠 Home</a>
+      <a href="#services" class="mobile-nav-link">💇‍♀️ Services</a>
+      <a href="#team" class="mobile-nav-link">👥 Team</a>
+      <a href="#gallery" class="mobile-nav-link">📸 Gallery</a>
+      <a href="#offers" class="mobile-nav-link">🏷️ Offers</a>
+      <a href="#reviews" class="mobile-nav-link">⭐ Reviews</a>
+      <a href="#book" class="mobile-nav-link">📅 Book</a>
+      <a href="#blog" class="mobile-nav-link">📰 Blog</a>
+      <a href="#contact" class="mobile-nav-link">✉️ Contact</a>
+    </div>
+  </div>
+
+  <main>
+    <!-- SECTION 01: HERO -->
+    <section id="home" style="padding: 0;">
+      <div class="hero-split">
+        <!-- Left content half -->
+        <div class="hero-content">
+          <span class="hero-eyebrow">✨ Hair Studio · Houston</span>
+          <div class="hero-title-container">
+            <h1 class="hero-title-1">Final Test Salon</h1>
+            <h1 class="hero-title-2">Houston</h1>
+          </div>
+          <div class="hero-divider">
+            <div class="hero-divider-line"></div>
+            <div class="hero-divider-dot"></div>
+          </div>
+          <p class="hero-description">Precision cuts, flawless color, and the kind of care that keeps clients coming back. Houston's salon, rebuilt for a new era.</p>
+          <div class="hero-cta-group">
+            <button class="hero-btn-primary" id="hero_book_btn">Book an Appointment</button>
+            <button class="hero-btn-secondary" id="hero_see_work">See Our Work</button>
+          </div>
+        </div>
+
+        <!-- Right abstract graphic half (Desktop only) -->
+        <div class="hero-illustration">
+          <div class="artwork-oval-head"></div>
+          <div class="artwork-back-wave"></div>
+          <div class="artwork-hair-line"></div>
+          <div class="artwork-decor-dot"></div>
+          <div class="artwork-decor-line-h"></div>
+        </div>
+      </div>
+
+      <!-- Hero stats strip bottom bar -->
+      <div class="hero-stats-strip">
+        <div class="stat-item">
+          <span class="stat-number font-serif">12 Years</span>
+          <span class="stat-label">In Houston</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-number font-serif">8 Stylists</span>
+          <span class="stat-label">On Our Team</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-number font-serif">4.9 Stars</span>
+          <span class="stat-label">Average Rating</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-number font-serif">2,000+</span>
+          <span class="stat-label">Happy Clients</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 02: SERVICES -->
+    <section id="services">
+      <div class="section-header" data-reveal>
+        <div>
+          <span class="section-eyebrow">02 — Services</span>
+          <h2 class="section-title font-serif">What We Do</h2>
+        </div>
+      </div>
+
+      <!-- Tabbed interface wrapper -->
+      <div class="tabs-wrapper" data-reveal>
+        <div class="tabs-container">
+          <button class="tab-btn active" data-tab="hair">💇‍♀️ Hair</button>
+          <button class="tab-btn" data-tab="color">🎨 Color</button>
+          <button class="tab-btn" data-tab="treatment">💆‍♀️ Treatment</button>
+          <button class="tab-btn" data-tab="styling">✨ Styling</button>
+        </div>
+      </div>
+
+      <!-- Hair tab services -->
+      <div class="services-pane active" id="pane-hair" data-reveal>
+        <div class="service-row">
+          <div class="service-meta">
+            <span class="service-name">Signature Cut ✂️</span>
+            <span class="service-separator">—</span>
+            <p class="service-desc">A full consultation, precision cut, blow-dry finish</p>
+          </div>
+          <span class="service-price">From $65</span>
+        </div>
+        <div class="service-row">
+          <div class="service-meta">
+            <span class="service-name">Dry Cut 💇</span>
+            <span class="service-separator">—</span>
+            <p class="service-desc">Reshape and refine. No wash, no blowout, just the cut</p>
+          </div>
+          <span class="service-price">From $45</span>
+        </div>
+        <div class="service-row">
+          <div class="service-meta">
+            <span class="service-name">Men's Cut 👱‍♂️</span>
+            <span class="service-separator">—</span>
+            <p class="service-desc">Classic, clean, and done properly</p>
+          </div>
+          <span class="service-price">From $40</span>
+        </div>
+        <div class="service-row">
+          <div class="service-meta">
+            <span class="service-name">Fringe Trim ✂️</span>
+            <span class="service-separator">—</span>
+            <p class="service-desc">Quick, precise, no appointment required on weekdays</p>
+          </div>
+          <span class="service-price">$15</span>
+        </div>
+      </div>
+
+      <!-- Color tab services -->
+      <div class="services-pane" id="pane-color" data-reveal>
+        <div class="service-row">
+          <div class="service-meta">
+            <span class="service-name">Balayage 🖌️</span>
+            <span class="service-separator">—</span>
+            <p class="service-desc">Hand-painted color, sun-kissed and natural</p>
+          </div>
+          <span class="service-price">From $160</span>
+        </div>
+        <div class="service-row">
+          <div class="service-meta">
+            <span class="service-name">Full Color 🌈</span>
+            <span class="service-separator">—</span>
+            <p class="service-desc">Root-to-tip color application, any shade</p>
+          </div>
+          <span class="service-price">From $95</span>
+        </div>
+        <div class="service-row">
+          <div class="service-meta">
+            <span class="service-name">Highlights 🌟</span>
+            <span class="service-separator">—</span>
+            <p class="service-desc">Traditional foil highlights, partial or full</p>
+          </div>
+          <span class="service-price">From $110</span>
+        </div>
+        <div class="service-row">
+          <div class="service-meta">
+            <span class="service-name">Toner & Gloss ✨</span>
+            <span class="service-separator">—</span>
+            <p class="service-desc">Tone correction and shine treatment post-color</p>
+          </div>
+          <span class="service-price">From $55</span>
+        </div>
+        <div class="service-row">
+          <div class="service-meta">
+            <span class="service-name">Color Correction 🎨</span>
+            <span class="service-separator">—</span>
+            <p class="service-desc">Complex color work. Consultation required</p>
+          </div>
+          <span class="service-price">From $200</span>
+        </div>
+        <div class="service-row">
+          <div class="service-meta">
+            <span class="service-name">Ombre / Sombre ☀️</span>
+            <span class="service-separator">—</span>
+            <p class="service-desc">Gradual color melt from root to end</p>
+          </div>
+          <span class="service-price">From $145</span>
+        </div>
+      </div>
+
+      <!-- Treatment tab services -->
+      <div class="services-pane" id="pane-treatment" data-reveal>
+        <div class="service-row">
+          <div class="service-meta">
+            <span class="service-name">Keratin Treatment 💧</span>
+            <span class="service-separator">—</span>
+            <p class="service-desc">12-week frizz control, smoother texture, faster styling</p>
+          </div>
+          <span class="service-price">From $180</span>
+        </div>
+        <div class="service-row">
+          <div class="service-meta">
+            <span class="service-name">Deep Conditioning 🧴</span>
+            <span class="service-separator">—</span>
+            <p class="service-desc">Intensive moisture and protein repair, 30 minutes</p>
+          </div>
+          <span class="service-price">From $55</span>
+        </div>
+        <div class="service-row">
+          <div class="service-meta">
+            <span class="service-name">Scalp Treatment 💆‍♀️</span>
+            <span class="service-separator">—</span>
+            <p class="service-desc">Analysis, cleanse, and targeted scalp care</p>
+          </div>
+          <span class="service-price">From $65</span>
+        </div>
+        <div class="service-row">
+          <div class="service-meta">
+            <span class="service-name">Olaplex Treatment 🌿</span>
+            <span class="service-separator">—</span>
+            <p class="service-desc">Bond-building repair for damaged or color-treated hair</p>
+          </div>
+          <span class="service-price">From $45</span>
+        </div>
+        <div class="service-row">
+          <div class="service-meta">
+            <span class="service-name">Glossing Treatment 🌟</span>
+            <span class="service-separator">—</span>
+            <p class="service-desc">Low-commitment shine and color refresh</p>
+          </div>
+          <span class="service-price">From $75</span>
+        </div>
+      </div>
+
+      <!-- Styling tab services -->
+      <div class="services-pane" id="pane-styling" data-reveal>
+        <div class="service-row">
+          <div class="service-meta">
+            <span class="service-name">Blowout 💨</span>
+            <span class="service-separator">—</span>
+            <p class="service-desc">Wash, blow-dry, and style. Any length.</p>
+          </div>
+          <span class="service-price">From $55</span>
+        </div>
+        <div class="service-row">
+          <div class="service-meta">
+            <span class="service-name">Special Occasion 🥂</span>
+            <span class="service-separator">—</span>
+            <p class="service-desc">Updo, bridal, event styling. Consultation recommended</p>
+          </div>
+          <span class="service-price">From $120</span>
+        </div>
+        <div class="service-row">
+          <div class="service-meta">
+            <span class="service-name">Bridal Hair 💍</span>
+            <span class="service-separator">—</span>
+            <p class="service-desc">On-location or in-salon. Trials available.</p>
+          </div>
+          <span class="service-price">From $250</span>
+        </div>
+        <div class="service-row">
+          <div class="service-meta">
+            <span class="service-name">Braiding 👑</span>
+            <span class="service-separator">—</span>
+            <p class="service-desc">Box braids, cornrows, protective styles</p>
+          </div>
+          <span class="service-price">From $85</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 03: THE TEAM -->
+    <section id="team" class="bg-parchment">
+      <div class="section-header" data-reveal>
+        <div>
+          <span class="section-eyebrow">03 — The Team</span>
+          <h2 class="section-title font-serif">Meet Your Stylists</h2>
+        </div>
+      </div>
+
+      <div class="team-grid" data-reveal>
+        <!-- Member 1 -->
+        <div class="team-card">
+          <div class="stylist-details-top">
+            <div class="stylist-avatar-container">
+              <div class="stylist-avatar-inner" style="background-image: url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=200'); background-size: cover; background-position: center;"></div>
+              <div class="stylist-shape-arc"></div>
+            </div>
+            <h3 class="stylist-name font-serif">Sophie Laurent</h3>
+            <span class="stylist-role">Senior Colorist</span>
+            <p class="stylist-bio">Sophie trained in Paris and brings a European sensibility to every color consultation. She specializes in natural-looking blondes and complex color corrections.</p>
+            <span class="stylist-tenure">9 years in Houston</span>
+          </div>
+          <div>
+            <div class="stylist-divider"></div>
+            <div class="stylist-tags">
+              <span class="stylist-tag">🎨 Balayage</span>
+              <span class="stylist-tag">✨ Color Correction</span>
+              <span class="stylist-tag">👱‍♀️ Blondes</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Member 2 -->
+        <div class="team-card">
+          <div class="stylist-details-top">
+            <div class="stylist-avatar-container">
+              <div class="stylist-avatar-inner" style="background-image: url('https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=200'); background-size: cover; background-position: center;"></div>
+              <div class="stylist-shape-arc"></div>
+            </div>
+            <h3 class="stylist-name font-serif">Marcus Webb</h3>
+            <span class="stylist-role">Master Stylist</span>
+            <p class="stylist-bio">Known for precision cuts and a calm, unhurried approach. Marcus works with all hair types and has a particular gift for curly and textured hair.</p>
+            <span class="stylist-tenure">7 years in Houston</span>
+          </div>
+          <div>
+            <div class="stylist-divider"></div>
+            <div class="stylist-tags">
+              <span class="stylist-tag">✂️ Precision Cuts</span>
+              <span class="stylist-tag">💫 Curly Hair</span>
+              <span class="stylist-tag">👨 Men's Cuts</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Member 3 -->
+        <div class="team-card">
+          <div class="stylist-details-top">
+            <div class="stylist-avatar-container">
+              <div class="stylist-avatar-inner" style="background-image: url('https://images.unsplash.com/photo-1531123897727-8f129e1eb4ce?auto=format&fit=crop&q=80&w=200'); background-size: cover; background-position: center;"></div>
+              <div class="stylist-shape-arc"></div>
+            </div>
+            <h3 class="stylist-name font-serif">Priya Nair</h3>
+            <span class="stylist-role">Color Specialist</span>
+            <p class="stylist-bio">Priya's foiling technique is consistently requested by new clients. She focuses on dimensional color that moves naturally in light.</p>
+            <span class="stylist-tenure">5 years in Houston</span>
+          </div>
+          <div>
+            <div class="stylist-divider"></div>
+            <div class="stylist-tags">
+              <span class="stylist-tag">✨ Highlights</span>
+              <span class="stylist-tag">🎨 Balayage</span>
+              <span class="stylist-tag">🌅 Ombre</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Member 4 -->
+        <div class="team-card">
+          <div class="stylist-details-top">
+            <div class="stylist-avatar-container">
+              <div class="stylist-avatar-inner" style="background-image: url('https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200'); background-size: cover; background-position: center;"></div>
+              <div class="stylist-shape-arc"></div>
+            </div>
+            <h3 class="stylist-name font-serif">James Tello</h3>
+            <span class="stylist-role">Stylist</span>
+            <p class="stylist-bio">James brings energy and precision to every appointment. He is equally at home with editorial styling and everyday cuts for busy clients.</p>
+            <span class="stylist-tenure">4 years in Houston</span>
+          </div>
+          <div>
+            <div class="stylist-divider"></div>
+            <div class="stylist-tags">
+              <span class="stylist-tag">✨ Styling</span>
+              <span class="stylist-tag">💨 Blowouts</span>
+              <span class="stylist-tag">👨 Men's Cuts</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Member 5 -->
+        <div class="team-card">
+          <div class="stylist-details-top">
+            <div class="stylist-avatar-container">
+              <div class="stylist-avatar-inner" style="background-image: url('https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'); background-size: cover; background-position: center;"></div>
+              <div class="stylist-shape-arc"></div>
+            </div>
+            <h3 class="stylist-name font-serif">Camille Roux</h3>
+            <span class="stylist-role">Senior Stylist</span>
+            <p class="stylist-bio">Camille's background in fashion made her a natural at salon work. Her eye for proportion and balance shows in every cut she delivers.</p>
+            <span class="stylist-tenure">6 years in Houston</span>
+          </div>
+          <div>
+            <div class="stylist-divider"></div>
+            <div class="stylist-tags">
+              <span class="stylist-tag">✂️ Precision Cuts</span>
+              <span class="stylist-tag">🌸 Bridal</span>
+              <span class="stylist-tag">✨ Styling</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Member 6 -->
+        <div class="team-card">
+          <div class="stylist-details-top">
+            <div class="stylist-avatar-container">
+              <div class="stylist-avatar-inner" style="background-image: url('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200'); background-size: cover; background-position: center;"></div>
+              <div class="stylist-shape-arc"></div>
+            </div>
+            <h3 class="stylist-name font-serif">Aisha Moore</h3>
+            <span class="stylist-role">Texture Specialist</span>
+            <p class="stylist-bio">Aisha has built one of the most loyal client rosters in the salon through her specialty in textured, natural, and protective styles.</p>
+            <span class="stylist-tenure">5 years in Houston</span>
+          </div>
+          <div>
+            <div class="stylist-divider"></div>
+            <div class="stylist-tags">
+              <span class="stylist-tag">🌿 Natural Hair</span>
+              <span class="stylist-tag">👑 Braiding</span>
+              <span class="stylist-tag">💎 Protective Styles</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 04: GALLERY (Work Portfolio) -->
+    <section id="gallery">
+      <div class="section-header" data-reveal>
+        <div>
+          <span class="section-eyebrow">04 — Our Work</span>
+          <h2 class="section-title font-serif">The Portfolio</h2>
+        </div>
+      </div>
+
+      <!-- Filters Row -->
+      <div class="filter-wrapper" data-reveal>
+        <button class="filter-btn active" data-filter="all">✨ All</button>
+        <button class="filter-btn" data-filter="color">🎨 Color</button>
+        <button class="filter-btn" data-filter="cuts">✂️ Cuts</button>
+        <button class="filter-btn" data-filter="texture">🌀 Texture</button>
+        <button class="filter-btn" data-filter="bridal">🌸 Bridal</button>
+      </div>
+
+      <!-- Grid layout with CSS Art -->
+      <div class="gallery-grid" data-reveal>
+        <!-- Cell 1 - Color -->
+        <div class="gallery-item" data-category="color" style="background-image: url('https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1?auto=format&amp;fit=crop&amp;q=80&amp;w=600');">
+          <div class="gallery-overlay">
+            <span class="gallery-label">Warm Blonde</span>
+          </div>
+        </div>
+
+        <!-- Cell 2 - Color -->
+        <div class="gallery-item" data-category="color" style="background-image: url('https://images.unsplash.com/photo-1605980776566-0486c3ac7617?auto=format&amp;fit=crop&amp;q=80&amp;w=600');">
+          <div class="gallery-overlay">
+            <span class="gallery-label">Deep Copper</span>
+          </div>
+        </div>
+
+        <!-- Cell 3 - Color -->
+        <div class="gallery-item" data-category="color" style="background-image: url('https://images.unsplash.com/photo-1617897903246-719242758050?auto=format&amp;fit=crop&amp;q=80&amp;w=600');">
+          <div class="gallery-overlay">
+            <span class="gallery-label">Honey Highlights</span>
+          </div>
+        </div>
+
+        <!-- Cell 4 - Cuts -->
+        <div class="gallery-item" data-category="cuts" style="background-image: url('https://images.unsplash.com/photo-1562322140-8baeececf3df?auto=format&amp;fit=crop&amp;q=80&amp;w=600');">
+          <div class="gallery-overlay">
+            <span class="gallery-label">Rich Dark Brown</span>
+          </div>
+        </div>
+
+        <!-- Cell 5 - Color -->
+        <div class="gallery-item" data-category="color" style="background-image: url('https://images.unsplash.com/photo-1518837695005-2083093ee35b?auto=format&amp;fit=crop&amp;q=80&amp;w=600');">
+          <div class="gallery-overlay">
+            <span class="gallery-label">Ash Blonde</span>
+          </div>
+        </div>
+
+        <!-- Cell 6 - Cuts -->
+        <div class="gallery-item" data-category="cuts" style="background-image: url('https://images.unsplash.com/photo-1492106087820-71f1a00d2b11?auto=format&amp;fit=crop&amp;q=80&amp;w=600');">
+          <div class="gallery-overlay">
+            <span class="gallery-label">Deep Red Cut</span>
+          </div>
+        </div>
+
+        <!-- Cell 7 - Color -->
+        <div class="gallery-item" data-category="color" style="background-image: url('https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&amp;fit=crop&amp;q=80&amp;w=600');">
+          <div class="gallery-overlay">
+            <span class="gallery-label">Silver Grey Tint</span>
+          </div>
+        </div>
+
+        <!-- Cell 8 - Cuts -->
+        <div class="gallery-item" data-category="cuts" style="background-image: url('https://images.unsplash.com/photo-1595959183075-c1d09e77bfd9?auto=format&amp;fit=crop&amp;q=80&amp;w=600');">
+          <div class="gallery-overlay">
+            <span class="gallery-label">Dimensional Shape</span>
+          </div>
+        </div>
+
+        <!-- Cell 9 - Bridal -->
+        <div class="gallery-item" data-category="bridal" style="background-image: url('https://images.unsplash.com/photo-1519699047748-de8e457a634e?auto=format&amp;fit=crop&amp;q=80&amp;w=600');">
+          <div class="gallery-overlay">
+            <span class="gallery-label">Bridal Champagne</span>
+          </div>
+        </div>
+
+        <!-- Cell 10 - Cuts -->
+        <div class="gallery-item" data-category="cuts" style="background-image: url('https://images.unsplash.com/photo-1580618672591-eb180b1a973f?auto=format&amp;fit=crop&amp;q=80&amp;w=600');">
+          <div class="gallery-overlay">
+            <span class="gallery-label">Chestnut Cut</span>
+          </div>
+        </div>
+
+        <!-- Cell 11 - Texture -->
+        <div class="gallery-item" data-category="texture" style="background-image: url('https://images.unsplash.com/photo-1601412436009-d964bd02edbc?auto=format&amp;fit=crop&amp;q=80&amp;w=600');">
+          <div class="gallery-overlay">
+            <span class="gallery-label">Textured Dark Green</span>
+          </div>
+        </div>
+
+        <!-- Cell 12 - Texture -->
+        <div class="gallery-item" data-category="texture" style="background-image: url('https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&amp;fit=crop&amp;q=80&amp;w=600');">
+          <div class="gallery-overlay">
+            <span class="gallery-label">Peachy Rose Twist</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 05: SPECIAL OFFERS -->
+    <section id="offers" class="bg-parchment">
+      <div class="section-header" data-reveal>
+        <div>
+          <span class="section-eyebrow">05 — Offers</span>
+          <h2 class="section-title font-serif">For New & Returning Clients</h2>
+        </div>
+      </div>
+
+      <div class="offers-grid" data-reveal>
+        <!-- Large Hero Offer -->
+        <div class="offer-card-large">
+          <div>
+            <span class="offer-tag">🎁 New Clients</span>
+            <h3 class="offer-title-lg font-serif">First Visit, Half Price</h3>
+            <p class="offer-desc-lg">Your first cut or color at Final Test Salon is 50% off the standard rate. No code, no form — just mention it when you book. Valid for any single service.</p>
+          </div>
+          <div class="offer-action-row">
+            <span class="offer-price font-serif">50% OFF</span>
+            <a href="#book" class="offer-cta-link link-tap">Book Now &rarr;</a>
+          </div>
+        </div>
+
+        <!-- Second Offer -->
+        <div class="offer-card-rose">
+          <div>
+            <span class="offer-tag" style="color: var(--rose-dark);">👥 Referrals</span>
+            <h3 class="offer-title-sm font-serif">Refer a Friend</h3>
+            <p class="offer-desc-sm">Refer a friend to Final Test Salon and both of you receive $20 off your next service. There is no limit — refer ten people, save $200.</p>
+          </div>
+          <span class="offer-price-sm font-serif">$20 EACH</span>
+        </div>
+
+        <!-- Third Offer -->
+        <div class="offer-card-light">
+          <div>
+            <span class="offer-tag">👑 Loyalty Program</span>
+            <h3 class="offer-title-sm font-serif">Every 8th Visit</h3>
+            <p class="offer-desc-sm">We count for you. After seven paid visits, your eighth appointment is entirely free. No app, no card, no expiry.</p>
+          </div>
+          <span class="offer-price-sm font-serif">8th FREE</span>
+        </div>
+
+        <!-- Fourth Offer -->
+        <div class="offer-card-light">
+          <div>
+            <span class="offer-tag">✨ Midweek Special</span>
+            <h3 class="offer-title-sm font-serif">Tuesday Blowout Special</h3>
+            <p class="offer-desc-sm">Every Tuesday, a wash and blowout for $35, regardless of hair length. Walk in or book the day before.</p>
+          </div>
+          <span class="offer-price-sm font-serif">$35 FLAT</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 06: REVIEWS -->
+    <section id="reviews">
+      <div class="section-header" data-reveal>
+        <div>
+          <span class="section-eyebrow">06 — Reviews</span>
+          <h2 class="section-title font-serif">What Clients Say</h2>
+        </div>
+      </div>
+
+      <div class="reviews-info-strip" data-reveal>
+        4.9 average — 200+ reviews across Google, Yelp, and Facebook
+      </div>
+
+      <!-- Responsive Carousel viewport with navigation controls -->
+      <div class="reviews-carousel-wrapper">
+        <div class="reviews-viewport" data-reveal>
+          <div class="reviews-container">
+            <!-- Card 1 -->
+            <div class="review-card">
+              <div>
+                <div class="star-rating">
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                </div>
+                <div style="height: 16px;"></div>
+                <p class="review-quote font-serif">"Sophie did my balayage and I have received more compliments in the two weeks since than in the two years before. She understood exactly what I wanted."</p>
+              </div>
+              <div class="review-author-wrap">
+                <div class="review-avatar" style="background-image: url('https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=200');"></div>
+                <div>
+                  <p class="review-author">Rachel M.</p>
+                  <span class="review-source">Google Review</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 2 -->
+            <div class="review-card">
+              <div>
+                <div class="star-rating">
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                </div>
+                <div style="height: 16px;"></div>
+                <p class="review-quote font-serif">"Marcus has been cutting my hair for three years now. He remembers how I like it, does not try to change it, and charges a fair price. That is hard to find."</p>
+              </div>
+              <div class="review-author-wrap">
+                <div class="review-avatar" style="background-image: url('https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=200');"></div>
+                <div>
+                  <p class="review-author">Daniel O.</p>
+                  <span class="review-source">Yelp Review</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 3 -->
+            <div class="review-card">
+              <div>
+                <div class="star-rating">
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                </div>
+                <div style="height: 16px;"></div>
+                <p class="review-quote font-serif">"Came in for a color correction after a bad experience. Priya spent two hours on it and was honest. The result was gorgeous and dimensional."</p>
+              </div>
+              <div class="review-author-wrap">
+                <div class="review-avatar" style="background-image: url('https://images.unsplash.com/photo-1531123897727-8f129e1eb4ce?auto=format&fit=crop&q=80&w=200');"></div>
+                <div>
+                  <p class="review-author">Layla H.</p>
+                  <span class="review-source">Google Review</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 4 -->
+            <div class="review-card">
+              <div>
+                <div class="star-rating">
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                </div>
+                <div style="height: 16px;"></div>
+                <p class="review-quote font-serif">"Booked a blowout for an event and the whole experience was calm, professional, and dry. The salon itself is beautiful and quiet."</p>
+              </div>
+              <div class="review-author-wrap">
+                <div class="review-avatar" style="background-image: url('https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200');"></div>
+                <div>
+                  <p class="review-author">Jess T.</p>
+                  <span class="review-source">Facebook Review</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 5 -->
+            <div class="review-card">
+              <div>
+                <div class="star-rating">
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                  <div class="star-shape empty"></div>
+                </div>
+                <div style="height: 16px;"></div>
+                <p class="review-quote font-serif">"Aisha does my braids and she is genuinely talented. Fast, clean work and she gives good advice about maintenance. Highly recommended."</p>
+              </div>
+              <div class="review-author-wrap">
+                <div class="review-avatar" style="background-image: url('https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200');"></div>
+                <div>
+                  <p class="review-author">Imani F.</p>
+                  <span class="review-source">Google Review</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 6 -->
+            <div class="review-card">
+              <div>
+                <div class="star-rating">
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                  <div class="star-shape"></div>
+                </div>
+                <div style="height: 16px;"></div>
+                <p class="review-quote font-serif">"First visit last month for a cut and treatment. Left looking like myself, which is exactly what I asked for. Booked again before leaving."</p>
+              </div>
+              <div class="review-author-wrap">
+                <div class="review-avatar" style="background-image: url('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200');"></div>
+                <div>
+                  <p class="review-author">Sam K.</p>
+                  <span class="review-source">Yelp Review</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="carousel-nav-container">
+          <button id="rev_left_btn" class="carousel-nav-btn carousel-left-btn hidden-btn" aria-label="Scroll reviews left">&#8249;</button>
+          <button id="rev_right_btn" class="carousel-nav-btn carousel-right-btn" aria-label="Scroll reviews right">&#8250;</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 07: BOOK APPOINTMENT -->
+    <section id="book" class="bg-parchment">
+      <div class="section-header" data-reveal>
+        <div>
+          <span class="section-eyebrow">07 — Reservations</span>
+          <h2 class="section-title font-serif">Book Your Appointment</h2>
+        </div>
+      </div>
+
+      <div class="book-split" data-reveal>
+        <div>
+          <!-- Unsubmitted form panel -->
+          <form id="reservation_form" class="reservation-form">
+            <div class="form-group-row">
+              <div class="form-field-container">
+                <label for="frm_fullname" class="form-label">Full Name *</label>
+                <input type="text" id="frm_fullname" class="input-underlined" placeholder="e.g. Rachel Miller" required>
+              </div>
+              <div class="form-field-container">
+                <label for="frm_email" class="form-label">Email Address *</label>
+                <input type="email" id="frm_email" class="input-underlined" placeholder="e.g. rachel@example.com" required>
+              </div>
+            </div>
+
+            <div class="form-group-row">
+              <div class="form-field-container">
+                <label for="frm_phone" class="form-label">Phone Number</label>
+                <input type="tel" id="frm_phone" class="input-underlined" placeholder="e.g. (310) 555-0193">
+              </div>
+              <div class="form-field-container">
+                <label for="frm_service" class="form-label">Service</label>
+                <select id="frm_service" class="input-underlined">
+                  <option value="" disabled selected>Select a Service</option>
+                  <optgroup label="Hair">
+                    <option value="Signature Cut">Signature Cut ✂️</option>
+                    <option value="Dry Cut">Dry Cut 💇</option>
+                    <option value="Men's Cut">Men's Cut 👱‍♂️</option>
+                    <option value="Fringe Trim">Fringe Trim ✂️</option>
+                  </optgroup>
+                  <optgroup label="Color">
+                    <option value="Balayage">Balayage 🎨</option>
+                    <option value="Full Color">Full Color 🧴</option>
+                    <option value="Highlights">Highlights ✨</option>
+                    <option value="Toner & Gloss">Toner & Gloss 💎</option>
+                    <option value="Color Correction">Color Correction 🔄</option>
+                    <option value="Ombre / Sombre">Ombre / Sombre 🌅</option>
+                  </optgroup>
+                  <optgroup label="Treatment">
+                    <option value="Keratin Treatment">Keratin Treatment 🌿</option>
+                    <option value="Deep Conditioning">Deep Conditioning 💧</option>
+                    <option value="Scalp Treatment">Scalp Treatment 💆‍♀️</option>
+                    <option value="Olaplex Treatment">Olaplex Treatment 🧬</option>
+                    <option value="Glossing Treatment">Glossing Treatment ✨</option>
+                  </optgroup>
+                  <optgroup label="Styling">
+                    <option value="Blowout">Blowout 💨</option>
+                    <option value="Special Occasion">Special Occasion 👑</option>
+                    <option value="Bridal Hair">Bridal Hair 👰</option>
+                    <option value="Braiding">Braiding 🎗️</option>
+                  </optgroup>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group-row">
+              <div class="form-field-container">
+                <label for="frm_stylist" class="form-label">Preferred Stylist</label>
+                <select id="frm_stylist" class="input-underlined">
+                  <option value="No Preference">No Preference</option>
+                  <option value="Sophie Laurent">Sophie Laurent</option>
+                  <option value="Marcus Webb">Marcus Webb</option>
+                  <option value="Priya Nair">Priya Nair</option>
+                  <option value="James Tello">James Tello</option>
+                  <option value="Camille Roux">Camille Roux</option>
+                  <option value="Aisha Moore">Aisha Moore</option>
+                </select>
+              </div>
+              <div class="form-field-container">
+                <label for="frm_date" class="form-label">Preferred Date</label>
+                <input type="date" id="frm_date" class="input-underlined">
+              </div>
+            </div>
+
+            <div class="form-group-row">
+              <div class="form-field-container">
+                <label for="frm_time" class="form-label">Preferred Time</label>
+                <select id="frm_time" class="input-underlined">
+                  <option value="09:00 AM">9:00 AM</option>
+                  <option value="09:30 AM">9:30 AM</option>
+                  <option value="10:00 AM">10:00 AM</option>
+                  <option value="10:30 AM">10:30 AM</option>
+                  <option value="11:00 AM">11:00 AM</option>
+                  <option value="11:30 AM">11:30 AM</option>
+                  <option value="12:00 PM">12:00 PM</option>
+                  <option value="12:30 PM">12:30 PM</option>
+                  <option value="01:00 PM">1:00 PM</option>
+                  <option value="01:30 PM">1:30 PM</option>
+                  <option value="02:00 PM">2:00 PM</option>
+                  <option value="02:30 PM">2:30 PM</option>
+                  <option value="03:00 PM">3:00 PM</option>
+                  <option value="03:30 PM">3:30 PM</option>
+                  <option value="04:00 PM">4:00 PM</option>
+                  <option value="04:30 PM">4:30 PM</option>
+                  <option value="05:00 PM">5:00 PM</option>
+                  <option value="05:30 PM">5:30 PM</option>
+                  <option value="06:00 PM">6:00 PM</option>
+                  <option value="06:30 PM">6:30 PM</option>
+                  <option value="07:00 PM">7:00 PM</option>
+                </select>
+              </div>
+              <div class="form-field-container">
+                <label for="frm_source" class="form-label">How did you hear about us?</label>
+                <select id="frm_source" class="input-underlined">
+                  <option value="Instagram">Instagram</option>
+                  <option value="Google Search">Google Search</option>
+                  <option value="Friend Referral">Friend Referral</option>
+                  <option value="Walk-by">Walk-by</option>
+                  <option value="SMS">SMS</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-field-container">
+              <label for="frm_notes" class="form-label">Additional Notes</label>
+              <textarea id="frm_notes" rows="3" class="input-underlined" placeholder="Mention hair length, custom requests, or questions here..."></textarea>
+            </div>
+
+            <div class="form-submit-container">
+              <button type="submit" class="form-submit-btn" id="frm_submit_btn">Request Booking</button>
+              <p class="booking-acknowledgment">We confirm within one hour by phone or email.</p>
+            </div>
+          </form>
+
+          <!-- Status Box -->
+          <div id="booking_success_box" class="booking-success-wrapper">
+            <h3 id="success_header" class="font-serif text-rose" style="font-size: 26px; font-weight: 300; margin-bottom: 12px;"></h3>
+            <p id="success_subtext" style="font-size: 14px; color: var(--ink-mid);"></p>
+          </div>
+        </div>
+
+        <!-- Info Sidebar -->
+        <div class="book-sidebar">
+          <h3 class="book-sidebar-title font-serif">Good to know</h3>
+          
+          <div class="notice-item">
+            <span class="notice-label">🚶 Walk-ins welcome</span>
+            <p class="notice-content">Availability varies by day. Call ahead if you are in a hurry.</p>
+          </div>
+
+          <div class="notice-item">
+            <span class="notice-label">⏰ Late arrivals</span>
+            <p class="notice-content">We hold appointments for 10 minutes. Please call if you are running late.</p>
+          </div>
+
+          <div class="notice-item">
+            <span class="notice-label">📅 Cancellations</span>
+            <p class="notice-content">24-hour notice appreciated. No charge for rescheduling.</p>
+          </div>
+
+          <div class="notice-item">
+            <span class="notice-label">🚗 Parking</span>
+            <p class="notice-content">Street parking available. Houston transit stops nearby.</p>
+          </div>
+
+          <div class="notice-hours">
+            <div class="hours-row">
+              <span class="hours-day">Mon &ndash; Fri</span>
+              <span>9:00 AM &ndash; 8:00 PM</span>
+            </div>
+            <div class="hours-row">
+              <span class="hours-day">Saturday</span>
+              <span>9:00 AM &ndash; 7:00 PM</span>
+            </div>
+            <div class="hours-row">
+              <span class="hours-day">Sunday</span>
+              <span>10:00 AM &ndash; 5:00 PM</span>
+            </div>
+          </div>
+
+          <div style="border-top: var(--rule-ghost); padding-top: 16px;">
+            <span class="notice-label" style="margin-bottom: 4px;">📞 Direct Call</span>
+            <a href="tel:15125551234" class="sidebar-phone-link font-serif">15125551234</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 08: THE BLOG (NEWS) -->
+    <section id="blog">
+      <div class="section-header" data-reveal>
+        <div>
+          <span class="section-eyebrow">08 — Blog</span>
+          <h2 class="section-title font-serif">From the Salon</h2>
+        </div>
+      </div>
+
+      <div class="blog-journal" data-reveal>
+        Hair care guides, style advice, and what is happening at Final Test Salon.
+      </div>
+
+      <div class="blog-grid" data-reveal>
+        <!-- Post 1 -->
+        <div class="blog-card">
+          <div class="blog-card-image-box" style="background-image: url('https://images.unsplash.com/photo-1519014816548-bf5fe059e98b?auto=format&fit=crop&q=80&w=600'); background-size: cover; background-position: center;">
+            <div class="blog-css-circle" style="display: none;"></div>
+          </div>
+          <div class="blog-body">
+            <div class="blog-badge-row">
+              <span class="blog-tag">💆‍♀️ Hair Care</span>
+              <span class="blog-date">Houston · April 2025</span>
+            </div>
+            <h4 class="blog-title font-serif">How Often Should You Actually Wash Your Hair?</h4>
+            <p class="blog-excerpt">The answer depends on your hair type, your routine, and what products you are using — and it is probably different from what you were told growing up. Final Test Salon's senior stylists share what they recommend for their own clients in Houston.</p>
+            <button class="blog-read-more link-tap" data-post-id="1">Read more</button>
+          </div>
+        </div>
+
+        <!-- Post 2 -->
+        <div class="blog-card">
+          <div class="blog-card-image-box" style="background-image: url('https://images.unsplash.com/photo-1522337660859-02fbefca4702?auto=format&fit=crop&q=80&w=600'); background-size: cover; background-position: center;">
+            <div class="blog-css-diagonal" style="display: none;"></div>
+          </div>
+          <div class="blog-body">
+            <div class="blog-badge-row">
+              <span class="blog-tag">🎨 Color</span>
+              <span class="blog-date">Houston · March 2025</span>
+            </div>
+            <h4 class="blog-title font-serif">What Nobody Tells You Before Getting Balayage</h4>
+            <p class="blog-excerpt">Balayage is one of the most requested services we do. It is also one of the most misunderstood. Here is what to expect, how to prepare, and how to make your color last as long as possible.</p>
+            <button class="blog-read-more link-tap" data-post-id="2">Read more</button>
+          </div>
+        </div>
+
+        <!-- Post 3 -->
+        <div class="blog-card">
+          <div class="blog-card-image-box" style="background-image: url('https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=600'); background-size: cover; background-position: center;">
+            <div class="blog-css-cross" style="display: none;"></div>
+          </div>
+          <div class="blog-body">
+            <div class="blog-badge-row">
+              <span class="blog-tag">💇‍♀️ Style Guide</span>
+              <span class="blog-date">Houston · February 2025</span>
+            </div>
+            <h4 class="blog-title font-serif">The Three Haircuts That Work for Nearly Everyone</h4>
+            <p class="blog-excerpt">After years of cuts across every face shape and hair type in Houston, our team has noticed patterns. These three cuts come up again and again — and there is a reason for that.</p>
+            <button class="blog-read-more link-tap" data-post-id="3">Read more</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- PREMIUM BLOG READER OVERLAY -->
+      <div id="blog_reader_overlay" class="blog-reader-overlay">
+        <div class="blog-reader-header">
+          <button id="blog_back_btn" class="blog-back-btn">
+            ← Back to Blog
+          </button>
+          <span class="blog-reader-logo text-ink">Final</span>
+          <div style="width: 100px; display: flex; justify-content: flex-end;">
+            <button id="blog_nav_book_btn" class="nav-cta-btn" style="padding: 6px 14px; font-size: 11px;">Book Now</button>
+          </div>
+        </div>
+        <div id="blog_reader_content" class="blog-reader-container">
+          <!-- Dynamic post loads here -->
+        </div>
+      </div>
+
+      <!-- SEO-OPTIMIZED ARTICLES (800 - 2,000 words each with placeholders) -->
+      <template id="blog-content-1">
+        <div class="blog-reader-hero-image" style="background-image: url('https://images.unsplash.com/photo-1519014816548-bf5fe059e98b?auto=format&fit=crop&q=80&w=1200');"></div>
+        <div class="blog-reader-meta">
+          <span class="blog-reader-tag">💆‍♀️ Hair Care</span>
+          <span class="blog-reader-date">Houston · April 2025</span>
+        </div>
+        <h1 class="blog-reader-title font-serif">How Often Should You Actually Wash Your Hair?</h1>
+        <p class="blog-reader-subtitle">An SEO-Optimized Scientific &amp; Artistic Exploration Into The Delicate Balance of Sebum, Scalp Preservation, and Double-Cleansing. Written by the Master Stylists of Final Test Salon in Houston.</p>
+        <div class="blog-reader-body">
+          <p>Few grooming questions spark as much debate as the optimal frequency of washing one's hair. In our French-themed atelier, Final in the heart of Houston, our senior styling artisans hear this query multiple times a day. Is daily washing really stripping your cuticle of essential nutrients? Or is extending time between washes simply hosting fine particles of environmental pollution and sebum build-up that smothers follicles? The answer is not a generic rule but a precise equation based on science, scalp chemistry, and specialized hair textures.</p>
+          
+          <h2>The Sebum Equation and the Hyper-Drive Rebound Effect</h2>
+          <p>To truly understand hair washing, we must first analyze the scalp’s natural ecosystem. Your hair follicles are connected to sebaceous glands that produce a vital lipid-rich substance known as sebum. Sebum is not your enemy—it is a sophisticated, natural barrier designed to lubricate the hair sheath, seal in cellular moisture, and protect the scalp from bacterial invasion. When you cleanse your hair daily with harsh, industrial-grade sulfates, you completely strip away this organic shield.</p>
+          <p>In response to this sudden dehydration, your body activates an biological defense mechanism. Your sebaceous glands go into hyper-drive, overproducing sebum to overcompensate for what has been lost. The result is the frustrating 24-hour greasy scalp cycle: the more you wash, the faster your hair feels oily. Breaking this feedback loop requires patience, structural methodology, and the guidance of an expert hair stylist who understands sebum orchestration.</p>
+          
+          <blockquote>"The goal of proper hair maintenance is not the absolute eradication of natural oils, but the balanced distribution of them from roots to ends."</blockquote>
+      
+          <h2>Customizing Your Wash Schedule by Texture Class</h2>
+          <p>No two heads of hair respond identically. For maximum structural health and beautiful movement, we recommend categorizing your wash intervals as structured below:</p>
+          
+          <h3>1. Straight, Fine, or Thin Hair Structures</h3>
+          <p>Fine hair has a smaller diameter, meaning the sebaceous oil can easily travel down the smooth shaft, coating the hair quickly and making it appear flat. However, fine hair is also highly susceptible to breakage when wet. We recommend a schedule of <strong>two to three times per week</strong> using a gentle, lightweight purifying formula. To extend the look between washes, use a premium, clean-starch dry shampoo at the roots instead of wet scrubbing.</p>
+          
+          <h3>2. Medium Density or Wavy Textures</h3>
+          <p>In Houston, medium density is the most common texture type. This structure can easily support natural oils for a longer period. We advise washing <strong>once or twice per week</strong>. On non-wash days, simply rinse with warm-to-cool water and use a light leave-in conditioner on the mid-shaft to ends to maintain the pristine style of your Final haircut.</p>
+          
+          <h3>3. Thick, Coarse, or High-Density Hair</h3>
+          <p>Thick strands require substantial natural moisture to prevent frizz and wire-like stiffness. Natural oils take much longer to migrate down the length of thick hair. Thus, a schedule of <strong>once a week</strong> is highly sufficient. Stripping thick hair more frequently will result in excessive dryness, dullness, and hard-to-manage cuticles.</p>
+          
+          <h3>4. Curly, Coily, or Highly Textured Hair</h3>
+          <p>Textured and curly hair is naturally dry because the spiral shape of the strand makes it incredibly difficult for sebum to make its way from the scalp down to the ends. For curly structures, washing once every <strong>7 to 10 days</strong> is the golden standard. Utilize low-lather co-washing treatments or cream-based cleansers, which hydrate the curls while lifting away impurities on the outer layer.</p>
+      
+          <h2>The Fine Art of the Double Wash: A Parisian Salon Secret</h2>
+          <p>At Final Test Salon, whenever a guest leans back into our porcelain washing basins, our assistants never wash the hair just once. We always perform a double cleanse: a ritual that optimizes scalp health and ensures long-lasting style life.</p>
+          <ul>
+            <li><strong>First Wash (The Detoxing Phase):</strong> The initial application of shampoo is formulated to target the superficial. It binds to external styling polymers, environmental smoke, hard water minerals, and surface sebum. This wash doesn't produce a rich lather because it is heavily working to emulsify the debris.</li>
+            <li><strong>Second Wash (The Therapeutic Phase):</strong> Once the barrier of grime is dissolved, the second shampoo application targets the actual skin of the scalp. With the surface clean, the active nutrients (like rosemary, jojoba, and thermal waters) can penetrate the follicles, balancing the scalp's delicate pH and encouraging blood circulation through gentle massage.</li>
+          </ul>
+      
+          <h2>Concluding Your Scaling Journey</h2>
+          <p>Adjusting your hair washing routine is a gradual transition that can take up to three weeks for the sebaceous glands to regulate. If you are struggling with a persistent dry scalp, excessive oiliness, or want custom-tailored guidance from local professionals, we would love to assist you.</p>
+          
+          <div class="blog-reader-cta-card">
+            <h3 class="blog-reader-cta-title" style="font-family: 'Fraunces', serif; font-size: 22px;">Ready for Your Personalized Scalp Assessment?</h3>
+            <p class="blog-reader-cta-desc">Book a signature wash, precision haircut, or custom styling analysis at Final today. Our dedicated expert stylers in Houston will prescribe the exact professional-grade formulas and scheduling your locks deserve.</p>
+            <button class="blog-reader-cta-btn" onclick="closeBlogReaderAndBook()">Request Your Session</button>
+          </div>
+        </div>
+      </template>
+      
+      <template id="blog-content-2">
+        <div class="blog-reader-hero-image" style="background-image: url('https://images.unsplash.com/photo-1522337660859-02fbefca4702?auto=format&fit=crop&q=80&w=1200');"></div>
+        <div class="blog-reader-meta">
+          <span class="blog-reader-tag">🎨 Color</span>
+          <span class="blog-reader-date">Houston · March 2025</span>
+        </div>
+        <h1 class="blog-reader-title font-serif">What Nobody Tells You Before Getting Balayage</h1>
+        <p class="blog-reader-subtitle">An SEO-Optimized Professional Guide to Hand-Painted Highlights, Dimensional Blending, Low-Maintenance Regrowth, and Preserving Your Brightness in Houston.</p>
+        <div class="blog-reader-body">
+          <p>Look at any major editorial beauty magazine, and you will see gorgeous cascading waves of hair reflecting multidimensional, sun-kissed blonde gradients. This is balayage, the French word for "sweeping" or "painting," which has revolutionized the hair coloring market. But while the visual allure is undeniable, there is a substantial amount of misinformation surrounding what it takes to achieve and preserve this premium technique.</p>
+          <p>Before you commit to a color transformation at Final Test Salon in Houston, our master colorists have compiled everything you need to know about the science of balayage, the preparation phase, and keeping your dimensional tone brilliant long after you walk out of our atelier.</p>
+          
+          <h2>Balayage vs. Traditional Foil Highlights: The Structural Difference</h2>
+          <p>To understand why balayage looks so sophisticated, we must look at how the lightning pigment is applied. Traditional highlights utilize aluminum foils to isolate hair sections from the root to the tip. This creates a uniform, hard line of color starting directly at the scalp. As your hair grows, this creates a distinct, harsh grow-out line that requires touch-ups every 4 to 6 weeks.</p>
+          <p>Balayage, conversely, is applied entirely freehand. Our color specialists literally paint the clay lightener across the surface of the hair in strategic, crescent-shaped sweeps. The lightener is applied softly near the root zone and gradually saturates the mid-lengths and ends. This hand-painted variation ensures there are no sharp boundaries. When the hair grows out, the transition remains perfectly blended and organic, lasting up to 6 months with minimal maintenance.</p>
+      
+          <blockquote>"Balayage is not just a hair technique; it is a personalized architectural design where we paint the light to highlight your bone structure and skin tone."</blockquote>
+      
+          <h2>The Hidden Realities of a Balayage Appointment</h2>
+          <p>While the final look appears effortless, the process itself is highly meticulous and custom-calibrated. Here are three truths about your color journey that other salons often gloss over:</p>
+          
+          <h3>1. It Often Requires Multiple Sessions</h3>
+          <p>If you have dark brunette hair or a history of previous box dyes, achieving a pale honey, caramel, or champagne blonde using balayage is a marathon, not a sprint. To maintain the structural integrity of your hair, we work in gradual progressive stages. Rushing the bleach process will tear open the outer cuticle, leading to porous, brittle shafts that cannot hold onto color. Trust the developmental plan laid out by your Final specialist.</p>
+          
+          <h3>2. Prep Work Starts Before You Arrive</h3>
+          <p>The state of your strands on the morning of your color appointment heavily dictates your results. We highly recommend coming with <strong>second-day hair</strong> rather than freshly washed locks. The scalp's natural oils act as a gentle protective barrier against lightener sensitivity. However, do not load your hair with metal-heavy dry shampoos, heavy wax build-ups, or thick color touchup sprays immediately before, as these form a physical wall that blocks the lightener from lifting evenly.</p>
+          
+          <h3>3. Hydration History is Crucial</h3>
+          <p>For two weeks leading up to your coloring event at our studio in Houston, incorporate a deep moisture-replenishing treatment mask once a week. Well-hydrated hair cuticle layers lift more smoothly, exhibit less warmth or brassiness, and hold onto their post-toning glosses far longer than dry or compromised strands.</p>
+      
+          <h2>The Lifeline of Your Color: Toner and Post-Salon Maintenance</h2>
+          <p>Many color guests believe they are leaving with raw bleach blonde. In reality, the most critical step of any luxury balayage is the <strong>Toner &amp; Gloss</strong>. The lightener lifts your natural pigment out, while the subsequent demi-permanent toner infuses the cool, warm, lavender, or beige tones that create the final aesthetic.</p>
+          <p>Because toning glosses gradually wash away over 6 to 8 weeks, maintaining the shade at home requires precise care:</p>
+          <ul>
+            <li><strong>Avoid Hot Water:</strong> Hot water expands the hair cuticle, allowing the pigment polymers of your toner to escape instantly. Wash with lukewarm water and always finish with a cool rinse to lock the cuticle flat.</li>
+            <li><strong>Sulfate-Free Cleansers ONLY:</strong> Sulfates are heavy surfactant salts that act like steel wool on colored hair. Use professional-grade acid-balanced cleansers that shield and preserve tone.</li>
+            <li><strong>Purple Shampoo Discipline:</strong> While purple pigment shampoo neutralizes yellow brassy undertones, using it too often (more than once a week) will leave microscopic ash deposits that make your hair look darker and dull. Alternate it with a rich protein-fortifying wash.</li>
+          </ul>
+      
+          <h2>Invest in Your Color Journey</h2>
+          <p>Balayage is the ultimate expression of low-maintenance beauty, but it still requires the hand of a true master to avoid patchy paint lines or dynamic damage. If you are seeking dimensional color that feels completely integrated and luxurious, we invite you to consult with the colorists at Final.</p>
+          
+          <div class="blog-reader-cta-card">
+            <h3 class="blog-reader-cta-title" style="font-family: 'Fraunces', serif; font-size: 22px;">Reserve Your Custom Color Painting Session</h3>
+            <p class="blog-reader-cta-desc">Elevate your hair game with a natural balayage, toner gloss, or dimensional root melt in the hands of our trained experts. Contact our Houston booking desk or book online below.</p>
+            <button class="blog-reader-cta-btn" onclick="closeBlogReaderAndBook()">Explore Balayage Sessions</button>
+          </div>
+        </div>
+      </template>
+      
+      <template id="blog-content-3">
+        <div class="blog-reader-hero-image" style="background-image: url('https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=1200');"></div>
+        <div class="blog-reader-meta">
+          <span class="blog-reader-tag">💇‍♀️ Style Guide</span>
+          <span class="blog-reader-date">Houston · February 2025</span>
+        </div>
+        <h1 class="blog-reader-title font-serif">The Three Haircuts That Work for Nearly Everyone</h1>
+        <p class="blog-reader-subtitle">An SEO-Optimized Guide to Universal Cuts, Precision Geometry, and Effortless Face-Framing Layer Styles. Hand-Crafted by the Stylists of Final Test Salon in Houston.</p>
+        <div class="blog-reader-body">
+          <p>Trends in the beauty industry are notoriously seasonal. A particular hair shape will dominate social feeds for three months, only to be deemed obsolete by the arrival of a new vintage aesthetic. However, in our over twelve years of cutting and sculpturing hair at Final here in Houston, our master stylists have observed three distinct cuts that completely transcend the seasonal cycle. These are the classics: shapes built on spatial math, precision geometry, and fluid weight distribution that work seamlessly on almost any face structure and hair texture.</p>
+          <p>Whether you want to frame your cheekbones, introduce maximum movement to flat strands, or simply find an easy-to-style daily look, here are the three universally beautiful haircuts we consistently recommend for our guests.</p>
+      
+          <h2>1. The Parisian Slob (The Soft Modern Bob)</h2>
+          <p>The Bob is easily one of the oldest cuts in written history, yet it remains the ultimate hallmark of chic, self-assured modern style. But where a traditional blunt bob can feel rigid, boxy, or hard to manage, the <strong>Parisian Slob</strong> (or Soft Bob) is cut with invisible internal movement.</p>
+          <p>Instead of cutting the hair in a static horizontal draft, our specialists use subtle sliding scissor strokes on the inside layers. This removes heavy weight from the lower perimeter while leaving the top canopy intact. The result is a jawline-skimming cut that flips naturally under the chin or curls outwards with zero stiff styling required. It works incredibly well on fine hair (by creating a strong horizontal weight line) and thick hair alike (by releasing the internal blockiness).</p>
+      
+          <blockquote>"A truly great haircut should look as beautiful when air-dried on a beach as it does when hand-styled under the blow-dry nozzle."</blockquote>
+      
+          <h2>2. The Textured Shag with Curtain Bangs</h2>
+          <p>For guests who love length but feel weighed down by static hair, the 70s-inspired shag is a magnificent revelation. This cut is a masterclass in texture variance, featuring a shorter, organic density at the crown that cascades into long, feathery textured pieces at the base.</p>
+          <p>The genius component of this cut is the integration of <strong>Curtain Bangs</strong>. Unlike classic heavy front bangs, curtain bangs split elegantly down the middle, sweeping outward toward your temples like folded drapes. Because they are cut with soft diagonal transitions, they frame the eyes and cheekbones beautifully, instantly highlighting the bone structure. When your hair grows out, curtain bangs seamlessly merge into the rest of the layers, sparing you the awkward, monthly growing stages of traditional bangs.</p>
+      
+          <h2>3. The Long Seamless "Invisible" Layers</h2>
+          <p>For many women in Houston, long hair is a non-negotiable luxury. But without architectural layers, very long hair can become flat, draping over the shoulders like a column and dragging down the facial features. Traditional short layers, however, can leave distinct "shelves" in the hair, which look dated and disjointed.</p>
+          <p>Our answer at Final Test Salon is the <strong>Seamless Invisible Layer</strong> cut. Using precision slide-cutting techniques on entirely dry hair, we carve delicate internal pathways of air within the shape. Rather than carving visible lines on the outer layers, our stylists shorten intermediate layers from the inside out. This preserves the dense, luxurious healthy appearance of your bottom ends while introducing soft airiness, dimensional swing, and volume to the mid-shaft. This cut is particularly breathtaking when paired with hand-painted balayage highlights, as the layers catch light and movement beautifully.</p>
+      
+          <h2>Custom Validation: Choosing What Works for Your Features</h2>
+          <p>While these three shapes can be adjusted to suit almost anyone, the difference between a good cut and an extraordinary one lies in the micro-adjustments:</p>
+          <ul>
+            <li><strong>Oval Face Shapes:</strong> Can support any of these three shapes, maintaining ideal visual proportion.</li>
+            <li><strong>Round Face Shapes:</strong> We recommend extending the Parisian Bob slightly below the chin line to elongate, or pairing the Textured Shag with a slightly angled part.</li>
+            <li><strong>Square Face Shapes:</strong> Seamless invisible layers paired with soft face-framing curtain bangs will gently soften the jawline.</li>
+            <li><strong>Heart Face Shapes:</strong> Long invisible layers or a clavicle-grazing bob will establish soft, complementary volume near the lower face.</li>
+          </ul>
+      
+          <h2>Consult with an Artisan</h2>
+          <p>If you are ready to find a hair companion that accentuates your natural beauty with effortless maintenance, our team of passionate precision cut masters is ready to help you discover the perfect silhouette.</p>
+          
+          <div class="blog-reader-cta-card">
+            <h3 class="blog-reader-cta-title" style="font-family: 'Fraunces', serif; font-size: 22px;">Book Your Structural Cut Consultation</h3>
+            <p class="blog-reader-cta-desc">Work with the precision stylists of Final to design a haircut customized to your hair flow, face shape, and daily lifestyle. View availability and reserve your spot today.</p>
+            <button class="blog-reader-cta-btn" onclick="closeBlogReaderAndBook()">Schedule Your Precision Cut</button>
+          </div>
+        </div>
+      </template>
+    </section>
+
+    <!-- SECTION 09: CONTACT -->
+    <section id="contact" class="bg-parchment">
+      <div class="section-header" data-reveal>
+        <div>
+          <span class="section-eyebrow">09 — Contact</span>
+          <h2 class="section-title font-serif">Find Us</h2>
+        </div>
+      </div>
+
+      <div class="contact-cols" data-reveal>
+        <div class="contact-col">
+          <span class="contact-label">☎️ Telephone</span>
+          <a href="tel:15125551234" class="contact-head font-serif">15125551234</a>
+          <p style="font-size:13.5px; color: var(--ink-muted);">Mon&ndash;Sun, 9 AM &ndash; 7 PM. We answer.</p>
+          <a href="tel:15125551234" class="contact-btn">Call Now</a>
+        </div>
+
+        <div class="contact-col">
+          <span class="contact-label">📱 Social</span>
+          <a href="https://instagram.com/final_test_salon" class="contact-head font-serif">@final_test_salon</a>
+          <p style="font-size:13.5px; color: var(--ink-muted);">Before and after shots, daily work, and the occasional look inside the salon.</p>
+          <a href="https://instagram.com/final_test_salon" target="_blank" class="contact-btn">Follow on Instagram</a>
+          <div class="contact-block-divider"></div>
+          <span class="contact-label">👤 Facebook Profile</span>
+          <a href="https://facebook.com/final_test_salon" target="_blank" class="contact-btn" style="margin-top: 4px;">Visit Our Page &rarr;</a>
+        </div>
+
+        <div class="contact-col">
+          <span class="contact-label">📍 Location</span>
+          <span class="contact-head font-serif">Houston</span>
+          <p style="font-size:13.5px; color: var(--ink-muted); line-height: 1.75;">We are in the heart of Houston. Street parking is available and we are close to transit lines. Call us for custom directions.</p>
+          <a href="https://maps.google.com?q=Final Test Salon+Houston" target="_blank" class="contact-btn">Get Directions</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-top">
+      <div class="footer-brand">
+        <div class="logo-container" style="cursor: default;">
+          <div class="logo-mark"></div>
+          <span class="logo-text">Final</span>
+        </div>
+        <p class="footer-tagline">Precision cuts. Flawless color. Houston.</p>
+      </div>
+
+      <div class="footer-navs">
+        <div class="footer-nav-col">
+          <span class="footer-nav-title">Shedules</span>
+          <a href="#services" class="footer-nav-link link-tap">Services</a>
+          <a href="#team" class="footer-nav-link link-tap">Team</a>
+          <a href="#gallery" class="footer-nav-link link-tap">Gallery</a>
+          <a href="#offers" class="footer-nav-link link-tap">Offers</a>
+        </div>
+        <div class="footer-nav-col">
+          <span class="footer-nav-title">Studio</span>
+          <a href="#reviews" class="footer-nav-link link-tap">Reviews</a>
+          <a href="#book" class="footer-nav-link link-tap">Book</a>
+          <a href="#blog" class="footer-nav-link link-tap">Blog</a>
+          <a href="#contact" class="footer-nav-link link-tap">Contact</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-divider"></div>
+
+    <div class="footer-bottom">
+      <span>&copy; 2025 Final Test Salon. All Rights Reserved.</span>
+      <span>Built by LocalSite</span>
+    </div>
+  </footer>
+
+  <!-- SCRIPT BLOCK -->
+  <script>
+    // 1. SOUND SYSTEM MODULE (WEB AUDIO API)
+    const SoundSystem = {
+      ctx: null,
+      init() {
+        if (this.ctx) return;
+        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      },
+      resume() {
+        this.init();
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      },
+      click() {
+        this.resume();
+        try {
+          const o = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          o.connect(g);
+          g.connect(this.ctx.destination);
+          o.frequency.setValueAtTime(880, this.ctx.currentTime);
+          o.frequency.exponentialRampToValueAtTime(440, this.ctx.currentTime + 0.08);
+          g.gain.setValueAtTime(0.08, this.ctx.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.12);
+          o.start();
+          o.stop(this.ctx.currentTime + 0.12);
+        } catch (e) {}
+      },
+      tap() {
+        this.resume();
+        try {
+          const o = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          o.type = 'sine';
+          o.connect(g);
+          g.connect(this.ctx.destination);
+          o.frequency.setValueAtTime(1200, this.ctx.currentTime);
+          o.frequency.exponentialRampToValueAtTime(800, this.ctx.currentTime + 0.05);
+          g.gain.setValueAtTime(0.04, this.ctx.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.08);
+          o.start();
+          o.stop(this.ctx.currentTime + 0.08);
+        } catch (e) {}
+      },
+      scrollTick() {
+        if (!this.ctx || this.ctx.state === 'suspended') return;
+        try {
+          const o = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          o.type = 'triangle';
+          o.connect(g);
+          g.connect(this.ctx.destination);
+          o.frequency.setValueAtTime(800, this.ctx.currentTime);
+          o.frequency.exponentialRampToValueAtTime(300, this.ctx.currentTime + 0.02);
+          g.gain.setValueAtTime(0.015, this.ctx.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.03);
+          o.start();
+          o.stop(this.ctx.currentTime + 0.03);
+        } catch (e) {}
+      },
+      success() {
+        this.resume();
+        try {
+          [523.25, 659.25, 783.99].forEach((freq, i) => {
+            const o = this.ctx.createOscillator();
+            const g = this.ctx.createGain();
+            o.type = 'sine';
+            o.connect(g);
+            g.connect(this.ctx.destination);
+            o.frequency.value = freq;
+            const t = this.ctx.currentTime + i * 0.12;
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(0.06, t + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+            o.start(t);
+            o.stop(t + 0.5);
+          });
+        } catch (e) {}
+      },
+      whoosh() {
+        this.resume();
+        try {
+          const b = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          b.type = 'sawtooth';
+          b.connect(g);
+          g.connect(this.ctx.destination);
+          b.frequency.setValueAtTime(200, this.ctx.currentTime);
+          b.frequency.exponentialRampToValueAtTime(80, this.ctx.currentTime + 0.18);
+          g.gain.setValueAtTime(0.03, this.ctx.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.18);
+          b.start();
+          b.stop(this.ctx.currentTime + 0.18);
+        } catch (e) {}
+      }
+    };
+
+    // 2. MOBILE MENU HANDLERS
+    const mobileToggle = document.getElementById('mobile_toggle_btn');
+    const mobileOverlay = document.getElementById('mobile_overlay');
+    const mobileLinks = document.querySelectorAll('.mobile-nav-link');
+    const navBar = document.getElementById('navbar');
+
+    function toggleMobileMenu() {
+      SoundSystem.whoosh();
+      const isOpen = mobileOverlay.classList.contains('open');
+      if (isOpen) {
+        mobileOverlay.classList.remove('open');
+        mobileToggle.classList.remove('is-active');
+        navBar.classList.remove('menu-open');
+        document.body.style.overflow = '';
+      } else {
+        mobileOverlay.classList.add('open');
+        mobileToggle.classList.add('is-active');
+        navBar.classList.add('menu-open');
+        document.body.style.overflow = 'hidden';
+      }
+    }
+
+    function closeMobileMenu() {
+      if (!mobileOverlay.classList.contains('open')) return;
+      SoundSystem.whoosh();
+      mobileOverlay.classList.remove('open');
+      mobileToggle.classList.remove('is-active');
+      navBar.classList.remove('menu-open');
+      document.body.style.overflow = '';
+    }
+
+    mobileToggle.addEventListener('click', toggleMobileMenu);
+    
+    mobileLinks.forEach(link => {
+      link.addEventListener('click', () => {
+        closeMobileMenu();
+        SoundSystem.tap();
+      });
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeMobileMenu();
+      }
+    });
+
+    // 3. STICKY HEADER BOX SHADOW ON SCROLL
+    const navbar = document.getElementById('navbar');
+    window.addEventListener('scroll', () => {
+      if (window.scrollY > 60) {
+        navbar.classList.add('scrolled');
+      } else {
+        navbar.classList.remove('scrolled');
+      }
+    });
+
+    // 4. ACTIVE LINK SCROLLING HIGHLIGHT (INTERSECTION OBSERVER)
+    const sections = document.querySelectorAll('section');
+    const desktopLinks = document.querySelectorAll('.nav-links-desktop .nav-link');
+    const navObserverOpts = {
+      root: null,
+      threshold: 0.25,
+      rootMargin: '-70px 0px 0px 0px'
+    };
+
+    const navObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const id = entry.target.getAttribute('id');
+          desktopLinks.forEach(link => {
+            if (link.getAttribute('href') === `#${id}`) {
+              link.classList.add('active');
+            } else {
+              link.classList.remove('active');
+            }
+          });
+        }
+      });
+    }, navObserverOpts);
+
+    sections.forEach(sec => navObserver.observe(sec));
+
+    // 5. SERVICES TAB SWITCH PANEL
+    const tabsWrapper = document.querySelector('.tabs-wrapper');
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabPanes = document.querySelectorAll('.services-pane');
+
+    let scrollTickTimeout = null;
+    let lastScrollPos = 0;
+    if (tabsWrapper) {
+      tabsWrapper.addEventListener('scroll', () => {
+        if (Math.abs(tabsWrapper.scrollLeft - lastScrollPos) > 40) {
+          lastScrollPos = tabsWrapper.scrollLeft;
+          if (!scrollTickTimeout) {
+            SoundSystem.scrollTick();
+            scrollTickTimeout = setTimeout(() => {
+              scrollTickTimeout = null;
+            }, 60);
+          }
+        }
+      }, { passive: true });
+    }
+
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        SoundSystem.tap();
+        const tabCategory = btn.getAttribute('data-tab');
+        
+        tabBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        tabPanes.forEach(pane => {
+          if (pane.id === `pane-${tabCategory}`) {
+            pane.classList.add('active');
+          } else {
+            pane.classList.remove('active');
+          }
+        });
+      });
+    });
+
+    // 6. PORTFOLIO WORK GALLERY FILTER
+    const filterBtns = document.querySelectorAll('.filter-btn');
+    const galleryItems = document.querySelectorAll('.gallery-item');
+
+    filterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        SoundSystem.tap();
+        const filterVal = btn.getAttribute('data-filter');
+        
+        filterBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        galleryItems.forEach(item => {
+          const category = item.getAttribute('data-category');
+          // Brief scale-down effect for transition-feeling
+          item.style.transform = 'scale(0.97)';
+          
+          if (filterVal === 'all' || category === filterVal) {
+            item.classList.remove('filtered-out');
+            item.style.position = 'relative';
+            setTimeout(() => {
+              item.style.transform = '';
+            }, 50);
+          } else {
+            setTimeout(() => {
+              item.classList.add('filtered-out');
+              item.style.position = 'absolute';
+              item.style.transform = '';
+            }, 150);
+          }
+        });
+      });
+    });
+
+    // 7. BOOKING RESERVATION FORM HANDLING
+    const reservationForm = document.getElementById('reservation_form');
+    const successBox = document.getElementById('booking_success_box');
+    const successHeader = document.getElementById('success_header');
+    const successSubtext = document.getElementById('success_subtext');
+
+    // Default min date to today as requested
+    const dateInput = document.getElementById('frm_date');
+    if (dateInput) {
+      const today = new Date().toISOString().split('T')[0];
+      dateInput.min = today;
+      dateInput.value = today;
+    }
+
+    reservationForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+
+      const name = document.getElementById('frm_fullname').value.trim();
+      const email = document.getElementById('frm_email').value.trim();
+      const phone = document.getElementById('frm_phone').value.trim() || 'your specified contact channel';
+
+      if (!name || !email) {
+        SoundSystem.click();
+        reservationForm.style.animation = 'whatsapp-bounce 0.3s ease';
+        setTimeout(() => { reservationForm.style.animation = ''; }, 300);
+        return;
+      }
+
+      // Success workflow
+      SoundSystem.success();
+      reservationForm.style.display = 'none';
+      successBox.style.display = 'block';
+
+      successHeader.textContent = "Your appointment is requested. We will confirm at " + phone + " within the hour.";
+      successSubtext.textContent = "Thank you for choosing Final.";
+    });
+
+    // 8. SCROLL REVEAL (INTERSECTION OBSERVER)
+    const revealItems = document.querySelectorAll('[data-reveal]');
+    const revealObserver_opts = {
+      root: null,
+      threshold: 0.1,
+      rootMargin: '0px 0px -40px 0px'
+    };
+
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('revealed');
+        }
+      });
+    }, revealObserver_opts);
+
+    revealItems.forEach(el => revealObserver.observe(el));
+
+    // 9. REVIEWS NAVIGATION & SWIPE MOMENTUM
+    const viewport = document.querySelector('.reviews-viewport');
+    const leftBtn = document.getElementById('rev_left_btn');
+    const rightBtn = document.getElementById('rev_right_btn');
+
+    function updateCarouselButtons() {
+      if (!viewport || !leftBtn || !rightBtn) return;
+      const scrollLeft = viewport.scrollLeft;
+      const maxScroll = viewport.scrollWidth - viewport.clientWidth;
+
+      if (scrollLeft <= 10) {
+        leftBtn.classList.add('hidden-btn');
+      } else {
+        leftBtn.classList.remove('hidden-btn');
+      }
+
+      if (scrollLeft >= maxScroll - 10) {
+        rightBtn.classList.add('hidden-btn');
+      } else {
+        rightBtn.classList.remove('hidden-btn');
+      }
+    }
+
+    if (viewport) {
+      viewport.addEventListener('scroll', updateCarouselButtons);
+      // Wait for rendering and layout pass
+      setTimeout(updateCarouselButtons, 150);
+      window.addEventListener('resize', updateCarouselButtons);
+    }
+
+    if (leftBtn) {
+      leftBtn.addEventListener('click', () => {
+        SoundSystem.tap();
+        const card = viewport.querySelector('.review-card');
+        if (card) {
+          const style = window.getComputedStyle(viewport.querySelector('.reviews-container'));
+          const gap = parseInt(style.gap) || 16;
+          const scrollAmount = card.clientWidth + gap;
+          viewport.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+        }
+      });
+    }
+
+    if (rightBtn) {
+      rightBtn.addEventListener('click', () => {
+        SoundSystem.tap();
+        const card = viewport.querySelector('.review-card');
+        if (card) {
+          const style = window.getComputedStyle(viewport.querySelector('.reviews-container'));
+          const gap = parseInt(style.gap) || 16;
+          const scrollAmount = card.clientWidth + gap;
+          viewport.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+        }
+      });
+    }
+
+    // GENTLE TOUCH DRAG SUPPORT
+    let isDown = false;
+    let startX;
+    let scrollLeftVal;
+
+    viewport.addEventListener('mousedown', (e) => {
+      isDown = true;
+      startX = e.pageX - viewport.offsetLeft;
+      scrollLeftVal = viewport.scrollLeft;
+    });
+
+    viewport.addEventListener('mouseleave', () => { isDown = false; });
+    viewport.addEventListener('mouseup', () => { isDown = false; });
+    
+    viewport.addEventListener('mousemove', (e) => {
+      if (!isDown) return;
+      e.preventDefault();
+      const x = e.pageX - viewport.offsetLeft;
+      const walk = (x - startX) * 1.5;
+      viewport.scrollLeft = scrollLeftVal - walk;
+    });
+
+    // 10. WEBSITE CACHING SYSTEM (IN-MEMORY & CACHE STORAGE FOR INSTANT RE-LOAD)
+    const imagesToPreload = [
+      'https://images.unsplash.com/photo-1562322140-8baeececf3df?auto=format&fit=crop&q=80&w=800',
+      'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&q=80&w=600',
+      'https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1?auto=format&fit=crop&q=80&w=600',
+      'https://images.unsplash.com/photo-1605497746444-ac9dbd39f69c?auto=format&fit=crop&q=80&w=600',
+      'https://images.unsplash.com/photo-1601412436009-d964bd02edbc?auto=format&fit=crop&q=80&w=600',
+      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=600',
+      'https://images.unsplash.com/photo-1503435980610-a51f3ddfee50?auto=format&fit=crop&q=80&w=600',
+      'https://images.unsplash.com/photo-1595152772835-219674b2a8a6?auto=format&fit=crop&q=80&w=600',
+      'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=600',
+      'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=600',
+      'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&q=80&w=600',
+      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=600',
+      'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=200',
+      'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=200',
+      'https://images.unsplash.com/photo-1531123897727-8f129e1eb4ce?auto=format&fit=crop&q=80&w=200',
+      'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200',
+      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
+      'https://images.unsplash.com/photo-1519014816548-bf5fe059e98b?auto=format&fit=crop&q=80&w=600',
+      'https://images.unsplash.com/photo-1522337660859-02fbefca4702?auto=format&fit=crop&q=80&w=600',
+      'https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=600'
+    ];
+
+    if ('caches' in window) {
+      caches.open('maison-salon-static-v1').then(cache => {
+        cache.addAll(imagesToPreload).then(() => {
+          console.log('Maison premium visuals successfully cached in persistent browser cache.');
+        }).catch(() => {});
+      });
+    }
+
+    // Warm-up memory cache instantly
+    imagesToPreload.forEach(url => {
+      const img = new Image();
+      img.src = url;
+    });
+
+    // 11. SMOOTH SCROLL ANCHOR CORRECTION WITH 70PX NAV OFFSET
+    const anchorLinks = document.querySelectorAll('a[href^="#"]');
+    anchorLinks.forEach(item => {
+      item.addEventListener('click', (e) => {
+        const destHref = item.getAttribute('href');
+        if (destHref === '#') return;
+        
+        e.preventDefault();
+        const destElement = document.querySelector(destHref);
+        if (destElement) {
+          SoundSystem.tap();
+          
+          // Trigger iOS-like scale bounce on clicking link elements
+          item.classList.add('animate-whatsapp-bounce');
+          setTimeout(() => { item.classList.remove('animate-whatsapp-bounce'); }, 400);
+
+          let elementPosition = destElement.getBoundingClientRect().top + window.pageYOffset;
+          let offsetPosition = elementPosition - 70;
+
+          window.scrollTo({
+            top: offsetPosition,
+            behavior: "smooth"
+          });
+        }
+      });
+    });
+
+    // 12. EXTRA CTA SOUND BINDINGS & SEAT HOVER BEHAVIORS
+    const bookCTAs = [
+      document.getElementById('nav_book_trigger'),
+      document.getElementById('hero_book_btn'),
+      document.getElementById('hero_see_work'),
+      document.getElementById('logo_trigger')
+    ];
+
+    bookCTAs.forEach(btn => {
+      if (btn) {
+        btn.addEventListener('click', () => {
+          if (btn.id === 'hero_see_work') {
+            SoundSystem.tap();
+            const dest = document.getElementById('gallery');
+            if (dest) window.scrollTo({ top: dest.getBoundingClientRect().top + window.pageYOffset - 70, behavior: "smooth" });
+          } else if (btn.id === 'logo_trigger') {
+            SoundSystem.tap();
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          } else {
+            SoundSystem.click();
+            const dest = document.getElementById('book');
+            if (dest) window.scrollTo({ top: dest.getBoundingClientRect().top + window.pageYOffset - 70, behavior: "smooth" });
+          }
+        });
+      }
+    });
+
+    const linkTaps = document.querySelectorAll('.link-tap');
+    linkTaps.forEach(itm => {
+      itm.addEventListener('click', () => {
+        SoundSystem.tap();
+      });
+    });
+
+    // 13. PREMIUM BLOG READER FUNCTIONALITY
+    const blogReaderOverlay = document.getElementById('blog_reader_overlay');
+    const blogReaderContent = document.getElementById('blog_reader_content');
+    const blogBackBtn = document.getElementById('blog_back_btn');
+    const blogNavBookBtn = document.getElementById('blog_nav_book_btn');
+    const blogReadMoreBtns = document.querySelectorAll('.blog-read-more');
+
+    function openBlogReader(postId) {
+      const template = document.getElementById(`blog-content-${postId}`);
+      if (!template) return;
+
+      SoundSystem.click();
+      
+      // Load content
+      blogReaderContent.innerHTML = template.innerHTML;
+      
+      // Update styling layout instantly and lock general scroll
+      blogReaderOverlay.classList.add('visible');
+      document.body.style.overflow = 'hidden';
+      blogReaderOverlay.scrollTop = 0;
+    }
+
+    function closeBlogReader() {
+      SoundSystem.tap();
+      blogReaderOverlay.classList.remove('visible');
+      document.body.style.overflow = '';
+    }
+
+    function closeBlogReaderAndBook() {
+      SoundSystem.click();
+      blogReaderOverlay.classList.remove('visible');
+      document.body.style.overflow = '';
+      setTimeout(() => {
+        const dest = document.getElementById('book');
+        if (dest) {
+          window.scrollTo({
+            top: dest.getBoundingClientRect().top + window.pageYOffset - 70,
+            behavior: "smooth"
+          });
+        }
+      }, 350);
+    }
+
+    // Bind on window so it remains globally accessible in dynamically inserted onclicks
+    window.closeBlogReaderAndBook = closeBlogReaderAndBook;
+
+    blogReadMoreBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const postId = btn.getAttribute('data-post-id');
+        openBlogReader(postId);
+      });
+    });
+
+    if (blogBackBtn) {
+      blogBackBtn.addEventListener('click', closeBlogReader);
+    }
+
+    if (blogNavBookBtn) {
+      blogNavBookBtn.addEventListener('click', closeBlogReaderAndBook);
+    }
+
+  </script>
+</body>
+</html>
