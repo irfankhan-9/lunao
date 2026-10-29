@@ -58,7 +58,7 @@ export interface SmsTemplatePreset {
   text: string;
 }
 
-export const PRESET_SMS_TEMPLATES_NO_WEBSITE: SmsTemplatePreset[] = [
+export const PRESET_SMS_TEMPLATES: SmsTemplatePreset[] = [
   {
     id: 'referral_josh',
     name: 'Josh Referral Hook (Recommended)',
@@ -76,10 +76,16 @@ export const PRESET_SMS_TEMPLATES_NO_WEBSITE: SmsTemplatePreset[] = [
 {{site_url}}`,
   },
   {
+    id: 'redesign_upgrade',
+    name: 'Redesign & Speed Upgrade',
+    badge: 'Redesign',
+    text: `Hey {{business_name}}, saw your current site and mocked up a faster, modern mobile version for u in {{city}}: {{site_url}} hope u like it!`,
+  },
+  {
     id: 'direct_no_site',
-    name: 'Direct Showcase (No Site Hook)',
+    name: 'Direct Showcase',
     badge: 'Showcase',
-    text: `Hey {{business_name}}, noticed u don't have a website yet in {{city}}. Put together a custom preview for u: {{site_url}} let me know if u like it!`,
+    text: `Hey {{business_name}}, put together a custom website preview for u in {{city}}: {{site_url}} let me know if u like it!`,
   },
   {
     id: 'compact_short_no_site',
@@ -89,38 +95,12 @@ export const PRESET_SMS_TEMPLATES_NO_WEBSITE: SmsTemplatePreset[] = [
   },
 ];
 
-export const PRESET_SMS_TEMPLATES_WITH_WEBSITE: SmsTemplatePreset[] = [
-  {
-    id: 'redesign_upgrade',
-    name: 'Redesign & Speed Upgrade (Recommended)',
-    badge: 'Redesign',
-    text: `Hey {{business_name}}, saw your current site and mocked up a faster, modern mobile version for u in {{city}}: {{site_url}} hope u like it!`,
-  },
-  {
-    id: 'booking_conversion',
-    name: '1-Click Booking Upgrade',
-    badge: 'Conversion',
-    text: `Yoo {{business_name}}, noticed your website was missing 1-click mobile booking. Built an upgrade preview for u: {{site_url}} let me know what u think!`,
-  },
-  {
-    id: 'modern_rebrand',
-    name: 'Modern Luxury Upgrade',
-    badge: 'Modernize',
-    text: `Hi {{business_name}}, redesigned your website with 2026 speed & mobile aesthetics: {{site_url}} check it out and let me know!`,
-  },
-  {
-    id: 'compact_short_upgrade',
-    name: 'Ultra Short Upgrade Hook',
-    badge: '1-Seg Safe',
-    text: `Yoo pal, redesigned your site for faster mobile bookings: {{site_url}} let me know!`,
-  },
-];
+export const PRESET_SMS_TEMPLATES_NO_WEBSITE = PRESET_SMS_TEMPLATES;
+export const PRESET_SMS_TEMPLATES_WITH_WEBSITE = PRESET_SMS_TEMPLATES;
 
-export const PRESET_SMS_TEMPLATES: SmsTemplatePreset[] = PRESET_SMS_TEMPLATES_NO_WEBSITE;
-
-const DEFAULT_SMS_MESSAGE_NO_WEBSITE = PRESET_SMS_TEMPLATES_NO_WEBSITE[0].text;
-const DEFAULT_SMS_MESSAGE_WITH_WEBSITE = PRESET_SMS_TEMPLATES_WITH_WEBSITE[0].text;
-const DEFAULT_SMS_MESSAGE = DEFAULT_SMS_MESSAGE_NO_WEBSITE;
+const DEFAULT_SMS_MESSAGE = PRESET_SMS_TEMPLATES[0].text;
+const DEFAULT_SMS_MESSAGE_NO_WEBSITE = DEFAULT_SMS_MESSAGE;
+const DEFAULT_SMS_MESSAGE_WITH_WEBSITE = DEFAULT_SMS_MESSAGE;
 
 export const interpolateSmsVariables = (
   template: string,
@@ -193,13 +173,8 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
 
-  // Step 5: Dual SMS Content & Advanced Segment Customization
-  const [messagingTargetTab, setMessagingTargetTab] = useState<'no_website' | 'with_website'>('no_website');
-  const [smsMessageNoWebsite, setSmsMessageNoWebsite] = useState<string>(DEFAULT_SMS_MESSAGE_NO_WEBSITE);
-  const [smsMessageWithWebsite, setSmsMessageWithWebsite] = useState<string>(DEFAULT_SMS_MESSAGE_WITH_WEBSITE);
-  const [smsMessage, setSmsMessage] = useState<string>(DEFAULT_SMS_MESSAGE_NO_WEBSITE);
-  const [activePresetIdNoWebsite, setActivePresetIdNoWebsite] = useState<string>('referral_josh');
-  const [activePresetIdWithWebsite, setActivePresetIdWithWebsite] = useState<string>('redesign_upgrade');
+  // Step 5: SMS Content & Advanced Segment Customization
+  const [smsMessage, setSmsMessage] = useState<string>(DEFAULT_SMS_MESSAGE);
   const [activePresetId, setActivePresetId] = useState<string>('referral_josh');
   const [copiedPreviewSms, setCopiedPreviewSms] = useState<boolean>(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -213,7 +188,6 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
   const [editingLeadIndex, setEditingLeadIndex] = useState<number | null>(null);
   const [editingLeadCopy, setEditingLeadCopy] = useState<string>('');
   const [segmentFilter, setSegmentFilter] = useState<'all' | '1seg' | '2seg'>('all');
-  const [websiteFilter, setWebsiteFilter] = useState<'all' | 'no_website' | 'with_website'>('all');
   const [previewLeadIndex, setPreviewLeadIndex] = useState<number>(0);
 
   // Autonomous Launch & Live Progress State
@@ -455,12 +429,11 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
       case 4:
         return isAutomatedSmsPlan(userPlan) || Boolean(selectedPhoneNumber);
       case 5:
-        return Boolean(smsMessageNoWebsite.trim()) && Boolean(smsMessageWithWebsite.trim());
+        return Boolean(smsMessage.trim());
       case 6:
         return (
           csvLeads.length > 0 &&
-          Boolean(smsMessageNoWebsite.trim()) &&
-          Boolean(smsMessageWithWebsite.trim()) &&
+          Boolean(smsMessage.trim()) &&
           userCredits >= totalRequiredCredits
         );
       default:
@@ -499,15 +472,11 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
     setPreviewModalOpen(true);
   };
 
-  // Insert variable tag into active SMS message textarea (no website or with website)
+  // Insert variable tag into active SMS message textarea
   const insertVariableTag = (tag: string) => {
     playSoftTap();
-    const isWithWebsite = messagingTargetTab === 'with_website';
-    const setter = isWithWebsite ? setSmsMessageWithWebsite : setSmsMessageNoWebsite;
-
     if (!textareaRef.current) {
-      setter((prev) => prev + ` {{${tag}}}`);
-      if (!isWithWebsite) setSmsMessage((prev) => prev + ` {{${tag}}}`);
+      setSmsMessage((prev) => prev + ` {{${tag}}}`);
       return;
     }
     const textarea = textareaRef.current;
@@ -516,8 +485,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
     const current = textarea.value;
     const insertion = `{{${tag}}}`;
     const next = current.substring(0, start) + insertion + current.substring(end);
-    setter(next);
-    if (!isWithWebsite) setSmsMessage(next);
+    setSmsMessage(next);
     setTimeout(() => {
       textarea.focus();
       textarea.setSelectionRange(start + insertion.length, start + insertion.length);
@@ -598,9 +566,9 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
           name: finalName,
           niche: selectedNiche,
           leads: csvLeads,
-          smsTemplate: smsMessageNoWebsite,
-          smsTemplateNoWebsite: smsMessageNoWebsite,
-          smsTemplateWithWebsite: smsMessageWithWebsite,
+          smsTemplate: smsMessage,
+          smsTemplateNoWebsite: smsMessage,
+          smsTemplateWithWebsite: smsMessage,
           type: 'sms',
           ownerKey: resolvedOwnerKey,
         }),
@@ -747,12 +715,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
         setCompletedSitesList([...completedAccumulator]);
         setDispatchedSmsList([...completedAccumulator as any]);
 
-        const leadHasWebsite = Boolean(
-          lead.website &&
-          String(lead.website).trim() &&
-          !['none', 'null', 'undefined', 'n/a', '-', 'false'].includes(String(lead.website).trim().toLowerCase())
-        );
-        let leadMessageTemplate = leadHasWebsite ? smsMessageWithWebsite : smsMessageNoWebsite;
+        let leadMessageTemplate = smsMessage;
         let used2SegShortener = false;
         if (customLeadMessages[i] !== undefined) {
           leadMessageTemplate = customLeadMessages[i];
@@ -1175,10 +1138,9 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
         !['none', 'null', 'undefined', 'n/a', '-', 'false'].includes(String(rawWebsite).trim().toLowerCase())
       );
 
-      // Select template according to prospect's website status
-      const baseTemplateForLead = hasWebsite ? smsMessageWithWebsite : smsMessageNoWebsite;
+      const baseTemplateForLead = smsMessage;
 
-      // 1. Calculate default message with appropriate template
+      // 1. Calculate default message with template
       const defaultText = interpolateSmsVariables(baseTemplateForLead, {
         businessName: lead.name,
         city: lead.city,
@@ -1233,20 +1195,12 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
         isCustomEdited,
       };
     });
-  }, [displayLeads, smsMessageNoWebsite, smsMessageWithWebsite, selectedNiche, enable2SegOverride, twoSegTemplate, customLeadMessages]);
+  }, [displayLeads, smsMessage, selectedNiche, enable2SegOverride, twoSegTemplate, customLeadMessages]);
 
   const totalEvaluatedCount = evaluatedLeads.length;
   const oneSegmentCount = evaluatedLeads.filter((l) => l.finalSegments === 1).length;
   const twoSegmentCount = evaluatedLeads.filter((l) => l.finalSegments >= 2).length;
   const originalTwoSegmentCount = evaluatedLeads.filter((l) => l.defaultSegments >= 2).length;
-
-  const leadsWithoutWebsiteCount = useMemo(() => {
-    return evaluatedLeads.filter((l) => !l.hasWebsite).length;
-  }, [evaluatedLeads]);
-
-  const leadsWithWebsiteCount = useMemo(() => {
-    return evaluatedLeads.filter((l) => l.hasWebsite).length;
-  }, [evaluatedLeads]);
 
   // Check if user is on Starter Plan or above (BYO Telnyx account)
   const isByoTelnyx = canUseOwnTelnyx(userPlan);
@@ -1274,10 +1228,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
   const sampleBusinessName = activePreview?.lead.name || (selectedNiche ? `${selectedNiche} Pro` : 'Vintage Cuts');
   const sampleCity = activePreview?.lead.city || 'Vancouver, BC';
   const sampleSiteUrl = activePreview?.siteUrl || `${typeof window !== 'undefined' ? window.location.origin : 'https://lunao.app'}/sites/preview/`;
-  const sampleSlug = activePreview?.cleanSlug || 'preview';
-  const sampleHasWebsite = Boolean(activePreview?.hasWebsite);
-  const sampleWebsiteUrl = activePreview?.website || '';
-  const interpolatedSms = activePreview?.resolvedText || (messagingTargetTab === 'with_website' ? smsMessageWithWebsite : smsMessageNoWebsite);
+  const interpolatedSms = activePreview?.resolvedText || smsMessage;
   const interpolatedCharCount = activePreview?.finalChars || interpolatedSms.length;
   const segmentsCount = activePreview?.finalSegments || (interpolatedCharCount <= 160 ? 1 : Math.ceil(interpolatedCharCount / 153));
 
@@ -2117,16 +2068,16 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
               {/* Left Column (7/12): SMS Message Editor & 2-Segment Optimizer */}
               <div className="lg:col-span-7 space-y-5">
                 
-                {/* Dual Audience Segment Selector & Message Editor */}
+                {/* Single Simple SMS Message Editor */}
                 <div className="p-4 sm:p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-light pb-4">
                     <div>
                       <h4 className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
                         <MessageSquare className="w-3.5 h-3.5 text-accent" />
-                        <span>Dual Outreach Message Engine</span>
+                        <span>SMS Proposal Message</span>
                       </h4>
                       <p className="text-[11px] text-ink-secondary mt-0.5">
-                        Write distinct, high-converting hooks for businesses with vs. without a website.
+                        This proposal message will be personalized and sent to all target prospects.
                       </p>
                     </div>
                     <div className="flex items-center gap-1.5 bg-surface px-2.5 py-1 rounded-full border border-border-light text-[11px] font-semibold text-ink-secondary">
@@ -2135,100 +2086,23 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                     </div>
                   </div>
 
-                  {/* Segment Switcher Tabs */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {/* Tab 1: Without Website */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSoftTap();
-                        setMessagingTargetTab('no_website');
-                        const idx = evaluatedLeads.findIndex((l) => !l.hasWebsite);
-                        if (idx >= 0) setPreviewLeadIndex(idx);
-                      }}
-                      className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-start justify-between gap-2.5 ${
-                        messagingTargetTab === 'no_website'
-                          ? 'bg-amber-500/10 border-amber-500 shadow-xs ring-2 ring-amber-500/20'
-                          : 'bg-surface hover:bg-off-white border-border-light text-ink'
-                      }`}
-                    >
-                      <div className="space-y-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm">🔥</span>
-                          <span className="text-xs font-bold text-ink">Businesses Without Website</span>
-                        </div>
-                        <p className="text-[11px] text-ink-secondary truncate">
-                          Cold referral & instant live site hook
-                        </p>
-                      </div>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
-                        {leadsWithoutWebsiteCount} {leadsWithoutWebsiteCount === 1 ? 'lead' : 'leads'}
-                      </span>
-                    </button>
-
-                    {/* Tab 2: With Website */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSoftTap();
-                        setMessagingTargetTab('with_website');
-                        const idx = evaluatedLeads.findIndex((l) => l.hasWebsite);
-                        if (idx >= 0) setPreviewLeadIndex(idx);
-                      }}
-                      className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-start justify-between gap-2.5 ${
-                        messagingTargetTab === 'with_website'
-                          ? 'bg-blue-500/10 border-blue-500 shadow-xs ring-2 ring-blue-500/20'
-                          : 'bg-surface hover:bg-off-white border-border-light text-ink'
-                      }`}
-                    >
-                      <div className="space-y-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm">🌐</span>
-                          <span className="text-xs font-bold text-ink">Businesses With Website</span>
-                        </div>
-                        <p className="text-[11px] text-ink-secondary truncate">
-                          Redesign & mobile booking upgrade hook
-                        </p>
-                      </div>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-blue-100 text-blue-800 border border-blue-200 shrink-0">
-                        {leadsWithWebsiteCount} {leadsWithWebsiteCount === 1 ? 'lead' : 'leads'}
-                      </span>
-                    </button>
-                  </div>
-
-                  {/* Active Message Content Card */}
-                  <div className={`p-4 rounded-xl border space-y-4 ${
-                    messagingTargetTab === 'no_website'
-                      ? 'bg-amber-50/30 border-amber-200/80'
-                      : 'bg-blue-50/30 border-blue-200/80'
-                  }`}>
+                  {/* Message Content Card */}
+                  <div className="p-4 rounded-xl border border-blue-200/80 bg-blue-50/20 space-y-4">
                     {/* Header with Char Count & Segments */}
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-base">{messagingTargetTab === 'no_website' ? '🔥' : '🌐'}</span>
-                        <div>
-                          <span className="text-xs font-bold text-ink block">
-                            {messagingTargetTab === 'no_website'
-                              ? 'Template A: For Businesses Without a Website'
-                              : 'Template B: For Businesses With an Existing Website'}
-                          </span>
-                          <span className="text-[10px] text-ink-tertiary">
-                            {messagingTargetTab === 'no_website'
-                              ? 'Dispatched to verified leads with 0 active websites'
-                              : 'Dispatched to verified leads that already have an existing web address'}
-                          </span>
-                        </div>
-                      </div>
+                      <span className="text-xs font-bold text-ink flex items-center gap-1.5">
+                        <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                        Proposal Hook Template
+                      </span>
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-ink-secondary">
                           <span className="font-mono font-semibold text-ink">
-                            {messagingTargetTab === 'no_website' ? smsMessageNoWebsite.length : smsMessageWithWebsite.length}
+                            {smsMessage.length}
                           </span> chars
                         </span>
                         <span className="text-border-light text-xs">•</span>
                         {(() => {
-                          const currentText = messagingTargetTab === 'no_website' ? smsMessageNoWebsite : smsMessageWithWebsite;
-                          const currentSegs = currentText.length <= 160 ? 1 : Math.ceil(currentText.length / 153);
+                          const currentSegs = smsMessage.length <= 160 ? 1 : Math.ceil(smsMessage.length / 153);
                           return (
                             <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold font-mono ${
                               currentSegs === 1
@@ -2245,46 +2119,30 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                     {/* Pre-Built SMS Templates */}
                     <div className="space-y-2">
                       <span className="text-[11px] font-semibold text-ink-tertiary block">
-                        {messagingTargetTab === 'no_website'
-                          ? 'Pre-built no-website hooks:'
-                          : 'Pre-built website redesign & upgrade hooks:'}
+                        Select a pre-built proposal hook:
                       </span>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {(messagingTargetTab === 'no_website'
-                          ? PRESET_SMS_TEMPLATES_NO_WEBSITE
-                          : PRESET_SMS_TEMPLATES_WITH_WEBSITE
-                        ).map((preset) => {
-                          const isSelected =
-                            messagingTargetTab === 'no_website'
-                              ? smsMessageNoWebsite === preset.text
-                              : smsMessageWithWebsite === preset.text;
+                        {PRESET_SMS_TEMPLATES.map((preset) => {
+                          const isSelected = smsMessage === preset.text;
                           return (
                             <button
                               key={preset.id}
                               type="button"
                               onClick={() => {
                                 playSoftTap();
-                                if (messagingTargetTab === 'no_website') {
-                                  setSmsMessageNoWebsite(preset.text);
-                                  setSmsMessage(preset.text);
-                                  setActivePresetIdNoWebsite(preset.id);
-                                } else {
-                                  setSmsMessageWithWebsite(preset.text);
-                                  setActivePresetIdWithWebsite(preset.id);
-                                }
+                                setSmsMessage(preset.text);
+                                setActivePresetId(preset.id);
                               }}
                               className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
                                 isSelected
-                                  ? messagingTargetTab === 'no_website'
-                                    ? 'bg-amber-100/70 border-amber-500 shadow-xs'
-                                    : 'bg-blue-100/70 border-blue-500 shadow-xs'
+                                  ? 'bg-blue-100/70 border-blue-500 shadow-xs'
                                   : 'bg-white hover:bg-surface border-border-light text-ink'
                               }`}
                             >
                               <div className="flex items-center justify-between gap-1">
                                 <span className="text-xs font-bold truncate text-ink">{preset.name}</span>
                                 <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${
-                                  preset.id === 'referral_josh' || preset.id === 'redesign_upgrade'
+                                  preset.id === 'referral_josh'
                                     ? 'bg-emerald-100 text-emerald-700'
                                     : 'bg-blue-100 text-blue-700'
                                 }`}>
@@ -2324,23 +2182,11 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
 
                     <textarea
                       ref={textareaRef}
-                      value={messagingTargetTab === 'no_website' ? smsMessageNoWebsite : smsMessageWithWebsite}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (messagingTargetTab === 'no_website') {
-                          setSmsMessageNoWebsite(val);
-                          setSmsMessage(val);
-                        } else {
-                          setSmsMessageWithWebsite(val);
-                        }
-                      }}
+                      value={smsMessage}
+                      onChange={(e) => setSmsMessage(e.target.value)}
                       rows={4}
                       className="w-full p-4 rounded-xl border border-border-main bg-white focus:border-accent focus:ring-2 focus:ring-accent/10 text-sm font-sans text-ink placeholder:text-ink-tertiary outline-none resize-none shadow-inner"
-                      placeholder={
-                        messagingTargetTab === 'no_website'
-                          ? "Enter SMS hook for businesses without a website..."
-                          : "Enter SMS hook for businesses with an existing website..."
-                      }
+                      placeholder="Enter your SMS proposal hook..."
                     />
                     <div className="flex items-center justify-between text-[11px] text-ink-tertiary">
                       <span>
@@ -2363,7 +2209,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                           <span className="text-[10px] text-ink-tertiary font-normal">(Long URLs Handler)</span>
                         </h4>
                         <p className="text-[11px] text-ink-secondary">
-                          Customize a shorter SMS specifically for messages that exceed 160 characters.
+                          Optionally customize a shorter SMS specifically for messages that exceed 160 characters.
                         </p>
                       </div>
                     </div>
@@ -2483,7 +2329,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
 
               </div>
 
-              {/* Right Column (5/12): Live SMS Bubble Preview Card (Brand Consistent: White, Blue, Green) */}
+              {/* Right Column (5/12): Live SMS Bubble Preview Card */}
               <div className="lg:col-span-5 space-y-5">
                 <div className="p-4 sm:p-5 rounded-2xl bg-white border border-blue-200/80 shadow-xs space-y-4">
                   {/* Preview Header & Recipient Switcher */}
@@ -2497,7 +2343,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                           <span className="text-[10px] font-medium text-emerald-700">
-                            Route: {selectedPhoneNumber || '+1 (604) 953-9651'} (Telnyx Canada 10DLC)
+                            Route: {selectedPhoneNumber || '+1 (604) 953-9651'} (Telnyx Carrier)
                           </span>
                         </div>
                       </div>
@@ -2559,58 +2405,12 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                         <span>Lunao Outreach</span>
                         <CheckCircle className="w-3 h-3 text-blue-600" />
                       </p>
-                      <div className="flex flex-wrap items-center justify-center gap-1.5">
-                        <span className="text-[10px] text-ink-tertiary">
-                          Recipient: <strong className="text-ink">{sampleBusinessName}</strong> ({sampleCity})
-                        </span>
-                        {sampleHasWebsite ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                            <Globe className="w-2.5 h-2.5" />
-                            <span>Has Website Hook</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                            <span>🔥 No Website Hook</span>
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Quick preview switcher buttons */}
-                      <div className="flex items-center justify-center gap-2 pt-0.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            playSoftTap();
-                            const idx = evaluatedLeads.findIndex((l) => !l.hasWebsite);
-                            if (idx >= 0) setPreviewLeadIndex(idx);
-                          }}
-                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                            !sampleHasWebsite
-                              ? 'bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs'
-                              : 'bg-white text-ink-secondary border border-border-light hover:bg-slate-50'
-                          }`}
-                        >
-                          <span>🔥 Preview No-Site Hook</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            playSoftTap();
-                            const idx = evaluatedLeads.findIndex((l) => l.hasWebsite);
-                            if (idx >= 0) setPreviewLeadIndex(idx);
-                          }}
-                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                            sampleHasWebsite
-                              ? 'bg-blue-100 text-blue-800 border border-blue-300 shadow-2xs'
-                              : 'bg-white text-ink-secondary border border-border-light hover:bg-slate-50'
-                          }`}
-                        >
-                          <span>🌐 Preview Has-Site Hook</span>
-                        </button>
-                      </div>
+                      <p className="text-[10px] text-ink-tertiary">
+                        Recipient: <strong className="text-ink">{sampleBusinessName}</strong> ({sampleCity})
+                      </p>
                     </div>
 
-                    {/* Message Bubble (Brand Green & Blue) */}
+                    {/* Message Bubble */}
                     <div className="space-y-1.5 max-w-md ml-auto">
                       <div className="p-4 rounded-2xl rounded-tr-sm bg-emerald-600 text-white shadow-md text-xs sm:text-[13px] font-sans leading-relaxed whitespace-pre-wrap">
                         {interpolatedSms}
@@ -2715,113 +2515,58 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                   </p>
                 </div>
 
-                {/* Filter Tabs (Segments + Website Status) */}
-                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-                  {/* Website Status Tabs */}
-                  <div className="flex items-center gap-1 bg-surface p-1 rounded-xl border border-border-light">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSoftTap();
-                        setWebsiteFilter('all');
-                      }}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        websiteFilter === 'all'
-                          ? 'bg-white text-ink shadow-xs'
-                          : 'text-ink-secondary hover:text-ink'
-                      }`}
-                    >
-                      All ({totalEvaluatedCount})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSoftTap();
-                        setWebsiteFilter('no_website');
-                      }}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                        websiteFilter === 'no_website'
-                          ? 'bg-amber-500 text-white shadow-xs'
-                          : 'text-amber-800 hover:bg-amber-50'
-                      }`}
-                    >
-                      <span>🔥 No Site</span>
-                      <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20 font-mono">
-                        {leadsWithoutWebsiteCount}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSoftTap();
-                        setWebsiteFilter('with_website');
-                      }}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                        websiteFilter === 'with_website'
-                          ? 'bg-blue-600 text-white shadow-xs'
-                          : 'text-blue-700 hover:bg-blue-50'
-                      }`}
-                    >
-                      <span>🌐 Has Site</span>
-                      <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20 font-mono">
-                        {leadsWithWebsiteCount}
-                      </span>
-                    </button>
-                  </div>
-
-                  {/* Segment Count Tabs */}
-                  <div className="flex items-center gap-1 bg-surface p-1 rounded-xl border border-border-light">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSoftTap();
-                        setSegmentFilter('all');
-                      }}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        segmentFilter === 'all'
-                          ? 'bg-white text-ink shadow-xs'
-                          : 'text-ink-secondary hover:text-ink'
-                      }`}
-                    >
-                      Any Seg
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSoftTap();
-                        setSegmentFilter('1seg');
-                      }}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                        segmentFilter === '1seg'
-                          ? 'bg-emerald-600 text-white shadow-xs'
-                          : 'text-emerald-700 hover:bg-emerald-50'
-                      }`}
-                    >
-                      <span>1-Seg</span>
-                      <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-100 text-emerald-800 font-mono">
-                        {oneSegmentCount}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSoftTap();
-                        setSegmentFilter('2seg');
-                      }}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                        segmentFilter === '2seg'
-                          ? 'bg-amber-600 text-white shadow-xs'
-                          : twoSegmentCount > 0
-                          ? 'text-amber-800 bg-amber-50 hover:bg-amber-100'
-                          : 'text-ink-secondary'
-                      }`}
-                    >
-                      <span>2-Seg</span>
-                      <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-100 text-amber-900 font-mono">
-                        {twoSegmentCount}
-                      </span>
-                    </button>
-                  </div>
+                {/* Filter Tabs (Segment Count) */}
+                <div className="flex items-center gap-1 bg-surface p-1 rounded-xl border border-border-light">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playSoftTap();
+                      setSegmentFilter('all');
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      segmentFilter === 'all'
+                        ? 'bg-white text-ink shadow-xs'
+                        : 'text-ink-secondary hover:text-ink'
+                    }`}
+                  >
+                    All ({totalEvaluatedCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playSoftTap();
+                      setSegmentFilter('1seg');
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      segmentFilter === '1seg'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-emerald-700 hover:bg-emerald-50'
+                    }`}
+                  >
+                    <span>1-Seg</span>
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-100 text-emerald-800 font-mono">
+                      {oneSegmentCount}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playSoftTap();
+                      setSegmentFilter('2seg');
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      segmentFilter === '2seg'
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : twoSegmentCount > 0
+                        ? 'text-amber-800 bg-amber-50 hover:bg-amber-100'
+                        : 'text-ink-secondary'
+                    }`}
+                  >
+                    <span>2-Seg</span>
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-100 text-amber-900 font-mono">
+                      {twoSegmentCount}
+                    </span>
+                  </button>
                 </div>
               </div>
 
@@ -2853,8 +2598,6 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                   .filter((item) => {
                     if (segmentFilter === '1seg' && item.finalSegments !== 1) return false;
                     if (segmentFilter === '2seg' && item.finalSegments < 2) return false;
-                    if (websiteFilter === 'no_website' && item.hasWebsite) return false;
-                    if (websiteFilter === 'with_website' && !item.hasWebsite) return false;
                     return true;
                   })
                   .map((item) => {
@@ -2878,22 +2621,9 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                               {item.index + 1}
                             </span>
                             <div className="min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <p className="text-xs font-bold text-ink truncate">{item.lead.name}</p>
-                                {item.hasWebsite ? (
-                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded font-mono text-[9px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                                    <Globe className="w-2.5 h-2.5" />
-                                    <span>Has Website Hook</span>
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded font-mono text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                                    <span>🔥 No Website Hook</span>
-                                  </span>
-                                )}
-                              </div>
+                              <p className="text-xs font-bold text-ink truncate">{item.lead.name}</p>
                               <p className="text-[10px] text-ink-secondary truncate">
                                 {item.lead.city || 'Local'} · {item.lead.phone || '+1 604-953-9651'}
-                                {item.hasWebsite && item.website ? ` · ${item.website.replace(/^https?:\/\//, '')}` : ''}
                               </p>
                             </div>
                           </div>
@@ -3259,16 +2989,16 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
               </div>
             </div>
 
-            {/* 3. Dual SMS Message Preview & Snapshot Card */}
+            {/* 3. SMS Message Preview & Snapshot Card */}
             <div className="p-4 sm:p-6 rounded-2xl bg-white border border-border-main shadow-xs space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-light pb-3">
                 <div className="space-y-0.5">
                   <h4 className="text-sm font-bold text-ink flex items-center gap-2">
                     <MessageSquare className="w-4 h-4 text-accent" />
-                    <span>Transmitted Dual SMS Proposal Hooks</span>
+                    <span>SMS Proposal Hook Preview</span>
                   </h4>
                   <p className="text-xs text-ink-secondary">
-                    Review both message copies before launch. Targets without a site get Template A; targets with a site get Template B.
+                    Review your proposal hook copy and sample personalized delivery before launching outreach.
                   </p>
                 </div>
 
@@ -3287,39 +3017,24 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                     className="px-3 py-1.5 rounded-lg bg-surface hover:bg-slate-200 text-xs font-semibold text-ink transition-colors cursor-pointer flex items-center gap-1.5"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
-                    <span>Edit Messages</span>
+                    <span>Edit Message</span>
                   </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-                {/* Template A: Without Website */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                {/* Proposal SMS Hook */}
                 <div className="p-3.5 rounded-xl bg-amber-50/40 border border-amber-200 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-amber-900 flex items-center gap-1">
-                      <span>🔥</span> Template A (No Website)
+                      <span>🔥</span> Proposal Hook
                     </span>
                     <span className="text-[10px] font-mono font-bold text-amber-800 bg-amber-100/80 px-1.5 py-0.5 rounded">
-                      {leadsWithoutWebsiteCount} leads
+                      {csvLeads.length} leads
                     </span>
                   </div>
                   <p className="text-xs font-mono text-ink-secondary whitespace-pre-wrap leading-relaxed line-clamp-5">
-                    {smsMessageNoWebsite}
-                  </p>
-                </div>
-
-                {/* Template B: With Website */}
-                <div className="p-3.5 rounded-xl bg-blue-50/40 border border-blue-200 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-blue-900 flex items-center gap-1">
-                      <span>🌐</span> Template B (Has Website)
-                    </span>
-                    <span className="text-[10px] font-mono font-bold text-blue-800 bg-blue-100/80 px-1.5 py-0.5 rounded">
-                      {leadsWithWebsiteCount} leads
-                    </span>
-                  </div>
-                  <p className="text-xs font-mono text-ink-secondary whitespace-pre-wrap leading-relaxed line-clamp-5">
-                    {smsMessageWithWebsite}
+                    {smsMessage}
                   </p>
                 </div>
 

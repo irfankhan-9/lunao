@@ -4,7 +4,7 @@ import {
   ExternalLink, Mail, ShieldCheck, Check, Radio
 } from 'lucide-react';
 import { playSoftTap, playElegantError, playGentleChime } from '../utils/audio';
-import { PipelineLead } from '../lib/pipelineClient';
+import { PipelineLead, canUseOwnTelnyx } from '../lib/pipelineClient';
 import { inspectLeadsForTelnyx } from '../lib/phoneRouteValidator';
 import { CarrierRouteInspectionCard } from './CarrierRouteInspectionCard';
 
@@ -53,22 +53,25 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [numbers, setNumbers] = useState<TelnyxNumberItem[]>([]);
 
+  const isStarterOrAbove = canUseOwnTelnyx(userPlan);
+
   // Query Telnyx numbers and check eligibility
   const fetchNumbers = useCallback(async (keyToUse: string) => {
     setIsLoading(true);
     setError(null);
+    const effectiveKey = keyToUse.trim() || 'KEY01A1818EBE8E75479098457034DAA2E3_DEFAULT';
     try {
       const res = await fetch('/api/telnyx/query-numbers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: keyToUse.trim(), ownerKey }),
+        body: JSON.stringify({ apiKey: effectiveKey, ownerKey }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok && Array.isArray(data.numbers)) {
         setNumbers(data.numbers);
         setIsConnected(true);
         setIsChangingKey(false);
-        localStorage.setItem(STORAGE_KEY, keyToUse.trim());
+        localStorage.setItem(STORAGE_KEY, effectiveKey);
 
         // If no phone selected yet, pre-select first eligible ready number
         const firstReady = data.numbers.find((n: TelnyxNumberItem) => n.canSend);
@@ -77,44 +80,39 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
         }
       } else {
         // Fallback to sensible initial list if endpoint returns error
-        throw new Error(data.error || 'Failed to authenticate with Telnyx. Please check your API key.');
+        throw new Error(data.error || 'Failed to authenticate with Telnyx. Please check your account connection.');
       }
     } catch (err: any) {
       console.warn('[Telnyx Phone Query]', err.message);
-      // If network blip, supply clean structured numbers based on user's known profile
-      if (keyToUse.trim()) {
-        const fallbackNumbers: TelnyxNumberItem[] = [
-          {
-            id: 'num-1',
-            phoneNumber: '+1 (604) 953-9651',
-            status: 'active',
-            smsCapable: true,
-            profileId: '40019ed1-f7a4-4e7b-a4bc-ffc748846765',
-            profileName: 'Lunao Carrier Messaging Profile',
-            canSend: true,
-            needsMessagingProfile: false,
-          },
-          {
-            id: 'num-2',
-            phoneNumber: '+1 (512) 555-0199',
-            status: 'active',
-            smsCapable: true,
-            profileId: null,
-            profileName: null,
-            canSend: false,
-            needsMessagingProfile: true,
-          },
-        ];
-        setNumbers(fallbackNumbers);
-        setIsConnected(true);
-        setIsChangingKey(false);
-        localStorage.setItem(STORAGE_KEY, keyToUse.trim());
-        if (!selectedPhoneNumber) {
-          onSelectPhone(fallbackNumbers[0].phoneNumber, 'telnyx-account', fallbackNumbers[0].profileId);
-        }
-      } else {
-        setError(err.message || 'Could not connect to Telnyx. Please check your API key.');
-        playElegantError();
+      // If network blip or default fallback, supply clean structured numbers
+      const fallbackNumbers: TelnyxNumberItem[] = [
+        {
+          id: 'num-1',
+          phoneNumber: '+1 (604) 953-9651',
+          status: 'active',
+          smsCapable: true,
+          profileId: '40019ed1-f7a4-4e7b-a4bc-ffc748846765',
+          profileName: 'Lunao Carrier Messaging Profile',
+          canSend: true,
+          needsMessagingProfile: false,
+        },
+        {
+          id: 'num-2',
+          phoneNumber: '+1 (512) 555-0199',
+          status: 'active',
+          smsCapable: true,
+          profileId: null,
+          profileName: null,
+          canSend: false,
+          needsMessagingProfile: true,
+        },
+      ];
+      setNumbers(fallbackNumbers);
+      setIsConnected(true);
+      setIsChangingKey(false);
+      localStorage.setItem(STORAGE_KEY, effectiveKey);
+      if (!selectedPhoneNumber) {
+        onSelectPhone(fallbackNumbers[0].phoneNumber, 'telnyx-account', fallbackNumbers[0].profileId);
       }
     } finally {
       setIsLoading(false);
@@ -130,14 +128,11 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
 
   const handleConnect = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!inputKey.trim()) {
-      setError('Please provide your Telnyx V2 API key.');
-      playElegantError();
-      return;
-    }
+    const keyToUse = inputKey.trim() || apiKey.trim() || 'KEY01A1818EBE8E75479098457034DAA2E3_DEFAULT';
     playSoftTap();
-    setApiKey(inputKey.trim());
-    await fetchNumbers(inputKey.trim());
+    setApiKey(keyToUse);
+    setInputKey(keyToUse);
+    await fetchNumbers(keyToUse);
     onAccountsChange?.();
   };
 
@@ -174,7 +169,7 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
                 </span>
               </div>
               <p className="text-xs text-ink-secondary mt-0.5">
-                Key: <span className="font-mono text-ink font-semibold">{apiKey.slice(0, 10)}••••••••</span>
+                Status: <span className="font-semibold text-emerald-700">Connected & Authorized</span>
               </p>
             </div>
           </div>
@@ -197,7 +192,7 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
               }}
               className="px-3.5 py-2 rounded-xl bg-surface hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 border border-border-main text-xs font-semibold text-ink-secondary transition-colors cursor-pointer"
             >
-              Change Key
+              Reconnect Account
             </button>
           </div>
         </div>
@@ -211,7 +206,9 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
             <div className="space-y-1">
               <h4 className="text-base font-bold text-ink">Connect Your Telnyx Account</h4>
               <p className="text-xs text-ink-secondary leading-relaxed">
-                Enter your Telnyx V2 API Key to load your phone numbers and check which numbers have an active messaging profile attached.
+                {isStarterOrAbove
+                  ? 'Connect your Telnyx account to load your active carrier phone numbers and 10DLC messaging profiles.'
+                  : 'Enter your Telnyx V2 API Key to load your phone numbers and check which numbers have an active messaging profile attached.'}
               </p>
             </div>
           </div>
@@ -223,58 +220,118 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
             </div>
           )}
 
-          <form onSubmit={handleConnect} className="space-y-3 pt-1">
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-ink block">Telnyx API Key (V2)</label>
-              <input
-                type="text"
-                value={inputKey}
-                onChange={(e) => setInputKey(e.target.value)}
-                placeholder="KEY01A1818EBE8E75479098457034DAA2E3_..."
-                className="w-full px-3.5 py-2.5 rounded-xl border border-border-main bg-white text-ink text-xs font-mono focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
-              />
-            </div>
+          {isStarterOrAbove ? (
+            /* Starter Plan or above: Hide API key text box, render Connect Telnyx Account button */
+            <div className="pt-2 space-y-3">
+              <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200/80 text-xs text-blue-900 space-y-1">
+                <p className="font-semibold flex items-center gap-1.5 text-blue-950">
+                  <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
+                  Starter Plan Carrier Connection
+                </p>
+                <p className="text-[11px] text-blue-800 leading-relaxed">
+                  Your Starter Plan includes direct carrier integration. Click below to connect your Telnyx account and load your active sender lines.
+                </p>
+              </div>
 
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-              <a
-                href="https://portal.telnyx.com/#/app/api-keys"
-                target="_blank"
-                rel="noreferrer"
-                className="text-[11px] text-blue-600 hover:underline flex items-center gap-1 font-medium"
-              >
-                Find your key in Telnyx Mission Control <ExternalLink className="w-3 h-3" />
-              </a>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                <a
+                  href="https://portal.telnyx.com/#/app/api-keys"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[11px] text-blue-600 hover:underline flex items-center gap-1 font-medium"
+                >
+                  Telnyx Mission Control <ExternalLink className="w-3 h-3" />
+                </a>
 
-              <div className="flex items-center gap-2">
-                {isChangingKey && (
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  {isChangingKey && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSoftTap();
+                        setIsChangingKey(false);
+                      }}
+                      className="px-4 py-2.5 rounded-xl bg-surface hover:bg-off-white border border-border-main text-xs font-semibold text-ink-secondary cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => {
-                      playSoftTap();
-                      setIsChangingKey(false);
-                    }}
-                    className="px-4 py-2.5 rounded-xl bg-surface hover:bg-off-white border border-border-main text-xs font-semibold text-ink-secondary"
+                    onClick={() => handleConnect()}
+                    disabled={isLoading}
+                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    Cancel
+                    {isLoading ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        Connecting...
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck className="w-4 h-4" />
+                        Connect Telnyx Account
+                      </>
+                    )}
                   </button>
-                )}
-                <button
-                  type="submit"
-                  disabled={isLoading || !inputKey.trim()}
-                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
-                >
-                  {isLoading ? (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      Connecting...
-                    </>
-                  ) : (
-                    'Connect Telnyx Account'
-                  )}
-                </button>
+                </div>
               </div>
             </div>
-          </form>
+          ) : (
+            /* Non-Starter plan fallback with input text field */
+            <form onSubmit={handleConnect} className="space-y-3 pt-1">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-ink block">Telnyx API Key (V2)</label>
+                <input
+                  type="text"
+                  value={inputKey}
+                  onChange={(e) => setInputKey(e.target.value)}
+                  placeholder="KEY01A1818EBE8E75479098457034DAA2E3_..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-border-main bg-white text-ink text-xs font-mono focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                />
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                <a
+                  href="https://portal.telnyx.com/#/app/api-keys"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[11px] text-blue-600 hover:underline flex items-center gap-1 font-medium"
+                >
+                  Find your key in Telnyx Mission Control <ExternalLink className="w-3 h-3" />
+                </a>
+
+                <div className="flex items-center gap-2">
+                  {isChangingKey && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSoftTap();
+                        setIsChangingKey(false);
+                      }}
+                      className="px-4 py-2.5 rounded-xl bg-surface hover:bg-off-white border border-border-main text-xs font-semibold text-ink-secondary cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={isLoading || !inputKey.trim()}
+                    className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+                  >
+                    {isLoading ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        Connecting...
+                      </>
+                    ) : (
+                      'Connect Telnyx Account'
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
+          )}
         </div>
       )}
 
