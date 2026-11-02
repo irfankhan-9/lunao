@@ -1,0 +1,193 @@
+================================================================================
+                    LUNAO BUSINESS SUITE - MASTER PRODUCT PLAN
+                  End-to-End Architecture & Mobile UI System
+================================================================================
+
+1. SYSTEM ARCHITECTURE & CORE DESIGN PHILOSOPHY
+--------------------------------------------------------------------------------
+• Primary Goal: Provide business owners with an ultra-responsive, zero-friction 
+  management suite for automated front-desk operations, appointments, clients,
+  automated communications, and live website publishing.
+• Visual Identity: Clean, high-contrast white & emerald green design system 
+  (warm slate neutrals, emerald-600/700 primary accents, slate-900 typography).
+• Mobile-First Ergonomics: Every view is optimized for one-thumb mobile navigation
+  with minimum 44px touch targets, fixed bottom navigation, collapsible drawers,
+  swipeable bottom sheets, and responsive grid reflows.
+• Tactile Sensory Feedback:
+  - Instant auto-scroll-to-top whenever switching sections or entering the app.
+  - Relaxing, non-intrusive harmonic chimes (528Hz Solfeggio tones) for section changes.
+  - Micro-haptic tactile clicks on button taps and tab switches.
+
+--------------------------------------------------------------------------------
+2. TENANT AUTHENTICATION & ACCESS CONTROL
+--------------------------------------------------------------------------------
+• Owner Access Code Gate (OwnerAuthModal):
+  - 4-8 character uppercase owner code authentication (e.g. BARBER01, DENTAL02, GLOW03).
+  - Pre-seeded test credentials with 1-click quick login pills for immediate audit.
+  - Instant session persistence in localStorage with graceful fallback to default tenant.
+  - Auto-scrolls to top upon successful verification.
+• Tenant Switcher (TopHeader & Settings):
+  - Fast switcher dropdown in top header on desktop.
+  - Full tenant management card in Settings and mobile More Drawer.
+  - Dynamically synchronizes all underlying state (bookings, customers, transcripts,
+    email logs, and AI receptionist personality).
+
+--------------------------------------------------------------------------------
+3. APP SHELL & RESPONSIVE NAVIGATION
+--------------------------------------------------------------------------------
+• Desktop Sidebar (w-64):
+  - Persistent left rail on lg+ viewports.
+  - Active section indicator with emerald background pill and left accent glow.
+  - Section count badges (e.g. active bookings, total clients).
+  - Business monogram badge and live tenant status card at the bottom.
+• Mobile Top Header:
+  - Slim 56px sticky header with business logo/monogram, tenant switcher,
+    PWA install badge, and notification center bell.
+• Mobile Bottom Navigation Bar (MobileNav):
+  - Fixed bottom bar (z-40) with 4 primary action tabs (Dashboard, Bookings, Clients, Inquiries)
+    plus a "More" drawer trigger.
+  - Main content padding-bottom (`pb-24`) ensures no button is ever obstructed by the nav bar.
+• Mobile "More" Drawer (MoreDrawer):
+  - Slide-over sheet giving instant access to secondary modules: AI Receptionist,
+    Website Builder, Automations, Email Center, Settings, Switch Tenant, and Logout.
+
+--------------------------------------------------------------------------------
+4. DETAILED SECTION BREAKDOWN
+--------------------------------------------------------------------------------
+
+[SECTION 1: DASHBOARD (DashboardPage)]
+• Mobile Layout: Single-column vertical stack with responsive stat cards.
+• Metric StatCards:
+  - Today's Appointments (Live count of confirmed bookings scheduled for today).
+  - Upcoming Bookings (Confirmed appointments this week).
+  - Total Clients (Verified client profiles in directory).
+• Quick Launch Tiles:
+  - Record New Appointment (opens New Booking BottomSheet).
+  - Send Email Outreach (navigates to Email Center).
+  - Configure AI Agent (navigates to AI Receptionist settings).
+  - Preview Live Website (navigates to Website Builder).
+• Live Appointments Feed:
+  - Filterable date list showing customer name, service, time slot, and status badge.
+• Real-Time Activity Feed:
+  - Chronological audit log of bookings created, messages received, and emails sent.
+
+[SECTION 2: BOOKINGS & CALENDAR (BookingsPage)]
+• View Modes:
+  - List View: Chronological list of bookings with search and status filter chips.
+  - Calendar View: 7-Day responsive schedule grid with time-slot blocks.
+• Strict Status Lifecycle (No 'pending' state):
+  - 'confirmed' (Active confirmed appointment with green badge).
+  - 'completed' (Service delivered with blue/accent badge).
+  - 'cancelled' (Cancelled appointment with neutral slate badge).
+• Filter Chips: 'All', 'Confirmed', 'Completed', 'Cancelled'.
+• Appointment Details BottomSheet:
+  - Client full name, phone number, email address.
+  - Service details, date, time slot, booking origin (Direct, AI Receptionist, Website).
+  - Direct 1-tap "Call Client" (`tel:`) and "Send Email" (`mailto:`) action buttons.
+  - Status progression buttons ("Confirm Appointment", "Cancel Booking").
+• New Appointment BottomSheet Form:
+  - Client full name (required), mobile phone (required), email (optional).
+  - Service dropdown / text, date picker, time slot, internal notes.
+  - Auto-saves with 'confirmed' status and updates dashboard metrics in real time.
+
+[SECTION 3: CLIENT DIRECTORY (CustomersPage)]
+• Search & Filter:
+  - Search input matching customer name, phone number, email, or notes.
+  - "With Email Only" filter toggle chip.
+• Customer Cards & List:
+  - Avatar monogram with initial letter.
+  - Total appointment count badge & date of last visit.
+  - Quick action buttons: Direct phone call & direct email outreach.
+• Customer Details & Edit BottomSheet:
+  - Full client profile view with historical bookings list.
+  - Editable contact details and preferences notes.
+• Add Client BottomSheet:
+  - Quick manual intake form for walk-ins and phone calls.
+
+[SECTION 4: INQUIRIES & TRANSCRIPTS (ChatInboxPage)]
+• Navigation Behavior:
+  - Always opens to the Inquiries Home List upon entering or re-entering the section.
+• Dual-Pane Responsive Interface:
+  - Mobile: Full-width conversation list. Tapping a dialogue smoothly transitions to
+    the full message transcript with a top Back button (`ChevronLeft`).
+  - Desktop: 4-column conversation session selector on the left, 8-column transcript on right.
+• Transcript Viewer:
+  - Read-only audit mode showing dialogue between AI Front Desk Agent and Web Visitor.
+  - Distinct chat bubbles (Emerald bubble for AI Front Desk, Slate bubble for visitor).
+  - Resulting Booking Banner: Links directly to scheduled appointment if the AI converted the chat.
+  - Header contact bar with 1-tap Call and Email action buttons.
+
+[SECTION 5: AI RECEPTIONIST CONFIG (AIReceptionistPage)]
+• Master Controls:
+  - Enable / Disable live front-desk widget toggle.
+  - Tone of Voice selector (Professional, Warm, Friendly, Concise).
+• Core Knowledge Base:
+  - Business description, operating hours, physical location & parking notes.
+  - Service booking instructions & deposit policies.
+  - Information to collect from visitor (Name, phone, preferred time).
+• Interactive FAQ Builder:
+  - Dynamic list of question-and-answer pairs with add/delete controls.
+• Safeguards & Boundary Rules:
+  - "Do Not Claim" topics (medical advice, legal claims, off-topic promises).
+  - Human escalation instructions.
+• Live Interactive Test Playground:
+  - Real-time conversational simulator with voice audio playback synthesizer.
+
+[SECTION 6: WEBSITE BUILDER & PREVIEW (WebsitePage)]
+• Device Viewport Simulation:
+  - 1-click toggles between Desktop (100%), Tablet (768px), and Mobile (375px).
+• Customization Controls:
+  - Main headline, subheadline, and hero image selector / URL.
+  - Call-to-action button text & top banner announcement.
+• Deployment Pipeline:
+  - Live deployment status indicator (Deployed / Live).
+  - 1-click "Open Live Website" button to launch public customer-facing landing page.
+
+[SECTION 7: AUTOMATIONS ENGINE (AutomationsPage)]
+• Trigger Rules & Flows:
+  - Instant Booking Confirmation SMS / Email (fires immediately upon booking).
+  - 24-Hour Appointment Reminder (pre-visit reminder with cancellation rules).
+  - Post-Service Follow-Up (solicits feedback & rebooking 24h after completion).
+• Per-Rule Controls:
+  - Enable/disable toggles, delay configuration, and message preview templates.
+• Execution Log:
+  - Real-time event monitor logging automated triggers.
+
+[SECTION 8: EMAIL CENTER (EmailCenterPage)]
+• Tabbed Navigation:
+  - Compose Message: Recipient selector ('All Clients' or individual customer),
+    subject line, rich body textarea, and send button.
+  - Template Library: Pre-built & custom email templates with category tags,
+    quick "Use Template" action, edit/delete actions, and "New Template" modal
+    with dynamic tag helpers (`[Customer Name]`, `[Business Name]`, `[Service]`, etc.).
+  - Recipients List: Directory of customers with valid email addresses and 1-tap
+    "Compose to Client" shortcuts.
+  - Delivery Log: Historical audit table tracking sent emails, recipients, and timestamps.
+• Connected Email Domain Banner:
+  - Displays authenticated business domain and delivery status.
+
+[SECTION 9: SETTINGS & PREFERENCES (SettingsPage)]
+• Business Profile:
+  - Business name, phone, support email, address, city, timezone, and website URL.
+• Social Media Integration:
+  - Instagram, Facebook, Google Maps link, and Twitter/X profiles.
+• Visual Theme Customizer:
+  - Primary accent color swatch selector, corner radius (sm/md/lg/xl), and typography pairing.
+• Feature Matrix Toggles:
+  - Enable/disable Bookings, Chatbot, Email Center, and Automations modules.
+• Multi-Tenant Code Management:
+  - Display active Owner Code with copy button and switch tenant modal.
+
+--------------------------------------------------------------------------------
+5. MOBILE UI & TOUCH ERGONOMICS CHECKLIST
+--------------------------------------------------------------------------------
+[✓] All buttons and clickable icons have minimum 44px x 44px tap targets.
+[✓] Input fields use `h-10` / `h-11` with `px-3` and font size >= 16px to prevent iOS auto-zoom.
+[✓] All modal dialogs on mobile reflow into full-width sliding BottomSheets with backdrop blur.
+[✓] Bottom navigation bar has fixed positioning (`bottom-0 z-40`) with safe-area padding.
+[✓] Main layout containers have `pb-24` on mobile to prevent content clipping under the nav bar.
+[✓] Horizontal scrollbars for chips and tabs are styled with `overflow-x-auto scrollbar-none`.
+[✓] Form actions have full-width primary submit buttons on mobile screens.
+[✓] Auto-scrolls to top (`window.scrollTo(0, 0)`) on every section change and login.
+[✓] Calming audio effects provide non-intrusive feedback without blocking user flow.
+================================================================================

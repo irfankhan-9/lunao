@@ -1,0 +1,404 @@
+================================================================================
+LUNAO SAAS — CAMPAIGN WIZARDS UI/UX UNIFICATION MASTER IMPLEMENTATION PLAN
+================================================================================
+Document:       CAMPAIGN_WIZARDS_UNIFICATION_PLAN.txt
+Author:         Principal Frontend Architect & Vibe-Coding Engineer
+Target System:  Lunao Campaign Studio (Site Deploy, Email Campaign, SMS Campaign)
+Status:         ARCHITECTURAL SPECIFICATION & PRODUCTION IMPLEMENTATION BLUEPRINT
+================================================================================
+
+--------------------------------------------------------------------------------
+1. EXECUTIVE SUMMARY & OBJECTIVE
+--------------------------------------------------------------------------------
+Lunao currently provides three high-ticket client acquisition campaign types:
+  1. Site Deploy Campaign    (Cloudflare worker automated multi-site synthesis)
+  2. Email Campaign          (Multi-inbox warmup, OAuth Gmail/Outlook, Dork/CSV)
+  3. SMS Campaign            (Telnyx 10DLC automated SMS proposal outreach)
+
+PROBLEM STATEMENT:
+Currently, the Email Campaign Wizard (EmailCampaignWizard.tsx) has achieved 
+a state of high visual polish: luxury dark/light brutalist typography, 
+smooth spring animations, glowing stepper track, interactive card grids, 
+rich audio triggers, and unified progress/completion overlays.
+However, Site Deploy (embedded inside Campaigns.tsx) and SMS Campaign 
+(SmsCampaignWizard.tsx) use older, inconsistent UI designs:
+  - Site Deploy uses small, plain buttons for niche selection, a bare-bones
+    dashed box for CSV upload, a cramped template grid, and lacks the 
+    modern progress toggle and celebration screen.
+  - SMS Campaign uses a different stepper style, mismatched tab pill headers,
+    different dropzone borders, and inconsistently styled phone number pickers.
+
+MISSION:
+Unify all three campaign flows to be 100% VISUALLY IDENTICAL, COHESIVE, AND 
+SHARED IN DESIGN VOCABULARY. When switching between Site Deploy, Email, and 
+SMS, the user will experience the exact same design language, card layouts, 
+button micro-interactions, responsive horizontal steppers, audio soundscapes, 
+and celebration screen architecture.
+
+
+--------------------------------------------------------------------------------
+2. CURRENT DISCREPANCY & GAP AUDIT
+--------------------------------------------------------------------------------
+
++----------------------+--------------------------+--------------------------+--------------------------+
+| Feature / Screen     | Email Campaign (GOLD)    | Site Deploy (Current)    | SMS Campaign (Current)   |
++----------------------+--------------------------+--------------------------+--------------------------+
+| Stepper & Track      | Horizontal swipe track,  | Separate track in parent | Inconsistent layout      |
+|                      | breathing ring on active,| with hardcoded steps;    | without responsive       |
+|                      | check-pop animations,    | truncated on narrow      | snap-scroll centering.   |
+|                      | snap-x centering.        | mobile viewports.        |                          |
++----------------------+--------------------------+--------------------------+--------------------------+
+| Step 1: Niche Picker | Luxury 3D card grid with | Plain 1-line text button | Outdated box cards with  |
+|                      | squircle emoji badges,   | grid (grid-cols-4),      | mismatched borders and   |
+|                      | glowing radial backdrops,| plain borders, no glows, | plain check icons; no    |
+|                      | spring hover tilt & pop. | no hover micro-physics.  | spring tilt physics.     |
++----------------------+--------------------------+--------------------------+--------------------------+
+| Step 2: Lead Source  | Modern pill toggle       | CSV upload only; plain   | Mismatched border-b      |
+|                      | container; luxury drop-  | dashed box; no preview   | tab bar; plain CSV card; |
+|                      | zone with floating spark | component; error cards   | Canada finder styled in  |
+|                      | icon; rich CsvPreview    | lack unified styling.    | older blue box format.   |
+|                      | with badges and tags.    |                          |                          |
++----------------------+--------------------------+--------------------------+--------------------------+
+| Step 3: Template     | Hero banner with pulsing | Inline radio grid;       | Semi-custom grid; lacks  |
+| Selection            | Globe icon, live count   | small thumbnail preview; | hero banner card with    |
+|                      | badges; large 3-col grid | no interactive modal     | live counts; inconsistent|
+|                      | with TemplateSimPreview  | carousel with device     | modal preview launcher.  |
+|                      | & TemplatePreviewModal.  | switcher.                |                          |
++----------------------+--------------------------+--------------------------+--------------------------+
+| Step 4: Configuration| Connected Accounts with  | N/A (Skips straight to   | Functional phone picker  |
+| / Inboxes / Numbers  | OAuth probe health checks| review/deploy; breaks    | but lacks modern OAuth/  |
+|                      | & disconnect dialogs.    | 5-step symmetry).        | token styled cards.      |
++----------------------+--------------------------+--------------------------+--------------------------+
+| Step 5: Content,     | Multi-tag pill insert,   | Plain review button;     | Textarea lacks unified   |
+| Review & Launch      | real-time simulator,     | no simulated viewport;   | variable chip bar;       |
+|                      | credit cost calculator,  | no detailed cost card.   | preview doesn't match    |
+|                      | launch progress banner.  |                          | desktop/mobile toggle.   |
++----------------------+--------------------------+--------------------------+--------------------------+
+| Progress & Completion| Floating progress pill   | Simple inline spinner;   | Custom completion card,  |
+|                      | (CampaignProgressToggle)| lacks live per-lead log  | but missing unified      |
+|                      | and celebration screen.  | and quick actions.       | stats counter grid.      |
++----------------------+--------------------------+--------------------------+--------------------------+
+
+
+--------------------------------------------------------------------------------
+3. THE GOLD STANDARD: EMAIL CAMPAIGN DESIGN TOKENS & UI PATTERNS
+--------------------------------------------------------------------------------
+To achieve 100% identical styling, all three wizards must strictly adhere to 
+these exact CSS classes, Tailwind patterns, and micro-interaction mechanics:
+
+3.1 Color Palette & Surfaces:
+  - Surface Background:       bg-off-white (#F7F6F3) / bg-white
+  - Primary Brand Accent:     text-accent (#2563EB / Royal Blue), bg-accent, bg-accent-soft
+  - Border Lines:             border-border-main (#E5E2DC), border-border-light (#EFECE6)
+  - Typography Colors:        text-ink (#1A1916), text-ink-secondary (#6E6A63), text-ink-tertiary (#A29E96)
+  - Success Green:            text-success (#059669), bg-success-soft (#ECFDF5)
+  - Alert / Danger Red:       text-danger (#DC2626), bg-danger-soft (#FEF2F2)
+
+3.2 Typography Hierarchy:
+  - Step Titles:              font-serif text-2xl text-ink leading-tight
+  - Step Subtitles:           text-sm text-ink-secondary leading-relaxed
+  - Section Micro-Labels:     text-[11px] font-bold uppercase tracking-wider text-ink-secondary
+  - Interactive Action Chips: text-xs font-semibold font-sans
+
+3.3 Animation & Sound Standard:
+  - Tab Switch / Step Next:   playGentleChime(stepNumber) + playSoftTap()
+  - Option Selection:         playSoftBubble() or playElegantBell()
+  - Launch Swell:             playLaunchSwell()
+  - Final Celebration:        playVictoryCelebration()
+  - Error Tone:               playElegantError()
+  - Container Transitions:    animate-fade-in duration-300 ease-out
+  - Selected Card Pop:        animate-niche-card-pop scale-[1.02]
+
+
+--------------------------------------------------------------------------------
+4. STEP-BY-STEP UNIFICATION MATRIX FOR ALL THREE CAMPAIGNS
+--------------------------------------------------------------------------------
+
+Every campaign wizard will follow a unified 5-STEP workflow structure.
+
+================================================================================
+STEP 1: SELECT NICHE (100% IDENTICAL ACROSS ALL THREE)
+================================================================================
+* Title:      "Select your niche"
+* Subtitle:   "This determines which website templates will be available. Tap a card to select."
+* Visuals:    4-column responsive grid (grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4)
+* Card Design:
+  - Outer:    rounded-2xl border transition-all duration-150 cursor-pointer overflow-hidden
+  - Active:   bg-gradient-to-br from-accent-soft via-white to-accent-soft/60 border-accent/40 
+              ring-4 ring-accent/20 shadow-[0_18px_40px_rgba(99,102,241,0.18)]
+  - Inactive: bg-white border-border-main hover:border-accent/30 hover:shadow-lg hover:-translate-y-1
+  - Squircle: w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center text-3xl
+              (Active rotates -6deg with drop shadow)
+  - Status:   "Selected" with check icon vs "Tap to select" in text-ink-tertiary
+* Behavior:   Clicking any niche immediately triggers playSoftBubble(), updates the 
+              selectedNiche state, updates campaign default name, and enables "Next Step".
+
+================================================================================
+STEP 2: LEAD SOURCE & BUSINESSES (SHARED SHELL WITH CONTEXTUAL TABS)
+================================================================================
+* Header:     "Choose your leads"
+* Subtitle:   Contextual description based on campaign type.
+* Tab Pill Bar:
+  - Container: flex gap-2 p-1.5 bg-gradient-to-r from-surface to-off-white rounded-2xl w-fit shadow-inner
+  - Active Pill: bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30
+  - Inactive Pill: text-ink-secondary hover:text-ink hover:bg-white/50
+
+* Tab Variants per Campaign:
+  A. Site Deploy:
+     - Tab 1: "Upload CSV" (Primary) — accepts business_name, city, phone_number, etc.
+     - Tab 2: "Quick Lead Generator" — generate realistic local business leads for instant testing.
+  B. SMS Campaign:
+     - Tab 1: "Upload CSV" (Primary) — accepts business_name, phone_number, city.
+     - Tab 2: "Find Leads in Canada" (Google Places discovery tool with Canada filter).
+  C. Email Campaign:
+     - Tab 1: "Auto Email Sender" (Google Dork engine).
+     - Tab 2: "Upload CSV" (Email list).
+
+* CSV Upload Experience (100% IDENTICAL FOR ALL THREE):
+  - Dropzone: Luxury large rounded-2xl border-2 border-dashed border-border-main
+              Decorative backdrop radial blur gradient.
+              Sparkle icon with subtle bounce animation.
+              "Drop your CSV file here" / "or click to browse from your computer".
+              Accent colored "Choose File" button.
+  - Preview State: Uses the shared CsvPreview component showing parsed count,
+                   columns detected, preview table, and "Upload another CSV" action.
+
+================================================================================
+STEP 3: CHOOSE TEMPLATE (100% IDENTICAL ACROSS ALL THREE)
+================================================================================
+* Hero Banner Card:
+  - Rounded-2xl bg-gradient-to-br from-accent/5 via-white to-accent/10 border border-accent/20
+  - Globe icon inside glowing badge with animated ping ring.
+  - Title: "Pick your template"
+  - Subtitle: "Each site will be personalized with the lead's business info. Click any card for a full preview."
+  - Badges: "[X] templates available" + "[Niche] niche selected"
+* Template Grid:
+  - 3-column responsive layout (grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-8)
+  - Large aspect-[16/11] TemplateSimPreview container.
+  - Hover overlay with glassmorphism "Preview" button (triggers TemplatePreviewModal).
+  - Selected state: border-accent shadow-2xl ring-4 ring-accent/10 scale-[1.02] with pulse glow.
+  - Badges on preview: Niche tag top-left, selection circle top-right, "Most Popular" star bottom-left.
+
+================================================================================
+STEP 4: CONNECTION & DISPATCH INFRASTRUCTURE
+================================================================================
+* Contextual setup step tailored to each campaign's underlying protocol:
+
+  A. Email Campaign:
+     - Connected Inboxes (Gmail / Outlook OAuth accounts list).
+     - Account probe cards showing warmup status, send limit, and reconnect button.
+
+  B. SMS Campaign:
+     - Phone Number & Telnyx Profile selection (SmsAccountStep).
+     - Redesigned into the same luxury card style:
+       * Dedicated "Selected Sender Number" card with signal strength badge.
+       * Automated provisioning status for Free/Starter plans.
+       * 10DLC registration compliance badge.
+
+  C. Site Deploy Campaign:
+     - Deployment Target & Domain Routing Configuration:
+       * Cloudflare Edge Deployment Engine card with active status badge.
+       * Subdomain preview banner: `https://[business-slug].lunao.app`
+       * Instant preview switch: "Enable Instant AI Landing Page Customizer"
+       * Zero external credentials required — automatic edge proxying.
+
+================================================================================
+STEP 5: REVIEW, CONTENT CUSTOMIZATION & LAUNCH
+================================================================================
+* Unified Layout Structure:
+  - Left Column (7/12 width): Message editor / deployment payload inspector with tag chips.
+  - Right Column (5/12 width): Device Simulator preview (Desktop/Mobile toggle) + Cost Summary.
+
+* Left Column Variants:
+  A. Email Campaign: Subject input + Body textarea + Dynamic variable chips (`{{business_name}}`, `{{city}}`, `{{site_url}}`).
+  B. SMS Campaign: Message textarea + Variable chips + Live character counter + 160-char SMS segment indicator.
+  C. Site Deploy Campaign: Business payload review list + Automated site meta configuration + SEO title & OpenGraph card summary.
+
+* Right Column: Cost Summary & Launch Card (IDENTICAL FORMAT):
+  - Cost per unit badge (Site Deploy: 1 credit | Email: 2 credits | SMS: 2-3 credits).
+  - Formula display: "[X] Leads × [Y] Credits = [Total] Credits Required".
+  - Current User Balance with sufficiency check.
+  - Big primary launch button:
+    * `Launch Site Deploy Campaign` (Globe icon)
+    * `Launch Email Outreach` (Mail/Send icon)
+    * `Launch SMS Outreach` (MessageSquare icon)
+
+================================================================================
+POST-LAUNCH: PROGRESS TOGGLE & CELEBRATION (IDENTICAL ARCHITECTURE)
+================================================================================
+1. Floating Progress Bar (`CampaignProgressToggle`):
+   - Minimized floating bar docked at the bottom right.
+   - Shows live counters: Sites Staged, Dispatches Sent, Failures, Percentage.
+   - Expandable into full progress modal.
+2. Victory Celebration Screen:
+   - Green & white luxury celebration container with CheckCircle icon.
+   - 4-card metric counter pop (Total Leads, Sites Built, Sent, Failed).
+   - Live deployed site links preview drawer.
+   - "Launch another campaign" + "View in Recent Campaigns" action buttons.
+
+
+--------------------------------------------------------------------------------
+5. MODULAR FILE ARCHITECTURE & REFACTORING PLAN
+--------------------------------------------------------------------------------
+
+To avoid monolithic code duplication, we will extract clean, modular components:
+
+```
+src/components/
+├── Campaigns.tsx                      <-- Parent Coordinator & Tab Switcher
+├── EmailCampaignWizard.tsx            <-- Gold Standard Email Wizard
+├── SiteDeployCampaignWizard.tsx       <-- NEW extracted unified wizard
+├── SmsCampaignWizard.tsx              <-- Refactored unified SMS wizard
+│
+└── campaign-wizard-shared/            <-- Shared Wizard Sub-Components
+    ├── WizardStepperTrack.tsx         <-- Universal 5-step horizontal track
+    ├── NicheStepGrid.tsx              <-- Universal Step 1 Niche Picker
+    ├── CsvDropZone.tsx                <-- Universal Step 2 CSV drag-and-drop
+    ├── TemplateStepGrid.tsx           <-- Universal Step 3 Template Picker
+    ├── CampaignCostSummaryCard.tsx    <-- Universal Step 5 Cost & Launch Card
+    └── CampaignCompletionModal.tsx    <-- Universal Victory Celebration Screen
+```
+
+5.1 New Component: `SiteDeployCampaignWizard.tsx`
+  - Extracts the inline site-deploy code currently scattered across lines 2100-2400 in `Campaigns.tsx`.
+  - Replaces it with a dedicated 5-step wizard component mirroring `EmailCampaignWizard.tsx` prop-for-prop.
+  - Implements the exact same `activeStep`, `allNiches`, `TemplateSimPreview`, `CsvPreview`, and audio calls.
+
+5.2 Refactored Component: `SmsCampaignWizard.tsx`
+  - Replaces outdated Step 1 with the identical niche card layout from EmailCampaignWizard.
+  - Updates Step 2 tabs to use the pill toggle container (`bg-gradient-to-r from-surface to-off-white`).
+  - Updates Step 3 with the Template Hero banner card and luxury template grid.
+  - Aligns Step 4 (`SmsAccountStep`) styling with Email's connected accounts card style.
+  - Harmonizes Step 5 with the dual-column layout, device simulator toggle, and cost summary card.
+
+5.3 Coordinator: `Campaigns.tsx`
+  - Simplifies the parent component to a clean tab switcher:
+    ```tsx
+    {activeCampaignType === 'site-deploy' && (
+      <SiteDeployCampaignWizard
+        templates={templates}
+        customTemplates={customTemplates}
+        userPlan={userPlan}
+        userCredits={userCredits}
+        onCreditsChange={setUserCredits}
+        onCampaignCreated={handleCampaignCreated}
+        ...
+      />
+    )}
+    {activeCampaignType === 'email' && (
+      <EmailCampaignWizard ... />
+    )}
+    {activeCampaignType === 'sms' && (
+      <SmsCampaignWizard ... />
+    )}
+    ```
+
+
+--------------------------------------------------------------------------------
+6. DETAILED SPECIFICATION FOR STEP 2 PER CAMPAIGN
+--------------------------------------------------------------------------------
+
+Requirement from brief:
+"2nd stpe dependig on campgin it should eithe rhave only csv or for sms discover through google places orcsv and for email same but stylingshould be exactly same as email campgin one"
+
+6.1 Site Deploy Campaign — Step 2:
+  - Header:
+    * Title: "Input your businesses"
+    * Subtitle: "Upload a CSV file containing local businesses you want to generate websites for."
+  - Tab Switcher:
+    * Tab A: "Upload CSV" (Default & Primary)
+    * Tab B: "Sample Businesses" (Quick demo 5-lead batch for instant trial)
+  - Visuals: Exact same dropzone card as EmailCampaignWizard with floating sparkle,
+    gradient backdrop, and full CsvPreview table on upload.
+
+6.2 SMS Campaign — Step 2:
+  - Header:
+    * Title: "Choose your leads"
+    * Subtitle: "Upload a CSV with mobile numbers or discover verified local businesses in Canada."
+  - Tab Switcher:
+    * Tab A: "Upload CSV" (FileSpreadsheet icon)
+    * Tab B: "Discover Leads in Canada" (MapPin icon + Google Places badge)
+  - Visuals: Exact same pill switcher, exact same CSV dropzone, and a beautifully restyled
+    SmsLeadFinder container matching the Email Auto Finder card aesthetic.
+
+6.3 Email Campaign — Step 2 (Existing Gold Standard):
+  - Header:
+    * Title: "Choose your leads"
+    * Subtitle: "Upload a CSV or use Auto Email Sender to find businesses."
+  - Tab Switcher:
+    * Tab A: "Auto Email Sender" (Globe icon)
+    * Tab B: "Upload CSV" (Upload icon)
+
+
+--------------------------------------------------------------------------------
+7. SHARED AUDIO & HAPTIC SYSTEM
+--------------------------------------------------------------------------------
+
+Every interactive element across all three wizards will fire synchronized,
+non-intrusive Web Audio triggers from `src/utils/audio.ts`:
+
+| Action Trigger                 | Audio Function Call          | Haptic / Vibe Impact          |
+|--------------------------------|------------------------------|-------------------------------|
+| Switch Campaign Type Tab       | playSoftBubble()             | Tactile bubble pop            |
+| Tap Niche Card (Step 1)        | playSoftBubble()             | Gentle spring pop             |
+| Switch Lead Source Tab (Step 2)| playSoftTap()                | Subtle mechanical click       |
+| Drop CSV File                  | playConfirmSuccess()         | Affirmative validation chime  |
+| Select Template Card (Step 3)  | playElegantBell()            | Resonant chime tone           |
+| Open Template Preview Modal    | playSoftTap()                | Clean lens open               |
+| Next Step Click                | playGentleChime(stepNumber)  | Ascending step progression    |
+| Back Step Click                | playGentleChime()            | Gentle regression chime       |
+| Insert Variable Tag Chip       | playSoftTap()                | Micro click                   |
+| Launch Campaign Primary Button | playLaunchSwell()            | Dramatic swell intro          |
+| Completion Screen Appearance   | playVictoryCelebration()     | Rich harmonic fanfare         |
+| Validation Error / Blocked     | playElegantError()           | Low dampened error buzz       |
+
+
+--------------------------------------------------------------------------------
+8. RESILIENCE, ERROR HANDLING & OFFLINE SAFETY
+--------------------------------------------------------------------------------
+In accordance with AI Studio guidelines and the Lunao architectural standards:
+  1. No unhandled Promise rejections on missing Express :8787 endpoints.
+  2. Automatic optimistic fallback to `src/data/mockData.ts` when offline.
+  3. Strict client-side CSV validation (missing columns highlighted in red pills,
+     country detection, phone format normalization).
+  4. Real-time credit quota verification (blocks launch button with clear, polite
+     insufficient credit callout and link to Plans tab).
+  5. One-line error reporting in chat and modal toasts without expanding or breaking
+     surrounding layout containers.
+
+
+--------------------------------------------------------------------------------
+9. IMPLEMENTATION EXECUTION CHECKLIST
+--------------------------------------------------------------------------------
+
+[ ] Phase 1: Shared Sub-Component Preparation
+    - [ ] Create `WizardStepperTrack.tsx` (or standardize existing track props).
+    - [ ] Verify `CsvPreview.tsx`, `TemplateSimPreview.tsx`, `TemplatePreviewModal.tsx`.
+    - [ ] Ensure `CampaignProgressToggle.tsx` supports kind: 'site-deploy' | 'email' | 'sms'.
+
+[ ] Phase 2: Site Deploy Campaign Wizard Extraction
+    - [ ] Create `SiteDeployCampaignWizard.tsx` modeled directly on `EmailCampaignWizard.tsx`.
+    - [ ] Port Step 1: Copy-paste luxury niche card grid with matching animations.
+    - [ ] Port Step 2: Implement unified CSV dropzone + CsvPreview with sample fallback.
+    - [ ] Port Step 3: Implement template hero banner + 3-col preview grid + preview modal.
+    - [ ] Port Step 4: Implement Edge Deployment review configuration.
+    - [ ] Port Step 5: Implement deployment payload summary + cost calculator (1 credit/lead).
+    - [ ] Wire up Cloudflare worker pipeline call and progress toggle.
+
+[ ] Phase 3: SMS Campaign Wizard Harmonization
+    - [ ] Refactor `SmsCampaignWizard.tsx` Step 1 to match the luxury niche grid.
+    - [ ] Refactor Step 2 to use the shared pill tab switcher and identical CSV dropzone.
+    - [ ] Refactor Step 3 to use the luxury template banner and 3-col preview grid.
+    - [ ] Refactor Step 4 to present Telnyx number selection inside luxury account cards.
+    - [ ] Refactor Step 5 to present character count, SMS phone simulator, and cost card.
+    - [ ] Standardize the completion celebration screen.
+
+[ ] Phase 4: Parent Campaigns.tsx Integration & Cleanup
+    - [ ] Update `Campaigns.tsx` to mount `SiteDeployCampaignWizard` as a clean modular component.
+    - [ ] Remove obsolete legacy inline wizard steps from `Campaigns.tsx`.
+    - [ ] Verify step transitions and audio cues across all 3 campaign types.
+    - [ ] Test build and compile (`compile_applet`).
+
+================================================================================
+END OF IMPLEMENTATION MASTER PLAN
+================================================================================

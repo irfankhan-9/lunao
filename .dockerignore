@@ -1,0 +1,12 @@
+node_modules
+lunaoownerpwa/node_modules
+.git
+.github
+.backup
+dist
+lunaoownerpwa/dist
+server/.data
+server/.sites
+.env
+.env.local
+.DS_Store

@@ -1,0 +1,23 @@
+# Exclude dev files from the Railway build context.
+# Keeps the build small + fast + free of secret material.
+node_modules/
+.git/
+.wrangler/
+coverage/
+build/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+.env.local
+assets/
+debug_script.js
+debug_script2.js
+temp.js
+temp_err_check_1.js
+temp_script_1.js
+main.txt
+server-startup.log
+lunaoexpoapp/
+expo-app-spec/

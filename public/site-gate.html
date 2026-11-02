@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Lunao — Enter password</title>
+<meta name="robots" content="noindex,nofollow" />
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --bg-2: #15131f;
+    --fg: #f4f4f8;
+    --muted: #8c89a3;
+    --accent: #a78bfa;
+    --accent-2: #7c5cff;
+    --danger: #f87171;
+    --border: rgba(255, 255, 255, 0.08);
+    --card: rgba(255, 255, 255, 0.04);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: radial-gradient(1200px 600px at 50% -10%, #251b40 0%, transparent 60%),
+                radial-gradient(900px 500px at 10% 110%, #1a1330 0%, transparent 55%),
+                var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .gate {
+    width: 100%;
+    max-width: 420px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+    backdrop-filter: blur(8px);
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .brand .mark {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff;
+    font-weight: 700;
+    font-family: 'Georgia', serif;
+    font-size: 18px;
+    box-shadow: 0 8px 24px -8px rgba(124, 92, 255, 0.6);
+  }
+  .brand h1 {
+    margin: 0;
+    font-family: 'Georgia', serif;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .brand .sub {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 2px;
+  }
+  .lede {
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.55;
+    margin: 0 0 22px;
+  }
+  form { display: flex; flex-direction: column; gap: 14px; }
+  label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .input-wrap {
+    position: relative;
+  }
+  input[type="password"] {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 44px 14px 14px;
+    color: var(--fg);
+    font-size: 15px;
+    font-family: inherit;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+    outline: none;
+  }
+  input[type="password"]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.18);
+  }
+  .toggle {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: 0;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 6px;
+  }
+  .toggle:hover { color: var(--fg); background: rgba(255, 255, 255, 0.04); }
+  button.primary {
+    width: 100%;
+    background: linear-gradient(180deg, var(--accent) 0%, var(--accent-2) 100%);
+    color: #fff;
+    font-weight: 600;
+    font-size: 15px;
+    padding: 13px 16px;
+    border: 0;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: transform 80ms ease, box-shadow 120ms ease, opacity 120ms ease;
+    box-shadow: 0 8px 24px -8px rgba(124, 92, 255, 0.6);
+  }
+  button.primary:hover { transform: translateY(-1px); }
+  button.primary:active { transform: translateY(0); }
+  button.primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+  .msg {
+    font-size: 13px;
+    min-height: 18px;
+    margin-top: 2px;
+  }
+  .msg.err { color: var(--danger); }
+  .msg.ok { color: #6ee7b7; }
+  .lock {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 18px;
+    text-align: center;
+    line-height: 1.6;
+  }
+  .hint {
+    font-size: 11px;
+    color: var(--muted);
+    background: rgba(167,139,250,0.08);
+    border: 1px solid rgba(167,139,250,0.2);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-top: 14px;
+    text-align: left;
+    line-height: 1.5;
+  }
+  .hint strong { color: var(--accent); }
+  .shake { animation: shake 360ms cubic-bezier(.36,.07,.19,.97) both; }
+  @keyframes shake {
+    10%, 90% { transform: translate3d(-1px, 0, 0); }
+    20%, 80% { transform: translate3d(2px, 0, 0); }
+    30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+    40%, 60% { transform: translate3d(4px, 0, 0); }
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(110, 231, 183, 0.08);
+    color: #6ee7b7;
+    border: 1px solid rgba(110, 231, 183, 0.2);
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 600;
+    margin-bottom: 16px;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: #6ee7b7; box-shadow: 0 0 8px #6ee7b7; }
+</style>
+</head>
+<body>
+  <div class="gate" id="gate">
+    <div class="brand">
+      <div class="mark">L</div>
+      <div>
+        <h1>Lunao</h1>
+        <div class="sub">Dashboard Access</div>
+      </div>
+    </div>
+    <div class="badge"><span class="dot"></span> Secure session — 12 hours</div>
+    <p class="lede">Enter the dashboard password to continue. The session is stored in a secure cookie and will keep you signed in until you sign out or close the browser.</p>
+    <form id="form" autocomplete="off" novalidate>
+      <div>
+        <label for="password">Password</label>
+        <div class="input-wrap" style="margin-top:6px;">
+          <input id="password" name="password" type="password" placeholder="••••••••" required autofocus />
+          <button type="button" class="toggle" id="toggle" aria-label="Show password">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+      <button type="submit" class="primary" id="submit">Unlock dashboard</button>
+      <div class="msg" id="msg" aria-live="polite"></div>
+    </form>
+    <div class="lock">
+      Forgot the password? The default is <code style="color:var(--accent);font-size:11px;">$Khan1234455</code> — change it via <code style="color:var(--accent);font-size:11px;">SITE_GATE_PASSWORD</code> in your <code style="color:var(--accent);font-size:11px;">.env.local</code>.
+    </div>
+    <div class="hint">
+      <strong>First time?</strong> The default dashboard password is <strong>$Khan1234455</strong>. To change it, set <strong>SITE_GATE_PASSWORD</strong>=yourpassword in <strong>.env.local</strong> and restart the server. For production, set <strong>SITE_GATE_PASSWORD_HASH</strong> with a bcrypt hash of your password.
+    </div>
+  </div>
+<script>
+  (function () {
+    const form = document.getElementById('form');
+    const input = document.getElementById('password');
+    const submit = document.getElementById('submit');
+    const msg = document.getElementById('msg');
+    const gate = document.getElementById('gate');
+    const toggle = document.getElementById('toggle');
+    const params = new URLSearchParams(location.search);
+    const next = params.get('next') || '/app';
+
+    // If already authenticated, bounce straight to the dashboard.
+    fetch('/api/site-gate/status', { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok && data.authenticated) {
+          location.replace(next);
+        }
+      })
+      .catch(() => { /* offline / weird — just show the form */ });
+
+    toggle.addEventListener('click', () => {
+      const isPwd = input.type === 'password';
+      input.type = isPwd ? 'text' : 'password';
+      toggle.setAttribute('aria-label', isPwd ? 'Hide password' : 'Show password');
+    });
+
+    let lockedUntil = 0;
+    let cooldownTimer = null;
+
+    function setMsg(text, kind) {
+      msg.textContent = text || '';
+      msg.className = 'msg' + (kind ? ' ' + kind : '');
+    }
+
+    function setLocked(secs) {
+      lockedUntil = Date.now() + secs * 1000;
+      input.disabled = true;
+      submit.disabled = true;
+      const tick = () => {
+        const remaining = Math.max(0, Math.ceil((lockedUntil - Date.now()) / 1000));
+        if (remaining <= 0) {
+          input.disabled = false;
+          submit.disabled = false;
+          setMsg('');
+          if (cooldownTimer) { clearInterval(cooldownTimer); cooldownTimer = null; }
+          return;
+        }
+        setMsg('Too many failed attempts. Try again in ' + remaining + 's.', 'err');
+      };
+      tick();
+      cooldownTimer = setInterval(tick, 1000);
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (Date.now() < lockedUntil) return;
+      const password = input.value;
+      if (!password) { setMsg('Password is required.', 'err'); return; }
+      submit.disabled = true;
+      setMsg('Checking…');
+      try {
+        const r = await fetch('/api/site-gate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ password, next }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (r.ok && data.ok) {
+          setMsg('Unlocked. Redirecting…', 'ok');
+          // Use replace so the gate page is not in the back/forward history.
+          setTimeout(() => location.replace(data.next || next), 250);
+          return;
+        }
+        if (r.status === 429) {
+          setLocked(parseInt(r.headers.get('Retry-After') || '900', 10));
+          return;
+        }
+        if (data && data.remaining != null) {
+          setMsg((data.error || 'Wrong password') + ' (' + data.remaining + ' attempts left)', 'err');
+        } else {
+          setMsg(data.error || 'Something went wrong.', 'err');
+        }
+        gate.classList.remove('shake');
+        // restart animation
+        void gate.offsetWidth;
+        gate.classList.add('shake');
+      } catch (err) {
+        setMsg('Network error — please try again.', 'err');
+      } finally {
+        if (Date.now() >= lockedUntil) submit.disabled = false;
+      }
+    });
+
+    // If the server is misconfigured (no hash / no secret), the gate fails
+    // closed. Surface that cleanly so the operator knows to check env vars.
+    fetch('/api/health', { credentials: 'include' })
+      .then(r => r.json())
+      .then(h => {
+        if (h && h.gate && h.gate.configured === false) {
+          setMsg('Site gate is not configured on the server. Set SITE_GATE_JWT_SECRET.', 'err');
+          submit.disabled = true;
+          input.disabled = true;
+        }
+      })
+      .catch(() => { /* ignore */ });
+  })();
+</script>
+</body>
+</html>
