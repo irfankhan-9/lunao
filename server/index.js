@@ -1033,6 +1033,7 @@ app.get('/api/sites/all', authenticate, async (req, res) => {
         if (sourceFilter) {
           restUrl.searchParams.set('campaign_source', `eq.${sourceFilter}`);
         }
+        restUrl.searchParams.set('owner_id', `eq.${ownerKey}`);
         restUrl.searchParams.set('order', 'created_at.desc');
         restUrl.searchParams.set('limit', String(limit));
 
@@ -1049,12 +1050,8 @@ app.get('/api/sites/all', authenticate, async (req, res) => {
           console.log(`[api/sites/all] Supabase REST status=${sbRes.status}, count=${Array.isArray(sbSites) ? sbSites.length : 'not array'}`);
           if (Array.isArray(sbSites)) {
             for (const s of sbSites) {
-              const ownerMatches =
-                !ownerKey ||
-                ownerKey === 'dashboard' ||
-                s.owner_id === ownerKey ||
-                (ownerKey.startsWith('user_') && (s.owner_id === ownerKey || s.owner_id?.startsWith('dash-') || s.owner_id?.startsWith('user_'))) ||
-                (ownerKey.startsWith('dash-') && (s.owner_id === ownerKey || s.owner_id?.startsWith('dash-') || s.owner_id?.startsWith('user_')));
+              // Strict per-account isolation: only this owner's own sites.
+              const ownerMatches = s.owner_id === ownerKey;
 
               if (ownerMatches && s.slug && !seenSlugs.has(s.slug.toLowerCase())) {
                 seenSlugs.add(s.slug.toLowerCase());
@@ -1095,8 +1092,8 @@ app.get('/api/sites/all', authenticate, async (req, res) => {
 
     // 2. SECONDARY: Local SQLite user_sites
     try {
-      let localSitesQuery = 'SELECT * FROM user_sites WHERE 1=1';
-      const localParams = [];
+      let localSitesQuery = 'SELECT * FROM user_sites WHERE owner_id = ?';
+      const localParams = [ownerKey];
       if (sourceFilter) {
         localSitesQuery += ' AND campaign_source = ?';
         localParams.push(sourceFilter);
@@ -1155,10 +1152,10 @@ app.get('/api/sites/all', authenticate, async (req, res) => {
             cl.created_at                                  AS created_at
           FROM campaign_leads cl
           JOIN campaigns c ON c.id = cl.campaign_id
-          WHERE cl.site_url IS NOT NULL AND cl.site_url != ''
+          WHERE c.owner_key = ? AND cl.site_url IS NOT NULL AND cl.site_url != ''
           ORDER BY cl.created_at DESC
           LIMIT ?
-        `).all(limit);
+        `).all(ownerKey, limit);
         for (const r of smsRows || []) {
           const key = (r.slug || r.site_url || '').toLowerCase();
           if (key && !seenSlugs.has(key)) {
@@ -1191,10 +1188,10 @@ app.get('/api/sites/all', authenticate, async (req, res) => {
             COALESCE(el.sent_at, el.created_at)            AS created_at
           FROM email_leads el
           JOIN email_campaigns ec ON ec.id = el.campaign_id
-          WHERE el.generated_site_url IS NOT NULL AND el.generated_site_url != ''
+          WHERE ec.user_id = ? AND el.generated_site_url IS NOT NULL AND el.generated_site_url != ''
           ORDER BY COALESCE(el.sent_at, el.created_at) DESC
           LIMIT ?
-        `).all(limit);
+        `).all(ownerKey, limit);
         for (const r of emRows || []) {
           const key = (r.slug || r.site_url || '').toLowerCase();
           if (key && !seenSlugs.has(key)) {

@@ -3866,26 +3866,9 @@ export async function fetchAllSites(
   try {
     const allCamps: any[] = [];
 
-    if (typeof localStorage !== 'undefined') {
-      try {
-        const userScoped = localStorage.getItem(`lunao_u_${ownerKey}_campaigns`) || localStorage.getItem('lunao_campaigns');
-        if (userScoped) {
-          const parsed = JSON.parse(userScoped);
-          if (Array.isArray(parsed)) allCamps.push(...parsed);
-        }
-        const sdResults = localStorage.getItem('lunao_sd_results');
-        if (sdResults) {
-          const parsedSd = JSON.parse(sdResults);
-          if (parsedSd && typeof parsedSd === 'object') {
-            for (const camp of Object.values(parsedSd)) {
-              if (camp && !allCamps.some((ac) => ac.id === (camp as any).id)) {
-                allCamps.push(camp);
-              }
-            }
-          }
-        }
-      } catch {}
-    }
+    // Active-session campaigns are merged by SitesSection from its `campaigns`
+    // prop; global localStorage keys are intentionally NOT read here so that
+    // data never leaks across accounts on a shared browser.
 
     const mergedSites: SiteRow[] = [...serverSites];
     const seenUrls = new Set<string>(
