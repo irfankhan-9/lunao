@@ -85,8 +85,12 @@ function buildGeminiPrompt(html, instruction, history = []) {
   ].filter(Boolean).join('\n');
 }
 
-function resolveRealGeminiModel(_requestedModel) {
-  return 'gemini-3.5-flash';
+function resolveRealGeminiModel(requestedModel) {
+  const norm = String(requestedModel || '').toLowerCase();
+  if (norm.includes('pro')) {
+    return process.env.GEMINI_PRO_MODEL || 'gemini-2.5-pro';
+  }
+  return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 }
 
 /**
