@@ -1107,6 +1107,27 @@ export async function topupCredits(ownerKey: string, plan: string): Promise<Cred
   return data.account as CreditAccount;
 }
 
+export async function syncUserCredits(ownerKey: string, balance: number): Promise<number> {
+  try {
+    const res = await fetch(`${API_BASE}/api/credits/sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('lunao_auth_token') || ownerKey}`,
+        'x-owner-key': ownerKey,
+      },
+      body: JSON.stringify({ balance: Number(balance) }),
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (typeof data.balance === 'number') return data.balance;
+    }
+  } catch (err) {
+    console.warn('[pipelineClient] syncUserCredits warning:', err);
+  }
+  return balance;
+}
+
 export interface CampaignSummary {
   id: string;
   ownerKey: string;

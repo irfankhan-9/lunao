@@ -51,7 +51,11 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
     ) => {
       const ownerKey = authUser.ownerKey;
       try {
-        localStorage.setItem('lunao_auth_user', JSON.stringify(authUser));
+        const updatedAuthUser: AuthUser = {
+          ...authUser,
+          credits: resolvedCredits,
+        };
+        localStorage.setItem('lunao_auth_user', JSON.stringify(updatedAuthUser));
         localStorage.setItem('lunao_owner_key', ownerKey);
         localStorage.setItem('lunao_auth_token', ownerKey);
         localStorage.setItem('lunao_unlocked', 'true');
@@ -66,7 +70,12 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
         const resolvedCredits =
           typeof userCreditsInput === 'number'
             ? userCreditsInput
-            : parseInt(localStorage.getItem(`lunao_u_${ownerKey}_credits`) || '30', 10);
+            : parseInt(
+                localStorage.getItem(`lunao_u_${ownerKey}_credits`) ||
+                localStorage.getItem('lunao_user_credits') ||
+                '30',
+                10
+              );
         localStorage.setItem(`lunao_u_${ownerKey}_credits`, String(resolvedCredits));
         localStorage.setItem('lunao_user_credits', String(resolvedCredits));
 
@@ -130,6 +139,7 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
             email: data.user.email || stored.email,
             name: data.user.name || stored.name,
             picture: data.user.picture || stored.picture,
+            credits: typeof data.userCredits === 'number' ? data.userCredits : undefined,
           };
           applyAuthenticatedSession(
             mergedUser,
@@ -146,6 +156,35 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
 
   // Listen to Supabase Auth state changes
   useEffect(() => {
+    const hydrateAndApplySession = async (authUser: AuthUser) => {
+      let serverCredits: number | undefined = undefined;
+      let serverPlan: string | undefined = undefined;
+      let serverVibe: number | undefined = undefined;
+
+      try {
+        const res = await fetch('/api/auth/me', {
+          headers: {
+            'x-owner-key': authUser.ownerKey,
+            Authorization: `Bearer ${authUser.ownerKey}`,
+          },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.ok) {
+            if (typeof data.userCredits === 'number') serverCredits = data.userCredits;
+            if (data.plan) serverPlan = data.plan;
+            if (typeof data.vibeCredits === 'number') serverVibe = data.vibeCredits;
+          }
+        }
+      } catch {}
+
+      const mergedUser: AuthUser = {
+        ...authUser,
+        credits: typeof serverCredits === 'number' ? serverCredits : authUser.credits,
+      };
+      applyAuthenticatedSession(mergedUser, serverPlan, serverCredits, serverVibe);
+    };
+
     (async () => {
       try {
         const { data } = await supabaseClient.auth.getSession();
@@ -163,7 +202,7 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
             name,
             picture,
           };
-          applyAuthenticatedSession(authUser);
+          await hydrateAndApplySession(authUser);
         } else {
           await refresh();
         }
@@ -174,7 +213,7 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
       }
     })();
 
-    const { data: authListener } = supabaseClient.auth.onAuthStateChange((event, session) => {
+    const { data: authListener } = supabaseClient.auth.onAuthStateChange(async (event, session) => {
       if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
         const sbUser = session.user;
         const email = sbUser.email || 'user@lunao.app';
@@ -189,7 +228,7 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
           name,
           picture,
         };
-        applyAuthenticatedSession(authUser);
+        await hydrateAndApplySession(authUser);
 
         if (typeof window !== 'undefined' && window.location.hash.includes('access_token=')) {
           window.history.replaceState(null, '', window.location.pathname);

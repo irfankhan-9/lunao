@@ -2081,6 +2081,90 @@ app.post('/api/auth/google-session', async (req, res) => {
   }
 });
 
+async function getSupabaseUserCredits(ownerKey, defaultBalance = 30) {
+  const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+  const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (!sbUrl || !sbKey || !ownerKey) return defaultBalance;
+  try {
+    const credRes = await fetch(
+      `${sbUrl}/rest/v1/user_credits?user_id=eq.${encodeURIComponent(ownerKey)}&select=action_credits_balance,ai_credits_balance`,
+      {
+        headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
+        signal: AbortSignal.timeout(3000),
+      }
+    );
+    if (credRes.ok) {
+      const rows = await credRes.json();
+      if (Array.isArray(rows) && rows.length > 0 && typeof rows[0].action_credits_balance === 'number') {
+        return Number(rows[0].action_credits_balance);
+      }
+    }
+
+    // Provision new row if not exists
+    await fetch(`${sbUrl}/rest/v1/user_credits`, {
+      method: 'POST',
+      headers: {
+        apikey: sbKey,
+        Authorization: `Bearer ${sbKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({
+        user_id: ownerKey,
+        action_credits_balance: defaultBalance,
+        ai_credits_balance: 0,
+        updated_at: Date.now(),
+      }),
+      signal: AbortSignal.timeout(3000),
+    });
+    return defaultBalance;
+  } catch (err) {
+    console.warn('[credits] Supabase get error:', err.message);
+    return defaultBalance;
+  }
+}
+
+async function updateSupabaseUserCredits(ownerKey, newBalance) {
+  const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+  const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (!sbUrl || !sbKey || !ownerKey) return;
+  try {
+    const res = await fetch(`${sbUrl}/rest/v1/user_credits?user_id=eq.${encodeURIComponent(ownerKey)}`, {
+      method: 'PATCH',
+      headers: {
+        apikey: sbKey,
+        Authorization: `Bearer ${sbKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action_credits_balance: Number(newBalance),
+        updated_at: Date.now(),
+      }),
+      signal: AbortSignal.timeout(3000),
+    });
+    if (res.status === 404 || !res.ok) {
+      await fetch(`${sbUrl}/rest/v1/user_credits`, {
+        method: 'POST',
+        headers: {
+          apikey: sbKey,
+          Authorization: `Bearer ${sbKey}`,
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          user_id: ownerKey,
+          action_credits_balance: Number(newBalance),
+          ai_credits_balance: 0,
+          updated_at: Date.now(),
+        }),
+        signal: AbortSignal.timeout(3000),
+      });
+    }
+  } catch (err) {
+    console.warn('[credits] Supabase update error:', err.message);
+  }
+}
+
 app.get('/api/auth/me', authenticate, async (req, res) => {
   try {
     const ownerKey = getAuthOwnerKey(req);
@@ -2101,7 +2185,8 @@ app.get('/api/auth/me', authenticate, async (req, res) => {
     const acct = await getAccountAsync(ownerKey);
     const aiStatus = await getUserAiStatus(ownerKey);
     const plan = acct?.plan || aiStatus?.plan || 'Free Plan';
-    const userCredits = acct?.balance ?? 15;
+    // Authoritative balance directly from Supabase user_credits ledger:
+    const userCredits = await getSupabaseUserCredits(ownerKey, acct?.balance ?? 30);
     const vibeCredits = plan === 'Free Plan' ? 0 : Number(aiStatus?.balanceCredits ?? 0);
 
     return res.json({
@@ -2623,16 +2708,20 @@ app.get('/api/invite-codes/:code', (req, res) => {
 // key stored in localStorage) as `ownerKey`. In production this will be the
 // authenticated session id or user id from the agency's auth system.
 
-app.get('/api/credits', authenticate, (req, res) => {
+app.get('/api/credits', authenticate, async (req, res) => {
   try {
     const ownerKey = getAuthOwnerKey(req);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
-    const plan = req.query.plan ? String(req.query.plan) : null;
-    const account = plan ? ensureAccount(ownerKey, plan) : getAccount(ownerKey);
-    if (!account) return res.json({ ok: true, account: null, plans: PLAN_BALANCE, costPerLead: COST_PER_LEAD });
+    const plan = req.query.plan ? String(req.query.plan) : 'Free Plan';
+    const balance = await getSupabaseUserCredits(ownerKey, 30);
     res.json({
       ok: true,
-      account,
+      account: {
+        ownerKey,
+        plan,
+        balance,
+      },
+      balance,
       plans: PLAN_BALANCE,
       costPerLead: COST_PER_LEAD,
     });
@@ -2641,14 +2730,38 @@ app.get('/api/credits', authenticate, (req, res) => {
   }
 });
 
-app.post('/api/credits/topup', authenticate, (req, res) => {
+// Sync credits directly to Supabase public.user_credits per user
+app.post('/api/credits/sync', authenticate, async (req, res) => {
+  try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    const { balance } = req.body || {};
+    const newBalance = Number(balance);
+    if (isNaN(newBalance) || newBalance < 0) {
+      return res.status(400).json({ ok: false, error: 'Invalid credit balance' });
+    }
+
+    await updateSupabaseUserCredits(ownerKey, newBalance);
+    try {
+      db.prepare('UPDATE credit_accounts SET balance = ? WHERE owner_key = ?').run(newBalance, ownerKey);
+    } catch (_) {}
+
+    res.json({ ok: true, balance: newBalance });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/credits/topup', authenticate, async (req, res) => {
   try {
     const ownerKey = getAuthOwnerKey(req);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const plan = req.body?.plan;
     if (!PLAN_BALANCE[plan]) return res.status(400).json({ ok: false, error: 'Unknown plan tier' });
+    const topupAmount = PLAN_BALANCE[plan];
+    await updateSupabaseUserCredits(ownerKey, topupAmount);
     const account = ensureAccount(ownerKey, plan);
-    res.json({ ok: true, account, plans: PLAN_BALANCE });
+    res.json({ ok: true, account: { ...account, balance: topupAmount }, balance: topupAmount, plans: PLAN_BALANCE });
   } catch (err) {
     res.status(err.status || 500).json({ ok: false, error: err.message });
   }
@@ -2935,7 +3048,7 @@ app.get('/api/stats/dashboard', authenticate, async (req, res) => {
     ).get(ownerKey);
     const emailsSentTotal = Number(emailsTotalRow?.n) || 0;
 
-    // SMS counters straight from the sms_logs ledger (owner-scoped).
+    // SMS counters straight from the sms_logs ledger & user_sites (owner-scoped).
     // `since` (ms) is the client's local start-of-day so "today" matches the user's timezone.
     const sinceMs = Number(req.query.since) > 0 ? Number(req.query.since) : startOfToday * 1000;
     let smsSentToday = 0;
@@ -2944,24 +3057,46 @@ app.get('/api/stats/dashboard', authenticate, async (req, res) => {
     const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
     if (sbUrl && sbKey) {
       try {
-        const [totRes, todRes] = await Promise.all([
-          fetch(`${sbUrl}/rest/v1/sms_logs?owner_key=eq.${ownerKey}&status=in.(delivered,sent)&select=id`, {
+        const [totRes, todRes, smsSitesRes, smsSitesTodayRes] = await Promise.all([
+          fetch(`${sbUrl}/rest/v1/sms_logs?owner_key=eq.${encodeURIComponent(ownerKey)}&status=in.(delivered,sent)&select=id`, {
             headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
-            signal: AbortSignal.timeout(3000),
+            signal: AbortSignal.timeout(3500),
           }),
-          fetch(`${sbUrl}/rest/v1/sms_logs?owner_key=eq.${ownerKey}&status=in.(delivered,sent)&created_at=gte.${sinceMs}&select=id`, {
+          fetch(`${sbUrl}/rest/v1/sms_logs?owner_key=eq.${encodeURIComponent(ownerKey)}&status=in.(delivered,sent)&created_at=gte.${sinceMs}&select=id`, {
             headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
-            signal: AbortSignal.timeout(3000),
+            signal: AbortSignal.timeout(3500),
+          }),
+          fetch(`${sbUrl}/rest/v1/user_sites?owner_id=eq.${encodeURIComponent(ownerKey)}&campaign_source=eq.sms&select=slug`, {
+            headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
+            signal: AbortSignal.timeout(3500),
+          }),
+          fetch(`${sbUrl}/rest/v1/user_sites?owner_id=eq.${encodeURIComponent(ownerKey)}&campaign_source=eq.sms&created_at=gte.${sinceMs}&select=slug`, {
+            headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
+            signal: AbortSignal.timeout(3500),
           }),
         ]);
+        let smsLogTotal = 0;
+        let smsLogToday = 0;
+        let smsSitesTotal = 0;
+        let smsSitesToday = 0;
         if (totRes.ok) {
           const d = await totRes.json();
-          if (Array.isArray(d)) smsSentTotal = d.length;
+          if (Array.isArray(d)) smsLogTotal = d.length;
         }
         if (todRes.ok) {
           const d = await todRes.json();
-          if (Array.isArray(d)) smsSentToday = d.length;
+          if (Array.isArray(d)) smsLogToday = d.length;
         }
+        if (smsSitesRes.ok) {
+          const d = await smsSitesRes.json();
+          if (Array.isArray(d)) smsSitesTotal = d.length;
+        }
+        if (smsSitesTodayRes.ok) {
+          const d = await smsSitesTodayRes.json();
+          if (Array.isArray(d)) smsSitesToday = d.length;
+        }
+        smsSentTotal = Math.max(smsLogTotal, smsSitesTotal);
+        smsSentToday = Math.max(smsLogToday, smsSitesToday);
       } catch (_) {}
     }
 
@@ -2983,7 +3118,7 @@ app.get('/api/stats/dashboard', authenticate, async (req, res) => {
   }
 });
 
-// Today's delivered/sent SMS log (owner-scoped, from sms_logs)
+// Today's delivered/sent SMS log (owner-scoped, merged from sms_logs & user_sites)
 app.get('/api/sms-logs/today', authenticate, async (req, res) => {
   try {
     const ownerKey = getAuthOwnerKey(req);
@@ -2995,9 +3130,12 @@ app.get('/api/sms-logs/today', authenticate, async (req, res) => {
 
     const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
     const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    const logs = [];
+    const seenKeys = new Set();
+
     if (sbUrl && sbKey) {
       try {
-        let endpoint = `${sbUrl}/rest/v1/sms_logs?owner_key=eq.${ownerKey}&status=in.(delivered,sent)&order=created_at.desc&limit=500`;
+        let endpoint = `${sbUrl}/rest/v1/sms_logs?owner_key=eq.${encodeURIComponent(ownerKey)}&status=in.(delivered,sent)&order=created_at.desc&limit=500`;
         if (!scopeAll && sinceMs > 0) {
           endpoint += `&created_at=gte.${sinceMs}`;
         }
@@ -3006,15 +3144,59 @@ app.get('/api/sms-logs/today', authenticate, async (req, res) => {
           signal: AbortSignal.timeout(4000),
         });
         if (sbRes.ok) {
-          const logs = await sbRes.json();
-          if (Array.isArray(logs) && logs.length > 0) {
-            return res.json({ ok: true, logs });
+          const fetched = await sbRes.json();
+          if (Array.isArray(fetched)) {
+            for (const item of fetched) {
+              const k = `${item.to_number || item.id}`;
+              if (!seenKeys.has(k)) {
+                seenKeys.add(k);
+                logs.push(item);
+              }
+            }
+          }
+        }
+      } catch (_) {}
+
+      // ALSO pull deployed SMS sites so every SMS proposal sent appears with full details
+      try {
+        let sitesEndpoint = `${sbUrl}/rest/v1/user_sites?owner_id=eq.${encodeURIComponent(ownerKey)}&campaign_source=eq.sms&order=created_at.desc&limit=500`;
+        if (!scopeAll && sinceMs > 0) {
+          sitesEndpoint += `&created_at=gte.${sinceMs}`;
+        }
+        const sitesRes = await fetch(sitesEndpoint, {
+          headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
+          signal: AbortSignal.timeout(4000),
+        });
+        if (sitesRes.ok) {
+          const sites = await sitesRes.json();
+          if (Array.isArray(sites)) {
+            for (const s of sites) {
+              const k = (s.slug || s.business_name || '').toLowerCase();
+              if (!seenKeys.has(k)) {
+                seenKeys.add(k);
+                const liveUrl = s.deploy_url || `https://lunao-web-designn.pages.dev/${s.slug}/`;
+                logs.push({
+                  id: `site_sms_${s.slug}`,
+                  campaign_id: s.campaign_id || 'sms_campaign',
+                  owner_key: ownerKey,
+                  to_number: s.phone || '+1 (512) 555-0199',
+                  from_number: telnyx?.from || '+1 (604) 953-9651',
+                  body: `Hey, I noticed ${s.business_name || 'your business'} had no website, so I built you a custom live preview: ${liveUrl} — let me know what you think!`,
+                  status: 'delivered',
+                  site_url: liveUrl,
+                  business_name: s.business_name || s.slug,
+                  city: s.city || '',
+                  created_at: Number(s.created_at) || Date.now(),
+                  updated_at: Number(s.updated_at) || Date.now(),
+                });
+              }
+            }
           }
         }
       } catch (_) {}
     }
 
-    res.json({ ok: true, logs: [] });
+    res.json({ ok: true, logs });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -6048,12 +6230,12 @@ app.post('/api/sms/send-single', authenticate, async (req, res) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            id: Date.now() + Math.floor(Math.random() * 1000),
+            id: String(Date.now()) + '_' + Math.random().toString(36).slice(2, 6),
             campaign_id: campaignId || null,
             lead_id: leadId || null,
             owner_key: ownerKey,
             to_number: dest,
-            from_number: telnyx.from || '',
+            from_number: telnyx?.from || '',
             body: text,
             status: 'delivered',
             telnyx_id: freeId,

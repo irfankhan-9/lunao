@@ -374,14 +374,16 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
     setCompletedSitesList([]);
     playLaunchSwell();
 
+    const ownerKey = localStorage.getItem('lunao_owner_key') || `dash-${userPlan.replace(/\s+/g, '-')}`;
+
     // Deduct credits optimistically
     const nextCredits = Math.max(0, userCredits - totalCost);
     onCreditsChange?.(nextCredits);
     localStorage.setItem('lunao_user_credits', nextCredits.toString());
+    localStorage.setItem(`lunao_u_${ownerKey}_credits`, nextCredits.toString());
 
     const newCampId = 'sd_' + Date.now();
     const finalName = campaignName || `${selectedNiche} Site Deploy Campaign`;
-    const ownerKey = localStorage.getItem('lunao_owner_key') || `dash-${userPlan.replace(/\s+/g, '-')}`;
 
     const getTime = () => {
       const d = new Date();

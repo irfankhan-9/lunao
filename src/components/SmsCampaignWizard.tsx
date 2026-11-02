@@ -700,14 +700,16 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
       // non-fatal
     }
 
+    const resolvedOwnerKey = ownerKey || localStorage.getItem('lunao_owner_key') || `dash-${userPlan.replace(/\s+/g, '-')}`;
+
     // Deduct credits optimistically
     const nextCredits = Math.max(0, userCredits - totalCost);
     onCreditsChange?.(nextCredits);
     localStorage.setItem('lunao_user_credits', nextCredits.toString());
+    localStorage.setItem(`lunao_u_${resolvedOwnerKey}_credits`, nextCredits.toString());
 
     const newCampId = 'sms_' + Date.now();
     const finalName = campaignName || `${selectedNiche} SMS Campaign`;
-    const resolvedOwnerKey = ownerKey || localStorage.getItem('lunao_owner_key') || `dash-${userPlan.replace(/\s+/g, '-')}`;
 
     const getTime = () => {
       const d = new Date();
@@ -826,6 +828,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
           const curCreds = parseInt(localStorage.getItem('lunao_user_credits') || '0', 10) || userCredits;
           const updatedCreds = curCreds + 7.0;
           localStorage.setItem('lunao_user_credits', updatedCreds.toString());
+          localStorage.setItem(`lunao_u_${resolvedOwnerKey}_credits`, updatedCreds.toString());
           onCreditsChange?.(updatedCreds);
 
           if (i < totalLeads - 1) {
@@ -991,6 +994,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
           const curCreds = parseInt(localStorage.getItem('lunao_user_credits') || '0', 10) || userCredits;
           const updatedCreds = curCreds + initialTotRef;
           localStorage.setItem('lunao_user_credits', updatedCreds.toString());
+          localStorage.setItem(`lunao_u_${resolvedOwnerKey}_credits`, updatedCreds.toString());
           onCreditsChange?.(updatedCreds);
         }
 
@@ -1227,6 +1231,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
         city: s.city,
         url: s.url,
         status: s.status,
+        smsStatus: s.smsStatus || 'delivered',
       })),
       smsLeads: completedAccumulator.map((s, idx) => ({
         leadId: `sms-lead-${idx + 1}`,
@@ -1235,7 +1240,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
         phone: s.phone || '',
         city: s.city || '',
         siteUrl: s.url,
-        status: (s.smsStatus || 'queued') as any,
+        status: (s.smsStatus || 'delivered') as any,
         smsText: s.smsText || '',
         sentAt: getTime(),
         smsError: s.smsError || null,
@@ -1246,8 +1251,12 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
       leads: csvLeads.map((l) => ({ name: l.name, city: l.city, phone: l.phone })),
     };
 
-    // Save in localStorage for persistence
+    // Save in localStorage for persistence under both owner-isolated and global keys
     try {
+      const userCampKey = `lunao_u_${resolvedOwnerKey}_campaigns`;
+      const existingUserCamps = JSON.parse(localStorage.getItem(userCampKey) || '[]') || [];
+      localStorage.setItem(userCampKey, JSON.stringify([completeCampRecord, ...existingUserCamps.filter((c: any) => c.id !== newCampId)]));
+
       const existingCamps = JSON.parse(localStorage.getItem('lunao_campaigns') || '[]') || [];
       localStorage.setItem('lunao_campaigns', JSON.stringify([completeCampRecord, ...existingCamps.filter((c: any) => c.id !== newCampId)]));
     } catch {

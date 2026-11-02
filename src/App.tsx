@@ -213,7 +213,15 @@ function DashboardApp() {
   };
 
   const [campaigns, setCampaigns] = useState<Campaign[]>(() => {
-    const persisted = loadPersisted<Campaign[]>(userCampaignsKey, []);
+    let persisted = loadPersisted<Campaign[]>(userCampaignsKey, []);
+    if (!Array.isArray(persisted) || persisted.length === 0) {
+      try {
+        const fallback = JSON.parse(localStorage.getItem('lunao_campaigns') || '[]');
+        if (Array.isArray(fallback) && fallback.length > 0) {
+          persisted = fallback;
+        }
+      } catch {}
+    }
     let sdResults: Record<string, unknown> = {};
     try {
       sdResults = JSON.parse(localStorage.getItem('lunao_sd_results') || '{}') || {};
@@ -342,8 +350,41 @@ function DashboardApp() {
       setUserCredits(user.credits);
       localStorage.setItem(userCreditsKey, String(user.credits));
       localStorage.setItem('lunao_user_credits', String(user.credits));
+      hasHydratedCreditsRef.current = true;
     }
   }, [user, userPlanKey, userCreditsKey]);
+
+  const hasHydratedCreditsRef = useRef(false);
+
+  // Pull authoritative credits ledger directly from Supabase / server on mount
+  useEffect(() => {
+    if (!ownerKey || ownerKey === 'dashboard') return;
+    import('./lib/pipelineClient').then(({ getCredits }) => {
+      getCredits(ownerKey, userPlan).then((status) => {
+        if (status.account && typeof status.account.balance === 'number') {
+          setUserCredits(status.account.balance);
+          localStorage.setItem(userCreditsKey, String(status.account.balance));
+          localStorage.setItem('lunao_user_credits', String(status.account.balance));
+        }
+      }).catch(() => {}).finally(() => {
+        hasHydratedCreditsRef.current = true;
+      });
+    }).catch(() => {
+      hasHydratedCreditsRef.current = true;
+    });
+  }, [ownerKey, userPlan, userCreditsKey]);
+
+  // Persist userCredits to Supabase ONLY when explicitly updated (after hydration)
+  useEffect(() => {
+    if (!hasHydratedCreditsRef.current) return;
+    if (typeof userCredits === 'number' && !Number.isNaN(userCredits) && !isSpecialModeActive()) {
+      localStorage.setItem(userCreditsKey, String(userCredits));
+      localStorage.setItem('lunao_user_credits', String(userCredits));
+      import('./lib/pipelineClient').then(({ syncUserCredits }) => {
+        syncUserCredits(ownerKey, userCredits).catch(() => {});
+      }).catch(() => {});
+    }
+  }, [userCredits, userCreditsKey, ownerKey]);
 
   // Sync special mode state (UGC or Sales Closer) on load and on code redemption
   useEffect(() => {
