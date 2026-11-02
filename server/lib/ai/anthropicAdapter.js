@@ -6,10 +6,15 @@ import { anthropic as anthropicCfg } from '../config.js';
 let _anthropicClient = null;
 
 function getClient(customApiKey) {
-  const apiKey = (customApiKey || process.env.ANTHROPIC_API_KEY || anthropicCfg.apiKey || '').trim();
+  let apiKey = (customApiKey || '').trim();
+  // If the passed key is an Anthropic Key ID (apikey_...) rather than a secret key (sk-ant-...),
+  // or if customApiKey is not provided, use the server's authenticated Anthropic key.
+  if (!apiKey.startsWith('sk-ant-') || apiKey.length < 10) {
+    apiKey = (process.env.ANTHROPIC_API_KEY || anthropicCfg.apiKey || '').trim();
+  }
   if (!apiKey || apiKey.length < 5 || apiKey.includes('YOUR_KEY')) return null;
 
-  if (customApiKey) {
+  if (customApiKey && customApiKey.startsWith('sk-ant-')) {
     return new Anthropic({ apiKey: customApiKey });
   }
   if (!_anthropicClient) {
@@ -93,12 +98,14 @@ export async function streamAnthropicEdit(
     throw new Error('AI servers busy, try later.');
   }
 
-  // Model resolution: map to closest available Anthropic API engine
-  let actualModel = 'claude-3-5-sonnet-20241022';
-  if (model.includes('haiku')) {
-    actualModel = 'claude-3-5-haiku-20241022';
-  } else if (model.includes('fable') || model.includes('sonnet')) {
-    actualModel = 'claude-3-5-sonnet-20241022';
+  // Direct mapping to live Anthropic models in AI Web Studio
+  let actualModel = model;
+  if (model === 'claude-haiku-5-5' || model.includes('haiku')) {
+    actualModel = 'claude-haiku-5-5';
+  } else if (model === 'claude-fable-5-1' || model.includes('fable')) {
+    actualModel = 'claude-fable-5-1';
+  } else if (model === 'claude-sonnet-5-5' || model.includes('sonnet')) {
+    actualModel = 'claude-sonnet-5-5';
   }
 
   const messages = buildClaudeMessages(html, instruction, history);
@@ -112,7 +119,6 @@ export async function streamAnthropicEdit(
       client.messages.stream({
         model: actualModel,
         max_tokens: Math.min(maxOutputTokens, 8192),
-        temperature: 0.3,
         system: SYSTEM_PROMPT,
         messages,
       }),

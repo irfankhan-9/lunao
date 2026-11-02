@@ -227,7 +227,7 @@ export async function runAiSmokeTests() {
       const anthropic = new Anthropic({ apiKey: anthropicKey, timeout: 2000 });
       const t0 = Date.now();
       const call = anthropic.messages.create({
-        model: 'claude-3-haiku-20240307',
+        model: 'claude-haiku-5-5',
         max_tokens: 5,
         messages: [{ role: 'user', content: 'say OK' }],
       });

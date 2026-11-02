@@ -92,8 +92,10 @@ export const googleMaps = google;
 
 // Claude powers the Site Editor's AI code chat. Key stays server-side.
 export const anthropic = {
-  apiKey: env.ANTHROPIC_API_KEY || '',
-  model: env.ANTHROPIC_MODEL || 'claude-sonnet-4-5',
+  get apiKey() {
+    return process.env.ANTHROPIC_API_KEY || env.ANTHROPIC_API_KEY || '';
+  },
+  model: env.ANTHROPIC_MODEL || 'claude-sonnet-5-5',
   get live() {
     return Boolean(this.apiKey);
   },
@@ -206,7 +208,7 @@ export function modeSummary() {
     googleMaps: google.live ? 'LIVE' : 'COMING SOON (CSV mode)',
     supabase: supabase.live ? 'LIVE (Supabase Relational)' : 'LOCAL (SQLite fallback)',
     resend: resend.live ? `LIVE (${resend.from})` : 'MOCK / DISABLED (no RESEND_API_KEY)',
-    aiEditor: (gemini.live || anthropic.live) ? 'LIVE (Gemini 2.5 Flash)' : 'disabled',
+    aiEditor: (anthropic.live || gemini.live) ? 'LIVE (Anthropic Claude & Gemini)' : 'disabled',
     chatbot: gemini.live ? 'LIVE (Gemini)' : 'rule-based (no GEMINI_API_KEY)',
     siteBaseUrl: siteBaseUrl(),
     apiBaseUrl: PUBLIC_API_BASE_URL,
