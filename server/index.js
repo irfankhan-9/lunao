@@ -2897,7 +2897,7 @@ app.post('/api/email-campaigns/:id/cancel', authenticate, (req, res) => {
 // =============================================================================
 
 // ---- Dashboard Stats ----
-app.get('/api/stats/dashboard', authenticate, (req, res) => {
+app.get('/api/stats/dashboard', authenticate, async (req, res) => {
   try {
     const ownerKey = getAuthOwnerKey(req);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
