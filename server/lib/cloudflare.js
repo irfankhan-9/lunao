@@ -8,6 +8,7 @@
 // Express server at  http://localhost:<port>/sites/<slug>/  so you can click
 // and view a real generated site immediately.
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { ROOT_DIR, SITES_DIR, cloudflare, siteBaseUrl } from './config.js';
@@ -50,7 +51,7 @@ async function writeSiteToDisk(slug, html) {
   try {
     const srcWorker = path.join(ROOT_DIR, 'public', '_worker.js');
     const dstWorker = path.join(SITES_DIR, '_worker.js');
-    if (fs.existsSync(srcWorker)) {
+    if (fsSync.existsSync(srcWorker)) {
       await fs.copyFile(srcWorker, dstWorker);
     }
   } catch (err) {

@@ -94,11 +94,11 @@ export async function streamAnthropicEdit(
   }
 
   // Model resolution: map to closest available Anthropic API engine
-  let actualModel = 'claude-3-5-sonnet-latest';
+  let actualModel = 'claude-3-5-sonnet-20241022';
   if (model.includes('haiku')) {
-    actualModel = 'claude-3-5-haiku-latest';
+    actualModel = 'claude-3-5-haiku-20241022';
   } else if (model.includes('fable') || model.includes('sonnet')) {
-    actualModel = 'claude-3-5-sonnet-latest';
+    actualModel = 'claude-3-5-sonnet-20241022';
   }
 
   const messages = buildClaudeMessages(html, instruction, history);

@@ -9,9 +9,11 @@
   5. Security Headers: Hardens all responses against XSS, clickjacking, and MIME sniffing
 */
 
-const BACKEND_ORIGIN = 'http://51.21.181.63';
+const BACKEND_ORIGIN = 'http://ec2-51-21-181-63.eu-north-1.compute.amazonaws.com';
 const SUPABASE_URL = 'https://wqlbuadknltsjfzrltpe.supabase.co';
-const SUPABASE_KEY = (typeof env !== 'undefined' && (env.SUPABASE_KEY || env.SUPABASE_SECRET_KEY)) || '';
+const SUPABASE_KEY =
+  (typeof env !== 'undefined' && (env.SUPABASE_KEY || env.SUPABASE_SECRET_KEY)) ||
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndxbGJ1YWRrbmx0c2pmenJsdHBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxMzE3ODksImV4cCI6MjEwNzcwNzc4OX0.et1OsefPRtiP3OTodktsfhf3Bxbaq6_zY7XdMUZ53Bw';
 
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',

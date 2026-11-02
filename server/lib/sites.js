@@ -257,11 +257,11 @@ export async function registerUserRebrandedSite({
   const canonicalBuiltin =
     BUILTIN_TEMPLATES.find(
       (t) =>
-        t.key.toLowerCase() === String(resolvedTemplate?.key || templateKey || '').trim().toLowerCase() ||
-        t.niche.toLowerCase() === String(niche || '').trim().toLowerCase(),
+        String(t.id || t.key || '').trim().toLowerCase() === String(resolvedTemplate?.key || templateKey || '').trim().toLowerCase() ||
+        String(t.niche || '').trim().toLowerCase() === String(niche || '').trim().toLowerCase(),
     ) || BUILTIN_TEMPLATES[0];
 
-  const finalTemplateKey = resolvedTemplate?.key || templateKey || canonicalBuiltin.key;
+  const finalTemplateKey = resolvedTemplate?.key || templateKey || canonicalBuiltin.id || canonicalBuiltin.key || 'barber-dark-luxury';
   const finalNiche = normalizeOfficialNiche(resolvedTemplate?.niche || niche || canonicalBuiltin.niche);
   const finalCampaignSource = normalizeCampaignSource(campaignSource);
   const projName = cloudflare.project || 'lunao-web-designn';

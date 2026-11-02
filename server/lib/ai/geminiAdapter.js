@@ -87,10 +87,13 @@ function buildGeminiPrompt(html, instruction, history = []) {
 
 function resolveRealGeminiModel(requestedModel) {
   const norm = String(requestedModel || '').toLowerCase();
-  if (norm.includes('pro')) {
-    return process.env.GEMINI_PRO_MODEL || 'gemini-2.5-pro';
+  if (norm.includes('3.1') || norm.includes('pro')) {
+    return process.env.GEMINI_PRO_MODEL || 'gemini-3.1-pro-preview';
   }
-  return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  if (norm.includes('3.5')) {
+    return 'gemini-3.5-flash';
+  }
+  return process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 }
 
 /**

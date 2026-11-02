@@ -12,7 +12,9 @@
 // Primary EC2 backend DNS endpoint (Cloudflare requires valid DNS hostname, not raw IP)
 const BACKEND_ORIGIN = 'http://ec2-51-21-181-63.eu-north-1.compute.amazonaws.com';
 const SUPABASE_URL = 'https://wqlbuadknltsjfzrltpe.supabase.co';
-const SUPABASE_KEY = (typeof env !== 'undefined' && (env.SUPABASE_KEY || env.SUPABASE_SECRET_KEY)) || '';
+const SUPABASE_KEY =
+  (typeof env !== 'undefined' && (env.SUPABASE_KEY || env.SUPABASE_SECRET_KEY)) ||
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndxbGJ1YWRrbmx0c2pmenJsdHBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxMzE3ODksImV4cCI6MjEwNzcwNzc4OX0.et1OsefPRtiP3OTodktsfhf3Bxbaq6_zY7XdMUZ53Bw';
 
 // Standard security headers to inject on all responses
 const SECURITY_HEADERS = {
