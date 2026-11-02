@@ -481,7 +481,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               niche, and shows campaign attribution + deployed URL with one-
               click copy / visit. Synced every 5 seconds. */}
           <div id="dashboard-sites-generated" className="scroll-mt-24">
-            <SitesSection ownerKey={ownerKey} />
+            <SitesSection ownerKey={ownerKey} campaigns={campaigns} />
           </div>
 
           {/* Main Grid Content: Recent Campaigns — unified surface */}

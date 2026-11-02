@@ -22,6 +22,7 @@ import {
   Mail, MessageSquare, Rocket, Layers, Phone, MapPin, Inbox, Filter,
 } from 'lucide-react';
 import { fetchAllSites, SiteRow, SitesCounts, SiteSource } from '../lib/pipelineClient';
+import { Campaign } from '../types';
 import { playSoftTap } from '../utils/audio';
 
 type SourceFilter = 'all' | SiteSource;
@@ -86,7 +87,11 @@ function countDistinctCampaigns(rows: SiteRow[]): number {
   return ids.size;
 }
 
-export const SitesSection: React.FC<{ ownerKey: string }> = ({ ownerKey }) => {
+export const SitesSection: React.FC<{
+  ownerKey: string;
+  campaigns?: Campaign[];
+  onCountChange?: (total: number) => void;
+}> = ({ ownerKey, campaigns = [], onCountChange }) => {
   const [rows, setRows] = useState<SiteRow[]>([]);
   const [counts, setCounts] = useState<SitesCounts>({ total: 0, siteDeploy: 0, email: 0, sms: 0 });
   const [loading, setLoading] = useState(false);
@@ -96,12 +101,94 @@ export const SitesSection: React.FC<{ ownerKey: string }> = ({ ownerKey }) => {
   const [search, setSearch] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Extract all deployed mockups directly from in-memory campaigns for instant 0ms reactivity
+  const campaignSites = useMemo(() => {
+    if (!Array.isArray(campaigns) || campaigns.length === 0) return [];
+    const list: SiteRow[] = [];
+    let leadCounter = 5000;
+    for (const c of campaigns) {
+      const rawSource: SiteSource = c.type === 'email' ? 'email' : c.type === 'sms' ? 'sms' : 'site-deploy';
+      const createdTs = c.createdAt ? Math.floor(Date.parse(c.createdAt) / 1000) || Math.floor(Date.now() / 1000) : Math.floor(Date.now() / 1000);
+
+      if (Array.isArray(c.deployedSites)) {
+        for (const s of c.deployedSites) {
+          if (!s || !s.url) continue;
+          list.push({
+            source: rawSource,
+            lead_id: leadCounter++,
+            campaign_id: c.id,
+            campaign_name: c.name || 'Site Deploy Campaign',
+            niche: c.niche || null,
+            campaign_status: c.status || 'Completed',
+            campaign_started_at: createdTs,
+            business_name: s.name || s.slug || 'Local Business',
+            city: s.city || null,
+            phone: null,
+            lead_niche: c.niche || null,
+            site_url: s.url,
+            slug: s.slug || null,
+            lead_status: 'live',
+            created_at: createdTs,
+          });
+        }
+      }
+
+      if (rawSource === 'email' && Array.isArray(c.emailLeads)) {
+        for (const l of c.emailLeads) {
+          if (l.siteUrl) {
+            list.push({
+              source: 'email',
+              lead_id: leadCounter++,
+              campaign_id: c.id,
+              campaign_name: c.name || 'Email Outreach',
+              niche: c.niche || null,
+              campaign_status: c.status || 'Completed',
+              campaign_started_at: createdTs,
+              business_name: l.name || 'Local Business',
+              city: l.city || null,
+              phone: null,
+              lead_niche: c.niche || null,
+              site_url: l.siteUrl,
+              slug: l.slug || null,
+              lead_status: l.status || 'sent',
+              created_at: createdTs,
+            });
+          }
+        }
+      }
+
+      if (rawSource === 'sms' && Array.isArray(c.smsLeads)) {
+        for (const sl of c.smsLeads) {
+          if (sl.siteUrl) {
+            list.push({
+              source: 'sms',
+              lead_id: leadCounter++,
+              campaign_id: c.id,
+              campaign_name: c.name || 'SMS Campaign',
+              niche: c.niche || null,
+              campaign_status: c.status || 'Completed',
+              campaign_started_at: createdTs,
+              business_name: sl.name || 'Local Business',
+              city: sl.city || null,
+              phone: sl.phone || null,
+              lead_niche: c.niche || null,
+              site_url: sl.siteUrl,
+              slug: null,
+              lead_status: sl.status || 'delivered',
+              created_at: createdTs,
+            });
+          }
+        }
+      }
+    }
+    return list;
+  }, [campaigns]);
+
   const load = async (src: SourceFilter) => {
     setLoading(true);
     try {
       const data = await fetchAllSites(ownerKey, src === 'all' ? { limit: 200 } : { source: src, limit: 200 });
       setRows(Array.isArray(data.sites) ? data.sites : []);
-      // counts from server already reflect the filter, so only merge if "all"
       setCounts(data.counts || { total: 0, siteDeploy: 0, email: 0, sms: 0 });
       setError(null);
     } catch (err: any) {
@@ -116,11 +203,45 @@ export const SitesSection: React.FC<{ ownerKey: string }> = ({ ownerKey }) => {
     load(filter);
     const id = setInterval(() => load(filter), 5000);
     return () => clearInterval(id);
-    // filter changes re-mount the polling loop so we re-query under the new
-    // ownerKey + source combination promptly. ESLint can't see `load` reading
-    // from `filter`, so the disable is intentional here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ownerKey, filter]);
+
+  // Merge server rows with live campaign prop sites (deduping by slug or URL)
+  const combinedAllRows = useMemo(() => {
+    const map = new Map<string, SiteRow>();
+    for (const r of rows) {
+      const key = (r.slug || r.site_url || '').toLowerCase().trim();
+      if (key) map.set(key, r);
+    }
+    for (const cr of campaignSites) {
+      const key = (cr.slug || cr.site_url || '').toLowerCase().trim();
+      if (key && !map.has(key)) {
+        map.set(key, cr);
+      }
+    }
+    const merged = Array.from(map.values());
+    merged.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+    return merged;
+  }, [rows, campaignSites]);
+
+  // Live dynamic counts across all sources
+  const computedCounts: SitesCounts = useMemo(() => {
+    return {
+      total: combinedAllRows.length,
+      siteDeploy: combinedAllRows.filter((r) => r.source === 'site-deploy').length,
+      email: combinedAllRows.filter((r) => r.source === 'email').length,
+      sms: combinedAllRows.filter((r) => r.source === 'sms').length,
+    };
+  }, [combinedAllRows]);
+
+  useEffect(() => {
+    onCountChange?.(computedCounts.total);
+  }, [computedCounts.total, onCountChange]);
+
+  const sourceFilteredRows = useMemo(() => {
+    if (filter === 'all') return combinedAllRows;
+    return combinedAllRows.filter((r) => r.source === filter);
+  }, [combinedAllRows, filter]);
 
   const copyUrl = async (e: React.MouseEvent, id: string, url: string) => {
     e.stopPropagation();
@@ -136,8 +257,8 @@ export const SitesSection: React.FC<{ ownerKey: string }> = ({ ownerKey }) => {
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) =>
+    if (!q) return sourceFilteredRows;
+    return sourceFilteredRows.filter((r) =>
       (r.business_name || '').toLowerCase().includes(q) ||
       (r.campaign_name || '').toLowerCase().includes(q) ||
       (r.niche || '').toLowerCase().includes(q) ||
@@ -145,22 +266,7 @@ export const SitesSection: React.FC<{ ownerKey: string }> = ({ ownerKey }) => {
       (r.phone || '').toLowerCase().includes(q) ||
       (r.site_url || '').toLowerCase().includes(q)
     );
-  }, [rows, search]);
-
-  // Total counts across all sources (the full directory size — independent
-  // of the active filter, so the user always knows how many sites exist).
-  const [globalCounts, setGlobalCounts] = useState<SitesCounts>({ total: 0, siteDeploy: 0, email: 0, sms: 0 });
-  useEffect(() => {
-    if (filter !== 'all') {
-      // Pull the all-source totals once so the header pills remain accurate
-      // even when the user has filtered the table to a single source.
-      fetchAllSites(ownerKey, { limit: 200 }).then((d) => {
-        if (d.counts) setGlobalCounts(d.counts);
-      });
-    } else {
-      setGlobalCounts(counts);
-    }
-  }, [filter, counts, ownerKey]);
+  }, [sourceFilteredRows, search]);
 
   return (
     <div className="bg-white border border-border-main rounded-xl shadow-2xs p-4 sm:p-5 space-y-4">
@@ -179,9 +285,9 @@ export const SitesSection: React.FC<{ ownerKey: string }> = ({ ownerKey }) => {
               </span>
             </div>
             <p className="text-[11px] text-ink-secondary mt-1 truncate">
-              {rows.length === 0
+              {combinedAllRows.length === 0
                 ? 'No sites generated yet'
-                : `${globalCounts.total} site${globalCounts.total === 1 ? '' : 's'} across ${countDistinctCampaigns(rows)} campaign${countDistinctCampaigns(rows) === 1 ? '' : 's'}`}
+                : `${computedCounts.total} site${computedCounts.total === 1 ? '' : 's'} across ${countDistinctCampaigns(combinedAllRows)} campaign${countDistinctCampaigns(combinedAllRows) === 1 ? '' : 's'}`}
             </p>
           </div>
         </div>
@@ -202,7 +308,7 @@ export const SitesSection: React.FC<{ ownerKey: string }> = ({ ownerKey }) => {
         <SourcePill
           icon={<Mail className="w-3.5 h-3.5" />}
           label="Email Campaign"
-          count={globalCounts.email}
+          count={computedCounts.email}
           color="success"
           active={filter === 'email'}
           onClick={() => { playSoftTap(); setFilter(filter === 'email' ? 'all' : 'email'); }}
@@ -210,7 +316,7 @@ export const SitesSection: React.FC<{ ownerKey: string }> = ({ ownerKey }) => {
         <SourcePill
           icon={<MessageSquare className="w-3.5 h-3.5" />}
           label="SMS Campaign"
-          count={globalCounts.sms ?? 0}
+          count={computedCounts.sms ?? 0}
           color="emerald"
           active={filter === 'sms'}
           onClick={() => { playSoftTap(); setFilter(filter === 'sms' ? 'all' : 'sms'); }}
@@ -218,7 +324,7 @@ export const SitesSection: React.FC<{ ownerKey: string }> = ({ ownerKey }) => {
         <SourcePill
           icon={<Rocket className="w-3.5 h-3.5" />}
           label="Site Deploy"
-          count={globalCounts.siteDeploy}
+          count={computedCounts.siteDeploy}
           color="accent"
           active={filter === 'site-deploy'}
           onClick={() => { playSoftTap(); setFilter(filter === 'site-deploy' ? 'all' : 'site-deploy'); }}
@@ -281,7 +387,7 @@ export const SitesSection: React.FC<{ ownerKey: string }> = ({ ownerKey }) => {
           {filter !== 'all' && (
             <span className="inline-flex items-center gap-1 text-[10px] text-ink-secondary font-mono shrink-0">
               <Filter className="w-3 h-3" />
-              Showing {filteredRows.length} of {rows.length}
+              Showing {filteredRows.length} of {combinedAllRows.length}
             </span>
           )}
         </div>
@@ -317,7 +423,7 @@ export const SitesSection: React.FC<{ ownerKey: string }> = ({ ownerKey }) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-light text-xs text-ink font-sans">
-                  {filteredRows.slice(0, 25).map((r) => {
+                  {filteredRows.slice(0, 50).map((r) => {
                     const meta = SOURCE_META[r.source];
                     const id = `${r.source}::${r.campaign_id}::${r.lead_id}`;
                     return (
@@ -409,7 +515,7 @@ export const SitesSection: React.FC<{ ownerKey: string }> = ({ ownerKey }) => {
 
           {/* Mobile card layout */}
           <ul className="space-y-2 md:hidden max-h-[320px] overflow-y-auto pr-1 -mr-1">
-            {filteredRows.slice(0, 25).map((r) => {
+            {filteredRows.slice(0, 50).map((r) => {
               const meta = SOURCE_META[r.source];
               const id = `${r.source}::${r.campaign_id}::${r.lead_id}`;
               return (
@@ -489,9 +595,9 @@ export const SitesSection: React.FC<{ ownerKey: string }> = ({ ownerKey }) => {
             })}
           </ul>
 
-          {filteredRows.length > 25 && (
+          {filteredRows.length > 50 && (
             <p className="text-[10px] text-ink-tertiary text-center pt-1">
-              Showing the 25 most recent · {filteredRows.length - 25} more available in the Sites tab.
+              Showing the 50 most recent · {filteredRows.length - 50} more available in the Sites tab.
             </p>
           )}
         </>

@@ -3844,6 +3844,7 @@ export async function fetchAllSites(
   if (isSpecialModeActive()) {
     return getSpecialModeSitesDirectory(opts) as { sites: SiteRow[]; counts: SitesCounts };
   }
+  let serverSites: SiteRow[] = [];
   try {
     const qs = new URLSearchParams({ ownerKey });
     if (opts?.source) qs.set('source', opts.source);
@@ -3854,120 +3855,143 @@ export async function fetchAllSites(
     if (res.ok) {
       const d = await res.json();
       if (Array.isArray(d.sites)) {
-        return {
-          sites: d.sites,
-          counts: {
-            total: d.counts?.total ?? d.sites.length,
-            siteDeploy: d.counts?.siteDeploy ?? 0,
-            email: d.counts?.email ?? 0,
-            sms: d.counts?.sms ?? 0,
-          },
-        };
+        serverSites = d.sites;
       }
     }
   } catch {
     // Network unavailable or backend offline; fallback below
   }
 
-  // Graceful fallback from the authenticated user's persisted campaigns
+  // Gracefully merge with the authenticated user's persisted campaigns
   try {
-    const fallbackSites: SiteRow[] = [];
     const allCamps: any[] = [];
 
     if (typeof localStorage !== 'undefined') {
-      const userScoped = localStorage.getItem(`lunao_u_${ownerKey}_campaigns`) || localStorage.getItem('lunao_campaigns');
-      if (userScoped) {
-        const parsed = JSON.parse(userScoped);
-        if (Array.isArray(parsed)) allCamps.push(...parsed);
-      }
+      try {
+        const userScoped = localStorage.getItem(`lunao_u_${ownerKey}_campaigns`) || localStorage.getItem('lunao_campaigns');
+        if (userScoped) {
+          const parsed = JSON.parse(userScoped);
+          if (Array.isArray(parsed)) allCamps.push(...parsed);
+        }
+        const sdResults = localStorage.getItem('lunao_sd_results');
+        if (sdResults) {
+          const parsedSd = JSON.parse(sdResults);
+          if (parsedSd && typeof parsedSd === 'object') {
+            for (const camp of Object.values(parsedSd)) {
+              if (camp && !allCamps.some((ac) => ac.id === (camp as any).id)) {
+                allCamps.push(camp);
+              }
+            }
+          }
+        }
+      } catch {}
     }
 
-    let leadCounter = 1;
+    const mergedSites: SiteRow[] = [...serverSites];
+    const seenUrls = new Set<string>(
+      serverSites.map((s) => (s.slug || s.site_url || '').toLowerCase().trim()).filter(Boolean)
+    );
+
+    let leadCounter = serverSites.length + 1;
     for (const c of allCamps) {
       const rawSource: SiteSource = c.type === 'email' ? 'email' : c.type === 'sms' ? 'sms' : 'site-deploy';
       const createdTs = c.createdAt ? Math.floor(Date.parse(c.createdAt) / 1000) || Math.floor(Date.now() / 1000) : Math.floor(Date.now() / 1000);
 
       if (Array.isArray(c.deployedSites)) {
         for (const s of c.deployedSites) {
-          if (!s.url) continue;
-          fallbackSites.push({
-            source: rawSource,
-            lead_id: leadCounter++,
-            campaign_id: c.id,
-            campaign_name: c.name || 'Untitled Campaign',
-            niche: c.niche || null,
-            campaign_status: c.status || 'Completed',
-            campaign_started_at: createdTs,
-            business_name: s.name || s.slug || 'Local Business',
-            city: s.city || null,
-            phone: s.phone || null,
-            lead_niche: c.niche || null,
-            site_url: s.url,
-            slug: s.slug || null,
-            lead_status: 'live',
-            created_at: createdTs,
-          });
+          if (!s || !s.url) continue;
+          const key = (s.slug || s.url || '').toLowerCase().trim();
+          if (key && !seenUrls.has(key)) {
+            seenUrls.add(key);
+            mergedSites.push({
+              source: rawSource,
+              lead_id: leadCounter++,
+              campaign_id: c.id,
+              campaign_name: c.name || 'Untitled Campaign',
+              niche: c.niche || null,
+              campaign_status: c.status || 'Completed',
+              campaign_started_at: createdTs,
+              business_name: s.name || s.slug || 'Local Business',
+              city: s.city || null,
+              phone: s.phone || null,
+              lead_niche: c.niche || null,
+              site_url: s.url,
+              slug: s.slug || null,
+              lead_status: 'live',
+              created_at: createdTs,
+            });
+          }
         }
       }
 
       if (rawSource === 'email' && Array.isArray(c.emailLeads)) {
         for (const l of c.emailLeads) {
-          if (l.siteUrl && !fallbackSites.some((fs) => fs.site_url === l.siteUrl)) {
-            fallbackSites.push({
-              source: 'email',
-              lead_id: leadCounter++,
-              campaign_id: c.id,
-              campaign_name: c.name || 'Email Outreach',
-              niche: c.niche || null,
-              campaign_status: c.status || 'Completed',
-              campaign_started_at: createdTs,
-              business_name: l.name || 'Local Business',
-              city: l.city || null,
-              phone: l.phone || null,
-              lead_niche: c.niche || null,
-              site_url: l.siteUrl,
-              slug: null,
-              lead_status: l.status || 'sent',
-              created_at: createdTs,
-            });
+          if (l.siteUrl) {
+            const key = (l.slug || l.siteUrl || '').toLowerCase().trim();
+            if (key && !seenUrls.has(key)) {
+              seenUrls.add(key);
+              mergedSites.push({
+                source: 'email',
+                lead_id: leadCounter++,
+                campaign_id: c.id,
+                campaign_name: c.name || 'Email Outreach',
+                niche: c.niche || null,
+                campaign_status: c.status || 'Completed',
+                campaign_started_at: createdTs,
+                business_name: l.name || 'Local Business',
+                city: l.city || null,
+                phone: l.phone || null,
+                lead_niche: c.niche || null,
+                site_url: l.siteUrl,
+                slug: l.slug || null,
+                lead_status: l.status || 'sent',
+                created_at: createdTs,
+              });
+            }
           }
         }
       }
 
       if (rawSource === 'sms' && Array.isArray(c.smsLeads)) {
         for (const sl of c.smsLeads) {
-          if (sl.siteUrl && !fallbackSites.some((fs) => fs.site_url === sl.siteUrl)) {
-            fallbackSites.push({
-              source: 'sms',
-              lead_id: leadCounter++,
-              campaign_id: c.id,
-              campaign_name: c.name || 'SMS Campaign',
-              niche: c.niche || null,
-              campaign_status: c.status || 'Completed',
-              campaign_started_at: createdTs,
-              business_name: sl.name || 'Local Business',
-              city: sl.city || null,
-              phone: sl.phone || null,
-              lead_niche: c.niche || null,
-              site_url: sl.siteUrl,
-              slug: null,
-              lead_status: sl.status || 'delivered',
-              created_at: createdTs,
-            });
+          if (sl.siteUrl) {
+            const key = (sl.slug || sl.siteUrl || '').toLowerCase().trim();
+            if (key && !seenUrls.has(key)) {
+              seenUrls.add(key);
+              mergedSites.push({
+                source: 'sms',
+                lead_id: leadCounter++,
+                campaign_id: c.id,
+                campaign_name: c.name || 'SMS Campaign',
+                niche: c.niche || null,
+                campaign_status: c.status || 'Completed',
+                campaign_started_at: createdTs,
+                business_name: sl.name || 'Local Business',
+                city: sl.city || null,
+                phone: sl.phone || null,
+                lead_niche: c.niche || null,
+                site_url: sl.siteUrl,
+                slug: sl.slug || null,
+                lead_status: sl.status || 'delivered',
+                created_at: createdTs,
+              });
+            }
           }
         }
       }
     }
 
+    mergedSites.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+
     const counts: SitesCounts = {
-      total: fallbackSites.length,
-      siteDeploy: fallbackSites.filter((s) => s.source === 'site-deploy').length,
-      email: fallbackSites.filter((s) => s.source === 'email').length,
-      sms: fallbackSites.filter((s) => s.source === 'sms').length,
+      total: mergedSites.length,
+      siteDeploy: mergedSites.filter((s) => s.source === 'site-deploy').length,
+      email: mergedSites.filter((s) => s.source === 'email').length,
+      sms: mergedSites.filter((s) => s.source === 'sms').length,
     };
 
-    let filtered = fallbackSites;
-    if (opts?.source) {
+    let filtered = mergedSites;
+    if (opts?.source && opts.source !== 'all') {
       filtered = filtered.filter((s) => s.source === opts.source);
     }
     if (opts?.limit) {
@@ -3976,7 +4000,15 @@ export async function fetchAllSites(
 
     return { sites: filtered, counts };
   } catch {
-    return { sites: [], counts: { total: 0, siteDeploy: 0, email: 0, sms: 0 } };
+    return {
+      sites: serverSites,
+      counts: {
+        total: serverSites.length,
+        siteDeploy: serverSites.filter((s) => s.source === 'site-deploy').length,
+        email: serverSites.filter((s) => s.source === 'email').length,
+        sms: serverSites.filter((s) => s.source === 'sms').length,
+      },
+    };
   }
 }
 

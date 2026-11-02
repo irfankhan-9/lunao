@@ -19,6 +19,10 @@
 //   GET  /api/auth/me                             -> current user from cookie
 //
 // In production it also serves the built frontend from /dist.
+import dns from 'node:dns';
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch {}
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import fs from 'node:fs';
@@ -1006,85 +1010,211 @@ app.post('/api/settings/cloudflare', authenticate, async (req, res) => {
 //
 // IMPORTANT: this MUST be registered BEFORE the `/api/sites/:slug` catch-all
 // below — otherwise Express matches "all" as a slug and returns 404.
-app.get('/api/sites/all', authenticate, (req, res) => {
+app.get('/api/sites/all', authenticate, async (req, res) => {
   try {
     const ownerKey = getAuthOwnerKey(req);
+    console.log(`[api/sites/all] Invoked ownerKey="${ownerKey}" source="${req.query.source}"`);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized: Authentication required' });
 
     const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
-    const sourceFilter = req.query.source; // 'site-deploy' | 'email' | undefined (all)
+    const sourceFilter = req.query.source; // 'site-deploy' | 'email' | 'sms' | undefined (all)
 
     const rows = [];
+    const seenSlugs = new Set();
+    let leadCounter = 1;
 
-    if (!sourceFilter || sourceFilter === 'site-deploy') {
-      // Site-deploy campaigns → live URLs in `campaign_leads.site_url`.
-      const sdRows = db.prepare(`
-        SELECT
-          'site-deploy'                                  AS source,
-          cl.id                                          AS lead_id,
-          cl.campaign_id                                 AS campaign_id,
-          c.name                                         AS campaign_name,
-          c.niche                                        AS niche,
-          c.status                                       AS campaign_status,
-          c.started_at                                   AS campaign_started_at,
-          cl.name                                        AS business_name,
-          cl.city                                        AS city,
-          cl.phone                                       AS phone,
-          cl.niche                                       AS lead_niche,
-          cl.site_url                                    AS site_url,
-          cl.slug                                        AS slug,
-          cl.site_status                                 AS lead_status,
-          cl.created_at                                  AS created_at
-        FROM campaign_leads cl
-        JOIN campaigns c ON c.id = cl.campaign_id
-        WHERE c.owner_key = ?
-          AND cl.site_url IS NOT NULL
-          AND cl.site_url != ''
-        ORDER BY cl.created_at DESC
-        LIMIT ?
-      `).all(ownerKey, limit);
-      rows.push(...sdRows);
+    // 1. PRIMARY: Query Supabase public.user_sites via direct REST API (fastest, zero-hang)
+    const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+    const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    if (sbUrl && sbKey) {
+      try {
+        const restUrl = new URL(`${sbUrl}/rest/v1/user_sites`);
+        restUrl.searchParams.set('select', 'slug,business_name,city,niche,template_key,campaign_source,campaign_id,deploy_url,created_at,owner_id');
+        if (sourceFilter) {
+          restUrl.searchParams.set('campaign_source', `eq.${sourceFilter}`);
+        }
+        restUrl.searchParams.set('order', 'created_at.desc');
+        restUrl.searchParams.set('limit', String(limit));
+
+        const sbRes = await fetch(restUrl.toString(), {
+          headers: {
+            apikey: sbKey,
+            Authorization: `Bearer ${sbKey}`,
+          },
+          signal: AbortSignal.timeout(4000),
+        });
+
+        if (sbRes.ok) {
+          const sbSites = await sbRes.json();
+          console.log(`[api/sites/all] Supabase REST status=${sbRes.status}, count=${Array.isArray(sbSites) ? sbSites.length : 'not array'}`);
+          if (Array.isArray(sbSites)) {
+            for (const s of sbSites) {
+              const ownerMatches =
+                !ownerKey ||
+                ownerKey === 'dashboard' ||
+                s.owner_id === ownerKey ||
+                (ownerKey.startsWith('user_') && (s.owner_id === ownerKey || s.owner_id?.startsWith('dash-') || s.owner_id?.startsWith('user_'))) ||
+                (ownerKey.startsWith('dash-') && (s.owner_id === ownerKey || s.owner_id?.startsWith('dash-') || s.owner_id?.startsWith('user_')));
+
+              if (ownerMatches && s.slug && !seenSlugs.has(s.slug.toLowerCase())) {
+                seenSlugs.add(s.slug.toLowerCase());
+                const rawSrc = (s.campaign_source || 'site-deploy').toLowerCase();
+                const source = rawSrc === 'email' ? 'email' : rawSrc === 'sms' ? 'sms' : 'site-deploy';
+                const createdTs = Number(s.created_at)
+                  ? Math.floor(Number(s.created_at) > 1e11 ? Number(s.created_at) / 1000 : Number(s.created_at))
+                  : Math.floor(Date.now() / 1000);
+
+                rows.push({
+                  source,
+                  lead_id: leadCounter++,
+                  campaign_id: s.campaign_id || `camp_${s.slug}`,
+                  campaign_name: s.campaign_name || (source === 'site-deploy' ? `${s.niche || 'Local'} Site Deploy` : source === 'sms' ? `${s.niche || 'Local'} SMS Outreach` : `${s.niche || 'Local'} Email Outreach`),
+                  niche: s.niche || null,
+                  campaign_status: 'Completed',
+                  campaign_started_at: createdTs,
+                  business_name: s.business_name || s.slug,
+                  city: s.city || null,
+                  phone: s.phone || null,
+                  lead_niche: s.niche || null,
+                  site_url: s.deploy_url || `https://lunao-web-designn.pages.dev/${s.slug}/`,
+                  slug: s.slug,
+                  lead_status: 'live',
+                  created_at: createdTs,
+                });
+              }
+            }
+          }
+        } else {
+          const errBody = await sbRes.text();
+          console.warn(`[api/sites/all] Supabase REST error status=${sbRes.status} body=${errBody}`);
+        }
+      } catch (sbEx) {
+        console.warn('[sites/all] Supabase REST notice:', sbEx.message);
+      }
     }
 
+    // 2. SECONDARY: Local SQLite user_sites
+    try {
+      let localSitesQuery = 'SELECT * FROM user_sites WHERE 1=1';
+      const localParams = [];
+      if (sourceFilter) {
+        localSitesQuery += ' AND campaign_source = ?';
+        localParams.push(sourceFilter);
+      }
+      localSitesQuery += ' ORDER BY created_at DESC LIMIT ?';
+      localParams.push(limit);
+      const localSites = db.prepare(localSitesQuery).all(...localParams);
+      for (const s of localSites || []) {
+        if (s.slug && !seenSlugs.has(s.slug.toLowerCase())) {
+          seenSlugs.add(s.slug.toLowerCase());
+          const rawSrc = (s.campaign_source || 'site-deploy').toLowerCase();
+          const source = rawSrc === 'email' ? 'email' : rawSrc === 'sms' ? 'sms' : 'site-deploy';
+          const createdTs = Number(s.created_at)
+            ? Math.floor(Number(s.created_at) > 1e11 ? Number(s.created_at) / 1000 : Number(s.created_at))
+            : Math.floor(Date.now() / 1000);
+          rows.push({
+            source,
+            lead_id: leadCounter++,
+            campaign_id: s.campaign_id || `camp_${s.slug}`,
+            campaign_name: s.campaign_name || `${s.niche || 'Local'} Campaign`,
+            niche: s.niche || null,
+            campaign_status: 'Completed',
+            campaign_started_at: createdTs,
+            business_name: s.business_name || s.slug,
+            city: s.city || null,
+            phone: s.phone || null,
+            lead_niche: s.niche || null,
+            site_url: s.deploy_url || `https://lunao-web-designn.pages.dev/${s.slug}/`,
+            slug: s.slug,
+            lead_status: 'live',
+            created_at: createdTs,
+          });
+        }
+      }
+    } catch {}
+
+    // 3. TERTIARY: campaign_leads (SMS campaigns)
+    if (!sourceFilter || sourceFilter === 'sms') {
+      try {
+        const smsRows = db.prepare(`
+          SELECT
+            'sms'                                          AS source,
+            cl.id                                          AS lead_id,
+            cl.campaign_id                                 AS campaign_id,
+            c.name                                         AS campaign_name,
+            c.niche                                        AS niche,
+            c.status                                       AS campaign_status,
+            c.started_at                                   AS campaign_started_at,
+            cl.name                                        AS business_name,
+            cl.city                                        AS city,
+            cl.phone                                       AS phone,
+            cl.niche                                       AS lead_niche,
+            cl.site_url                                    AS site_url,
+            cl.slug                                        AS slug,
+            cl.site_status                                 AS lead_status,
+            cl.created_at                                  AS created_at
+          FROM campaign_leads cl
+          JOIN campaigns c ON c.id = cl.campaign_id
+          WHERE cl.site_url IS NOT NULL AND cl.site_url != ''
+          ORDER BY cl.created_at DESC
+          LIMIT ?
+        `).all(limit);
+        for (const r of smsRows || []) {
+          const key = (r.slug || r.site_url || '').toLowerCase();
+          if (key && !seenSlugs.has(key)) {
+            seenSlugs.add(key);
+            rows.push(r);
+          }
+        }
+      } catch {}
+    }
+
+    // 4. QUATERNARY: email_leads (Email campaigns)
     if (!sourceFilter || sourceFilter === 'email') {
-      // Email campaigns → live URLs in `email_leads.generated_site_url`.
-      const emRows = db.prepare(`
-        SELECT
-          'email'                                        AS source,
-          el.id                                          AS lead_id,
-          el.campaign_id                                 AS campaign_id,
-          ec.email_subject                               AS campaign_name,
-          ec.niche                                       AS niche,
-          ec.status                                      AS campaign_status,
-          ec.started_at                                  AS campaign_started_at,
-          el.business_name                               AS business_name,
-          el.city                                        AS city,
-          el.phone                                       AS phone,
-          ec.niche                                       AS lead_niche,
-          el.generated_site_url                          AS site_url,
-          el.slug                                        AS slug,
-          el.send_status                                 AS lead_status,
-          COALESCE(el.sent_at, el.created_at)            AS created_at
-        FROM email_leads el
-        JOIN email_campaigns ec ON ec.id = el.campaign_id
-        WHERE ec.user_id = ?
-          AND el.generated_site_url IS NOT NULL
-          AND el.generated_site_url != ''
-        ORDER BY COALESCE(el.sent_at, el.created_at) DESC
-        LIMIT ?
-      `).all(ownerKey, limit);
-      rows.push(...emRows);
+      try {
+        const emRows = db.prepare(`
+          SELECT
+            'email'                                        AS source,
+            el.id                                          AS lead_id,
+            el.campaign_id                                 AS campaign_id,
+            ec.email_subject                               AS campaign_name,
+            ec.niche                                       AS niche,
+            ec.status                                      AS campaign_status,
+            ec.started_at                                  AS campaign_started_at,
+            el.business_name                               AS business_name,
+            el.city                                        AS city,
+            el.phone                                       AS phone,
+            ec.niche                                       AS lead_niche,
+            el.generated_site_url                          AS site_url,
+            el.slug                                        AS slug,
+            el.send_status                                 AS lead_status,
+            COALESCE(el.sent_at, el.created_at)            AS created_at
+          FROM email_leads el
+          JOIN email_campaigns ec ON ec.id = el.campaign_id
+          WHERE el.generated_site_url IS NOT NULL AND el.generated_site_url != ''
+          ORDER BY COALESCE(el.sent_at, el.created_at) DESC
+          LIMIT ?
+        `).all(limit);
+        for (const r of emRows || []) {
+          const key = (r.slug || r.site_url || '').toLowerCase();
+          if (key && !seenSlugs.has(key)) {
+            seenSlugs.add(key);
+            rows.push(r);
+          }
+        }
+      } catch {}
     }
 
-    // Aggregate counts for the header pills.
+    // Sort newest first
+    rows.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+
+    // Calculate counts accurately across ALL sources
     const counts = {
       total: rows.length,
       siteDeploy: rows.filter(r => r.source === 'site-deploy').length,
+      sms: rows.filter(r => r.source === 'sms').length,
       email: rows.filter(r => r.source === 'email').length,
     };
-
-    // Sort merged rows newest-first so the UI shows the freshest site at the top.
-    rows.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
 
     res.json({ ok: true, sites: rows, counts });
   } catch (err) {
