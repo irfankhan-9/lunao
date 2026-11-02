@@ -1251,14 +1251,11 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
       leads: csvLeads.map((l) => ({ name: l.name, city: l.city, phone: l.phone })),
     };
 
-    // Save in localStorage for persistence under both owner-isolated and global keys
+    // Save in tenant-isolated localStorage for persistence
     try {
       const userCampKey = `lunao_u_${resolvedOwnerKey}_campaigns`;
       const existingUserCamps = JSON.parse(localStorage.getItem(userCampKey) || '[]') || [];
       localStorage.setItem(userCampKey, JSON.stringify([completeCampRecord, ...existingUserCamps.filter((c: any) => c.id !== newCampId)]));
-
-      const existingCamps = JSON.parse(localStorage.getItem('lunao_campaigns') || '[]') || [];
-      localStorage.setItem('lunao_campaigns', JSON.stringify([completeCampRecord, ...existingCamps.filter((c: any) => c.id !== newCampId)]));
     } catch {
       // non-fatal
     }

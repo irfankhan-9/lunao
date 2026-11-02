@@ -213,15 +213,7 @@ function DashboardApp() {
   };
 
   const [campaigns, setCampaigns] = useState<Campaign[]>(() => {
-    let persisted = loadPersisted<Campaign[]>(userCampaignsKey, []);
-    if (!Array.isArray(persisted) || persisted.length === 0) {
-      try {
-        const fallback = JSON.parse(localStorage.getItem('lunao_campaigns') || '[]');
-        if (Array.isArray(fallback) && fallback.length > 0) {
-          persisted = fallback;
-        }
-      } catch {}
-    }
+    const persisted = loadPersisted<Campaign[]>(userCampaignsKey, []);
     let sdResults: Record<string, unknown> = {};
     try {
       sdResults = JSON.parse(localStorage.getItem('lunao_sd_results') || '{}') || {};
@@ -288,17 +280,14 @@ function DashboardApp() {
   useEffect(() => {
     const serialized = JSON.stringify(campaigns);
     localStorage.setItem(userCampaignsKey, serialized);
-    localStorage.setItem('lunao_campaigns', serialized);
   }, [campaigns, userCampaignsKey]);
   useEffect(() => {
     const serialized = JSON.stringify(businesses);
     localStorage.setItem(userBusinessesKey, serialized);
-    localStorage.setItem('lunao_businesses', serialized);
   }, [businesses, userBusinessesKey]);
   useEffect(() => {
     const serialized = JSON.stringify(smsLogs);
     localStorage.setItem(userSmsLogsKey, serialized);
-    localStorage.setItem('lunao_sms_logs', serialized);
   }, [smsLogs, userSmsLogsKey]);
 
   const [isNavMinimized, setIsNavMinimized] = useState(false);

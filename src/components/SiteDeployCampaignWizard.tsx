@@ -497,14 +497,16 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
       leads: csvLeads.map((l) => ({ name: l.name, city: l.city, phone: l.phone })),
     };
 
-    // Save in localStorage sd_results for persistence
+    // Save in tenant-isolated localStorage for persistence
     try {
+      const resolvedOwnerKey = localStorage.getItem('lunao_owner_key') || 'dashboard';
+      const userCampKey = `lunao_u_${resolvedOwnerKey}_campaigns`;
+      const existingUserCamps = JSON.parse(localStorage.getItem(userCampKey) || '[]') || [];
+      localStorage.setItem(userCampKey, JSON.stringify([completeCampRecord, ...existingUserCamps.filter((c: any) => c.id !== newCampId)]));
+
       const existingSd = JSON.parse(localStorage.getItem('lunao_sd_results') || '{}') || {};
       existingSd[newCampId] = completeCampRecord;
       localStorage.setItem('lunao_sd_results', JSON.stringify(existingSd));
-
-      const existingCamps = JSON.parse(localStorage.getItem('lunao_campaigns') || '[]') || [];
-      localStorage.setItem('lunao_campaigns', JSON.stringify([completeCampRecord, ...existingCamps.filter((c: any) => c.id !== newCampId)]));
     } catch {
       // non-fatal
     }

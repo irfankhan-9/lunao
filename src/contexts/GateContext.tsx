@@ -288,6 +288,10 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem('lunao_user_credits');
       localStorage.removeItem('lunao_vibe_credits');
       localStorage.removeItem('lunao_custom_templates');
+      localStorage.removeItem('lunao_campaigns');
+      localStorage.removeItem('lunao_businesses');
+      localStorage.removeItem('lunao_sms_logs');
+      localStorage.removeItem('lunao_sd_results');
     } catch {}
 
     setUser(null);

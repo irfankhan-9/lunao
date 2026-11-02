@@ -1370,10 +1370,11 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       leads: targetLeads.map((l) => ({ name: l.name, city: l.city, email: l.email, phone: l.phone })),
     };
 
-    // Save in localStorage for persistence
+    // Save in tenant-isolated localStorage for persistence
     try {
-      const existingCamps = JSON.parse(localStorage.getItem('lunao_campaigns') || '[]') || [];
-      localStorage.setItem('lunao_campaigns', JSON.stringify([completeCampRecord, ...existingCamps.filter((c: any) => c.id !== newCampId)]));
+      const userCampKey = `lunao_u_${resolvedOwnerKey}_campaigns`;
+      const existingUserCamps = JSON.parse(localStorage.getItem(userCampKey) || '[]') || [];
+      localStorage.setItem(userCampKey, JSON.stringify([completeCampRecord, ...existingUserCamps.filter((c: any) => c.id !== newCampId)]));
     } catch {
       // non-fatal
     }
