@@ -148,7 +148,7 @@ export const telnyxOAuth = {
   // PKCE alone authenticates the token exchange. We still accept a secret
   // for backward compatibility with confidential clients.
   clientSecret: env.TELNYX_CLIENT_SECRET || '',
-  scopes: 'admin',
+  scopes: env.TELNYX_SCOPES || 'messaging.read messaging.write numbers.read numbers.write account_management.read account_management.write',
   authorizationUrl: 'https://api.telnyx.com/v2/oauth/authorize',
   tokenUrl: 'https://api.telnyx.com/v2/oauth/token',
   get enabled() {
