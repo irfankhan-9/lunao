@@ -165,12 +165,39 @@ export async function publishBatch() {
   if (stagedFiles === 0) {
     throw new Error(`No sites staged at ${SITES_DIR} — nothing to deploy`);
   }
-  console.log(`[cloudflare] deploying ${stagedFiles} site(s) from ${SITES_DIR} to project=${cloudflare.project} branch=${cloudflare.branch}`);
+  // If deploying to the same project as the main app (lunao-web-designn),
+  // deploy from dist/ and merge staged client sites so the React SaaS dashboard is never overwritten!
+  const distDir = path.join(ROOT_DIR, 'dist');
+  let deployDir = SITES_DIR;
+  if (fsSync.existsSync(distDir) && fsSync.existsSync(path.join(distDir, 'index.html'))) {
+    try {
+      const siteDirs = await fs.readdir(SITES_DIR, { withFileTypes: true });
+      for (const d of siteDirs) {
+        if (d.isDirectory()) {
+          const srcSite = path.join(SITES_DIR, d.name);
+          const dstSite = path.join(distDir, d.name);
+          await fs.cp(srcSite, dstSite, { recursive: true });
+        }
+      }
+      // Ensure _worker.js is present in dist
+      const srcWorker = path.join(ROOT_DIR, 'public', '_worker.js');
+      const dstWorker = path.join(distDir, '_worker.js');
+      if (fsSync.existsSync(srcWorker)) {
+        await fs.copyFile(srcWorker, dstWorker);
+      }
+      deployDir = distDir;
+      console.log(`[cloudflare] Merged ${stagedFiles} site(s) into dist/ for unified deployment`);
+    } catch (mergeErr) {
+      console.warn('[cloudflare] Could not merge sites into dist:', mergeErr.message);
+    }
+  }
+
+  console.log(`[cloudflare] deploying from ${deployDir} to project=${cloudflare.project} branch=${cloudflare.branch}`);
   const { code, stdout, stderr } = await runWrangler(
     [
       'pages',
       'deploy',
-      SITES_DIR,
+      deployDir,
       `--project-name=${cloudflare.project}`,
       `--branch=${cloudflare.branch}`,
       '--commit-dirty=true',
