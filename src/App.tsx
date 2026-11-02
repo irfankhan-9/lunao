@@ -101,12 +101,12 @@ function AppRouter() {
     }
   }, [loading, unlocked, route]);
 
-  // Bounce /app back to / if the user is not authenticated.
+  // Bounce /app back to / if the user is not authenticated once loading finishes.
   useEffect(() => {
-    if (route === '/app' && !unlocked) {
+    if (!loading && route === '/app' && !unlocked) {
       setRoute('/');
     }
-  }, [route, unlocked]);
+  }, [loading, route, unlocked]);
 
   // While checking the session, show a clean loading spinner.
   if (loading) {

@@ -93,6 +93,7 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
       }
       setUser(authUser);
       setUnlocked(true);
+      setLoading(false);
     },
     []
   );
@@ -174,7 +175,7 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
     })();
 
     const { data: authListener } = supabaseClient.auth.onAuthStateChange((event, session) => {
-      if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+      if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
         const sbUser = session.user;
         const email = sbUser.email || 'user@lunao.app';
         const name = sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || email.split('@')[0];
@@ -189,6 +190,10 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
           picture,
         };
         applyAuthenticatedSession(authUser);
+
+        if (typeof window !== 'undefined' && window.location.hash.includes('access_token=')) {
+          window.history.replaceState(null, '', window.location.pathname);
+        }
       }
     });
 
