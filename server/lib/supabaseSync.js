@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getPgPool } from './supabase.js';
+import { getPgPool, getSupabase } from './supabase.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LEGACY_DB_FILE = path.resolve(__dirname, '..', '.data', 'lunao-db.json');
@@ -285,35 +285,102 @@ export async function hydrateTablesMapFromSupabase(tablesMap, customPool = null)
 // ============================================================================
 
 export async function pgListSiteHistory(ownerKey, parentSlug = null) {
+  if (!ownerKey) return [];
+  const sb = getSupabase();
   const pool = getPgPool();
-  if (!pool || !ownerKey) return [];
-  const params = [ownerKey];
-  let sql = `SELECT * FROM public.site_history WHERE owner_key = $1`;
-  if (parentSlug) {
-    params.push(parentSlug);
-    sql += ` AND parent_slug = $2`;
-  }
-  sql += ` ORDER BY updated_at DESC, created_at DESC`;
-  const { rows } = await pool.query(sql, params);
+  let rows = [];
 
+  // 1. Try Supabase REST Client first (immune to IPv6 / port 5432 routing issues)
+  if (sb) {
+    try {
+      let query = sb.from('site_history').select('*');
+      if (ownerKey) {
+        query = query.eq('owner_key', ownerKey);
+      }
+      if (parentSlug) {
+        query = query.eq('parent_slug', parentSlug);
+      }
+      query = query.order('updated_at', { ascending: false }).order('created_at', { ascending: false });
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        rows = data;
+      } else if (error) {
+        console.warn('[Supabase REST] pgListSiteHistory warning:', error.message);
+      }
+    } catch (err) {
+      console.warn('[Supabase REST] pgListSiteHistory exception:', err.message);
+    }
+  }
+
+  // 2. Fallback to direct Postgres pool if REST returned nothing
+  if (rows.length === 0 && pool) {
+    try {
+      const params = [ownerKey];
+      let sql = `SELECT * FROM public.site_history WHERE owner_key = $1`;
+      if (parentSlug) {
+        params.push(parentSlug);
+        sql += ` AND parent_slug = $2`;
+      }
+      sql += ` ORDER BY updated_at DESC, created_at DESC`;
+      const res = await pool.query(sql, params);
+      if (res?.rows?.length) {
+        rows = res.rows;
+      }
+    } catch {
+      // Safe fallback - pool may be unreachable
+    }
+  }
+
+  // 3. Also pull from custom_templates to ensure all saved vibe-coded templates appear
+  if (sb && !parentSlug) {
+    try {
+      const { data: tmplData } = await sb
+        .from('custom_templates')
+        .select('*')
+        .eq('owner_key', ownerKey)
+        .order('updated_at', { ascending: false });
+      if (Array.isArray(tmplData)) {
+        for (const t of tmplData) {
+          rows.push({
+            id: t.id,
+            parent_slug: t.slug,
+            title: t.name,
+            niche: t.niche,
+            html: t.raw_html || t.preview_html,
+            snapshot_label: `Saved Template (${t.niche || 'General'})`,
+            is_template: true,
+            template_id: t.id,
+            template_name: t.name,
+            created_at: Number(t.created_at) || Date.now(),
+            updated_at: Number(t.updated_at) || Number(t.created_at) || Date.now(),
+          });
+        }
+      }
+    } catch {
+      // Safe fallback
+    }
+  }
+
+  // Deduplicate by template_id, parent_slug, title, or id
   const seen = new Set();
   const unique = [];
   for (const r of rows || []) {
+    if (!r) continue;
     const key = String(r.template_id || r.parent_slug || r.title || r.id).toLowerCase().trim();
     if (!seen.has(key)) {
       seen.add(key);
       unique.push({
         id: r.id,
-        parentSlug: r.parent_slug,
-        title: r.title,
-        niche: r.niche,
-        html: r.html,
-        snapshotLabel: r.snapshot_label,
-        isTemplate: Boolean(r.is_template),
-        templateId: r.template_id,
-        templateName: r.template_name,
-        createdAt: Number(r.created_at) || Date.now(),
-        updatedAt: Number(r.updated_at) || Number(r.created_at) || Date.now(),
+        parentSlug: r.parent_slug || r.parentSlug,
+        title: r.title || r.name || 'Bespoke Business Website',
+        niche: r.niche || 'Local Business',
+        html: r.html || r.raw_html || r.preview_html || '',
+        snapshotLabel: r.snapshot_label || r.snapshotLabel || 'Saved Build',
+        isTemplate: Boolean(r.is_template ?? r.isTemplate ?? r.template_id ?? r.templateId),
+        templateId: r.template_id || r.templateId || null,
+        templateName: r.template_name || r.templateName || r.title || null,
+        createdAt: Number(r.created_at || r.createdAt) || Date.now(),
+        updatedAt: Number(r.updated_at || r.updatedAt || r.created_at || r.createdAt) || Date.now(),
       });
     }
   }
@@ -321,27 +388,86 @@ export async function pgListSiteHistory(ownerKey, parentSlug = null) {
 }
 
 export async function pgGetSiteHistoryById(id, ownerKey) {
+  if (!id) return null;
+  const sb = getSupabase();
   const pool = getPgPool();
-  if (!pool || !ownerKey) return null;
-  const { rows } = await pool.query(
-    `SELECT * FROM public.site_history WHERE id = $1 AND owner_key = $2 LIMIT 1`,
-    [id, ownerKey]
-  );
-  const r = rows?.[0];
-  if (!r) return null;
-  return {
-    id: r.id,
-    ownerKey: r.owner_key,
-    parentSlug: r.parent_slug,
-    title: r.title,
-    niche: r.niche,
-    html: r.html,
-    snapshotLabel: r.snapshot_label,
-    isTemplate: Boolean(r.is_template),
-    templateId: r.template_id,
-    templateName: r.template_name,
-    createdAt: Number(r.created_at) || Date.now(),
-  };
+
+  if (sb) {
+    try {
+      let query = sb.from('site_history').select('*').eq('id', id);
+      if (ownerKey) query = query.eq('owner_key', ownerKey);
+      const { data, error } = await query.limit(1);
+      if (!error && data && data[0]) {
+        const r = data[0];
+        return {
+          id: r.id,
+          ownerKey: r.owner_key,
+          parentSlug: r.parent_slug,
+          title: r.title,
+          niche: r.niche,
+          html: r.html,
+          snapshotLabel: r.snapshot_label,
+          isTemplate: Boolean(r.is_template),
+          templateId: r.template_id,
+          templateName: r.template_name,
+          createdAt: Number(r.created_at) || Date.now(),
+          updatedAt: Number(r.updated_at) || Number(r.created_at) || Date.now(),
+        };
+      }
+
+      // Also check if id is a custom_template
+      let tmplQuery = sb.from('custom_templates').select('*').eq('id', id);
+      if (ownerKey) tmplQuery = tmplQuery.eq('owner_key', ownerKey);
+      const { data: tData } = await tmplQuery.limit(1);
+      if (tData && tData[0]) {
+        const t = tData[0];
+        return {
+          id: t.id,
+          ownerKey: t.owner_key,
+          parentSlug: t.slug,
+          title: t.name,
+          niche: t.niche,
+          html: t.raw_html || t.preview_html,
+          snapshotLabel: `Saved Template (${t.niche || 'General'})`,
+          isTemplate: true,
+          templateId: t.id,
+          templateName: t.name,
+          createdAt: Number(t.created_at) || Date.now(),
+          updatedAt: Number(t.updated_at) || Number(t.created_at) || Date.now(),
+        };
+      }
+    } catch (err) {
+      console.warn('[Supabase REST] pgGetSiteHistoryById warning:', err.message);
+    }
+  }
+
+  if (pool && ownerKey) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT * FROM public.site_history WHERE id = $1 AND owner_key = $2 LIMIT 1`,
+        [id, ownerKey]
+      );
+      const r = rows?.[0];
+      if (r) {
+        return {
+          id: r.id,
+          ownerKey: r.owner_key,
+          parentSlug: r.parent_slug,
+          title: r.title,
+          niche: r.niche,
+          html: r.html,
+          snapshotLabel: r.snapshot_label,
+          isTemplate: Boolean(r.is_template),
+          templateId: r.template_id,
+          templateName: r.template_name,
+          createdAt: Number(r.created_at) || Date.now(),
+          updatedAt: Number(r.updated_at) || Number(r.created_at) || Date.now(),
+        };
+      }
+    } catch {}
+  }
+
+  return null;
 }
 
 export async function pgUpsertSiteHistory({
@@ -356,115 +482,260 @@ export async function pgUpsertSiteHistory({
   templateName = null,
   isTemplate = false,
 }) {
+  const sb = getSupabase();
   const pool = getPgPool();
   const now = Date.now();
+
   let existing = null;
 
-  if (pool && ownerKey) {
-    if (incomingId) {
-      const { rows } = await pool.query(
-        `SELECT * FROM public.site_history WHERE id = $1 AND owner_key = $2 LIMIT 1`,
-        [incomingId, ownerKey]
-      );
-      existing = rows?.[0] || null;
-    }
-    if (!existing && parentSlug) {
-      const { rows } = await pool.query(
-        `SELECT * FROM public.site_history WHERE parent_slug = $1 AND owner_key = $2 ORDER BY updated_at DESC LIMIT 1`,
-        [parentSlug, ownerKey]
-      );
-      existing = rows?.[0] || null;
-    }
-    if (!existing && templateId) {
-      const { rows } = await pool.query(
-        `SELECT * FROM public.site_history WHERE template_id = $1 AND owner_key = $2 ORDER BY updated_at DESC LIMIT 1`,
-        [templateId, ownerKey]
-      );
-      existing = rows?.[0] || null;
-    }
+  // 1. Try Supabase REST Client
+  if (sb && ownerKey) {
+    try {
+      if (incomingId) {
+        const { data } = await sb.from('site_history').select('*').eq('id', incomingId).eq('owner_key', ownerKey).limit(1);
+        if (data && data[0]) existing = data[0];
+      }
+      if (!existing && parentSlug) {
+        const { data } = await sb.from('site_history').select('*').eq('parent_slug', parentSlug).eq('owner_key', ownerKey).order('updated_at', { ascending: false }).limit(1);
+        if (data && data[0]) existing = data[0];
+      }
+      if (!existing && templateId) {
+        const { data } = await sb.from('site_history').select('*').eq('template_id', templateId).eq('owner_key', ownerKey).order('updated_at', { ascending: false }).limit(1);
+        if (data && data[0]) existing = data[0];
+      }
 
-    if (existing) {
-      const updatedTitle = title || existing.title || 'Bespoke Business Website';
-      const updatedNiche = niche || existing.niche || 'Local Business';
-      const updatedTmplId = templateId || existing.template_id || null;
-      const updatedTmplName = templateName || existing.template_name || null;
-      const updatedIsTmpl = Boolean(isTemplate || existing.is_template || updatedTmplId);
+      if (existing) {
+        const updatedTitle = title || existing.title || 'Bespoke Business Website';
+        const updatedNiche = niche || existing.niche || 'Local Business';
+        const updatedTmplId = templateId || existing.template_id || null;
+        const updatedTmplName = templateName || existing.template_name || null;
+        const updatedIsTmpl = Boolean(isTemplate || existing.is_template || updatedTmplId);
+
+        const updatePayload = {
+          html,
+          title: updatedTitle,
+          niche: updatedNiche,
+          snapshot_label: snapshotLabel,
+          template_id: updatedTmplId,
+          template_name: updatedTmplName,
+          is_template: updatedIsTmpl,
+          owner_key: ownerKey,
+          updated_at: now,
+        };
+
+        const { data, error } = await sb
+          .from('site_history')
+          .update(updatePayload)
+          .eq('id', existing.id)
+          .select()
+          .single();
+
+        if (!error && data) {
+          // If this site history entry is connected to a custom template, update the template too!
+          if (updatedTmplId) {
+            try {
+              await sb
+                .from('custom_templates')
+                .update({
+                  raw_html: html,
+                  updated_at: now,
+                  name: updatedTitle,
+                  niche: updatedNiche,
+                })
+                .eq('id', updatedTmplId)
+                .eq('owner_key', ownerKey);
+            } catch {}
+          }
+
+          return {
+            id: existing.id,
+            parentSlug: existing.parent_slug,
+            title: updatedTitle,
+            niche: updatedNiche,
+            snapshotLabel,
+            isTemplate: updatedIsTmpl,
+            templateId: updatedTmplId,
+            templateName: updatedTmplName,
+            createdAt: Number(existing.created_at) || now,
+            updatedAt: now,
+          };
+        }
+      }
+
+      const id = incomingId || `hist_${now}_${Math.random().toString(36).slice(2, 7)}`;
+      const finalSlug = parentSlug || `studio-${id}`;
+      const finalTitle = title || 'Bespoke Business Website';
+      const finalNiche = niche || 'Local Business';
+      const finalIsTmpl = Boolean(isTemplate || templateId);
+
+      const insertPayload = {
+        id,
+        owner_key: ownerKey,
+        parent_slug: finalSlug,
+        title: finalTitle,
+        niche: finalNiche,
+        html,
+        snapshot_label: snapshotLabel,
+        is_template: finalIsTmpl,
+        template_id: templateId || null,
+        template_name: templateName || null,
+        created_at: now,
+        updated_at: now,
+      };
+
+      const { data, error } = await sb
+        .from('site_history')
+        .upsert(insertPayload, { onConflict: 'id' })
+        .select()
+        .single();
+
+      if (!error && data) {
+        return {
+          id: data.id,
+          parentSlug: data.parent_slug,
+          title: data.title,
+          niche: data.niche,
+          snapshotLabel: data.snapshot_label,
+          isTemplate: data.is_template,
+          templateId: data.template_id,
+          templateName: data.template_name,
+          createdAt: Number(data.created_at) || now,
+          updatedAt: Number(data.updated_at) || now,
+        };
+      }
+    } catch (err) {
+      console.warn('[Supabase REST] pgUpsertSiteHistory warning:', err.message);
+    }
+  }
+
+  // 2. Pool fallback if REST is not available
+  if (pool && ownerKey) {
+    try {
+      if (incomingId) {
+        const { rows } = await pool.query(
+          `SELECT * FROM public.site_history WHERE id = $1 AND owner_key = $2 LIMIT 1`,
+          [incomingId, ownerKey]
+        );
+        existing = rows?.[0] || null;
+      }
+      if (!existing && parentSlug) {
+        const { rows } = await pool.query(
+          `SELECT * FROM public.site_history WHERE parent_slug = $1 AND owner_key = $2 ORDER BY updated_at DESC LIMIT 1`,
+          [parentSlug, ownerKey]
+        );
+        existing = rows?.[0] || null;
+      }
+      if (!existing && templateId) {
+        const { rows } = await pool.query(
+          `SELECT * FROM public.site_history WHERE template_id = $1 AND owner_key = $2 ORDER BY updated_at DESC LIMIT 1`,
+          [templateId, ownerKey]
+        );
+        existing = rows?.[0] || null;
+      }
+
+      if (existing) {
+        const updatedTitle = title || existing.title || 'Bespoke Business Website';
+        const updatedNiche = niche || existing.niche || 'Local Business';
+        const updatedTmplId = templateId || existing.template_id || null;
+        const updatedTmplName = templateName || existing.template_name || null;
+        const updatedIsTmpl = Boolean(isTemplate || existing.is_template || updatedTmplId);
+
+        await pool.query(
+          `UPDATE public.site_history
+           SET html = $1, title = $2, niche = $3, snapshot_label = $4, template_id = $5, template_name = $6, is_template = $7, owner_key = $8, updated_at = $9
+           WHERE id = $10`,
+          [html, updatedTitle, updatedNiche, snapshotLabel, updatedTmplId, updatedTmplName, updatedIsTmpl, ownerKey, now, existing.id]
+        );
+
+        return {
+          id: existing.id,
+          parentSlug: existing.parent_slug,
+          title: updatedTitle,
+          niche: updatedNiche,
+          snapshotLabel,
+          isTemplate: updatedIsTmpl,
+          templateId: updatedTmplId,
+          templateName: updatedTmplName,
+          createdAt: Number(existing.created_at) || now,
+          updatedAt: now,
+        };
+      }
+
+      const id = incomingId || `hist_${now}_${Math.random().toString(36).slice(2, 7)}`;
+      const finalSlug = parentSlug || `studio-${id}`;
+      const finalTitle = title || 'Bespoke Business Website';
+      const finalNiche = niche || 'Local Business';
+      const finalIsTmpl = Boolean(isTemplate || templateId);
 
       await pool.query(
-        `UPDATE public.site_history
-         SET html = $1,
-             title = $2,
-             niche = $3,
-             snapshot_label = $4,
-             template_id = $5,
-             template_name = $6,
-             is_template = $7,
-             owner_key = $8,
-             updated_at = $9
-         WHERE id = $10`,
-        [html, updatedTitle, updatedNiche, snapshotLabel, updatedTmplId, updatedTmplName, updatedIsTmpl, ownerKey, now, existing.id]
+        `INSERT INTO public.site_history
+           (id, owner_key, parent_slug, title, niche, html, snapshot_label, is_template, template_id, template_name, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         ON CONFLICT (id) DO UPDATE SET
+           html = EXCLUDED.html, title = EXCLUDED.title, niche = EXCLUDED.niche, snapshot_label = EXCLUDED.snapshot_label,
+           is_template = EXCLUDED.is_template, template_id = COALESCE(EXCLUDED.template_id, public.site_history.template_id),
+           template_name = COALESCE(EXCLUDED.template_name, public.site_history.template_name), updated_at = EXCLUDED.updated_at`,
+        [id, ownerKey, finalSlug, finalTitle, finalNiche, html, snapshotLabel, finalIsTmpl, templateId || null, templateName || null, now, now]
       );
 
       return {
-        id: existing.id,
-        parentSlug: existing.parent_slug,
-        title: updatedTitle,
-        niche: updatedNiche,
+        id,
+        parentSlug: finalSlug,
+        title: finalTitle,
+        niche: finalNiche,
         snapshotLabel,
-        isTemplate: updatedIsTmpl,
-        templateId: updatedTmplId,
-        templateName: updatedTmplName,
-        createdAt: Number(existing.created_at) || now,
+        isTemplate: finalIsTmpl,
+        templateId: templateId || null,
+        templateName: templateName || null,
+        createdAt: now,
         updatedAt: now,
       };
-    }
-
-    const id = incomingId || `hist_${now}_${Math.random().toString(36).slice(2, 7)}`;
-    const finalSlug = parentSlug || `studio-${id}`;
-    const finalTitle = title || 'Bespoke Business Website';
-    const finalNiche = niche || 'Local Business';
-    const finalIsTmpl = Boolean(isTemplate || templateId);
-
-    await pool.query(
-      `INSERT INTO public.site_history
-         (id, owner_key, parent_slug, title, niche, html, snapshot_label, is_template, template_id, template_name, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-       ON CONFLICT (id) DO UPDATE SET
-         html = EXCLUDED.html,
-         title = EXCLUDED.title,
-         niche = EXCLUDED.niche,
-         snapshot_label = EXCLUDED.snapshot_label,
-         is_template = EXCLUDED.is_template,
-         template_id = COALESCE(EXCLUDED.template_id, public.site_history.template_id),
-         template_name = COALESCE(EXCLUDED.template_name, public.site_history.template_name),
-         updated_at = EXCLUDED.updated_at`,
-      [id, ownerKey, finalSlug, finalTitle, finalNiche, html, snapshotLabel, finalIsTmpl, templateId || null, templateName || null, now, now]
-    );
-
-    return {
-      id,
-      parentSlug: finalSlug,
-      title: finalTitle,
-      niche: finalNiche,
-      snapshotLabel,
-      isTemplate: finalIsTmpl,
-      templateId: templateId || null,
-      templateName: templateName || null,
-      createdAt: now,
-      updatedAt: now,
-    };
+    } catch {}
   }
-  return null;
+
+  // 3. Fallback memory/return object so caller never crashes
+  const fallbackId = incomingId || `hist_${now}`;
+  return {
+    id: fallbackId,
+    parentSlug: parentSlug || `studio-${fallbackId}`,
+    title: title || 'Bespoke Business Website',
+    niche: niche || 'Local Business',
+    snapshotLabel,
+    isTemplate: Boolean(isTemplate || templateId),
+    templateId: templateId || null,
+    templateName: templateName || null,
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 
 export async function pgDeleteSiteHistory(id, ownerKey) {
+  if (!id || !ownerKey) return false;
+  const sb = getSupabase();
   const pool = getPgPool();
-  if (!pool || !ownerKey) return false;
-  const res = await pool.query(
-    `DELETE FROM public.site_history WHERE id = $1 AND owner_key = $2`,
-    [id, ownerKey]
-  );
-  return (res.rowCount || 0) > 0;
+
+  if (sb) {
+    try {
+      const { error, count } = await sb
+        .from('site_history')
+        .delete({ count: 'exact' })
+        .eq('id', id)
+        .eq('owner_key', ownerKey);
+      if (!error && (count || 0) > 0) return true;
+    } catch {}
+  }
+
+  if (pool) {
+    try {
+      const res = await pool.query(
+        `DELETE FROM public.site_history WHERE id = $1 AND owner_key = $2`,
+        [id, ownerKey]
+      );
+      return (res.rowCount || 0) > 0;
+    } catch {}
+  }
+
+  return false;
 }
 
 export async function pgUpsertCustomTemplate({
@@ -479,62 +750,346 @@ export async function pgUpsertCustomTemplate({
   styleTags = '',
   usedCount = 0,
 }) {
+  const sb = getSupabase();
   const pool = getPgPool();
-  if (!pool) return null;
   const now = Date.now();
-  await pool.query(
-    `INSERT INTO public.custom_templates
-       (id, owner_key, category_id, name, slug, niche, raw_html, preview_html, style_tags, used_count, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-     ON CONFLICT (id) DO UPDATE SET
-       name = EXCLUDED.name,
-       slug = EXCLUDED.slug,
-       niche = EXCLUDED.niche,
-       category_id = COALESCE(EXCLUDED.category_id, public.custom_templates.category_id),
-       raw_html = COALESCE(NULLIF(EXCLUDED.raw_html, ''), public.custom_templates.raw_html),
-       preview_html = COALESCE(NULLIF(EXCLUDED.preview_html, ''), public.custom_templates.preview_html),
-       style_tags = COALESCE(NULLIF(EXCLUDED.style_tags, ''), public.custom_templates.style_tags),
-       updated_at = EXCLUDED.updated_at`,
-    [id, ownerKey, categoryId, name, slug, niche, rawHtml || '', previewHtml || '', styleTags || '', usedCount, now, now]
-  );
+
+  if (sb) {
+    try {
+      const payload = {
+        id,
+        owner_key: ownerKey,
+        category_id: categoryId,
+        name,
+        slug,
+        niche,
+        raw_html: rawHtml || '',
+        preview_html: previewHtml || '',
+        style_tags: styleTags || '',
+        used_count: usedCount,
+        created_at: now,
+        updated_at: now,
+      };
+      const { data, error } = await sb
+        .from('custom_templates')
+        .upsert(payload, { onConflict: 'id' })
+        .select()
+        .single();
+      if (!error && data) {
+        return { id: data.id, ownerKey: data.owner_key, categoryId: data.category_id, name: data.name, slug: data.slug, niche: data.niche, createdAt: now };
+      }
+    } catch (err) {
+      console.warn('[Supabase REST] pgUpsertCustomTemplate warning:', err.message);
+    }
+  }
+
+  if (pool) {
+    try {
+      await pool.query(
+        `INSERT INTO public.custom_templates
+           (id, owner_key, category_id, name, slug, niche, raw_html, preview_html, style_tags, used_count, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         ON CONFLICT (id) DO UPDATE SET
+           name = EXCLUDED.name,
+           slug = EXCLUDED.slug,
+           niche = EXCLUDED.niche,
+           category_id = COALESCE(EXCLUDED.category_id, public.custom_templates.category_id),
+           raw_html = COALESCE(NULLIF(EXCLUDED.raw_html, ''), public.custom_templates.raw_html),
+           preview_html = COALESCE(NULLIF(EXCLUDED.preview_html, ''), public.custom_templates.preview_html),
+           style_tags = COALESCE(NULLIF(EXCLUDED.style_tags, ''), public.custom_templates.style_tags),
+           updated_at = EXCLUDED.updated_at`,
+        [id, ownerKey, categoryId, name, slug, niche, rawHtml || '', previewHtml || '', styleTags || '', usedCount, now, now]
+      );
+      return { id, ownerKey, categoryId, name, slug, niche, createdAt: now };
+    } catch {}
+  }
+
   return { id, ownerKey, categoryId, name, slug, niche, createdAt: now };
 }
 
 export async function pgListCustomTemplates(ownerKey = null, categoryId = null) {
+  if (!ownerKey) return [];
+  const sb = getSupabase();
   const pool = getPgPool();
-  if (!pool || !ownerKey) return [];
-  const params = [ownerKey];
-  let sql = `SELECT * FROM public.custom_templates`;
-  const where = [`owner_key = $1`];
-  if (categoryId) {
-    params.push(categoryId);
-    where.push(`category_id = $${params.length}`);
+
+  if (sb) {
+    try {
+      let query = sb.from('custom_templates').select('*');
+      if (ownerKey) query = query.eq('owner_key', ownerKey);
+      if (categoryId) query = query.eq('category_id', categoryId);
+      query = query.order('created_at', { ascending: false });
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) return data;
+    } catch (err) {
+      console.warn('[Supabase REST] pgListCustomTemplates warning:', err.message);
+    }
   }
-  sql += ` WHERE ` + where.join(' AND ');
-  sql += ` ORDER BY created_at DESC`;
-  const { rows } = await pool.query(sql, params);
-  return rows || [];
+
+  if (pool) {
+    try {
+      const params = [ownerKey];
+      let sql = `SELECT * FROM public.custom_templates WHERE owner_key = $1`;
+      if (categoryId) {
+        params.push(categoryId);
+        sql += ` AND category_id = $2`;
+      }
+      sql += ` ORDER BY created_at DESC`;
+      const { rows } = await pool.query(sql, params);
+      return rows || [];
+    } catch {}
+  }
+
+  return [];
 }
 
 export async function pgGetCustomTemplate(keyOrId) {
+  if (!keyOrId) return null;
+  const sb = getSupabase();
   const pool = getPgPool();
-  if (!pool || !keyOrId) return null;
   const k = String(keyOrId).trim();
-  const { rows } = await pool.query(
-    `SELECT * FROM public.custom_templates WHERE id = $1 OR slug = $1 OR lower(name) = lower($1) LIMIT 1`,
-    [k]
-  );
-  return rows?.[0] || null;
+
+  if (sb) {
+    try {
+      const { data, error } = await sb
+        .from('custom_templates')
+        .select('*')
+        .or(`id.eq.${k},slug.eq.${k},name.ilike.${k}`)
+        .limit(1);
+      if (!error && data && data[0]) return data[0];
+    } catch {}
+  }
+
+  if (pool) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT * FROM public.custom_templates WHERE id = $1 OR slug = $1 OR lower(name) = lower($1) LIMIT 1`,
+        [k]
+      );
+      return rows?.[0] || null;
+    } catch {}
+  }
+
+  return null;
 }
 
 export async function pgDeleteCustomTemplate(id, ownerKey) {
+  if (!id || !ownerKey) return false;
+  const sb = getSupabase();
   const pool = getPgPool();
-  if (!pool || !ownerKey) return false;
-  const res = await pool.query(
-    `DELETE FROM public.custom_templates WHERE id = $1 AND owner_key = $2`,
-    [id, ownerKey]
-  );
-  return (res.rowCount || 0) > 0;
+
+  if (sb) {
+    try {
+      const { error, count } = await sb
+        .from('custom_templates')
+        .delete({ count: 'exact' })
+        .eq('id', id)
+        .eq('owner_key', ownerKey);
+      if (!error && (count || 0) > 0) return true;
+    } catch {}
+  }
+
+  if (pool) {
+    try {
+      const res = await pool.query(
+        `DELETE FROM public.custom_templates WHERE id = $1 AND owner_key = $2`,
+        [id, ownerKey]
+      );
+      return (res.rowCount || 0) > 0;
+    } catch {}
+  }
+
+  return false;
+}
+
+export async function pgListTemplateCategories(ownerKey) {
+  if (!ownerKey) return [];
+  const sb = getSupabase();
+  const pool = getPgPool();
+
+  if (sb) {
+    try {
+      const { data: cats, error } = await sb
+        .from('template_categories')
+        .select('id, name, color, icon, sort_order')
+        .eq('owner_key', ownerKey)
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true });
+      if (!error && Array.isArray(cats)) {
+        const { data: tmpls } = await sb
+          .from('custom_templates')
+          .select('category_id')
+          .eq('owner_key', ownerKey);
+        const counts = {};
+        for (const t of tmpls || []) {
+          if (t.category_id) counts[t.category_id] = (counts[t.category_id] || 0) + 1;
+        }
+        return cats.map(c => ({
+          id: c.id,
+          name: c.name,
+          color: c.color,
+          icon: c.icon,
+          sortOrder: c.sort_order,
+          templateCount: counts[c.id] || 0,
+        }));
+      }
+    } catch {}
+  }
+
+  if (pool) {
+    try {
+      const { rows: cats } = await pool.query(
+        `SELECT id, name, color, icon, sort_order FROM public.template_categories
+         WHERE owner_key = $1
+         ORDER BY sort_order ASC, created_at ASC`,
+        [ownerKey]
+      );
+      const result = [];
+      for (const c of cats || []) {
+        const cntRes = await pool.query(
+          `SELECT COUNT(*)::int AS count FROM public.custom_templates WHERE category_id = $1 AND owner_key = $2`,
+          [c.id, ownerKey]
+        );
+        result.push({
+          id: c.id,
+          name: c.name,
+          color: c.color,
+          icon: c.icon,
+          sortOrder: c.sort_order,
+          templateCount: cntRes.rows?.[0]?.count ?? 0,
+        });
+      }
+      return result;
+    } catch {}
+  }
+
+  return [];
+}
+
+export async function pgCreateTemplateCategory(ownerKey, { name, color = '#2563EB', icon = 'layout' }) {
+  const sb = getSupabase();
+  const pool = getPgPool();
+  const id = `cat_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || id;
+  const now = Date.now();
+
+  if (sb) {
+    try {
+      const { data: maxRow } = await sb
+        .from('template_categories')
+        .select('sort_order')
+        .eq('owner_key', ownerKey)
+        .order('sort_order', { ascending: false })
+        .limit(1);
+      const sortOrder = (maxRow?.[0]?.sort_order ?? -1) + 1;
+      await sb.from('template_categories').insert({
+        id,
+        owner_key: ownerKey,
+        name: name.trim(),
+        slug,
+        color,
+        icon,
+        sort_order: sortOrder,
+        created_at: now,
+      });
+      return { id, name: name.trim(), color, icon, sortOrder, templateCount: 0 };
+    } catch {}
+  }
+
+  if (pool) {
+    try {
+      const maxRes = await pool.query(
+        `SELECT COALESCE(MAX(sort_order), -1)::int AS m FROM public.template_categories WHERE owner_key = $1`,
+        [ownerKey]
+      );
+      const sortOrder = (maxRes.rows?.[0]?.m ?? -1) + 1;
+      await pool.query(
+        `INSERT INTO public.template_categories (id, owner_key, name, slug, color, icon, sort_order, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [id, ownerKey, name.trim(), slug, color, icon, sortOrder, now]
+      );
+      return { id, name: name.trim(), color, icon, sortOrder, templateCount: 0 };
+    } catch {}
+  }
+
+  return { id, name: name.trim(), color, icon, sortOrder: 0, templateCount: 0 };
+}
+
+export async function pgUpdateTemplateCategory(id, ownerKey, { name, color, icon, sortOrder }) {
+  const sb = getSupabase();
+  const pool = getPgPool();
+
+  if (sb) {
+    try {
+      const updateData = {};
+      if (name !== undefined) updateData.name = name;
+      if (color !== undefined) updateData.color = color;
+      if (icon !== undefined) updateData.icon = icon;
+      if (sortOrder !== undefined) updateData.sort_order = sortOrder;
+      const { data, error } = await sb
+        .from('template_categories')
+        .update(updateData)
+        .eq('id', id)
+        .eq('owner_key', ownerKey)
+        .select()
+        .single();
+      if (!error && data) {
+        return { id: data.id, name: data.name, color: data.color, icon: data.icon, sortOrder: data.sort_order };
+      }
+    } catch {}
+  }
+
+  if (pool) {
+    try {
+      const existRes = await pool.query(
+        `SELECT * FROM public.template_categories WHERE id = $1 AND owner_key = $2`,
+        [id, ownerKey]
+      );
+      const existing = existRes.rows?.[0];
+      if (existing) {
+        const newName = name !== undefined ? name : existing.name;
+        const newColor = color !== undefined ? color : existing.color;
+        const newIcon = icon !== undefined ? icon : existing.icon;
+        const newSort = sortOrder !== undefined ? sortOrder : existing.sort_order;
+
+        await pool.query(
+          `UPDATE public.template_categories SET name = $1, color = $2, icon = $3, sort_order = $4 WHERE id = $5 AND owner_key = $6`,
+          [newName, newColor, newIcon, newSort, id, ownerKey]
+        );
+        return { id, name: newName, color: newColor, icon: newIcon, sortOrder: newSort };
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
+export async function pgDeleteTemplateCategory(id, ownerKey) {
+  const sb = getSupabase();
+  const pool = getPgPool();
+
+  if (sb) {
+    try {
+      await sb.from('custom_templates').update({ category_id: null }).eq('category_id', id).eq('owner_key', ownerKey);
+      const { error } = await sb.from('template_categories').delete().eq('id', id).eq('owner_key', ownerKey);
+      if (!error) return true;
+    } catch {}
+  }
+
+  if (pool) {
+    try {
+      await pool.query(
+        `UPDATE public.custom_templates SET category_id = NULL WHERE category_id = $1 AND owner_key = $2`,
+        [id, ownerKey]
+      );
+      await pool.query(
+        `DELETE FROM public.template_categories WHERE id = $1 AND owner_key = $2`,
+        [id, ownerKey]
+      );
+      return true;
+    } catch {}
+  }
+
+  return false;
 }
 
 export async function getSupabaseFullSyncStatus() {

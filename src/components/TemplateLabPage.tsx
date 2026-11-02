@@ -14,6 +14,7 @@ import {
   TemplateScanResult, RebrandingSuiteReport, RebrandTestResult,
   scanTemplateReadinessClient, testRebrandClient,
 } from '../lib/pipelineClient';
+import { initialTemplates } from '../data';
 import { useSyncNiches, addAndSyncTemplate, moveAndSyncTemplate, getLocalTemplates, getNicheEmoji } from '../lib/nichesSync';
 import {
   validateBookingContract,
@@ -479,9 +480,33 @@ export const TemplateLabPage: React.FC<{
   const uniqueHistory = useMemo(() => {
     const seen = new Set<string>();
     const out: SiteHistoryEntry[] = [];
+
+    // Also include any custom templates saved to niches by this user locally
+    const localCustomTemplates: SiteHistoryEntry[] = [];
+    try {
+      const allLocal = getLocalTemplates();
+      for (const t of allLocal) {
+        if (!initialTemplates.some(it => it.id === t.id)) {
+          localCustomTemplates.push({
+            id: t.id,
+            parentSlug: `studio-${t.id}`,
+            title: t.name || 'Custom Template',
+            niche: t.niche || 'Local Business',
+            html: (t as any).rawHtml || (t as any).previewHtml || '',
+            snapshotLabel: `Saved Template (${t.niche || 'General'})`,
+            isTemplate: true,
+            templateId: t.id,
+            templateName: t.name,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          });
+        }
+      }
+    } catch {}
+
     const baseList = isSpecialModeActive()
-      ? [getSpecialBarberHistoryEntry(), ...(history || [])]
-      : (history || []);
+      ? [getSpecialBarberHistoryEntry(), ...(history || []), ...localCustomTemplates]
+      : [...(history || []), ...localCustomTemplates];
     for (const h of baseList) {
       if (!h) continue;
       const normTitle = (h.title || '').toLowerCase().trim();
@@ -832,6 +857,18 @@ export const TemplateLabPage: React.FC<{
     setSaveName(newTitle);
     setEditingTitle(false);
 
+    if (activeProjectId || turnedTemplateId) {
+      createSiteHistory({
+        id: activeProjectId || undefined,
+        parentSlug: activeProjectSlug || undefined,
+        title: newTitle,
+        niche: niche || turnedTemplateNiche || 'General',
+        html,
+        templateId: turnedTemplateId || undefined,
+        templateName: newTitle,
+      }).catch(() => {});
+    }
+
     if (turnedTemplateId) {
       addAndSyncTemplate({
         id: turnedTemplateId,
@@ -841,6 +878,13 @@ export const TemplateLabPage: React.FC<{
         previewHtml: previewHtml || compilePreview(html),
         previewPath: `/api/templates/${turnedTemplateId}/preview`,
       });
+      convertHistoryToTemplate({
+        historyId: activeProjectId || turnedTemplateId,
+        name: newTitle,
+        niche: niche || turnedTemplateNiche || 'General',
+        rawHtml: html,
+        templateId: turnedTemplateId,
+      }).catch(() => {});
       flashToast?.({
         type: 'success',
         text: `Template name updated to "${newTitle}" and synced across site.`,
@@ -1176,6 +1220,13 @@ export const TemplateLabPage: React.FC<{
             previewHtml: finalCompiled,
             previewPath: `/api/templates/${targetId}/preview`,
           });
+          convertHistoryToTemplate({
+            historyId: activeProjectId || targetId,
+            name: syncName,
+            niche: syncNiche,
+            rawHtml: result,
+            templateId: targetId,
+          }).catch(() => {});
           flashToast?.({
             type: 'success',
             text: `Template "${syncName}" updated & instantly synced across all campaigns and templates!`,

@@ -6387,6 +6387,10 @@ import {
   pgListCustomTemplates,
   pgGetCustomTemplate,
   pgDeleteCustomTemplate,
+  pgListTemplateCategories,
+  pgCreateTemplateCategory,
+  pgUpdateTemplateCategory,
+  pgDeleteTemplateCategory,
   getSupabaseFullSyncStatus,
 } from './lib/supabaseSync.js';
 
@@ -6493,20 +6497,18 @@ app.post('/api/site-history/:id/convert-to-template', authenticate, async (req, 
       usedCount: 0,
     });
 
-    if (row) {
-      await pgUpsertSiteHistory({
-        id: row.id,
-        ownerKey,
-        parentSlug: row.parentSlug,
-        title: row.title,
-        niche: targetNiche,
-        html: htmlToSave,
-        snapshotLabel: row.snapshotLabel,
-        templateId,
-        templateName,
-        isTemplate: true,
-      });
-    }
+    await pgUpsertSiteHistory({
+      id: row?.id || req.params.id,
+      ownerKey,
+      parentSlug: row?.parentSlug || slug,
+      title: templateName,
+      niche: targetNiche,
+      html: htmlToSave,
+      snapshotLabel: row?.snapshotLabel || `Saved Template (${targetNiche})`,
+      templateId,
+      templateName,
+      isTemplate: true,
+    });
 
     const updatedNiches = await getAllNiches(ownerKey);
 
@@ -6849,30 +6851,8 @@ app.get('/api/template-categories', authenticate, async (req, res) => {
   try {
     const ownerKey = getAuthOwnerKey(req);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
-    const pool = getPgPool();
-    if (!pool) return res.json({ ok: true, categories: [] });
-    const { rows: cats } = await pool.query(
-      `SELECT id, name, color, icon, sort_order FROM public.template_categories
-       WHERE owner_key = $1
-       ORDER BY sort_order ASC, created_at ASC`,
-      [ownerKey]
-    );
-    const result = [];
-    for (const c of cats || []) {
-      const cntRes = await pool.query(
-        `SELECT COUNT(*)::int AS count FROM public.custom_templates WHERE category_id = $1 AND owner_key = $2`,
-        [c.id, ownerKey]
-      );
-      result.push({
-        id: c.id,
-        name: c.name,
-        color: c.color,
-        icon: c.icon,
-        sortOrder: c.sort_order,
-        templateCount: cntRes.rows?.[0]?.count ?? 0,
-      });
-    }
-    res.json({ ok: true, categories: result });
+    const categories = await pgListTemplateCategories(ownerKey);
+    res.json({ ok: true, categories });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -6887,24 +6867,8 @@ app.post('/api/template-categories', authenticate, async (req, res) => {
     if (!name || typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({ ok: false, error: 'name is required' });
     }
-    const id = `cat_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || id;
-    const now = Date.now();
-    const pool = getPgPool();
-    let sortOrder = 0;
-    if (pool) {
-      const maxRes = await pool.query(
-        `SELECT COALESCE(MAX(sort_order), -1)::int AS m FROM public.template_categories WHERE owner_key = $1`,
-        [ownerKey]
-      );
-      sortOrder = (maxRes.rows?.[0]?.m ?? -1) + 1;
-      await pool.query(
-        `INSERT INTO public.template_categories (id, owner_key, name, slug, color, icon, sort_order, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [id, ownerKey, name.trim(), slug, color, icon, sortOrder, now]
-      );
-    }
-    res.json({ ok: true, category: { id, name: name.trim(), color, icon, sortOrder, templateCount: 0 } });
+    const category = await pgCreateTemplateCategory(ownerKey, { name, color, icon });
+    res.json({ ok: true, category });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -6916,25 +6880,9 @@ app.put('/api/template-categories/:id', authenticate, async (req, res) => {
     const ownerKey = getAuthOwnerKey(req);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const { name, color, icon, sortOrder } = req.body || {};
-    const pool = getPgPool();
-    if (!pool) return res.status(503).json({ ok: false, error: 'Database unavailable' });
-    const existRes = await pool.query(
-      `SELECT * FROM public.template_categories WHERE id = $1 AND owner_key = $2`,
-      [req.params.id, ownerKey]
-    );
-    const existing = existRes.rows?.[0];
-    if (!existing) return res.status(404).json({ ok: false, error: 'Category not found' });
-
-    const newName = name !== undefined ? name : existing.name;
-    const newColor = color !== undefined ? color : existing.color;
-    const newIcon = icon !== undefined ? icon : existing.icon;
-    const newSort = sortOrder !== undefined ? sortOrder : existing.sort_order;
-
-    await pool.query(
-      `UPDATE public.template_categories SET name = $1, color = $2, icon = $3, sort_order = $4 WHERE id = $5 AND owner_key = $6`,
-      [newName, newColor, newIcon, newSort, req.params.id, ownerKey]
-    );
-    res.json({ ok: true, category: { id: req.params.id, name: newName, color: newColor, icon: newIcon, sortOrder: newSort } });
+    const category = await pgUpdateTemplateCategory(req.params.id, ownerKey, { name, color, icon, sortOrder });
+    if (!category) return res.status(404).json({ ok: false, error: 'Category not found' });
+    res.json({ ok: true, category });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -6945,16 +6893,7 @@ app.delete('/api/template-categories/:id', authenticate, async (req, res) => {
   try {
     const ownerKey = getAuthOwnerKey(req);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
-    const pool = getPgPool();
-    if (!pool) return res.status(503).json({ ok: false, error: 'Database unavailable' });
-    await pool.query(
-      `UPDATE public.custom_templates SET category_id = NULL WHERE category_id = $1 AND owner_key = $2`,
-      [req.params.id, ownerKey]
-    );
-    await pool.query(
-      `DELETE FROM public.template_categories WHERE id = $1 AND owner_key = $2`,
-      [req.params.id, ownerKey]
-    );
+    await pgDeleteTemplateCategory(req.params.id, ownerKey);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
