@@ -34,6 +34,7 @@ interface DashboardProps {
   // on an email campaign row. App.tsx navigates to the Campaigns tab and
   // pre-fills the email wizard with the source campaign's subject/body.
   onEditOutreach?: (campaign: Campaign) => void;
+  ownerKey?: string;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -47,6 +48,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   setScrollTarget,
   onViewDetails,
   onEditOutreach,
+  ownerKey: propOwnerKey,
 }) => {
   const [viewMode, setViewMode] = useState<'summary' | 'deployed-sites'>('summary');
   const [animatingBtn, setAnimatingBtn] = useState<string | null>(null);
@@ -91,16 +93,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
   // ran. `localStorage.lunao_owner_key` is the single source of truth — set
   // the moment the user lands on the EmailCampaignWizard / OAuth flow.
   const DASHBOARD_OWNER_KEY = React.useMemo(() => {
+    if (propOwnerKey) return propOwnerKey;
     try {
       return localStorage.getItem('lunao_owner_key') || 'dashboard';
     } catch {
       return 'dashboard';
     }
-  }, []);
+  }, [propOwnerKey]);
   // Re-read ownerKey if it ever changes mid-session (plan upgrade, OAuth
   // callback, etc.) so the dashboard starts polling under the new id.
   const [ownerKey, setOwnerKey] = React.useState<string>(DASHBOARD_OWNER_KEY);
   useEffect(() => {
+    if (propOwnerKey) {
+      setOwnerKey(propOwnerKey);
+      return;
+    }
     const refresh = () => {
       try {
         setOwnerKey(localStorage.getItem('lunao_owner_key') || 'dashboard');
@@ -114,7 +121,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       window.removeEventListener('storage', refresh);
       window.removeEventListener('lunao_owner_key_changed', refresh);
     };
-  }, []);
+  }, [propOwnerKey]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [statsPulse, setStatsPulse] = useState<{ sites: number; emails: number }>({ sites: 0, emails: 0 });
   const prevStatsRef = useRef<DashboardStats | null>(null);
@@ -239,6 +246,40 @@ export const Dashboard: React.FC<DashboardProps> = ({
     );
   });
 
+  // Total SMS delivered across all campaigns (lifetime)
+  const totalDeliveredSms = React.useMemo(() => {
+    let count = 0;
+    const seen = new Set<string>();
+    for (const c of campaigns) {
+      if (!c) continue;
+      if (Array.isArray(c.smsLeads)) {
+        for (const l of c.smsLeads) {
+          if (l.status === 'delivered' || l.status === 'sent') {
+            const k = `${c.id}-${l.leadId || l.phone}`;
+            if (!seen.has(k)) {
+              seen.add(k);
+              count += 1;
+            }
+          }
+        }
+      } else if (c.type === 'sms' && Array.isArray(c.deployedSites)) {
+        for (const s of c.deployedSites) {
+          const st = s.smsStatus || 'delivered';
+          if (st === 'delivered' || st === 'sent') {
+            const k = `${c.id}-${s.slug || s.name}`;
+            if (!seen.has(k)) {
+              seen.add(k);
+              count += 1;
+            }
+          }
+        }
+      } else if (c.type === 'sms' && typeof c.smsSent === 'number' && c.smsSent > 0) {
+        count += c.smsSent;
+      }
+    }
+    return Math.max(count, totalSms, Number(stats?.smsSentTotal) || 0);
+  }, [campaigns, stats, totalSms]);
+
   // Calculate SMS sent today (only sent or delivered, no failed ones)
   const smsSentToday = React.useMemo(() => {
     const todayStr = new Date().toDateString();
@@ -282,37 +323,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
       }
     }
 
-    try {
-      const stored = localStorage.getItem('lunao_campaigns');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          for (const c of parsed) {
-            if (c.type !== 'sms' && (!c.smsLeads || c.smsLeads.length === 0)) continue;
-            if (Array.isArray(c.smsLeads)) {
-              for (const l of c.smsLeads) {
-                if (l.status !== 'delivered' && l.status !== 'sent') continue;
-                let ts = Date.now();
-                if (c.createdAt) {
-                  const p = Date.parse(c.createdAt);
-                  if (!Number.isNaN(p)) ts = p;
-                }
-                if (new Date(ts).toDateString() !== todayStr) continue;
-                const k = `${c.id}-${l.leadId || l.phone}`;
-                if (seen.has(k)) continue;
-                seen.add(k);
-                count += 1;
-              }
-            }
-          }
-        }
-      }
-    } catch {
-      // ignore
-    }
-
-    return count;
-  }, [campaigns]);
+    // Server ledger (sms_logs) is authoritative; campaigns state covers the
+    // few seconds before the next poll. Never read shared localStorage keys
+    // here — that leaks other accounts' data on a shared browser.
+    return Math.max(count, Number(stats?.smsSentToday) || 0);
+  }, [campaigns, stats]);
 
   return (
     <div
@@ -424,12 +439,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <ChevronRight className="w-4 h-4 text-ink-tertiary group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all" />
               </div>
               <div className="text-4xl sm:text-5xl font-serif text-emerald-600 tracking-tight leading-none mt-3 animate-counter-pop">
-                {smsSentToday.toLocaleString()}
+                {(smsSentToday > 0 ? smsSentToday : totalDeliveredSms).toLocaleString()}
               </div>
               <div className="flex items-center justify-between mt-4 pt-3 border-t border-border-light gap-2">
-                <span className="text-[11px] text-ink-secondary">Since midnight</span>
+                <span className="text-[11px] text-ink-secondary">
+                  {smsSentToday > 0 ? 'Since midnight' : 'All campaigns'}
+                </span>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                  {smsSentToday} Successful
+                  {totalDeliveredSms} Successful
                 </span>
               </div>
             </button>

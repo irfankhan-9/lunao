@@ -1218,7 +1218,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
       smsFailed: completedAccumulator.filter(s => s.smsStatus === 'failed').length,
       claimed: 0,
       status: 'Completed' as const,
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: new Date().toISOString(),
       templateId: selectedTemplateId,
       type: 'sms' as const,
       deployedSites: completedAccumulator.map(s => ({

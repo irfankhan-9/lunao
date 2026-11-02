@@ -523,6 +523,7 @@ function DashboardApp() {
               setScrollTarget={setScrollTarget}
               onViewDetails={handleViewCampaign}
               onEditOutreach={handleEditOutreach}
+              ownerKey={ownerKey}
             />
           </div>
            <div className={activeTab === 'campaigns' ? 'block animate-fade-in' : 'hidden'}>

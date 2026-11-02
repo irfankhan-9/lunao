@@ -3754,8 +3754,47 @@ export interface DashboardStats {
   sitesDeployedTotal: number;
   emailsSentToday: number;
   emailsSentTotal: number;
+  smsSentToday?: number;
+  smsSentTotal?: number;
   asOf: number;          // server clock at snapshot (unix seconds)
   windowStart: number;   // start-of-today (unix seconds) used as the cutoff
+}
+
+function localStartOfDayMs(): number {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+export interface SmsLogRow {
+  id: number;
+  campaign_id: string | null;
+  lead_id: string | number | null;
+  to_number: string;
+  body: string;
+  status: string;
+  created_at: number;
+  campaign_name: string | null;
+  business_name: string | null;
+  city: string | null;
+  site_url: string | null;
+}
+
+export async function fetchSmsLogsToday(ownerKey: string, scope: 'today' | 'all' = 'all'): Promise<SmsLogRow[]> {
+  try {
+    const query = scope === 'all'
+      ? `ownerKey=${encodeURIComponent(ownerKey)}&all=true`
+      : `ownerKey=${encodeURIComponent(ownerKey)}&since=${localStartOfDayMs()}`;
+    const res = await fetch(
+      `${API_BASE}/api/sms-logs/today?${query}`,
+      { headers: { 'x-owner-key': ownerKey } }
+    );
+    if (!res.ok) return [];
+    const d = await res.json();
+    return Array.isArray(d.logs) ? d.logs : [];
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchDashboardStats(ownerKey: string): Promise<DashboardStats | null> {
@@ -3764,7 +3803,7 @@ export async function fetchDashboardStats(ownerKey: string): Promise<DashboardSt
   }
   try {
     const res = await fetch(
-      `${API_BASE}/api/stats/dashboard?ownerKey=${encodeURIComponent(ownerKey)}`
+      `${API_BASE}/api/stats/dashboard?ownerKey=${encodeURIComponent(ownerKey)}&since=${localStartOfDayMs()}`
     );
     if (!res.ok) return null;
     const d = await res.json();

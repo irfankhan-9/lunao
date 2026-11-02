@@ -24,6 +24,7 @@ import {
   Link2
 } from 'lucide-react';
 import { Campaign, CampaignSmsLead } from '../types';
+import { fetchSmsLogsToday, SmsLogRow } from '../lib/pipelineClient';
 import { playConfirmSuccess, playSoftTap } from '../utils/audio';
 
 export interface SmsTodayLogEntry {
@@ -38,6 +39,7 @@ export interface SmsTodayLogEntry {
   sentAtTs: number;
   status: 'delivered' | 'sent';
   smsPhoneUsed?: string;
+  isToday?: boolean;
 }
 
 interface SmsTodayLogProps {
@@ -49,9 +51,28 @@ export const SmsTodayLog: React.FC<SmsTodayLogProps> = ({ campaigns, ownerKey })
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [loading, setLoading] = useState(false);
+  const [serverLogs, setServerLogs] = useState<SmsLogRow[]>([]);
+  const [filterMode, setFilterMode] = useState<'all' | 'today'>('all');
 
-  // Extract successful SMS sent today across all campaigns in state + localStorage
-  const smsTodayEntries = useMemo<SmsTodayLogEntry[]>(() => {
+  useEffect(() => {
+    let cancelled = false;
+    const pull = async () => {
+      const rows = await fetchSmsLogsToday(ownerKey, 'all');
+      if (!cancelled) setServerLogs(rows);
+    };
+    pull();
+    const id = setInterval(pull, 5000);
+    const onStatus = () => pull();
+    window.addEventListener('lunao_sms_status_updated', onStatus);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      window.removeEventListener('lunao_sms_status_updated', onStatus);
+    };
+  }, [ownerKey]);
+
+  // Extract successful SMS across all campaigns in state + server logs
+  const allSmsEntries = useMemo<SmsTodayLogEntry[]>(() => {
     const entries: SmsTodayLogEntry[] = [];
     const seenKeys = new Set<string>();
 
@@ -71,7 +92,6 @@ export const SmsTodayLog: React.FC<SmsTodayLogProps> = ({ campaigns, ownerKey })
           // Exclude failed or queued — only sent or delivered!
           if (l.status !== 'delivered' && l.status !== 'sent') continue;
 
-          // Check if today
           let ts = Date.now();
           if (c.createdAt) {
             const parsed = Date.parse(c.createdAt);
@@ -79,7 +99,7 @@ export const SmsTodayLog: React.FC<SmsTodayLogProps> = ({ campaigns, ownerKey })
           }
 
           const entryDateStr = new Date(ts).toDateString();
-          if (entryDateStr !== todayStr) continue;
+          const isToday = entryDateStr === todayStr;
 
           const key = `${c.id}-${l.leadId || l.phone}`;
           if (seenKeys.has(key)) continue;
@@ -97,6 +117,7 @@ export const SmsTodayLog: React.FC<SmsTodayLogProps> = ({ campaigns, ownerKey })
             sentAtTs: ts,
             status: (l.status === 'delivered' ? 'delivered' : 'sent'),
             smsPhoneUsed: routePhone,
+            isToday,
           });
         }
       } else if (c.deployedSites && Array.isArray(c.deployedSites) && c.type === 'sms') {
@@ -112,7 +133,7 @@ export const SmsTodayLog: React.FC<SmsTodayLogProps> = ({ campaigns, ownerKey })
           }
 
           const entryDateStr = new Date(ts).toDateString();
-          if (entryDateStr !== todayStr) continue;
+          const isToday = entryDateStr === todayStr;
 
           const key = `${c.id}-${s.slug || s.name}`;
           if (seenKeys.has(key)) continue;
@@ -130,61 +151,47 @@ export const SmsTodayLog: React.FC<SmsTodayLogProps> = ({ campaigns, ownerKey })
             sentAtTs: ts,
             status: smsStat === 'delivered' ? 'delivered' : 'sent',
             smsPhoneUsed: routePhone,
+            isToday,
           });
         }
       }
     }
 
-    // 2. Also read from localStorage for background runs
-    try {
-      const stored = localStorage.getItem('lunao_campaigns');
-      if (stored) {
-        const parsedCamps = JSON.parse(stored);
-        if (Array.isArray(parsedCamps)) {
-          for (const c of parsedCamps) {
-            if (c.type !== 'sms' && (!c.smsLeads || c.smsLeads.length === 0)) continue;
-            const cName = c.name || 'SMS Outreach Campaign';
-            const routePhone = c.smsPhoneUsed || 'Telnyx Line';
-
-            if (Array.isArray(c.smsLeads)) {
-              for (const l of c.smsLeads) {
-                if (l.status !== 'delivered' && l.status !== 'sent') continue;
-                let ts = Date.now();
-                if (c.createdAt) {
-                  const p = Date.parse(c.createdAt);
-                  if (!Number.isNaN(p)) ts = p;
-                }
-                if (new Date(ts).toDateString() !== todayStr) continue;
-
-                const key = `${c.id}-${l.leadId || l.phone}`;
-                if (seenKeys.has(key)) continue;
-                seenKeys.add(key);
-
-                entries.push({
-                  id: key,
-                  campaignId: c.id,
-                  campaignName: cName,
-                  businessName: l.businessName || l.name || 'Local Business',
-                  phone: l.phone || '+1 604-555-0199',
-                  city: l.city || '',
-                  siteUrl: l.siteUrl || '',
-                  smsText: l.smsText || c.smsMessage || '',
-                  sentAtTs: ts,
-                  status: l.status === 'delivered' ? 'delivered' : 'sent',
-                  smsPhoneUsed: routePhone,
-                });
-              }
-            }
-          }
-        }
-      }
-    } catch {
-      // non-fatal
+    // 2. Merge the authoritative server ledger (sms_logs) so every delivered
+    // SMS shows up even when the local campaign record is missing/out of date.
+    const digits = (p: string) => (p || '').replace(/\D/g, '');
+    const have = new Set(entries.map((e) => `${e.campaignId || ''}|${digits(e.phone)}`));
+    for (const r of serverLogs) {
+      const k = `${r.campaign_id || ''}|${digits(r.to_number)}`;
+      if (have.has(k)) continue;
+      have.add(k);
+      const ts = Number(r.created_at) || Date.now();
+      const isToday = new Date(ts).toDateString() === todayStr;
+      entries.push({
+        id: `srv-${r.id}`,
+        campaignId: r.campaign_id || undefined,
+        campaignName: r.campaign_name || 'SMS Outreach Campaign',
+        businessName: r.business_name || r.to_number,
+        phone: r.to_number,
+        city: r.city || '',
+        siteUrl: r.site_url || '',
+        smsText: r.body || '',
+        sentAtTs: ts,
+        status: r.status === 'delivered' ? 'delivered' : 'sent',
+        smsPhoneUsed: 'Telnyx Line',
+        isToday,
+      });
     }
 
     // Sort freshest first
     return entries.sort((a, b) => b.sentAtTs - a.sentAtTs);
-  }, [campaigns]);
+  }, [campaigns, serverLogs]);
+
+  const todayCount = useMemo(() => allSmsEntries.filter((e) => e.isToday).length, [allSmsEntries]);
+  const displayedEntries = useMemo(() => {
+    if (filterMode === 'today') return allSmsEntries.filter((e) => e.isToday);
+    return allSmsEntries;
+  }, [allSmsEntries, filterMode]);
 
   const handleCopy = async (text: string, key: string) => {
     if (!text) return;
@@ -215,29 +222,57 @@ export const SmsTodayLog: React.FC<SmsTodayLogProps> = ({ campaigns, ownerKey })
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-sm font-bold text-ink leading-none">SMS Sent Today</h3>
+              <h3 className="text-sm font-bold text-ink leading-none">SMS Sent & Delivered</h3>
               <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse" />
                 Live
               </span>
             </div>
             <p className="text-[11px] text-ink-secondary mt-1 truncate">
-              {smsTodayEntries.length === 0
-                ? 'No SMS sent today'
-                : `${smsTodayEntries.length} SMS sent across ${new Set(smsTodayEntries.map(e => e.campaignName)).size} campaign${new Set(smsTodayEntries.map(e => e.campaignName)).size === 1 ? '' : 's'}`}
+              {allSmsEntries.length === 0
+                ? 'No SMS sent yet'
+                : `${displayedEntries.length} SMS ${filterMode === 'today' ? 'today' : 'delivered'} across ${new Set(displayedEntries.map(e => e.campaignName)).size} campaign${new Set(displayedEntries.map(e => e.campaignName)).size === 1 ? '' : 's'}`}
             </p>
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleRefresh}
-          title="Refresh SMS log"
-          aria-label="Refresh SMS log"
-          className={`shrink-0 w-8 h-8 rounded-lg border border-border-light text-ink-secondary hover:text-emerald-600 hover:bg-emerald-50 transition-colors flex items-center justify-center cursor-pointer ${loading ? 'animate-spin' : ''}`}
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Filter Pills */}
+          <div className="inline-flex p-0.5 bg-off-white rounded-lg border border-border-light shrink-0">
+            <button
+              type="button"
+              onClick={() => { playSoftTap(); setFilterMode('all'); }}
+              className={`px-2 py-1 text-[11px] font-medium rounded-md transition-all cursor-pointer ${
+                filterMode === 'all'
+                  ? 'bg-white text-ink shadow-2xs font-semibold'
+                  : 'text-ink-secondary hover:text-ink'
+              }`}
+            >
+              All ({allSmsEntries.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => { playSoftTap(); setFilterMode('today'); }}
+              className={`px-2 py-1 text-[11px] font-medium rounded-md transition-all cursor-pointer ${
+                filterMode === 'today'
+                  ? 'bg-white text-emerald-700 shadow-2xs font-semibold'
+                  : 'text-ink-secondary hover:text-ink'
+              }`}
+            >
+              Today ({todayCount})
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleRefresh}
+            title="Refresh SMS log"
+            aria-label="Refresh SMS log"
+            className={`shrink-0 w-8 h-8 rounded-lg border border-border-light text-ink-secondary hover:text-emerald-600 hover:bg-emerald-50 transition-colors flex items-center justify-center cursor-pointer ${loading ? 'animate-spin' : ''}`}
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* Timestamp */}
@@ -251,19 +286,31 @@ export const SmsTodayLog: React.FC<SmsTodayLogProps> = ({ campaigns, ownerKey })
       </div>
 
       {/* Log list */}
-      {smsTodayEntries.length === 0 ? (
+      {displayedEntries.length === 0 ? (
         <div className="text-center py-8 border border-dashed border-border-light rounded-xl bg-off-white/30">
           <Inbox className="w-8 h-8 text-ink-tertiary mx-auto mb-2 opacity-50" />
-          <p className="text-sm font-semibold text-ink-secondary">No SMS sent yet today</p>
+          <p className="text-sm font-semibold text-ink-secondary">
+            {filterMode === 'today' && allSmsEntries.length > 0 ? 'No SMS sent today' : 'No SMS sent yet'}
+          </p>
           <p className="text-[11px] text-ink-tertiary mt-1 max-w-xs mx-auto">
-            Launch an SMS campaign and each successful send will appear here in real time with the target business and website link.
+            {filterMode === 'today' && allSmsEntries.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setFilterMode('all')}
+                className="text-emerald-600 font-semibold underline cursor-pointer"
+              >
+                View all {allSmsEntries.length} delivered SMS proposals
+              </button>
+            ) : (
+              'Launch an SMS campaign and each successful send will appear here in real time with the target business and website link.'
+            )}
           </p>
         </div>
       ) : (
         <div className="space-y-2 max-h-[360px] overflow-y-auto pr-0.5">
           <div className="rounded-xl border border-border-light overflow-hidden">
             <div className="divide-y divide-border-light">
-              {smsTodayEntries.map((entry, idx) => {
+              {displayedEntries.map((entry, idx) => {
                 const isDelivered = entry.status === 'delivered';
                 return (
                   <div
@@ -304,7 +351,9 @@ export const SmsTodayLog: React.FC<SmsTodayLogProps> = ({ campaigns, ownerKey })
                           </span>
                         )}
                         <span className="text-[10px] text-ink-tertiary font-mono">
-                          {new Date(entry.sentAtTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {entry.isToday
+                            ? new Date(entry.sentAtTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                            : new Date(entry.sentAtTs).toLocaleDateString([], { month: 'short', day: 'numeric' })}
                         </span>
                       </div>
                     </div>

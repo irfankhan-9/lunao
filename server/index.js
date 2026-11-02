@@ -2935,6 +2935,36 @@ app.get('/api/stats/dashboard', authenticate, (req, res) => {
     ).get(ownerKey);
     const emailsSentTotal = Number(emailsTotalRow?.n) || 0;
 
+    // SMS counters straight from the sms_logs ledger (owner-scoped).
+    // `since` (ms) is the client's local start-of-day so "today" matches the user's timezone.
+    const sinceMs = Number(req.query.since) > 0 ? Number(req.query.since) : startOfToday * 1000;
+    let smsSentToday = 0;
+    let smsSentTotal = 0;
+    const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+    const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    if (sbUrl && sbKey) {
+      try {
+        const [totRes, todRes] = await Promise.all([
+          fetch(`${sbUrl}/rest/v1/sms_logs?owner_key=eq.${ownerKey}&status=in.(delivered,sent)&select=id`, {
+            headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
+            signal: AbortSignal.timeout(3000),
+          }),
+          fetch(`${sbUrl}/rest/v1/sms_logs?owner_key=eq.${ownerKey}&status=in.(delivered,sent)&created_at=gte.${sinceMs}&select=id`, {
+            headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
+            signal: AbortSignal.timeout(3000),
+          }),
+        ]);
+        if (totRes.ok) {
+          const d = await totRes.json();
+          if (Array.isArray(d)) smsSentTotal = d.length;
+        }
+        if (todRes.ok) {
+          const d = await todRes.json();
+          if (Array.isArray(d)) smsSentToday = d.length;
+        }
+      } catch (_) {}
+    }
+
     res.json({
       ok: true,
       stats: {
@@ -2942,10 +2972,49 @@ app.get('/api/stats/dashboard', authenticate, (req, res) => {
         sitesDeployedTotal,
         emailsSentToday,
         emailsSentTotal,
+        smsSentToday,
+        smsSentTotal,
         asOf: now,
         windowStart: startOfToday,
       },
     });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Today's delivered/sent SMS log (owner-scoped, from sms_logs)
+app.get('/api/sms-logs/today', authenticate, async (req, res) => {
+  try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    const sinceMs = Number(req.query.since) > 0
+      ? Number(req.query.since)
+      : new Date().setHours(0, 0, 0, 0);
+    const scopeAll = req.query.all === 'true' || req.query.scope === 'all';
+
+    const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+    const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    if (sbUrl && sbKey) {
+      try {
+        let endpoint = `${sbUrl}/rest/v1/sms_logs?owner_key=eq.${ownerKey}&status=in.(delivered,sent)&order=created_at.desc&limit=500`;
+        if (!scopeAll && sinceMs > 0) {
+          endpoint += `&created_at=gte.${sinceMs}`;
+        }
+        const sbRes = await fetch(endpoint, {
+          headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
+          signal: AbortSignal.timeout(4000),
+        });
+        if (sbRes.ok) {
+          const logs = await sbRes.json();
+          if (Array.isArray(logs) && logs.length > 0) {
+            return res.json({ ok: true, logs });
+          }
+        }
+      } catch (_) {}
+    }
+
+    res.json({ ok: true, logs: [] });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -5968,6 +6037,32 @@ app.post('/api/sms/send-single', authenticate, async (req, res) => {
           );
         } catch (e) {}
       }
+
+      // Persist to Supabase REST public.sms_logs ledger
+      if (sbUrl && sbKey) {
+        fetch(`${sbUrl}/rest/v1/sms_logs`, {
+          method: 'POST',
+          headers: {
+            apikey: sbKey,
+            Authorization: `Bearer ${sbKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            id: Date.now() + Math.floor(Math.random() * 1000),
+            campaign_id: campaignId || null,
+            lead_id: leadId || null,
+            owner_key: ownerKey,
+            to_number: dest,
+            from_number: telnyx.from || '',
+            body: text,
+            status: 'delivered',
+            telnyx_id: freeId,
+            created_at: Date.now(),
+            updated_at: Date.now(),
+          }),
+        }).catch((e) => console.warn('[sms_logs] Supabase REST push notice:', e.message));
+      }
+
       return res.json({
         ok: true,
         status: 'delivered',
@@ -5989,6 +6084,30 @@ app.post('/api/sms/send-single', authenticate, async (req, res) => {
         error_code: result?.errorCode || null,
         error_message: result?.error || null,
       });
+    }
+
+    if (sbUrl && sbKey) {
+      fetch(`${sbUrl}/rest/v1/sms_logs`, {
+        method: 'POST',
+        headers: {
+          apikey: sbKey,
+          Authorization: `Bearer ${sbKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          campaign_id: campaignId || null,
+          lead_id: leadId || null,
+          owner_key: ownerKey,
+          to_number: dest,
+          from_number: telnyx.from || '',
+          body: text,
+          status: result?.status || 'queued',
+          telnyx_id: result?.id || null,
+          created_at: Date.now(),
+          updated_at: Date.now(),
+        }),
+      }).catch((e) => console.warn('[sms_logs] Supabase REST push notice:', e.message));
     }
 
     if (leadId) {
