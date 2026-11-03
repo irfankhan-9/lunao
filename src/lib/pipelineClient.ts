@@ -509,6 +509,16 @@ export function getEditorOwnerKey(): string {
   try {
     const explicit = localStorage.getItem('lunao_owner_key');
     if (explicit && explicit.trim()) return explicit.trim();
+    const authUserRaw = localStorage.getItem('lunao_auth_user');
+    if (authUserRaw) {
+      try {
+        const parsed = JSON.parse(authUserRaw);
+        if (parsed?.ownerKey) {
+          localStorage.setItem('lunao_owner_key', parsed.ownerKey);
+          return parsed.ownerKey;
+        }
+      } catch {}
+    }
     const generated = `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     localStorage.setItem('lunao_owner_key', generated);
     return generated;
