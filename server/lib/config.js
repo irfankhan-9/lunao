@@ -38,7 +38,7 @@ export const telnyx = {
     return env.TELNYX_MESSAGING_PROFILE_ID || '40019ed1-f7a4-4e7b-a4bc-ffc748846765';
   },
   get PUBLIC_API_BASE_URL() {
-    return env.PUBLIC_API_BASE_URL || env.LUNAO_API_BASE_URL || 'https://ais-dev-6d5czs7vzolfky6pa4cqvz-570409437174.asia-southeast1.run.app';
+    return env.PUBLIC_API_BASE_URL || env.LUNAO_API_BASE_URL || 'https://lunao-web-designn.pages.dev';
   },
   get enabled() {
     if (env.SMS_ENABLED !== undefined) {

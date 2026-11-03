@@ -2710,6 +2710,9 @@
       if (window.LUNAO_BOOKING_API_URL && typeof window.LUNAO_BOOKING_API_URL === 'string') {
         return window.LUNAO_BOOKING_API_URL.replace(/\/+$/, '');
       }
+      if (window.location && /^https?:$/i.test(window.location.protocol)) {
+        return '/api/bookings';
+      }
       const supabaseBase = window.LUNAO_SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
       return `${supabaseBase.replace(/\/+$/, '')}/functions/v1/public-bookings`;
     }

@@ -44,7 +44,7 @@ export default {
     const path = url.pathname;
 
     // ─── 1. PROXY API & BACKEND SERVICES TO EC2 ─────────────────────────
-    if (path.startsWith('/api/') || path.startsWith('/owner') || path.startsWith('/sites/')) {
+    if (path.startsWith('/api/') || path.startsWith('/owner') || path.startsWith('/sites/') || path.startsWith('/functions/')) {
       const origin = env.BACKEND_URL || BACKEND_ORIGIN;
       const backendUrl = new URL(path + url.search, origin);
       const reqHeaders = new Headers(request.headers);

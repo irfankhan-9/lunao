@@ -16,6 +16,11 @@
   if (window.__LUNAO_BOOKING_BRIDGE_INITIALIZED__) return;
   window.__LUNAO_BOOKING_BRIDGE_INITIALIZED__ = true;
 
+  // Set global default booking endpoint so inline template scripts also use /api/bookings
+  if (!window.LUNAO_BOOKING_API_URL) {
+    window.LUNAO_BOOKING_API_URL = '/api/bookings';
+  }
+
   var isIframe = false;
   try {
     isIframe = window.parent && window.parent !== window;
@@ -211,6 +216,9 @@
 
     e.preventDefault();
     e.stopPropagation();
+    if (e.stopImmediatePropagation) {
+      try { e.stopImmediatePropagation(); } catch (err) {}
+    }
 
     var submitBtn = form.querySelector('button[type="submit"], input[type="submit"], button:not([type="button"])');
     var originalBtnHtml = submitBtn ? submitBtn.innerHTML : '';
@@ -290,8 +298,20 @@
 
     // Strict persistence with automatic multi-endpoint failover
     var idempotencyKey = 'bk_' + Date.now() + '_' + Math.random().toString(36).substr(2, 8);
-    var supabaseEndpoint = 'https://wqlbuadknltsjfzrltpe.supabase.co/functions/v1/public-bookings';
-    var appletEndpoint = 'https://ais-dev-g3eqvrjyk7ivct6g6iyvyz-570409437174.asia-southeast1.run.app/api/bookings';
+    
+    // Prioritize relative /api/bookings which is proxied to EC2 with zero CORS overhead
+    var candidateEndpoints = [
+      '/api/bookings',
+      '/api/public/bookings',
+      '/functions/v1/public-bookings',
+      'https://lunao-web-designn.pages.dev/api/bookings'
+    ];
+    if (window.LUNAO_BOOKING_API_URL && typeof window.LUNAO_BOOKING_API_URL === 'string') {
+      var customUrl = window.LUNAO_BOOKING_API_URL.replace(/\/+$/, '');
+      if (candidateEndpoints.indexOf(customUrl) === -1) {
+        candidateEndpoints.unshift(customUrl);
+      }
+    }
 
     function sendBookingRequest(url) {
       return fetch(url, {
@@ -303,7 +323,7 @@
         body: JSON.stringify(payload)
       }).then(function(res) {
         var contentType = (res.headers && res.headers.get && res.headers.get('content-type')) || '';
-        if (res.ok || res.status === 200 || res.status === 403) {
+        if (res.ok || res.status === 200 || res.status === 201 || res.status === 403) {
           if (contentType.indexOf('application/json') !== -1) {
             return res.json().then(function(data) {
               if (data && data.code === 'PWA_ACTIVATION_REQUIRED') {
@@ -329,16 +349,18 @@
       });
     }
 
-    // Try primary endpoint first, then failover to alternate endpoint
-    var isPagesDev = /\.pages\.dev$/i.test(window.location.hostname || '');
-    var primaryUrl = isPagesDev ? supabaseEndpoint : '/api/bookings';
-    var fallbackUrl = isPagesDev ? appletEndpoint : '/api/bookings';
+    function tryNextEndpoint(endpoints, index) {
+      if (index >= endpoints.length) {
+        return Promise.reject(new Error('Unable to confirm booking. Please call us directly.'));
+      }
+      var targetUrl = endpoints[index];
+      return sendBookingRequest(targetUrl).catch(function(err) {
+        console.warn('[LunaoBookingBridge] Booking attempt failed for ' + targetUrl + ':', err.message);
+        return tryNextEndpoint(endpoints, index + 1);
+      });
+    }
 
-    sendBookingRequest(primaryUrl)
-      .catch(function(primaryErr) {
-        console.warn('[LunaoBookingBridge] Primary endpoint (' + primaryUrl + ') failed:', primaryErr.message, '— attempting fallback to:', fallbackUrl);
-        return sendBookingRequest(fallbackUrl);
-      })
+    tryNextEndpoint(candidateEndpoints, 0)
       .then(function(resData) {
         showSuccessUI();
 
