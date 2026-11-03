@@ -91,7 +91,7 @@ export const TopHeader: React.FC = () => {
     if (type.includes('booking')) {
       setActiveSection('bookings');
     } else {
-      setActiveSection('automations');
+      setActiveSection('customers');
     }
   };
 
@@ -265,7 +265,7 @@ export const TopHeader: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-600 animate-ping" />
                   <span className="text-[11px] font-semibold text-emerald-950">
-                    AI Front Desk & Automations
+                    AI Front Desk & Bookings
                   </span>
                 </div>
                 <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">
@@ -325,11 +325,11 @@ export const TopHeader: React.FC = () => {
                 <button
                   onClick={() => {
                     setShowNotifications(false);
-                    setActiveSection('automations');
+                    setActiveSection('customers');
                   }}
                   className="py-1.5 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-medium text-slate-700 transition cursor-pointer"
                 >
-                  View Automations
+                  View Clients
                 </button>
               </div>
             </div>

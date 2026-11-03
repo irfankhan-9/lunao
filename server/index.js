@@ -66,7 +66,7 @@ import { streamEdit, isAiEnabled, cleanHtmlOutput, generateTemplateHtml } from '
 import { orchestrateAiEditStream } from './lib/ai/orchestrator.js';
 import { listStudioModels } from './lib/ai/pricingRegistry.js';
 import { getUserAiStatus, listAiUsageLedger, syncUserAiPlan } from './lib/ai/accountingService.js';
-import { createBooking, createBookingAsync, listBookings, listBookingsAsync, updateBookingStatus, getBooking } from './lib/bookings.js';
+import { createBooking, createBookingAsync, listBookings, listBookingsAsync, updateBookingStatus, updateBookingStatusAsync, getBooking, getBookingAsync } from './lib/bookings.js';
 import { validateBookingContract, rollbackToApprovedBooking, CONTRACT_REJECTION_MESSAGE } from './lib/bookingContractValidator.js';
 import {
   verifyOwnerSlugAccess,
@@ -1867,14 +1867,14 @@ app.get('/api/bookings', authenticate, async (req, res) => {
   }
 });
 
-// Update a booking's status (confirm / cancel) with strict tenant authorization.
+// Update a booking's status (confirm / complete / cancel) with strict tenant authorization.
 app.patch(['/api/bookings/:id', '/api/public/bookings/:id'], authenticate, async (req, res) => {
   try {
     const ownerKey = getAuthOwnerKey(req);
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ ok: false, error: 'Invalid id' });
 
-    const booking = getBooking(id);
+    const booking = await getBookingAsync(id);
     if (!booking) {
       return res.status(404).json({ ok: false, error: 'Booking not found.' });
     }
@@ -1885,7 +1885,7 @@ app.patch(['/api/bookings/:id', '/api/public/bookings/:id'], authenticate, async
       return res.status(403).json({ ok: false, error: 'Access denied to this booking.' });
     }
 
-    const updated = updateBookingStatus(id, req.body?.status, req.body?.notes);
+    const updated = await updateBookingStatusAsync(id, req.body?.status, req.body?.notes);
     res.json({ ok: true, booking: updated });
   } catch (err) {
     res.status(err.status || 500).json({ ok: false, error: err.message });

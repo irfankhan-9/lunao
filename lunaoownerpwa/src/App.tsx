@@ -13,7 +13,6 @@ import { DashboardPage } from './pages/DashboardPage';
 import { BookingsPage } from './pages/BookingsPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { WebsitePage } from './pages/WebsitePage';
-import { AutomationsPage } from './pages/AutomationsPage';
 import { SettingsPage } from './pages/SettingsPage';
 
 const ActiveSectionRenderer: React.FC = () => {
@@ -38,8 +37,6 @@ const ActiveSectionRenderer: React.FC = () => {
         return <CustomersPage />;
       case 'website':
         return <WebsitePage />;
-      case 'automations':
-        return <AutomationsPage />;
       case 'settings':
         return <SettingsPage />;
       default:

@@ -222,19 +222,19 @@ export const DashboardPage: React.FC = () => {
           <button
             onClick={() => {
               soundEffects.playButtonClick();
-              setActiveSection('automations');
+              setActiveSection('website');
             }}
             className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50 text-left transition group active:scale-[0.98]"
           >
             <div className="p-2 rounded-lg bg-emerald-100 text-emerald-800 shrink-0">
-              <Workflow className="w-4 h-4" />
+              <Globe className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <p className="text-xs font-semibold text-slate-900 group-hover:text-emerald-800 truncate">
-                Automations
+                Business Website
               </p>
               <p className="text-[10px] text-slate-500 truncate">
-                Reminders & triggers
+                Preview & details
               </p>
             </div>
           </button>
@@ -361,22 +361,22 @@ export const DashboardPage: React.FC = () => {
             )}
           </div>
 
-          {/* Business Automations Status Card */}
+          {/* Live Website Status Card */}
           <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200">
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-emerald-700" />
               <span className="text-xs font-semibold text-emerald-900">
-                Automations Active
+                Front Desk Online
               </span>
             </div>
             <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-              Dispatching instant client booking receipts, 24-hour reminders, and review follow-ups automatically.
+              Your website is live and capturing customer appointments in real time.
             </p>
             <button
-              onClick={() => setActiveSection('automations')}
+              onClick={() => setActiveSection('website')}
               className="mt-3 text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:underline"
             >
-              Configure Automation Triggers &rarr;
+              View Live Website &rarr;
             </button>
           </div>
         </div>

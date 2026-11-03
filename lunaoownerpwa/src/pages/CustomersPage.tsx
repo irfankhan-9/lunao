@@ -36,32 +36,79 @@ export const CustomersPage: React.FC = () => {
   const [newClientNotes, setNewClientNotes] = useState('');
   const [isCreatingClient, setIsCreatingClient] = useState(false);
 
+  // Derives and merges all tenant customer profiles from bookings and server records
+  const mergeCustomers = (custList: Customer[], bookList: Booking[]): Customer[] => {
+    const map = new Map<string, Customer>();
+    for (const c of custList || []) {
+      const k = (c.email || c.phone || c.name || '').trim().toLowerCase();
+      if (k) map.set(k, { ...c, recentBookings: [...(c.recentBookings || [])] });
+    }
+    for (const b of bookList || []) {
+      const k = (b.customerEmail || b.customerPhone || b.customerName || '').trim().toLowerCase();
+      if (!k) continue;
+      if (map.has(k)) {
+        const existing = map.get(k)!;
+        if (!existing.recentBookings.some((rb) => String(rb.id) === String(b.id))) {
+          existing.recentBookings.unshift(b);
+          existing.bookingCount = Math.max(existing.bookingCount, existing.recentBookings.length);
+        }
+        if (!existing.lastBookingDate && b.date) existing.lastBookingDate = b.date;
+        if (!existing.lastService && b.service) existing.lastService = b.service;
+      } else {
+        map.set(k, {
+          id: String(b.id),
+          name: b.customerName || 'Valued Client',
+          phone: b.customerPhone || '',
+          email: b.customerEmail || null,
+          bookingCount: 1,
+          lastBookingDate: b.date || '',
+          lastService: b.service || null,
+          notes: b.notes || null,
+          createdAt: b.createdAt || new Date().toISOString(),
+          recentBookings: [b],
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.lastBookingDate && b.lastBookingDate) {
+        return b.lastBookingDate.localeCompare(a.lastBookingDate);
+      }
+      return (b.bookingCount || 0) - (a.bookingCount || 0);
+    });
+  };
+
   useEffect(() => {
     let isMounted = true;
     async function load() {
-      const [custList, bookList] = await Promise.all([
-        customerService.getCustomers(),
-        bookingService.getBookings(),
-      ]);
-      if (isMounted) {
-        setCustomers(custList);
-        setAllBookings(bookList);
-        setIsLoading(false);
+      try {
+        const [custList, bookList] = await Promise.all([
+          customerService.getCustomers(),
+          bookingService.getBookings(),
+        ]);
+        if (isMounted) {
+          setCustomers(mergeCustomers(custList, bookList));
+          setAllBookings(bookList);
+          setIsLoading(false);
+        }
+      } catch {
+        if (isMounted) setIsLoading(false);
       }
     }
     load();
 
     const interval = setInterval(async () => {
       if (!isMounted) return;
-      const [custList, bookList] = await Promise.all([
-        customerService.getCustomers(),
-        bookingService.getBookings(),
-      ]);
-      if (isMounted) {
-        setCustomers(custList);
-        setAllBookings(bookList);
-      }
-    }, 5000);
+      try {
+        const [custList, bookList] = await Promise.all([
+          customerService.getCustomers(),
+          bookingService.getBookings(),
+        ]);
+        if (isMounted) {
+          setCustomers(mergeCustomers(custList, bookList));
+          setAllBookings(bookList);
+        }
+      } catch {}
+    }, 3000);
 
     return () => {
       isMounted = false;

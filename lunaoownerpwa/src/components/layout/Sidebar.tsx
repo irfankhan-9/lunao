@@ -4,7 +4,6 @@ import {
   CalendarDays,
   Users,
   Globe,
-  Workflow,
   Settings,
   ExternalLink,
   LogOut,
@@ -44,12 +43,6 @@ export const Sidebar: React.FC = () => {
       id: 'website',
       label: 'Business Website',
       icon: <Globe className="w-4 h-4" />,
-    },
-    {
-      id: 'automations',
-      label: 'Automations',
-      icon: <Workflow className="w-4 h-4" />,
-      featureFlag: 'automations',
     },
     {
       id: 'settings',

@@ -17,7 +17,9 @@ import {
   createBooking,
   createBookingAsync,
   updateBookingStatus,
+  updateBookingStatusAsync,
   getBooking,
+  getBookingAsync,
 } from './bookings.js';
 import {
   supabaseListConversations,
@@ -120,39 +122,35 @@ function isoDate(ms) {
 // ---------------------------------------------------------------------------
 // Dashboard aggregation
 // ---------------------------------------------------------------------------
-function getDashboardAggregates(slug) {
+async function getDashboardAggregates(slug) {
   const now = Date.now();
   const today = new Date().toISOString().slice(0, 10);
 
-  const todayRow = db
-    .prepare(
-      `SELECT COUNT(*) AS c FROM bookings
-        WHERE slug = ? AND date = ? AND status != 'cancelled'`,
-    )
-    .get(slug, today);
-  const todayBookings = Number(todayRow?.c || 0);
+  let bookings = [];
+  try {
+    bookings = await listBookingsAsync(slug);
+  } catch {
+    bookings = listBookings(slug);
+  }
 
-  const upcomingRow = db
-    .prepare(
-      `SELECT COUNT(*) AS c FROM bookings
-        WHERE slug = ? AND date > ? AND status != 'cancelled'`,
-    )
-    .get(slug, today);
-  const upcomingBookings = Number(upcomingRow?.c || 0);
+  const activeBookings = (bookings || []).filter((b) => b.status !== 'cancelled');
+  const todayBookings = activeBookings.filter((b) => b.date === today).length;
+  const upcomingBookings = activeBookings.filter((b) => b.date && b.date > today).length;
 
-  // Customers = distinct lowercased email or phone
-  const customerRow = db
-    .prepare(
-      `SELECT COUNT(DISTINCT lower(COALESCE(NULLIF(email, ''), phone))) AS c
-         FROM bookings WHERE slug = ? AND (email != '' OR phone != '')`,
-    )
-    .get(slug);
-  const totalCustomers = Number(customerRow?.c || 0);
+  const uniqueCustomerKeys = new Set();
+  for (const b of bookings || []) {
+    const k = (b.email || b.phone || b.customerName || b.customer_name || '').trim().toLowerCase();
+    if (k) uniqueCustomerKeys.add(k);
+  }
+  const totalCustomers = uniqueCustomerKeys.size;
 
-  const chatRow = db
-    .prepare('SELECT COUNT(*) AS c FROM chat_sessions WHERE slug = ?')
-    .get(slug);
-  const totalChats = Number(chatRow?.c || 0);
+  let totalChats = 0;
+  try {
+    const chatRow = db
+      .prepare('SELECT COUNT(*) AS c FROM chat_sessions WHERE slug = ?')
+      .get(slug);
+    totalChats = Number(chatRow?.c || 0);
+  } catch {}
 
   return {
     todayBookings,
@@ -164,31 +162,32 @@ function getDashboardAggregates(slug) {
 }
 
 // ---------------------------------------------------------------------------
-// Customer derivation — group bookings by lower(email|phone)
+// Customer derivation — group bookings by lower(email|phone|name)
 // ---------------------------------------------------------------------------
-function deriveCustomers(slug) {
-  const bookings = db
-    .prepare(
-      `SELECT id, customer_name, phone, email, service, date, time,
-              status, created_at, notes, source
-         FROM bookings
-        WHERE slug = ?
-        ORDER BY date DESC, time DESC, created_at DESC`,
-    )
-    .all(slug);
+async function deriveCustomers(slug) {
+  let bookings = [];
+  try {
+    bookings = await listBookingsAsync(slug);
+  } catch {
+    bookings = listBookings(slug);
+  }
 
   const groups = new Map();
-  for (const b of bookings) {
-    const key = (b.email || b.phone || '').trim().toLowerCase() || `id:${b.id}`;
+  for (const b of bookings || []) {
+    const name = (b.customerName || b.customer_name || '').trim();
+    const phone = (b.phone || b.customerPhone || '').trim();
+    const email = (b.email || b.customerEmail || '').trim();
+    const key = (email || phone || name).toLowerCase() || `id:${b.id}`;
     if (!groups.has(key)) {
       groups.set(key, {
+        id: String(b.id || key),
         key,
-        name: b.customer_name || '',
-        phone: b.phone || '',
-        email: b.email || '',
+        name: name || 'Valued Client',
+        phone,
+        email,
         bookingCount: 0,
-        lastBookingDate: b.date || isoDate(b.created_at),
-        lastService: b.service || '',
+        lastBookingDate: b.date || isoDate(b.createdAt || b.created_at),
+        lastService: b.service || 'Service',
         notes: b.notes || '',
         status: b.status || 'confirmed',
         bookings: [],
@@ -196,7 +195,7 @@ function deriveCustomers(slug) {
     }
     const g = groups.get(key);
     g.bookingCount += 1;
-    if (!g.lastBookingDate) g.lastBookingDate = b.date || isoDate(b.created_at);
+    if (!g.lastBookingDate && b.date) g.lastBookingDate = b.date;
     g.bookings.push({
       id: b.id,
       service: b.service,
@@ -205,25 +204,39 @@ function deriveCustomers(slug) {
       status: b.status,
       source: b.source,
       notes: b.notes,
-      createdAt: b.created_at,
+      createdAt: b.createdAt || b.created_at,
     });
   }
 
-  // Enrich with pwa_customers.notes when an email match exists.
-  const enrichments = db
-    .prepare('SELECT name, email, phone, notes FROM pwa_customers WHERE slug = ?')
-    .all(slug);
-  const byEmail = new Map(
-    enrichments
-      .filter((e) => e.email)
-      .map((e) => [String(e.email).toLowerCase(), e]),
-  );
-  for (const [, g] of groups) {
-    const enriched = g.email ? byEmail.get(g.email.toLowerCase()) : null;
-    if (enriched) {
-      if (enriched.notes) g.notes = enriched.notes;
-      if (enriched.name && !g.name) g.name = enriched.name;
+  // Enrich with pwa_customers.notes when an entry exists.
+  try {
+    const enrichments = db
+      .prepare('SELECT id, name, email, phone, notes FROM pwa_customers WHERE slug = ?')
+      .all(slug);
+    for (const e of enrichments || []) {
+      const key = (e.email || e.phone || e.name || '').trim().toLowerCase();
+      if (key && groups.has(key)) {
+        const g = groups.get(key);
+        if (e.notes) g.notes = e.notes;
+        if (e.name && (!g.name || g.name === 'Valued Client')) g.name = e.name;
+      } else if (key) {
+        groups.set(key, {
+          id: String(e.id || key),
+          key,
+          name: e.name || 'Valued Client',
+          phone: e.phone || '',
+          email: e.email || '',
+          bookingCount: 0,
+          lastBookingDate: '',
+          lastService: '',
+          notes: e.notes || '',
+          status: 'confirmed',
+          bookings: [],
+        });
+      }
     }
+  } catch (err) {
+    console.warn('[pwaApi] Customer enrichment warning:', err.message);
   }
 
   return Array.from(groups.values()).sort((a, b) => {
@@ -321,7 +334,7 @@ export function mountPwaApi(app) {
         /* non-fatal */
       }
 
-      const dashboard = getDashboardAggregates(slug);
+      const dashboard = await getDashboardAggregates(slug);
 
       res.json({
         ok: true,
@@ -591,10 +604,10 @@ export function mountPwaApi(app) {
   });
 
   // ---- Dashboard aggregate -----
-  app.get('/api/pwa/me/dashboard', pwaAuth, (req, res) => {
+  app.get('/api/pwa/me/dashboard', pwaAuth, async (req, res) => {
     try {
       const slug = req.tenantSlug;
-      res.json({ ok: true, dashboard: getDashboardAggregates(slug) });
+      res.json({ ok: true, dashboard: await getDashboardAggregates(slug) });
     } catch (err) {
       res.status(500).json({ ok: false, error: err.message });
     }
@@ -641,10 +654,10 @@ export function mountPwaApi(app) {
     '/api/pwa/:slug/bookings/:id',
     pwaAuth,
     assertSameSlug,
-    (req, res) => {
+    async (req, res) => {
       try {
         const id = parseInt(req.params.id, 10);
-        const existing = getBooking(id);
+        const existing = await getBookingAsync(id);
         if (!existing) {
           return res
             .status(404)
@@ -657,13 +670,10 @@ export function mountPwaApi(app) {
         }
         const { status, notes } = req.body || {};
         let updated = existing;
-        if (status) updated = updateBookingStatus(id, status);
-        if (notes !== undefined) {
-          db.prepare('UPDATE bookings SET notes = ? WHERE id = ?').run(
-            String(notes || ''),
-            id,
-          );
-          updated = getBooking(id);
+        if (status) {
+          updated = await updateBookingStatusAsync(id, status, notes);
+        } else if (notes !== undefined) {
+          updated = await updateBookingStatusAsync(id, existing.status, notes);
         }
         res.json({ ok: true, booking: updated });
       } catch (err) {
@@ -719,9 +729,9 @@ export function mountPwaApi(app) {
   });
 
   // ---- Customers -----
-  app.get('/api/pwa/:slug/customers', pwaAuth, assertSameSlug, (req, res) => {
+  app.get('/api/pwa/:slug/customers', pwaAuth, assertSameSlug, async (req, res) => {
     try {
-      const customers = deriveCustomers(req.params.slug);
+      const customers = await deriveCustomers(req.params.slug);
       const { search, emailOnly } = req.query;
       let filtered = customers;
       if (search) {

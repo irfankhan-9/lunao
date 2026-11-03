@@ -6,11 +6,11 @@ import {
   Mail,
   Search,
   AlertCircle,
+  CheckCircle,
 } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 import { Booking, BookingStatus } from '../types';
 import { bookingService } from '../services/bookingService';
-import { emailService } from '../services/emailService';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -24,7 +24,7 @@ export const BookingsPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | BookingStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
-  const [cancelConfirmMode, setCancelConfirmMode] = useState<'silent' | 'with_email' | null>(null);
+  const [cancelConfirmMode, setCancelConfirmMode] = useState<'confirm' | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -100,30 +100,6 @@ export const BookingsPage: React.FC = () => {
       showToast(`Appointment marked as ${newStatus}`);
     } catch {
       showToast('Error updating status');
-    }
-  };
-
-  const handleCancelAndSendEmail = async (b: Booking) => {
-    try {
-      soundEffects.playButtonClick();
-      const updated = await bookingService.updateBookingStatus(b.id, 'cancelled');
-      setBookings((prev) => prev.map((item) => (item.id === b.id ? updated : item)));
-      if (selectedBooking && selectedBooking.id === b.id) {
-        setSelectedBooking(updated);
-      }
-      if (b.customerEmail) {
-        await emailService.sendEmail({
-          recipientNames: [b.customerName],
-          recipientEmails: [b.customerEmail],
-          subject: `Appointment Cancelled: ${b.service || 'Appointment'} on ${b.date}`,
-          body: `Hi ${b.customerName},\n\nYour appointment for ${b.service || 'Appointment'} scheduled on ${b.date} at ${b.time} with ${business.name} has been cancelled as requested.\n\nIf you wish to reschedule, please visit ${business.websiteUrl} or call ${business.phone}.\n\nWarm regards,\n${business.name}`,
-          templateName: 'Appointment Cancellation Notice',
-        });
-      }
-      soundEffects.playSuccess();
-      showToast(`Booking cancelled & cancellation email sent to ${b.customerName}!`);
-    } catch {
-      showToast('Error processing cancellation and email');
     }
   };
 
@@ -539,27 +515,17 @@ export const BookingsPage: React.FC = () => {
             )}
 
             {/* Direct Communication Actions */}
-            <div className="flex items-center gap-2 pt-2">
-              {selectedBooking.customerPhone && selectedBooking.customerPhone.trim() !== '' && (
+            {selectedBooking.customerPhone && selectedBooking.customerPhone.trim() !== '' && (
+              <div className="pt-2">
                 <a
                   href={`tel:${selectedBooking.customerPhone.replace(/[^0-9]/g, '')}`}
-                  className="flex-1 h-10 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 flex items-center justify-center gap-2 font-medium transition shadow-2xs"
+                  className="w-full h-10 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 flex items-center justify-center gap-2 font-medium transition shadow-2xs"
                 >
                   <Phone className="w-4 h-4 text-emerald-700" />
-                  <span>Call Client</span>
+                  <span>Call Client ({selectedBooking.customerPhone})</span>
                 </a>
-              )}
-
-              {selectedBooking.customerEmail && (
-                <a
-                  href={`mailto:${selectedBooking.customerEmail}`}
-                  className="flex-1 h-10 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 flex items-center justify-center gap-2 font-medium transition shadow-2xs"
-                >
-                  <Mail className="w-4 h-4 text-emerald-700" />
-                  <span>Send Email</span>
-                </a>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Booking State Actions */}
             <div className="flex flex-col gap-2 pt-1 border-t border-slate-200">
@@ -575,6 +541,7 @@ export const BookingsPage: React.FC = () => {
                   Confirm Appointment
                 </Button>
               )}
+
               {selectedBooking.status === 'confirmed' && (
                 <Button
                   variant="primary"
@@ -588,61 +555,25 @@ export const BookingsPage: React.FC = () => {
                 </Button>
               )}
 
-              {selectedBooking.status !== 'cancelled' && (
-                <>
-                  {/* Warning Confirmation for Silent Cancellation (No Email) */}
-                  {cancelConfirmMode === 'silent' && (
-                    <div className="p-3.5 rounded-xl bg-amber-50/90 border border-amber-200 space-y-2.5">
-                      <div className="flex items-start gap-2.5">
-                        <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                        <div className="space-y-1">
-                          <p className="text-xs font-bold text-amber-950">
-                            Customer will not be notified
-                          </p>
-                          <p className="text-[11px] text-amber-900 leading-relaxed">
-                            {selectedBooking.customerName} will <strong>not</strong> receive an automated email or notification alerting them that their appointment was cancelled. Are you sure you want to cancel this booking?
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 pt-0.5">
-                        <Button
-                          variant="outline"
-                          className="flex-1 text-xs bg-white"
-                          onClick={() => {
-                            soundEffects.playButtonClick();
-                            setCancelConfirmMode(null);
-                          }}
-                        >
-                          Keep Booking
-                        </Button>
-                        <Button
-                          variant="primary"
-                          className="flex-1 text-xs bg-amber-700 hover:bg-amber-800 text-white"
-                          onClick={() => {
-                            soundEffects.playButtonClick();
-                            setCancelConfirmMode(null);
-                            handleStatusChange(selectedBooking.id, 'cancelled');
-                            setSelectedBooking(null);
-                          }}
-                        >
-                          Yes, Cancel Without Email
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+              {selectedBooking.status === 'completed' && (
+                <div className="w-full py-2.5 px-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-center font-semibold text-xs flex items-center justify-center gap-1.5">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                  <span>Appointment Completed</span>
+                </div>
+              )}
 
-                  {/* Confirmation for Cancel & Send Email */}
-                  {cancelConfirmMode === 'with_email' && (
+              {selectedBooking.status !== 'cancelled' && selectedBooking.status !== 'completed' && (
+                <>
+                  {cancelConfirmMode === 'confirm' ? (
                     <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 space-y-2.5">
                       <div className="flex items-start gap-2.5">
-                        <Mail className="w-4 h-4 text-rose-700 shrink-0 mt-0.5" />
+                        <AlertCircle className="w-4 h-4 text-rose-700 shrink-0 mt-0.5" />
                         <div className="space-y-1">
                           <p className="text-xs font-bold text-rose-950">
-                            Cancel & Send Email Notification
+                            Cancel Appointment
                           </p>
                           <p className="text-[11px] text-rose-900 leading-relaxed">
-                            A cancellation notification email will be sent immediately to {selectedBooking.customerName}
-                            {selectedBooking.customerEmail ? ` (${selectedBooking.customerEmail})` : ''}. Are you sure you want to cancel and notify?
+                            Are you sure you want to cancel the booking for {selectedBooking.customerName}?
                           </p>
                         </div>
                       </div>
@@ -660,42 +591,28 @@ export const BookingsPage: React.FC = () => {
                         <Button
                           variant="primary"
                           className="flex-1 text-xs bg-rose-600 hover:bg-rose-700 text-white"
-                          onClick={async () => {
+                          onClick={() => {
+                            soundEffects.playButtonClick();
                             setCancelConfirmMode(null);
-                            await handleCancelAndSendEmail(selectedBooking);
+                            handleStatusChange(selectedBooking.id, 'cancelled');
                             setSelectedBooking(null);
                           }}
                         >
-                          Yes, Cancel & Email
+                          Yes, Cancel Booking
                         </Button>
                       </div>
                     </div>
-                  )}
-
-                  {/* Default State: Both Cancel Actions Available */}
-                  {cancelConfirmMode === null && (
-                    <div className="flex items-center gap-2 w-full">
-                      <Button
-                        variant="outline"
-                        className="flex-1 text-xs"
-                        onClick={() => {
-                          soundEffects.playButtonClick();
-                          setCancelConfirmMode('silent');
-                        }}
-                      >
-                        Cancel Booking
-                      </Button>
-                      <Button
-                        variant="primary"
-                        className="flex-1 text-xs bg-rose-600 hover:bg-rose-700 text-white"
-                        onClick={() => {
-                          soundEffects.playButtonClick();
-                          setCancelConfirmMode('with_email');
-                        }}
-                      >
-                        Cancel & Send Email
-                      </Button>
-                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      className="w-full text-xs text-rose-700 border-rose-300 hover:bg-rose-50"
+                      onClick={() => {
+                        soundEffects.playButtonClick();
+                        setCancelConfirmMode('confirm');
+                      }}
+                    >
+                      Cancel Booking
+                    </Button>
                   )}
                 </>
               )}

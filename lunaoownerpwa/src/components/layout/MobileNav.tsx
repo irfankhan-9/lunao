@@ -3,7 +3,7 @@ import {
   LayoutDashboard,
   CalendarDays,
   Users,
-  Workflow,
+  Globe,
   Menu,
 } from 'lucide-react';
 import { useBusiness } from '../../context/BusinessContext';
@@ -32,14 +32,13 @@ export const MobileNav: React.FC = () => {
       icon: <Users className="w-5 h-5" />,
     },
     {
-      id: 'automations',
-      label: 'Automations',
-      icon: <Workflow className="w-5 h-5" />,
+      id: 'website',
+      label: 'Website',
+      icon: <Globe className="w-5 h-5" />,
     },
   ];
 
   const isMoreActive = [
-    'website',
     'settings',
   ].includes(activeSection);
 

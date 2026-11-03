@@ -12,7 +12,7 @@ import { supabase as supabaseCfg } from './config.js';
 import { validateBookingPayloadContract } from './bookingContractValidator.js';
 import { getBookingConfig, validateBookingAgainstConfig } from './bookingConfig.js';
 
-const VALID_STATUS = new Set(['new', 'confirmed', 'cancelled']);
+const VALID_STATUS = new Set(['new', 'confirmed', 'completed', 'cancelled']);
 const VALID_SOURCE = new Set(['form', 'chatbot']);
 
 const insertStmt = db.prepare(`
@@ -244,6 +244,35 @@ export function getBooking(id) {
   return localBookingsMemory.find((b) => String(b.id) === String(id)) || null;
 }
 
+export async function getBookingAsync(id) {
+  const local = getBooking(id);
+  if (local) return local;
+
+  const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+  const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (sbUrl && sbKey) {
+    try {
+      const res = await fetch(`${sbUrl}/rest/v1/bookings?id=eq.${encodeURIComponent(String(id))}`, {
+        headers: {
+          apikey: sbKey,
+          Authorization: `Bearer ${sbKey}`,
+          Accept: 'application/json',
+        },
+        signal: AbortSignal.timeout(4000),
+      });
+      if (res.ok) {
+        const rows = await res.json();
+        if (Array.isArray(rows) && rows[0]) {
+          return rowToBooking(rows[0]);
+        }
+      }
+    } catch (err) {
+      console.warn('[bookings] Supabase getBooking notice:', err.message);
+    }
+  }
+  return null;
+}
+
 export function listBookings(slug) {
   try {
     const rows = slug
@@ -326,6 +355,60 @@ export function updateBookingStatus(id, status, notes) {
   supabaseUpdateBookingStatus(id, status, notes).catch((err) => {
     console.warn('[bookings] Supabase update status notice:', err.message);
   });
+
+  return updated;
+}
+
+export async function updateBookingStatusAsync(id, status, notes) {
+  if (!VALID_STATUS.has(status)) {
+    const err = new Error('Invalid status.');
+    err.status = 400;
+    throw err;
+  }
+
+  let updated = null;
+
+  // 1. Update in Supabase PostgreSQL first
+  try {
+    const sbUpdated = await supabaseUpdateBookingStatus(id, status, notes);
+    if (sbUpdated) {
+      updated = rowToBooking(sbUpdated);
+    }
+  } catch (err) {
+    console.warn('[bookings] Supabase update status notice:', err.message);
+  }
+
+  // 2. Update local SQLite cache
+  try {
+    const info = notes !== undefined
+      ? db.prepare('UPDATE bookings SET status = ?, notes = ? WHERE id = ?').run(status, String(notes || ''), id)
+      : db.prepare('UPDATE bookings SET status = ? WHERE id = ?').run(status, id);
+    if (info && info.changes > 0 && !updated) {
+      updated = getBooking(id);
+    }
+  } catch {}
+
+  // 3. Fallback to memory
+  const memIdx = localBookingsMemory.findIndex((b) => String(b.id) === String(id));
+  if (memIdx !== -1) {
+    localBookingsMemory[memIdx].status = status;
+    if (notes !== undefined) {
+      localBookingsMemory[memIdx].notes = String(notes || '');
+    }
+    if (!updated) updated = localBookingsMemory[memIdx];
+  }
+
+  if (!updated) {
+    const existing = await getBookingAsync(id);
+    if (existing) {
+      existing.status = status;
+      if (notes !== undefined) existing.notes = String(notes || '');
+      return existing;
+    }
+    const err = new Error('Booking not found.');
+    err.status = 404;
+    throw err;
+  }
 
   return updated;
 }
