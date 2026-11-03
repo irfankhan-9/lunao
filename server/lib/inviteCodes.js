@@ -106,6 +106,47 @@ export function findByCode(code) {
   return rowToRecord(row);
 }
 
+export async function findByCodeAsync(code) {
+  if (!code) return null;
+  const normalized = String(code).trim().toUpperCase();
+  const row = db
+    .prepare('SELECT * FROM invite_codes WHERE code = ?')
+    .get(normalized);
+  if (row) return rowToRecord(row);
+
+  try {
+    const { getSupabase } = await import('./supabase.js');
+    const sb = getSupabase();
+    if (sb) {
+      const { data } = await sb
+        .from('invite_codes')
+        .select('*')
+        .eq('code', normalized)
+        .maybeSingle();
+      if (data) {
+        try {
+          db.prepare(
+            `INSERT INTO invite_codes (code, slug, label, created_at, used_at, last_active_at, redeemed_count, revoked_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(code) DO UPDATE SET slug=excluded.slug, revoked_at=excluded.revoked_at`
+          ).run(
+            data.code,
+            data.slug,
+            data.label || null,
+            data.created_at || Date.now(),
+            data.used_at || null,
+            data.last_active_at || null,
+            data.redeemed_count || 0,
+            data.revoked_at || null
+          );
+        } catch {}
+        return rowToRecord(data);
+      }
+    }
+  } catch {}
+  return null;
+}
+
 export function findByCodeSafe(code) {
   if (!code) return null;
   const normalized = String(code).trim().toUpperCase();

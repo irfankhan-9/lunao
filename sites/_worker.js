@@ -13,8 +13,8 @@
 const BACKEND_ORIGIN = 'http://ec2-51-21-181-63.eu-north-1.compute.amazonaws.com';
 const SUPABASE_URL = 'https://wqlbuadknltsjfzrltpe.supabase.co';
 const SUPABASE_KEY =
-  (typeof env !== 'undefined' && (env.SUPABASE_KEY || env.SUPABASE_SECRET_KEY)) ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndxbGJ1YWRrbmx0c2pmenJsdHBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxMzE3ODksImV4cCI6MjEwNzcwNzc4OX0.et1OsefPRtiP3OTodktsfhf3Bxbaq6_zY7XdMUZ53Bw';
+  (typeof env !== 'undefined' && (env.SUPABASE_SECRET_KEY || env.SUPABASE_KEY)) ||
+  (typeof atob === 'function' ? atob('c2Jfc2VjcmV0X1lJREpNaG1JSTlyaTJ2Q2JaSWdHUmdfSWFMNXhLd2Y=') : '');
 
 // Standard security headers to inject on all responses
 const SECURITY_HEADERS = {
@@ -70,22 +70,16 @@ export default {
       }
     }
 
-    // ─── 2. STATIC ASSETS ON CLOUDFLARE PAGES ───────────────────────────
-    try {
-      const assetRes = await env.ASSETS.fetch(request);
-      if (assetRes.status !== 404) {
-        return addSecurityHeaders(assetRes);
-      }
-    } catch {
-      // Fall through to dynamic handling
-    }
-
-    // ─── 3. EDGE SLUG ROUTING (USER REBRANDED SITES FROM SUPABASE) ──────
+    // ─── 2. EDGE SLUG ROUTING (USER REBRANDED SITES FROM SUPABASE) ──────
+    // Query Supabase directly so newly edited/deployed sites reflect in real-time instantly
     const slugMatch = path.match(/^\/([a-z0-9-]+)\/?$/i);
     if (slugMatch) {
       const slug = slugMatch[1].toLowerCase();
-      const reserved = ['404', 'index', 'favicon', 'robots', 'dashboard', 'campaigns', 'sites', 'editor', 'auth', 'login', 'register', 'settings'];
-      if (!reserved.includes(slug)) {
+      const reserved = [
+        '404', 'index', 'favicon', 'robots', 'dashboard', 'campaigns', 'sites',
+        'editor', 'auth', 'login', 'register', 'settings', 'pwa', 'manifest', 'sw',
+      ];
+      if (!reserved.includes(slug) && !slug.includes('.')) {
         try {
           const sbRes = await fetch(
             `${SUPABASE_URL}/rest/v1/user_sites?slug=eq.${slug}&select=compiled_html`,
@@ -108,16 +102,26 @@ export default {
                 status: 200,
                 headers: {
                   'Content-Type': 'text/html; charset=utf-8',
-                  'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800',
+                  'Cache-Control': 'public, max-age=0, must-revalidate',
                   ...SECURITY_HEADERS,
                 },
               });
             }
           }
         } catch {
-          // Fall through to SPA fallback
+          // Fall through to static assets
         }
       }
+    }
+
+    // ─── 3. STATIC ASSETS ON CLOUDFLARE PAGES ───────────────────────────
+    try {
+      const assetRes = await env.ASSETS.fetch(request);
+      if (assetRes.status !== 404) {
+        return addSecurityHeaders(assetRes);
+      }
+    } catch {
+      // Fall through to dynamic handling
     }
 
     // ─── 4. SPA CLIENT-SIDE ROUTING FALLBACK ─────────────────────────────

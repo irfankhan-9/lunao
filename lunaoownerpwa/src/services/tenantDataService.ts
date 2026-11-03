@@ -35,7 +35,7 @@ import {
 async function fetchPwa<T = any>(
   path: string,
   init: RequestInit = {},
-  options: { requireAuth?: boolean } = {},
+  options: { requireAuth?: boolean; timeoutMs?: number } = {},
 ): Promise<T> {
   const token = tenantAuthService.getAuthToken();
   if (options.requireAuth !== false && !token) {
@@ -52,7 +52,7 @@ async function fetchPwa<T = any>(
   let lastError: Error | null = null;
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000); // 8-second realistic network timeout
+    const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 15000); // 15-second realistic network timeout
     const res = await fetch(url, { ...init, headers, signal: controller.signal });
     clearTimeout(timeout);
     const data = await res.json().catch(() => ({}));
@@ -213,10 +213,14 @@ export const tenantDataService = {
 
   async deployWebsiteHtml(businessId: string, html?: string): Promise<{ ok: boolean; slug: string; url: string; lastDeployed: string }> {
     const slug = tenantAuthService.getActiveSlug() || businessId;
-    return fetchPwa<{ ok: boolean; slug: string; url: string; lastDeployed: string }>(`/pwa/${encodeURIComponent(slug)}/site/deploy`, {
-      method: 'POST',
-      body: JSON.stringify({ html }),
-    });
+    return fetchPwa<{ ok: boolean; slug: string; url: string; lastDeployed: string }>(
+      `/pwa/${encodeURIComponent(slug)}/site/deploy`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ html }),
+      },
+      { timeoutMs: 30000 },
+    );
   },
 
   async updateWebsiteConfig(

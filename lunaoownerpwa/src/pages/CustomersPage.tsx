@@ -3,7 +3,6 @@ import {
   Users,
   Search,
   Phone,
-  Mail,
   ChevronRight,
   Plus,
   UserPlus,
@@ -410,30 +409,15 @@ export const CustomersPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
+              <div className="pt-2 border-t border-slate-200">
                 <a
                   href={`tel:${selectedCustomer.phone.replace(/[^0-9]/g, '')}`}
                   onClick={() => soundEffects.playButtonClick()}
-                  className="flex-1 h-10 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 flex items-center justify-center gap-1.5 font-medium transition shadow-2xs"
+                  className="w-full h-10 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 flex items-center justify-center gap-1.5 font-medium transition shadow-2xs"
                 >
                   <Phone className="w-3.5 h-3.5 text-emerald-700" />
                   <span>Call Phone</span>
                 </a>
-
-                {selectedCustomer.email ? (
-                  <a
-                    href={`mailto:${selectedCustomer.email}`}
-                    onClick={() => soundEffects.playButtonClick()}
-                    className="flex-1 h-10 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 flex items-center justify-center gap-1.5 font-medium transition shadow-2xs"
-                  >
-                    <Mail className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>Send Email</span>
-                  </a>
-                ) : (
-                  <span className="flex-1 h-10 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 flex items-center justify-center text-[11px] italic select-none">
-                    No email on file
-                  </span>
-                )}
               </div>
             </div>
 

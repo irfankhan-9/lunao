@@ -34,7 +34,7 @@ function decodeToken(token) {
   return { code, mintedAt: Number.isFinite(mintedAt) ? mintedAt : 0 };
 }
 
-export function pwaAuth(req, res, next) {
+export async function pwaAuth(req, res, next) {
   const auth = req.headers.authorization || '';
   if (!auth.startsWith('Bearer ')) {
     return res
@@ -48,7 +48,13 @@ export function pwaAuth(req, res, next) {
       .status(401)
       .json({ ok: false, error: 'Malformed token.' });
   }
-  const row = findByCode(decoded.code);
+  let row = findByCode(decoded.code);
+  if (!row) {
+    try {
+      const { findByCodeAsync } = await import('./inviteCodes.js');
+      row = await findByCodeAsync(decoded.code);
+    } catch {}
+  }
   if (!row) {
     return res
       .status(401)

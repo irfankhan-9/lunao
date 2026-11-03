@@ -126,17 +126,29 @@ export const WebsitePage: React.FC = () => {
     }
   }, []);
 
-  // 2. Synchronize current HTML from active iframe
+  // 2. Synchronize current HTML from active iframe (cleans temporary editor outlines)
   const syncHtmlFromDoc = useCallback((): string => {
     const activeIframe = isFullscreenPreview ? fullscreenIframeRef.current : iframeRef.current;
     const doc = activeIframe?.contentDocument;
     if (!doc || !doc.documentElement) {
       return htmlBufferRef.current || siteHtml;
     }
+
+    // Temporarily disable outlines so saved HTML is clean
+    if (editMode) {
+      applyEditMode(doc, false);
+    }
+
     const current = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+
+    // Restore outlines if still in edit mode
+    if (editMode) {
+      applyEditMode(doc, true);
+    }
+
     htmlBufferRef.current = current;
     return current;
-  }, [isFullscreenPreview, siteHtml]);
+  }, [isFullscreenPreview, siteHtml, editMode, applyEditMode]);
 
   // 3. Apply editMode (designMode + outline on clickable images)
   const applyEditMode = useCallback((doc: Document | null, on: boolean) => {
@@ -205,6 +217,7 @@ export const WebsitePage: React.FC = () => {
     try {
       await websiteService.saveWebsiteHtml(business.id, currentHtml);
       setSiteHtml(currentHtml);
+      htmlBufferRef.current = currentHtml;
       setIsDirty(false);
       soundEffects.playSuccess();
       showToast('Website changes saved successfully');
@@ -224,6 +237,7 @@ export const WebsitePage: React.FC = () => {
     try {
       const result = await websiteService.deployWebsiteHtml(business.id, currentHtml);
       setSiteHtml(currentHtml);
+      htmlBufferRef.current = currentHtml;
       setIsDirty(false);
       updateWebsiteConfig({
         lastDeployed: result.lastDeployed || new Date().toISOString().slice(0, 10),

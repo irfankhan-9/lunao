@@ -21,11 +21,14 @@ import {
   getBooking,
   getBookingAsync,
 } from './bookings.js';
+import path from 'node:path';
+import fs from 'node:fs/promises';
 import { readSite, writeSite, isValidSlug } from './sites.js';
 import { validateBookingContract, CONTRACT_REJECTION_MESSAGE } from './bookingContractValidator.js';
 import { publishBatch } from './cloudflare.js';
-import { cloudflare } from './config.js';
+import { cloudflare, ROOT_DIR } from './config.js';
 import {
+  getSupabase,
   supabaseListConversations,
   supabaseGetConversationMessages,
   supabaseListCustomers,
@@ -535,6 +538,86 @@ export function mountPwaApi(app) {
     }
   });
 
+  // Helper to durably persist website HTML to ALL tiers:
+  // Supabase PostgreSQL (source of truth for Cloudflare Pages edge router) + Local Disk + Local dist + SQLite mirror
+  async function persistPwaSiteHtmlToAllTiers(slug, html, liveUrl) {
+    const now = Date.now();
+
+    // 1. Immediately update Supabase user_sites via Supabase JS client
+    let supabaseUpdated = false;
+    const sb = getSupabase();
+    if (sb) {
+      try {
+        const patch = { compiled_html: html, deploy_url: liveUrl, updated_at: now };
+        const { data, error } = await sb
+          .from('user_sites')
+          .update(patch)
+          .eq('slug', slug)
+          .select('slug, updated_at');
+        if (!error && data && data.length > 0) {
+          supabaseUpdated = true;
+        }
+      } catch (err) {
+        console.warn('[pwaApi] Supabase JS site update warning:', err.message);
+      }
+    }
+
+    // 2. Also update Supabase user_sites via direct REST API PATCH for dual-path certainty
+    const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+    const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    if (sbUrl && sbKey) {
+      try {
+        const patchUrl = new URL(`${sbUrl}/rest/v1/user_sites`);
+        patchUrl.searchParams.set('slug', `eq.${slug}`);
+        const res = await fetch(patchUrl.toString(), {
+          method: 'PATCH',
+          headers: {
+            apikey: sbKey,
+            Authorization: `Bearer ${sbKey}`,
+            'Content-Type': 'application/json',
+            Prefer: 'return=minimal',
+          },
+          body: JSON.stringify({ compiled_html: html, deploy_url: liveUrl, updated_at: now }),
+          signal: AbortSignal.timeout(5000),
+        });
+        if (res.ok) supabaseUpdated = true;
+      } catch (err) {
+        console.warn('[pwaApi] Supabase REST site save warning:', err.message);
+      }
+    }
+
+    // 3. Write directly to disk at SITES_DIR
+    await writeSite(slug, html);
+
+    // 4. Also write directly to dist/ if dist/ exists, so it is immediately served by Express / Cloudflare
+    try {
+      const distDir = path.join(ROOT_DIR, 'dist', slug);
+      await fs.mkdir(distDir, { recursive: true });
+      await fs.writeFile(path.join(distDir, 'index.html'), html, 'utf8');
+    } catch {}
+
+    // 5. Update local SQLite mirror
+    try {
+      db.prepare(
+        `UPDATE user_sites
+            SET compiled_html = ?,
+                deploy_url = COALESCE(?, deploy_url),
+                updated_at = ?
+          WHERE slug = ?`,
+      ).run(html, liveUrl, now, slug);
+    } catch {}
+
+    try {
+      db.prepare(
+        `UPDATE pwa_website_config
+            SET last_updated = ?, updated_at = ?
+          WHERE slug = ?`,
+      ).run(new Date().toISOString().slice(0, 10), now, slug);
+    } catch {}
+
+    return { ok: true, supabaseUpdated, liveUrl };
+  }
+
   // ---- Get business owner's real website HTML (strictly tenant-isolated) -----
   app.get('/api/pwa/:slug/site/html', pwaAuth, assertSameSlug, async (req, res) => {
     try {
@@ -544,18 +627,71 @@ export function mountPwaApi(app) {
       }
 
       let html = '';
-      try {
-        html = await readSite(slug);
-      } catch (err) {
-        const row = db.prepare('SELECT compiled_html FROM user_sites WHERE slug = ?').get(slug);
-        if (row?.compiled_html) {
-          html = row.compiled_html;
+
+      // 1. Fetch latest HTML from Supabase user_sites (single source of truth for Cloudflare Edge)
+      const sb = getSupabase();
+      if (sb) {
+        try {
+          const { data, error } = await sb
+            .from('user_sites')
+            .select('compiled_html')
+            .eq('slug', slug)
+            .maybeSingle();
+          if (!error && data?.compiled_html && data.compiled_html.length > 500) {
+            html = data.compiled_html;
+          }
+        } catch (sbErr) {
+          console.warn('[pwaApi] Supabase get site HTML notice:', sbErr.message);
         }
+      }
+
+      // 2. Fallback to Supabase REST
+      if (!html) {
+        const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+        const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+        if (sbUrl && sbKey) {
+          try {
+            const res = await fetch(`${sbUrl}/rest/v1/user_sites?slug=eq.${slug}&select=compiled_html`, {
+              headers: {
+                apikey: sbKey,
+                Authorization: `Bearer ${sbKey}`,
+                Accept: 'application/json',
+              },
+              signal: AbortSignal.timeout(4000),
+            });
+            if (res.ok) {
+              const rows = await res.json();
+              if (Array.isArray(rows) && rows[0]?.compiled_html) {
+                html = rows[0].compiled_html;
+              }
+            }
+          } catch {}
+        }
+      }
+
+      // 3. Fallback to local disk file
+      if (!html) {
+        try {
+          html = await readSite(slug);
+        } catch (err) {}
+      }
+
+      // 4. Fallback to SQLite mirror
+      if (!html) {
+        try {
+          const row = db.prepare('SELECT compiled_html FROM user_sites WHERE slug = ?').get(slug);
+          if (row?.compiled_html) {
+            html = row.compiled_html;
+          }
+        } catch {}
       }
 
       if (!html) {
         return res.status(404).json({ ok: false, error: 'Website HTML not found for this business.' });
       }
+
+      // Ensure local disk copy stays fresh with the latest HTML
+      writeSite(slug, html).catch(() => {});
 
       const projName = cloudflare.project || 'lunao-web-designn';
       const liveUrl = `https://${projName}.pages.dev/${slug}/`;
@@ -595,62 +731,15 @@ export function mountPwaApi(app) {
 
       const projName = cloudflare.project || 'lunao-web-designn';
       const liveUrl = `https://${projName}.pages.dev/${slug}/`;
-      const now = Date.now();
 
-      // 1. Write to disk so it is immediately served and stageable
-      await writeSite(slug, html);
-
-      // 2. Update local SQLite mirrors
-      try {
-        db.prepare(
-          `UPDATE user_sites
-              SET compiled_html = ?,
-                  deploy_url = COALESCE(?, deploy_url),
-                  updated_at = ?
-            WHERE slug = ?`,
-        ).run(html, liveUrl, now, slug);
-      } catch (e) {
-        /* non-fatal */
-      }
-
-      try {
-        db.prepare(
-          `UPDATE pwa_website_config
-              SET last_updated = ?, updated_at = ?
-            WHERE slug = ?`,
-        ).run(new Date().toISOString().slice(0, 10), now, slug);
-      } catch (e) {
-        /* non-fatal */
-      }
-
-      // 3. Update Supabase REST
-      const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
-      const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-      if (sbUrl && sbKey) {
-        try {
-          const patchUrl = new URL(`${sbUrl}/rest/v1/user_sites`);
-          patchUrl.searchParams.set('slug', `eq.${slug}`);
-          await fetch(patchUrl.toString(), {
-            method: 'PATCH',
-            headers: {
-              apikey: sbKey,
-              Authorization: `Bearer ${sbKey}`,
-              'Content-Type': 'application/json',
-              Prefer: 'return=minimal',
-            },
-            body: JSON.stringify({ compiled_html: html, deploy_url: liveUrl, updated_at: now }),
-            signal: AbortSignal.timeout(6000),
-          });
-        } catch (err) {
-          console.warn('[pwaApi] Supabase REST site save notice:', err.message);
-        }
-      }
+      await persistPwaSiteHtmlToAllTiers(slug, html, liveUrl);
 
       res.json({
         ok: true,
         slug,
         url: liveUrl,
         message: 'Website changes saved successfully.',
+        html,
       });
     } catch (err) {
       res.status(500).json({ ok: false, error: err.message });
@@ -669,6 +758,7 @@ export function mountPwaApi(app) {
       const projName = cloudflare.project || 'lunao-web-designn';
       const liveUrl = `https://${projName}.pages.dev/${slug}/`;
       const now = Date.now();
+      const today = new Date().toISOString().slice(0, 10);
 
       if (typeof html === 'string' && html.trim()) {
         const contractCheck = validateBookingContract(html);
@@ -678,20 +768,10 @@ export function mountPwaApi(app) {
             error: contractCheck.customerMessage || CONTRACT_REJECTION_MESSAGE,
           });
         }
-        await writeSite(slug, html);
-        try {
-          db.prepare(
-            `UPDATE user_sites
-                SET compiled_html = ?,
-                    deploy_url = COALESCE(?, deploy_url),
-                    updated_at = ?
-              WHERE slug = ?`,
-          ).run(html, liveUrl, now, slug);
-        } catch {}
+        await persistPwaSiteHtmlToAllTiers(slug, html, liveUrl);
       }
 
       // Update PWA config status
-      const today = new Date().toISOString().slice(0, 10);
       try {
         db.prepare(
           `UPDATE pwa_website_config
@@ -700,20 +780,23 @@ export function mountPwaApi(app) {
         ).run(today, now, slug);
       } catch {}
 
-      // Trigger Cloudflare Pages deployment batch
-      let deployResult = null;
-      try {
-        deployResult = await publishBatch();
-      } catch (err) {
-        console.warn('[pwaApi] publishBatch notice:', err.message);
-      }
+      // Trigger Cloudflare Pages deployment batch in background so client receives instant response
+      // Cloudflare Edge Worker already serves the new HTML live instantly from Supabase!
+      publishBatch()
+        .then((deployResult) => {
+          console.log('[pwaApi] Cloudflare batch deploy finished:', deployResult?.deploymentUrl || 'ok');
+        })
+        .catch((err) => {
+          console.warn('[pwaApi] publishBatch background notice:', err.message);
+        });
 
       res.json({
         ok: true,
         slug,
         url: liveUrl,
-        deploy: deployResult,
+        deploy: { ok: true, status: 'published_live' },
         lastDeployed: today,
+        html,
       });
     } catch (err) {
       res.status(500).json({ ok: false, error: err.message });

@@ -136,7 +136,32 @@ export async function hydrateAllSitesToDisk() {
   await fs.mkdir(SITES_DIR, { recursive: true });
   let hydrated = 0;
 
-  // 1. Query production Supabase PostgreSQL
+  // 1. Query production Supabase PostgreSQL / Supabase Client
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const { data, error } = await sb
+        .from('user_sites')
+        .select('slug, compiled_html')
+        .not('compiled_html', 'is', null);
+      if (!error && Array.isArray(data)) {
+        for (const r of data) {
+          if (r.slug && r.compiled_html && isValidSlug(r.slug) && r.compiled_html.length > 2000) {
+            const sDir = path.join(SITES_DIR, r.slug);
+            const sPath = path.join(sDir, 'index.html');
+            try {
+              await fs.mkdir(sDir, { recursive: true });
+              await fs.writeFile(sPath, r.compiled_html, 'utf8');
+              hydrated++;
+            } catch {}
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[sites] Supabase client hydration notice:', err.message);
+    }
+  }
+
   const pool = getPgPool();
   if (pool) {
     try {
