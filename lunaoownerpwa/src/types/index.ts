@@ -212,8 +212,9 @@ export interface EmailActivityRecord {
   recipientEmail: string;
   templateName: string;
   subject: string;
+  bodyPreview?: string;
   sentAt: string;
-  status: 'delivered' | 'sent';
+  status: 'delivered' | 'sent' | 'failed' | 'not_sent' | 'queued';
 }
 
 export interface ConnectedEmailAccount {

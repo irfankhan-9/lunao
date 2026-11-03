@@ -2367,16 +2367,32 @@ app.post('/api/owner/redeem', async (req, res) => {
       upperCode = `LUNAO-${upperCode}`;
     }
 
+    const isCodeFormat = upperCode.startsWith('LUNAO-') || /^[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(input);
     const sites = listSitesSync();
-
-    // 1. Try finding by invite code first
-    let row = findByCode(upperCode);
+    let row = null;
     let target = null;
 
-    if (row) {
+    if (isCodeFormat) {
+      // 1. Strict validation: Must match a valid registered invite code in SQLite or Supabase
+      row = findByCode(upperCode);
+      if (!row) {
+        try {
+          const { findByCodeAsync } = await import('./lib/inviteCodes.js');
+          row = await findByCodeAsync(upperCode);
+        } catch {}
+      }
+
+      if (!row) {
+        return res.status(404).json({
+          ok: false,
+          error: 'Invalid or unrecognized owner access code. Even a single incorrect digit will not grant access.',
+        });
+      }
+
       if (row.revokedAt) {
         return res.status(404).json({ ok: false, error: 'This invite code has been revoked.' });
       }
+
       if (isEdmontonContractorSlug(row.slug) || isSpecialUgcOrSalesRequest(req, 'dashboard')) {
         await ensureSpecialModeSiteHtml(row.slug, SITES_DIR);
         const contractorInfo = getSpecialModeContractorSite(row.slug);
@@ -2398,10 +2414,9 @@ app.post('/api/owner/redeem', async (req, res) => {
         };
       }
     } else {
-      // 2. Try finding by website slug / code (e.g. "everest-climate-denver")
+      // 2. Exact match only by full website slug or full URL
       const cleanSlug = input.toLowerCase().replace(/^https?:\/\/[^/]+\//, '').replace(/\/$/, '').trim();
-      target = sites.find((s) => s.slug.toLowerCase() === cleanSlug || s.slug.toLowerCase() === input.toLowerCase()) ||
-               sites.find((s) => s.slug.toLowerCase().includes(cleanSlug) || cleanSlug.includes(s.slug.toLowerCase()));
+      target = sites.find((s) => s.slug.toLowerCase() === cleanSlug || s.slug.toLowerCase() === input.toLowerCase());
 
       if (!target && (isEdmontonContractorSlug(cleanSlug) || isSpecialUgcOrSalesRequest(req, 'dashboard'))) {
         await ensureSpecialModeSiteHtml(cleanSlug, SITES_DIR);

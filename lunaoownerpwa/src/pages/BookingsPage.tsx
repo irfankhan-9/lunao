@@ -447,11 +447,9 @@ export const BookingsPage: React.FC = () => {
                   {selectedBooking.customerName}
                 </p>
                 <p className="text-slate-600 mt-0.5">{selectedBooking.customerPhone}</p>
-                {selectedBooking.customerEmail ? (
+                {selectedBooking.customerEmail && selectedBooking.customerEmail.trim() ? (
                   <p className="text-slate-600">{selectedBooking.customerEmail}</p>
-                ) : (
-                  <p className="text-slate-400 italic">No email on file</p>
-                )}
+                ) : null}
               </div>
               <Badge
                 variant={

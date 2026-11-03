@@ -221,6 +221,13 @@ function upsertRow(rowData) {
                  .map((c) => `${c} = excluded.${c}`)
                  .join(', ')}`;
   db.prepare(sql).run(...cols.map((c) => rowData[c]));
+  import('./supabaseSync.js')
+    .then(({ queueSync }) => {
+      if (typeof queueSync === 'function') {
+        queueSync('business_profiles', 'upsert', rowData, ['slug']);
+      }
+    })
+    .catch(() => {});
 }
 
 // Update an existing profile with new fields (owner-editable subset).

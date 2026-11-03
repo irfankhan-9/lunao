@@ -335,44 +335,27 @@ export const tenantAuthService = {
     }
 
     if (ok && data?.token && data?.slug) {
-      try {
-        const business = await fetchFullBusiness(data.token, data.slug, data.businessName);
-        business.lunaoCode = normalized;
-        business.authToken = data.token;
-        business.slug = data.slug;
+      const business = await fetchFullBusiness(data.token, data.slug, data.businessName);
+      business.lunaoCode = normalized;
+      business.authToken = data.token;
+      business.slug = data.slug;
 
-        persistSession({
-          token: data.token,
-          slug: data.slug,
-          code: normalized,
-          business,
-          authenticatedAt: new Date().toISOString(),
-        });
+      persistSession({
+        token: data.token,
+        slug: data.slug,
+        code: normalized,
+        business,
+        authenticatedAt: new Date().toISOString(),
+      });
 
-        return { success: true, business, token: data.token, slug: data.slug };
-      } catch {
-        // Fallback to high-fidelity mock profile
-      }
+      return { success: true, business, token: data.token, slug: data.slug };
     }
 
-    // 2. High-fidelity instant fallback for local preview environments
-    const fallbackBusiness = createFallbackBusiness(codeToSend, data?.businessName);
-    const token = fallbackBusiness.authToken || `lunao.mock.${Date.now()}`;
-    const slug = fallbackBusiness.slug;
-
-    persistSession({
-      token,
-      slug,
-      code: normalized,
-      business: fallbackBusiness,
-      authenticatedAt: new Date().toISOString(),
-    });
-
     return {
-      success: true,
-      business: fallbackBusiness,
-      token,
-      slug,
+      success: false,
+      errorMessage:
+        data?.error ||
+        'Invalid or unrecognized owner access code. Please check your code and try again.',
     };
   },
 

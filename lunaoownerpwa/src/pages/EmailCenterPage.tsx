@@ -579,27 +579,62 @@ export const EmailCenterPage: React.FC = () => {
               {records.map((rec) => (
                 <div
                   key={rec.id}
-                  className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs flex items-center justify-between gap-3"
+                  className={`p-4 rounded-xl bg-white border ${
+                    rec.status === 'not_sent'
+                      ? 'border-amber-200 bg-amber-50/30'
+                      : rec.status === 'failed'
+                      ? 'border-rose-200 bg-rose-50/30'
+                      : 'border-slate-200'
+                  } shadow-2xs flex flex-col gap-2`}
                 >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs font-semibold text-slate-900 truncate">
-                        {rec.subject}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs font-semibold text-slate-900 truncate">
+                          {rec.subject}
+                        </p>
+                        <Badge
+                          variant={
+                            rec.status === 'sent' || rec.status === 'delivered'
+                              ? 'success'
+                              : rec.status === 'not_sent'
+                              ? 'warning'
+                              : rec.status === 'failed'
+                              ? 'danger'
+                              : 'neutral'
+                          }
+                          size="sm"
+                        >
+                          {rec.status === 'not_sent'
+                            ? 'Not Sent'
+                            : rec.status === 'failed'
+                            ? 'Failed'
+                            : rec.status === 'sent'
+                            ? 'Sent'
+                            : rec.status === 'delivered'
+                            ? 'Delivered'
+                            : rec.status}
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                        To: {rec.recipientName} ({rec.recipientEmail})
                       </p>
-                      <Badge
-                        variant={rec.status === 'delivered' ? 'success' : 'neutral'}
-                        size="sm"
-                      >
-                        {rec.status}
-                      </Badge>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-0.5 truncate">
-                      To: {rec.recipientName} ({rec.recipientEmail})
-                    </p>
+                    <span className="text-[11px] text-slate-400 shrink-0 font-mono">
+                      {rec.sentAt}
+                    </span>
                   </div>
-                  <span className="text-[11px] text-slate-400 shrink-0 font-mono">
-                    {rec.sentAt}
-                  </span>
+                  {rec.bodyPreview && (rec.status === 'not_sent' || rec.status === 'failed') && (
+                    <div
+                      className={`p-2 rounded-lg text-[11px] leading-relaxed ${
+                        rec.status === 'not_sent'
+                          ? 'bg-amber-100/70 text-amber-900 border border-amber-200'
+                          : 'bg-rose-100/70 text-rose-900 border border-rose-200'
+                      }`}
+                    >
+                      {rec.bodyPreview}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

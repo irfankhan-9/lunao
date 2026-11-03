@@ -632,13 +632,13 @@ The ${businessName} Team
 
   logEmailActivity({
     slug,
-    recipientName: booking.customerName,
+    recipientName: booking.customerName || 'Customer',
     recipientEmail: booking.email,
     templateName: 'Booking Confirmation',
     subject,
-    bodyPreview: text,
+    bodyPreview: res.success ? text : `Delivery failed: ${res.error || 'Resend API error'}`,
     status: res.success ? 'sent' : 'failed',
-    resendId: res.id,
+    resendId: res.id || null,
   });
 
   return res;
@@ -653,21 +653,30 @@ export async function sendOwnerBookingNotification(booking, profile = null) {
 
   const slug = booking.slug;
   const business = profile || (await getProfile(slug)) || {};
+  const businessName = business.name || booking.businessName || 'Your Business';
+  const rawOwnerEmail = business.email || booking.ownerEmail || null;
   const ownerEmail =
-    business.email ||
-    booking.ownerEmail ||
-    process.env.NOTIFICATION_EMAIL ||
-    process.env.OWNER_EMAIL ||
-    process.env.RESEND_TEST_RECIPIENT ||
-    'iwsnkskqjwmw@gmail.com';
+    typeof rawOwnerEmail === 'string' && rawOwnerEmail.trim() ? rawOwnerEmail.trim() : null;
 
   if (!ownerEmail) {
-    console.log('[emailAutomations] Business profile has no owner email; skipping owner notification.');
-    return { skipped: true, reason: 'no_owner_email' };
+    const unconfiguredNotice =
+      'Owner notification not sent: Business owner notification email is not configured in Owner PWA Settings. Please configure your email in Business Settings to receive instant booking notifications.';
+    console.warn(`[emailAutomations] No owner email configured in settings for ${slug}; recording not_sent activity.`);
+    logEmailActivity({
+      slug,
+      recipientName: `${businessName} Owner`,
+      recipientEmail: 'Not configured in Settings',
+      templateName: 'Owner New Booking Notification',
+      subject: `[New Booking Alert] ${booking.customerName || 'New Client'} - ${booking.service || 'Appointment'}`,
+      bodyPreview: unconfiguredNotice,
+      status: 'not_sent',
+      resendId: null,
+    });
+    return { skipped: true, reason: 'owner_email_not_configured' };
   }
 
   // Atomic deduplication claim
-  const dedupKey = `owner:${booking.id || `${slug}_${booking.phone}_${booking.date}_${booking.time}`}`;
+  const dedupKey = `owner:${booking.id || `${slug}_${booking.phone || 'nophone'}_${booking.date}_${booking.time}`}`;
   const claim = await claimAutomationJob(dedupKey, {
     bookingId: booking.id,
     slug,
@@ -680,7 +689,6 @@ export async function sendOwnerBookingNotification(booking, profile = null) {
     return { skipped: true, reason: claim.reason };
   }
 
-  const businessName = business.name || booking.businessName || 'Your Business';
   const accent = '#d97706'; // Warm Amber for owner alerts
   const { formattedDate, formattedTime } = formatAppointmentDateTime(
     booking.date,
@@ -806,9 +814,9 @@ ${ownerPwaUrl}
     recipientEmail: ownerEmail,
     templateName: 'Owner New Booking Notification',
     subject,
-    bodyPreview: text,
+    bodyPreview: res.success ? text : `Delivery failed: ${res.error || 'Resend API error'}`,
     status: res.success ? 'sent' : 'failed',
-    resendId: res.id,
+    resendId: res.id || null,
   });
 
   return res;

@@ -1,10 +1,14 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Smartphone,
   Layers,
   KeyRound,
   LogOut,
   Check,
+  Mail,
+  CheckCircle2,
+  AlertCircle,
+  Save,
 } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 import { Button } from '../components/ui/Button';
@@ -16,9 +20,36 @@ export const SettingsPage: React.FC = () => {
     business,
     availableDemoProfiles,
     switchTenantByCode,
+    updateBusiness,
     logout,
   } = useBusiness();
   const { isInstallable, isInstalled, install } = usePWAInstall();
+
+  const [ownerEmail, setOwnerEmail] = useState(business?.email || '');
+  const [isSavingEmail, setIsSavingEmail] = useState(false);
+  const [emailSavedSuccess, setEmailSavedSuccess] = useState(false);
+
+  useEffect(() => {
+    if (business?.email !== undefined) {
+      setOwnerEmail(business.email || '');
+    }
+  }, [business?.email]);
+
+  const handleSaveEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ownerEmail.trim()) return;
+    setIsSavingEmail(true);
+    try {
+      soundEffects.playSuccess();
+      await updateBusiness({ email: ownerEmail.trim() });
+      setEmailSavedSuccess(true);
+      setTimeout(() => setEmailSavedSuccess(false), 3000);
+    } catch {
+      soundEffects.playError();
+    } finally {
+      setIsSavingEmail(false);
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -73,6 +104,66 @@ export const SettingsPage: React.FC = () => {
       </div>
 
 
+
+      {/* Owner Notification Email Configuration */}
+      <div className="p-5 md:p-6 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+          <div className="flex items-center gap-2.5">
+            <Mail className="w-5 h-5 text-emerald-700" />
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">
+                Owner Notification Email
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                Receive instant email alerts whenever a new appointment or customer booking is submitted
+              </p>
+            </div>
+          </div>
+          {business?.email ? (
+            <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              Alerts Active
+            </span>
+          ) : (
+            <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
+              <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+              Email Not Set
+            </span>
+          )}
+        </div>
+
+        <form onSubmit={handleSaveEmail} className="space-y-3">
+          <div className="space-y-1.5">
+            <label className="block text-xs font-medium text-slate-700">
+              Notification Delivery Address
+            </label>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <input
+                type="email"
+                required
+                placeholder="e.g. owner@yourbusiness.com"
+                value={ownerEmail}
+                onChange={(e) => setOwnerEmail(e.target.value)}
+                className="flex-1 h-10 px-3.5 rounded-xl bg-white border border-slate-300 text-slate-900 text-xs focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 shadow-2xs"
+              />
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                className="h-10 px-4 whitespace-nowrap text-xs"
+                disabled={isSavingEmail}
+                leftIcon={emailSavedSuccess ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+              >
+                {isSavingEmail ? 'Saving...' : emailSavedSuccess ? 'Saved' : 'Save Email'}
+              </Button>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            Note: For website booking forms that do not ask customers for an email address, booking notifications are dispatched strictly to this owner email address.
+          </p>
+        </form>
+      </div>
 
       {/* Switch Owner Business Account */}
       <div className="p-5 md:p-6 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-4">

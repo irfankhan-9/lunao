@@ -524,10 +524,18 @@ export const tenantDataService = {
       });
     }
     for (const e of email.slice(0, 20)) {
+      const statusLabel =
+        e.status === 'sent'
+          ? 'Sent'
+          : e.status === 'delivered'
+          ? 'Delivered'
+          : e.status === 'not_sent'
+          ? 'Not Sent'
+          : 'Failed';
       events.push({
         id: `e-${e.id}`,
         type: 'email_sent',
-        title: `Email ${e.status}: ${e.templateName || e.subject || 'Send'}`,
+        title: `Email ${statusLabel}: ${e.templateName || e.subject || 'Notification'}`,
         timestamp: e.sentAt,
         description: `To ${e.recipientName || e.recipientEmail}`,
       });
@@ -635,14 +643,19 @@ function emailTemplateFromApi(t: any): EmailTemplate {
 }
 
 function emailActivityFromApi(e: any): EmailActivityRecord {
+  const validStatus =
+    e.status === 'delivered' || e.status === 'sent' || e.status === 'failed' || e.status === 'not_sent' || e.status === 'queued'
+      ? e.status
+      : 'sent';
   return {
     id: String(e.id),
     recipientName: e.recipientName || '',
     recipientEmail: e.recipientEmail || '',
     templateName: e.templateName || '',
     subject: e.subject || '',
+    bodyPreview: e.bodyPreview || '',
     sentAt: e.sentAt || '',
-    status: e.status === 'failed' ? 'sent' : 'delivered',
+    status: validStatus,
   };
 }
 
