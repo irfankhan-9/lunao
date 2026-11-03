@@ -38,6 +38,7 @@ async function fetchPwa<T = any>(
   options: { requireAuth?: boolean; timeoutMs?: number } = {},
 ): Promise<T> {
   const token = tenantAuthService.getAuthToken();
+  const activeSlug = tenantAuthService.getActiveSlug();
   if (options.requireAuth !== false && !token) {
     throw new Error('Not authenticated. Please sign in with your owner code.');
   }
@@ -47,6 +48,7 @@ async function fetchPwa<T = any>(
     ...(init.headers as Record<string, string> | undefined),
   };
   if (token) headers.Authorization = `Bearer ${token}`;
+  if (activeSlug) headers['X-Tenant-Slug'] = activeSlug;
   const url = path.startsWith('http') ? path : `/api${path.startsWith('/') ? path : '/' + path}`;
 
   let lastError: Error | null = null;

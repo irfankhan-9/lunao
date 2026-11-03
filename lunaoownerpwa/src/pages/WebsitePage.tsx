@@ -126,7 +126,24 @@ export const WebsitePage: React.FC = () => {
     }
   }, []);
 
-  // 2. Synchronize current HTML from active iframe (cleans temporary editor outlines)
+  // 2. Apply editMode (designMode + outline on clickable images)
+  const applyEditMode = useCallback((doc: Document | null, on: boolean) => {
+    if (!doc) return;
+    try {
+      doc.designMode = on ? 'on' : 'off';
+    } catch {
+      /* ignore cross-origin or restricted frames */
+    }
+
+    const imgs = Array.from(doc.images || []);
+    imgs.forEach((img) => {
+      (img as HTMLImageElement).style.outline = on ? '2.5px dashed rgba(16, 185, 129, 0.85)' : '';
+      (img as HTMLImageElement).style.cursor = on ? 'pointer' : '';
+      (img as HTMLImageElement).title = on ? 'Click to replace this image' : '';
+    });
+  }, []);
+
+  // 3. Synchronize current HTML from active iframe (cleans temporary editor outlines)
   const syncHtmlFromDoc = useCallback((): string => {
     const activeIframe = isFullscreenPreview ? fullscreenIframeRef.current : iframeRef.current;
     const doc = activeIframe?.contentDocument;
@@ -149,23 +166,6 @@ export const WebsitePage: React.FC = () => {
     htmlBufferRef.current = current;
     return current;
   }, [isFullscreenPreview, siteHtml, editMode, applyEditMode]);
-
-  // 3. Apply editMode (designMode + outline on clickable images)
-  const applyEditMode = useCallback((doc: Document | null, on: boolean) => {
-    if (!doc) return;
-    try {
-      doc.designMode = on ? 'on' : 'off';
-    } catch {
-      /* ignore cross-origin or restricted frames */
-    }
-
-    const imgs = Array.from(doc.images || []);
-    imgs.forEach((img) => {
-      (img as HTMLImageElement).style.outline = on ? '2.5px dashed rgba(16, 185, 129, 0.85)' : '';
-      (img as HTMLImageElement).style.cursor = on ? 'pointer' : '';
-      (img as HTMLImageElement).title = on ? 'Click to replace this image' : '';
-    });
-  }, []);
 
   const handleImgClick = useCallback((e: Event) => {
     const target = e.target as HTMLElement;

@@ -224,8 +224,8 @@ export async function initSupabaseSyncAndMigrate(inMemoryTablesMap = null) {
 }
 
 export async function hydrateTablesMapFromSupabase(tablesMap, customPool = null) {
+  if (!tablesMap) return;
   const pool = customPool || getPgPool();
-  if (!pool || !tablesMap) return;
 
   const tablesToLoad = [
     'site_history',
@@ -256,18 +256,46 @@ export async function hydrateTablesMapFromSupabase(tablesMap, customPool = null)
   ];
 
   for (const tbl of tablesToLoad) {
+    let rawRows = null;
+    if (pool) {
+      try {
+        const { rows } = await pool.query(`SELECT * FROM public.${tbl}`);
+        rawRows = rows;
+      } catch {
+        // Pool failed (e.g. IPv6 ENETUNREACH)
+      }
+    }
+
+    if (!rawRows) {
+      try {
+        const sb = getSupabase();
+        if (sb) {
+          const { data, error } = await sb.from(tbl).select('*');
+          if (!error && Array.isArray(data)) {
+            rawRows = data;
+          }
+        }
+      } catch {
+        // Supabase client error
+      }
+    }
+
+    if (!rawRows || !Array.isArray(rawRows)) continue;
+
     try {
-      const { rows } = await pool.query(`SELECT * FROM public.${tbl}`);
-      const normalizedRows = (rows || []).map((r) => {
+      const normalizedRows = rawRows.map((r) => {
         const copy = { ...r };
         for (const col of BOOLEAN_COLUMNS) {
           if (col in copy && typeof copy[col] === 'boolean') {
-            // Convert numeric/boolean columns seamlessly for legacy readers that check === 1 or boolean
             copy[col] = copy[col] ? 1 : 0;
           }
         }
         for (const [k, v] of Object.entries(copy)) {
-          if (typeof v === 'string' && /^(created_at|updated_at|started_at|completed_at|sent_at|connected_at|last_reset_at|expires_at|received_at|used_at|last_active_at|revoked_at)$/.test(k) && /^\d+$/.test(v)) {
+          if (
+            typeof v === 'string' &&
+            /^(created_at|updated_at|started_at|completed_at|sent_at|connected_at|last_reset_at|expires_at|received_at|used_at|last_active_at|revoked_at)$/.test(k) &&
+            /^\d+$/.test(v)
+          ) {
             copy[k] = Number(v);
           }
         }
@@ -275,7 +303,7 @@ export async function hydrateTablesMapFromSupabase(tablesMap, customPool = null)
       });
       tablesMap.set(tbl, normalizedRows);
     } catch {
-      // ignore if table not yet populated
+      // ignore
     }
   }
 }

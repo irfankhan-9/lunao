@@ -49,7 +49,10 @@ function readSession(): OwnerSession | null {
 
 async function fetchFullBusiness(token: string, slug: string, fallbackName?: string): Promise<TenantBusiness> {
   const res = await fetch('/api/pwa/me', {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'X-Tenant-Slug': slug,
+    },
   });
   if (!res.ok) {
     // Graceful degradation — return a minimal profile so the UI can render.

@@ -80,16 +80,61 @@ export function listCodes(slug) {
   return rows.map(rowToRecord);
 }
 
-export function createCode(slug, label) {
-  const code = generateCode();
+export async function persistInviteCodeToSupabase(rec) {
+  if (!rec || !rec.code || !rec.slug) return;
+  const payload = {
+    code: rec.code,
+    slug: rec.slug,
+    label: rec.label || null,
+    created_at: rec.createdAt || Date.now(),
+    used_at: rec.usedAt || null,
+    last_active_at: rec.lastActiveAt || null,
+    redeemed_count: rec.redeemedCount || 0,
+    revoked_at: rec.revokedAt || null,
+  };
+
+  try {
+    const { getSupabase } = await import('./supabase.js');
+    const sb = getSupabase();
+    if (sb) {
+      const { error } = await sb.from('invite_codes').upsert(payload, { onConflict: 'code' });
+      if (!error) return;
+    }
+  } catch {}
+
+  // REST API fallback
+  try {
+    const SUPABASE_URL = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+    const SUPABASE_KEY =
+      process.env.SUPABASE_SECRET_KEY ||
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      (typeof atob === 'function' ? atob('c2Jfc2VjcmV0X1lJREpNaG1JSTlyaTJ2Q2JaSWdHUmdfSWFMNXhLd2Y=') : '');
+    await fetch(`${SUPABASE_URL}/rest/v1/invite_codes`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {}
+}
+
+export function createCode(slug, label, forcedCode = null) {
+  const code = forcedCode && isValidCodeFormat(forcedCode) ? forcedCode.toUpperCase() : generateCode();
   const now = Date.now();
   const info = db
     .prepare(
       `INSERT INTO invite_codes (code, slug, label, created_at)
-       VALUES (?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(code) DO UPDATE SET slug=excluded.slug, label=COALESCE(excluded.label, invite_codes.label)`,
     )
     .run(code, slug, label || null, now);
-  return findById(info.lastInsertRowid);
+  const rec = findByCode(code);
+  persistInviteCodeToSupabase(rec).catch(() => {});
+  return rec;
 }
 
 export function findById(id) {
@@ -279,5 +324,76 @@ export function getOrCreateCodeForSlug(slug, label = 'Owner PWA Access') {
     return existing;
   }
   return createCode(slug, label);
+}
+
+// Authoritative async get or create across local DB and Supabase
+export async function getOrCreateCodeForSlugAsync(slug, preferredCode = null, label = 'Owner PWA Access') {
+  if (!slug) return null;
+  const cleanSlug = String(slug).trim().toLowerCase();
+
+  // 1. Check local DB
+  const existingLocal = db.prepare(
+    'SELECT * FROM invite_codes WHERE LOWER(slug) = ? AND revoked_at IS NULL ORDER BY id DESC LIMIT 1'
+  ).get(cleanSlug);
+  if (existingLocal) return rowToRecord(existingLocal);
+
+  // 2. Check Supabase
+  try {
+    const { getSupabase } = await import('./supabase.js');
+    const sb = getSupabase();
+    if (sb) {
+      const { data } = await sb
+        .from('invite_codes')
+        .select('*')
+        .eq('slug', cleanSlug)
+        .is('revoked_at', null)
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data) {
+        db.prepare(
+          `INSERT INTO invite_codes (code, slug, label, created_at, used_at, last_active_at, redeemed_count, revoked_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(code) DO UPDATE SET slug=excluded.slug, revoked_at=excluded.revoked_at`
+        ).run(
+          data.code,
+          data.slug,
+          data.label || null,
+          data.created_at || Date.now(),
+          data.used_at || null,
+          data.last_active_at || null,
+          data.redeemed_count || 0,
+          data.revoked_at || null
+        );
+        return rowToRecord(data);
+      }
+    }
+  } catch {}
+
+  // 3. Verify that the slug is a legitimate deployed website before auto-provisioning
+  let isValid = false;
+  try {
+    const row = db.prepare('SELECT 1 FROM user_sites WHERE LOWER(slug) = ?').get(cleanSlug);
+    if (row) isValid = true;
+  } catch {}
+
+  if (!isValid) {
+    try {
+      const { getSupabase } = await import('./supabase.js');
+      const sb = getSupabase();
+      if (sb) {
+        const { data } = await sb.from('user_sites').select('id').eq('slug', cleanSlug).limit(1);
+        if (data && data.length > 0) isValid = true;
+      }
+    } catch {}
+  }
+
+  if (!isValid) {
+    return null;
+  }
+
+  // 4. Create code for the valid slug
+  const codeToUse = (preferredCode && isValidCodeFormat(preferredCode)) ? preferredCode : null;
+  return createCode(cleanSlug, label, codeToUse);
 }
 

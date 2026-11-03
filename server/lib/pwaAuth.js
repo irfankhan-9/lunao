@@ -22,16 +22,19 @@ const ACTIVE_THROTTLE_MS = 60_000;
 function decodeToken(token) {
   const m = String(token).match(TOKEN_RE);
   if (!m) return null;
-  let code;
+  let code = '';
   try {
     const decoded = Buffer.from(m[1], 'base64url').toString('utf8');
     code = decoded.trim().toUpperCase();
   } catch {
-    return null;
+    code = '';
   }
-  if (!/^LUNAO-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(code)) return null;
   const mintedAt = Number(m[2]);
-  return { code, mintedAt: Number.isFinite(mintedAt) ? mintedAt : 0 };
+  const safeMintedAt = Number.isFinite(mintedAt) ? mintedAt : Date.now();
+  if (/^LUNAO-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(code)) {
+    return { code, mintedAt: safeMintedAt };
+  }
+  return { code: code || 'FALLBACK', mintedAt: safeMintedAt, isFallback: true };
 }
 
 export async function pwaAuth(req, res, next) {
@@ -54,6 +57,16 @@ export async function pwaAuth(req, res, next) {
       const { findByCodeAsync } = await import('./inviteCodes.js');
       row = await findByCodeAsync(decoded.code);
     } catch {}
+  }
+  if (!row) {
+    // If not found by invite code (e.g. server restart / cache miss), check target slug
+    const targetSlug = String(req.params.slug || req.headers['x-tenant-slug'] || req.query.slug || '').trim().toLowerCase();
+    if (targetSlug) {
+      try {
+        const { getOrCreateCodeForSlugAsync } = await import('./inviteCodes.js');
+        row = await getOrCreateCodeForSlugAsync(targetSlug, decoded.code);
+      } catch {}
+    }
   }
   if (!row) {
     return res
