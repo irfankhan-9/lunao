@@ -189,6 +189,48 @@ function normalizeCampaignSource(source) {
   return 'site-deploy';
 }
 
+// A site belongs in the Site Editor when it was rebranded from an official built-in
+// Lunao template. Rows saved before the classification fix may carry
+// template_source='custom' even though their template_key is built-in, so the
+// template key is the source of truth here.
+function isEditorEligibleRow(r) {
+  if (!r || !r.slug) return false;
+  return isOfficialBuiltinPwaTemplate(r.template_key) || isOfficialBuiltinPwaTemplate(r.niche);
+}
+
+// Self-heal legacy rows that were misclassified as custom so every store agrees.
+async function healMisclassifiedRows(rows) {
+  const slugs = (rows || [])
+    .filter((r) => isEditorEligibleRow(r) && (r.template_source !== 'builtin' || !r.is_pwa_connected))
+    .map((r) => String(r.slug).toLowerCase());
+  if (!slugs.length) return;
+  try {
+    db.prepare(
+      `UPDATE user_sites SET template_source = 'builtin', is_pwa_connected = 1
+        WHERE slug IN (${slugs.map(() => '?').join(',')})`,
+    ).run(...slugs);
+  } catch {}
+  const pool = getPgPool();
+  if (pool) {
+    try {
+      await pool.query(
+        `UPDATE public.user_sites SET template_source = 'builtin', is_pwa_connected = true
+          WHERE slug = ANY($1::text[])`,
+        [slugs],
+      );
+      return;
+    } catch (err) {
+      console.warn('[sites] Postgres heal notice:', err.message);
+    }
+  }
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      await sb.from('user_sites').update({ template_source: 'builtin', is_pwa_connected: true }).in('slug', slugs);
+    } catch {}
+  }
+}
+
 function formatEditorSiteRow(r) {
   if (!r) return null;
   const slug = r.slug;
@@ -206,8 +248,8 @@ function formatEditorSiteRow(r) {
     city: r.city || '',
     niche: normalizeOfficialNiche(r.niche),
     templateKey: r.template_key || 'barber-dark-luxury',
-    templateSource: r.template_source || 'builtin',
-    isPwaConnected: Boolean(r.is_pwa_connected),
+    templateSource: isEditorEligibleRow(r) ? 'builtin' : (r.template_source || 'builtin'),
+    isPwaConnected: isEditorEligibleRow(r) ? true : Boolean(r.is_pwa_connected),
     campaignSource: r.campaign_source || 'site-deploy',
     campaignId: r.campaign_id || null,
     url: deployUrl,
@@ -245,11 +287,14 @@ export async function registerUserRebrandedSite({
     return { registered: false, savedToSupabase: false, reason: 'invalid_slug' };
   }
 
-  // Determine whether this uses an official built-in PWA template or a custom template
+  // Determine whether this uses an official built-in PWA template or a custom template.
+  // NOTE: campaign wizards forward the built-in template's raw HTML alongside its key,
+  // so a raw-HTML override does NOT make a site "custom" when the key itself is an
+  // official built-in template. Classification is driven by the template key.
   const builtinEligible =
     templateSource === 'custom' || isPwaConnected === false
       ? false
-      : isOfficialBuiltinPwaTemplate(templateKey || niche, resolvedTemplate, hasRawHtmlOverride);
+      : isOfficialBuiltinPwaTemplate(templateKey || niche, resolvedTemplate, false);
 
   const effectiveTemplateSource = builtinEligible ? 'builtin' : 'custom';
   const effectivePwaConnected = builtinEligible;
@@ -433,18 +478,17 @@ export async function listUserEditorSites(ownerKey) {
                 deploy_url, compiled_html, created_at, updated_at
            FROM public.user_sites
           WHERE owner_id = $1
-            AND template_source = 'builtin'
-            AND is_pwa_connected = true
           ORDER BY updated_at DESC
-          LIMIT 500`,
+          LIMIT 1000`,
         [cleanOwner],
       );
-      queriedRemote = true;
+      queriedRemote = (rows || []).length > 0;
       for (const r of rows || []) {
-        if (!isOfficialBuiltinPwaTemplate(r.template_key)) continue;
+        if (!isEditorEligibleRow(r)) continue;
         const formatted = formatEditorSiteRow(r);
         if (formatted) bySlug.set(formatted.slug, formatted);
       }
+      healMisclassifiedRows(rows).catch(() => {});
     } catch (err) {
       console.warn('[sites] Postgres listUserEditorSites notice:', err.message);
     }
@@ -458,17 +502,16 @@ export async function listUserEditorSites(ownerKey) {
           .from('user_sites')
           .select('*')
           .eq('owner_id', cleanOwner)
-          .eq('template_source', 'builtin')
-          .eq('is_pwa_connected', true)
           .order('updated_at', { ascending: false })
-          .limit(500);
+          .limit(1000);
         if (!error && Array.isArray(data)) {
           queriedRemote = true;
           for (const r of data) {
-            if (!isOfficialBuiltinPwaTemplate(r.template_key)) continue;
+            if (!isEditorEligibleRow(r)) continue;
             const formatted = formatEditorSiteRow(r);
             if (formatted) bySlug.set(formatted.slug, formatted);
           }
+          healMisclassifiedRows(data).catch(() => {});
         }
       } catch (err) {
         console.warn('[sites] Supabase REST listUserEditorSites notice:', err.message);
@@ -482,14 +525,12 @@ export async function listUserEditorSites(ownerKey) {
       .prepare(
         `SELECT * FROM user_sites
           WHERE owner_id = ?
-            AND template_source = 'builtin'
-            AND is_pwa_connected = 1
           ORDER BY updated_at DESC
-          LIMIT 500`,
+          LIMIT 1000`,
       )
       .all(cleanOwner);
     for (const r of localRows || []) {
-      if (!isOfficialBuiltinPwaTemplate(r.template_key)) continue;
+      if (!isEditorEligibleRow(r)) continue;
       if (!bySlug.has(r.slug)) {
         const formatted = formatEditorSiteRow(r);
         if (formatted) bySlug.set(formatted.slug, formatted);
@@ -565,11 +606,7 @@ export async function getUserEditorSite(ownerKey, slug) {
     return { ok: false, status: 403, error: 'Forbidden: You do not have permission to access this site.' };
   }
 
-  if (
-    row.template_source !== 'builtin' ||
-    !row.is_pwa_connected ||
-    !isOfficialBuiltinPwaTemplate(row.template_key)
-  ) {
+  if (!isEditorEligibleRow(row)) {
     return {
       ok: false,
       status: 403,

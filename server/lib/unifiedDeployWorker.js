@@ -23,6 +23,7 @@ import { validateBookingContract, CONTRACT_REJECTION_MESSAGE } from './bookingCo
 import { slugify } from './slug.js';
 import { cloudflare } from './config.js';
 import { pgUpsertCustomTemplate } from './supabaseSync.js';
+import { isOfficialBuiltinPwaTemplate } from './templates.js';
 
 export const MIN_LEAD_DURATION_MS = 4000;
 export const MAX_CLOUDFLARE_RETRY_WINDOW_MS = 30000;
@@ -102,8 +103,10 @@ export async function executeUnifiedLeadRebrandAndDeploy({
     message: `Rebranding template for "${business.name}"...`,
   });
 
-  // If custom rawHtml was supplied with a custom ID, persist it to custom_templates in Supabase
-  if (effectiveRawHtml && effectiveKey && typeof effectiveRawHtml === 'string' && effectiveRawHtml.trim().length > 200) {
+  // If custom rawHtml was supplied with a custom ID, persist it to custom_templates in Supabase.
+  // Built-in template keys are skipped — wizards forward built-in raw HTML too, and those
+  // must never be re-registered as user custom templates.
+  if (effectiveRawHtml && effectiveKey && !isOfficialBuiltinPwaTemplate(effectiveKey) && typeof effectiveRawHtml === 'string' && effectiveRawHtml.trim().length > 200) {
     try {
       const tName = (effectiveName || 'Custom Template').trim();
       const tSlug = String(effectiveKey).toLowerCase().replace(/[^a-z0-9]+/g, '-');
