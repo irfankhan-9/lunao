@@ -21,6 +21,10 @@ import {
   getBooking,
   getBookingAsync,
 } from './bookings.js';
+import { readSite, writeSite, isValidSlug } from './sites.js';
+import { validateBookingContract, CONTRACT_REJECTION_MESSAGE } from './bookingContractValidator.js';
+import { publishBatch } from './cloudflare.js';
+import { cloudflare } from './config.js';
 import {
   supabaseListConversations,
   supabaseGetConversationMessages,
@@ -531,7 +535,190 @@ export function mountPwaApi(app) {
     }
   });
 
-  // ---- Integrations (explicit) -----
+  // ---- Get business owner's real website HTML (strictly tenant-isolated) -----
+  app.get('/api/pwa/:slug/site/html', pwaAuth, assertSameSlug, async (req, res) => {
+    try {
+      const slug = req.tenantSlug;
+      if (!isValidSlug(slug)) {
+        return res.status(400).json({ ok: false, error: 'Invalid site slug.' });
+      }
+
+      let html = '';
+      try {
+        html = await readSite(slug);
+      } catch (err) {
+        const row = db.prepare('SELECT compiled_html FROM user_sites WHERE slug = ?').get(slug);
+        if (row?.compiled_html) {
+          html = row.compiled_html;
+        }
+      }
+
+      if (!html) {
+        return res.status(404).json({ ok: false, error: 'Website HTML not found for this business.' });
+      }
+
+      const projName = cloudflare.project || 'lunao-web-designn';
+      const liveUrl = `https://${projName}.pages.dev/${slug}/`;
+
+      res.json({
+        ok: true,
+        slug,
+        html,
+        url: liveUrl,
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // ---- Save business owner's edited website HTML (strictly tenant-isolated) -----
+  app.put('/api/pwa/:slug/site/html', pwaAuth, assertSameSlug, async (req, res) => {
+    try {
+      const slug = req.tenantSlug;
+      if (!isValidSlug(slug)) {
+        return res.status(400).json({ ok: false, error: 'Invalid site slug.' });
+      }
+
+      const html = req.body?.html;
+      if (typeof html !== 'string' || !html.trim()) {
+        return res.status(400).json({ ok: false, error: 'html string is required.' });
+      }
+
+      // Enforce booking contract validation so the booking bridge remains safe
+      const contractCheck = validateBookingContract(html);
+      if (!contractCheck.valid) {
+        return res.status(400).json({
+          ok: false,
+          error: contractCheck.customerMessage || CONTRACT_REJECTION_MESSAGE,
+        });
+      }
+
+      const projName = cloudflare.project || 'lunao-web-designn';
+      const liveUrl = `https://${projName}.pages.dev/${slug}/`;
+      const now = Date.now();
+
+      // 1. Write to disk so it is immediately served and stageable
+      await writeSite(slug, html);
+
+      // 2. Update local SQLite mirrors
+      try {
+        db.prepare(
+          `UPDATE user_sites
+              SET compiled_html = ?,
+                  deploy_url = COALESCE(?, deploy_url),
+                  updated_at = ?
+            WHERE slug = ?`,
+        ).run(html, liveUrl, now, slug);
+      } catch (e) {
+        /* non-fatal */
+      }
+
+      try {
+        db.prepare(
+          `UPDATE pwa_website_config
+              SET last_updated = ?, updated_at = ?
+            WHERE slug = ?`,
+        ).run(new Date().toISOString().slice(0, 10), now, slug);
+      } catch (e) {
+        /* non-fatal */
+      }
+
+      // 3. Update Supabase REST
+      const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+      const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+      if (sbUrl && sbKey) {
+        try {
+          const patchUrl = new URL(`${sbUrl}/rest/v1/user_sites`);
+          patchUrl.searchParams.set('slug', `eq.${slug}`);
+          await fetch(patchUrl.toString(), {
+            method: 'PATCH',
+            headers: {
+              apikey: sbKey,
+              Authorization: `Bearer ${sbKey}`,
+              'Content-Type': 'application/json',
+              Prefer: 'return=minimal',
+            },
+            body: JSON.stringify({ compiled_html: html, deploy_url: liveUrl, updated_at: now }),
+            signal: AbortSignal.timeout(6000),
+          });
+        } catch (err) {
+          console.warn('[pwaApi] Supabase REST site save notice:', err.message);
+        }
+      }
+
+      res.json({
+        ok: true,
+        slug,
+        url: liveUrl,
+        message: 'Website changes saved successfully.',
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // ---- Save & Redeploy business owner's website live (strictly tenant-isolated) -----
+  app.post('/api/pwa/:slug/site/deploy', pwaAuth, assertSameSlug, async (req, res) => {
+    try {
+      const slug = req.tenantSlug;
+      if (!isValidSlug(slug)) {
+        return res.status(400).json({ ok: false, error: 'Invalid site slug.' });
+      }
+
+      const html = req.body?.html;
+      const projName = cloudflare.project || 'lunao-web-designn';
+      const liveUrl = `https://${projName}.pages.dev/${slug}/`;
+      const now = Date.now();
+
+      if (typeof html === 'string' && html.trim()) {
+        const contractCheck = validateBookingContract(html);
+        if (!contractCheck.valid) {
+          return res.status(400).json({
+            ok: false,
+            error: contractCheck.customerMessage || CONTRACT_REJECTION_MESSAGE,
+          });
+        }
+        await writeSite(slug, html);
+        try {
+          db.prepare(
+            `UPDATE user_sites
+                SET compiled_html = ?,
+                    deploy_url = COALESCE(?, deploy_url),
+                    updated_at = ?
+              WHERE slug = ?`,
+          ).run(html, liveUrl, now, slug);
+        } catch {}
+      }
+
+      // Update PWA config status
+      const today = new Date().toISOString().slice(0, 10);
+      try {
+        db.prepare(
+          `UPDATE pwa_website_config
+              SET status = 'deployed', last_deployed = ?, updated_at = ?
+            WHERE slug = ?`,
+        ).run(today, now, slug);
+      } catch {}
+
+      // Trigger Cloudflare Pages deployment batch
+      let deployResult = null;
+      try {
+        deployResult = await publishBatch();
+      } catch (err) {
+        console.warn('[pwaApi] publishBatch notice:', err.message);
+      }
+
+      res.json({
+        ok: true,
+        slug,
+        url: liveUrl,
+        deploy: deployResult,
+        lastDeployed: today,
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
   app.get('/api/pwa/me/integrations', pwaAuth, async (req, res) => {
     try {
       const slug = req.tenantSlug;

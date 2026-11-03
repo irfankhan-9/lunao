@@ -198,6 +198,27 @@ export const tenantDataService = {
     return websiteFromApi(data.website);
   },
 
+  async getWebsiteHtml(businessId: string): Promise<{ ok: boolean; html: string; slug: string; url: string }> {
+    const slug = tenantAuthService.getActiveSlug() || businessId;
+    return fetchPwa<{ ok: boolean; html: string; slug: string; url: string }>(`/pwa/${encodeURIComponent(slug)}/site/html`);
+  },
+
+  async saveWebsiteHtml(businessId: string, html: string): Promise<{ ok: boolean; slug: string; url: string; message: string }> {
+    const slug = tenantAuthService.getActiveSlug() || businessId;
+    return fetchPwa<{ ok: boolean; slug: string; url: string; message: string }>(`/pwa/${encodeURIComponent(slug)}/site/html`, {
+      method: 'PUT',
+      body: JSON.stringify({ html }),
+    });
+  },
+
+  async deployWebsiteHtml(businessId: string, html?: string): Promise<{ ok: boolean; slug: string; url: string; lastDeployed: string }> {
+    const slug = tenantAuthService.getActiveSlug() || businessId;
+    return fetchPwa<{ ok: boolean; slug: string; url: string; lastDeployed: string }>(`/pwa/${encodeURIComponent(slug)}/site/deploy`, {
+      method: 'POST',
+      body: JSON.stringify({ html }),
+    });
+  },
+
   async updateWebsiteConfig(
     businessId: string,
     cfg: Partial<TenantBusiness['websiteConfig']>,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Globe,
   ExternalLink,
@@ -11,102 +11,289 @@ import {
   Maximize2,
   Eye,
   X,
+  Save,
+  Pencil,
+  Image as ImageIcon,
+  UploadCloud,
+  Link2,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  Code2,
 } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 import { websiteService } from '../services/websiteService';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { BottomSheet } from '../components/ui/BottomSheet';
-import { BusinessLandingView } from '../components/website/BusinessLandingView';
 import { soundEffects } from '../utils/soundEffects';
 
 export const WebsitePage: React.FC = () => {
   const { business, updateWebsiteConfig, showToast } = useBusiness();
   const [isDeploying, setIsDeploying] = useState(false);
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
 
-  // Local Form state for quick editor
-  const [headline, setHeadline] = useState(business.websiteConfig.headline);
-  const [subheadline, setSubheadline] = useState(business.websiteConfig.subheadline);
-  const [ctaText, setCtaText] = useState(business.websiteConfig.ctaText || 'Book Online');
-  const [heroImage] = useState(business.websiteConfig.heroImage);
-  const [announcement, setAnnouncement] = useState(business.websiteConfig.announcement || '');
+  // Real website HTML state
+  const [siteHtml, setSiteHtml] = useState<string>('');
+  const [liveSiteUrl, setLiveSiteUrl] = useState<string>(business.websiteUrl || '');
+  const [isLoadingHtml, setIsLoadingHtml] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isDirty, setIsDirty] = useState<boolean>(false);
+  const [editMode, setEditMode] = useState<boolean>(false);
 
+  // Image replacement panel
+  const [imgPanelOpen, setImgPanelOpen] = useState(false);
+  const [imgUrlInput, setImgUrlInput] = useState('');
+  const selectedImgRef = useRef<HTMLImageElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // iframe refs
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const fullscreenIframeRef = useRef<HTMLIFrameElement>(null);
+  const htmlBufferRef = useRef<string>('');
+
+  // 1. Fetch business owner's real website HTML on mount or when business.id / business.websiteUrl changes
+  const loadWebsiteHtml = useCallback(async () => {
+    setIsLoadingHtml(true);
+    setLoadError(null);
+    try {
+      const res = await websiteService.getWebsiteHtml(business.id);
+      if (res && res.html) {
+        setSiteHtml(res.html);
+        htmlBufferRef.current = res.html;
+        if (res.url) {
+          setLiveSiteUrl(res.url);
+        }
+        setIsDirty(false);
+      } else {
+        setLoadError('No HTML content returned for this business website.');
+      }
+    } catch (err: any) {
+      console.warn('[WebsitePage] Failed to load real site HTML:', err);
+      setLoadError(err?.message || 'Could not load website HTML.');
+    } finally {
+      setIsLoadingHtml(false);
+    }
+  }, [business.id]);
+
+  useEffect(() => {
+    loadWebsiteHtml();
+  }, [loadWebsiteHtml]);
+
+  // 2. Synchronize current HTML from active iframe (inline edits & DOM changes)
+  const syncHtmlFromDoc = useCallback((): string => {
+    const activeIframe = isFullscreenPreview ? fullscreenIframeRef.current : iframeRef.current;
+    const doc = activeIframe?.contentDocument;
+    if (!doc || !doc.documentElement) {
+      return htmlBufferRef.current || siteHtml;
+    }
+    const current = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+    htmlBufferRef.current = current;
+    return current;
+  }, [isFullscreenPreview, siteHtml]);
+
+  // 3. Apply editMode (designMode + outline on clickable images)
+  const applyEditMode = useCallback((doc: Document | null, on: boolean) => {
+    if (!doc) return;
+    try {
+      doc.designMode = on ? 'on' : 'off';
+    } catch {
+      /* ignore cross-origin or restricted frames */
+    }
+
+    const imgs = Array.from(doc.images || []);
+    imgs.forEach((img) => {
+      (img as HTMLImageElement).style.outline = on ? '2px dashed rgba(16, 185, 129, 0.7)' : '';
+      (img as HTMLImageElement).style.cursor = on ? 'pointer' : '';
+      (img as HTMLImageElement).title = on ? 'Click to replace this image' : '';
+    });
+  }, []);
+
+  const handleImgClick = useCallback((e: Event) => {
+    const target = e.target as HTMLElement;
+    if (target && target.tagName === 'IMG') {
+      e.preventDefault();
+      e.stopPropagation();
+      selectedImgRef.current = target as HTMLImageElement;
+      setImgUrlInput((target as HTMLImageElement).getAttribute('src') || '');
+      setImgPanelOpen(true);
+      soundEffects.playDialogPop();
+    }
+  }, []);
+
+  const attachIframeListeners = useCallback(
+    (iframeEl: HTMLIFrameElement | null) => {
+      if (!iframeEl) return;
+      const doc = iframeEl.contentDocument;
+      if (!doc) return;
+
+      doc.addEventListener('input', () => {
+        setIsDirty(true);
+      });
+      doc.addEventListener('click', handleImgClick, true);
+      applyEditMode(doc, editMode);
+    },
+    [handleImgClick, applyEditMode, editMode]
+  );
+
+  useEffect(() => {
+    const doc1 = iframeRef.current?.contentDocument;
+    if (doc1) applyEditMode(doc1, editMode);
+
+    const doc2 = fullscreenIframeRef.current?.contentDocument;
+    if (doc2) applyEditMode(doc2, editMode);
+
+    if (!editMode) setImgPanelOpen(false);
+  }, [editMode, applyEditMode]);
+
+  // 4. Save edits without deploying
+  const handleSaveHtml = async () => {
+    soundEffects.playButtonClick();
+    const currentHtml = syncHtmlFromDoc();
+    setIsSaving(true);
+    try {
+      const res = await websiteService.saveWebsiteHtml(business.id, currentHtml);
+      setSiteHtml(currentHtml);
+      setIsDirty(false);
+      soundEffects.playSuccess();
+      showToast('Website changes saved successfully');
+    } catch (err: any) {
+      soundEffects.playError();
+      showToast(err?.message || 'Failed to save website changes');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 5. Deploy live to Cloudflare Pages
   const handleDeploy = async () => {
     soundEffects.playButtonClick();
+    const currentHtml = syncHtmlFromDoc();
     setIsDeploying(true);
     try {
-      const result = await websiteService.deployWebsite(business.id);
+      const result = await websiteService.deployWebsiteHtml(business.id, currentHtml);
+      setSiteHtml(currentHtml);
+      setIsDirty(false);
       updateWebsiteConfig({
-        lastDeployed: result.lastDeployed,
+        lastDeployed: result.lastDeployed || new Date().toISOString().slice(0, 10),
         status: 'deployed',
       });
       soundEffects.playSuccess();
-      showToast('Website changes published live');
-    } catch {
-      showToast('Deployment error occurred');
+      showToast('Website published live to customers');
+    } catch (err: any) {
+      soundEffects.playError();
+      showToast(err?.message || 'Deployment error occurred');
     } finally {
       setIsDeploying(false);
     }
   };
 
-  const handleSaveEditor = async (e: React.FormEvent) => {
-    e.preventDefault();
-    soundEffects.playSuccess();
-    const updated = await websiteService.updateWebsite(business.id, {
-      headline,
-      subheadline,
-      ctaText,
-      heroImage,
-      announcement: announcement.trim() || undefined,
-    });
-    updateWebsiteConfig(updated);
-    setIsEditorOpen(false);
-    showToast('Website copy updated');
+  // 6. Image Replacement Actions
+  const applyImageUrl = () => {
+    if (selectedImgRef.current && imgUrlInput.trim()) {
+      selectedImgRef.current.src = imgUrlInput.trim();
+      setIsDirty(true);
+      soundEffects.playSoftBubble();
+      showToast('Image updated from URL');
+      setImgPanelOpen(false);
+    }
   };
+
+  const handlePickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedImgRef.current) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (selectedImgRef.current && typeof reader.result === 'string') {
+        selectedImgRef.current.src = reader.result;
+        setIsDirty(true);
+        soundEffects.playSoftBubble();
+        showToast('Image uploaded and applied');
+        setImgPanelOpen(false);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const domainDisplay = (liveSiteUrl || business.websiteUrl || '').replace('https://', '').replace(/\/$/, '');
 
   return (
     <div className="space-y-6">
+      {/* Hidden file input for uploading images */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handlePickFile}
+      />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl md:text-2xl font-bold tracking-tight text-slate-900">
-              Public Website
+              Business Website
             </h2>
             <Badge variant="success" dot size="sm">
-              Live & Published
+              Live & Synced
             </Badge>
           </div>
           <p className="text-xs md:text-sm text-slate-500 mt-0.5">
-            Manage your client-facing website copy, visual announcements, and instant publishing
+            Click &ldquo;Edit Website&rdquo; to modify any text or swap images directly on your live site, then publish live in one click.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Edit Mode Toggle */}
+          <Button
+            variant={editMode ? 'primary' : 'outline'}
+            size="sm"
+            leftIcon={<Pencil className="w-3.5 h-3.5" />}
+            onClick={() => {
+              soundEffects.playButtonClick();
+              setEditMode((prev) => !prev);
+            }}
+          >
+            {editMode ? 'Finish Editing' : 'Edit Website'}
+          </Button>
+
+          {/* Save Button (shows when dirty) */}
+          {isDirty && (
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={
+                isSaving ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                ) : (
+                  <Save className="w-3.5 h-3.5 text-emerald-600" />
+                )
+              }
+              onClick={handleSaveHtml}
+              disabled={isSaving}
+            >
+              {isSaving ? 'Saving...' : 'Save Draft'}
+            </Button>
+          )}
+
+          {/* Full-screen preview */}
           <Button
             variant="outline"
             size="sm"
-            leftIcon={<Eye className="w-3.5 h-3.5" />}
+            leftIcon={<Maximize2 className="w-3.5 h-3.5" />}
             onClick={() => {
               soundEffects.playButtonClick();
               setIsFullscreenPreview(true);
             }}
           >
-            Live Preview
+            Full Screen
           </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            leftIcon={<Edit3 className="w-3.5 h-3.5" />}
-            onClick={() => setIsEditorOpen(true)}
-          >
-            Edit Copy
-          </Button>
-
+          {/* Publish Live */}
           <Button
             variant="primary"
             size="sm"
@@ -125,6 +312,25 @@ export const WebsitePage: React.FC = () => {
         </div>
       </div>
 
+      {/* Edit Mode Notice Banner */}
+      {editMode && (
+        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center justify-between gap-3 text-xs shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <div className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
+              <Pencil className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <span className="font-bold">Edit Mode Active:</span> Click any text directly on the page to type, or click any image to replace it with a new photo or URL.
+            </div>
+          </div>
+          {isDirty && (
+            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold text-[11px] shrink-0 border border-amber-200">
+              Unsaved Changes
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Website Info Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
         <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
@@ -133,27 +339,26 @@ export const WebsitePage: React.FC = () => {
           </span>
           <div className="mt-1 flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-900 truncate max-w-[200px]">
-              {business.websiteUrl.replace('https://', '')}
+              {domainDisplay}
             </span>
-            <button
-              onClick={() => {
-                soundEffects.playButtonClick();
-                setIsFullscreenPreview(true);
-              }}
+            <a
+              href={liveSiteUrl || business.websiteUrl}
+              target="_blank"
+              rel="noreferrer"
               className="text-emerald-700 hover:text-emerald-800 p-1 rounded-md hover:bg-slate-50 transition cursor-pointer"
-              title="Open full-screen preview"
+              title="Open public website in new tab"
             >
               <ExternalLink className="w-3.5 h-3.5" />
-            </button>
+            </a>
           </div>
         </div>
 
         <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
           <span className="text-[11px] font-semibold text-slate-500 uppercase">
-            Last Content Update
+            Content Status
           </span>
           <p className="mt-1 text-xs font-semibold text-slate-900">
-            {business.websiteConfig.lastUpdated}
+            {isDirty ? 'Draft changes pending' : 'Synchronized with live site'}
           </p>
         </div>
 
@@ -162,7 +367,7 @@ export const WebsitePage: React.FC = () => {
             Production Build
           </span>
           <p className="mt-1 text-xs font-semibold text-slate-900">
-            {business.websiteConfig.lastDeployed}
+            {business.websiteConfig.lastDeployed || 'Current'}
           </p>
         </div>
       </div>
@@ -174,8 +379,13 @@ export const WebsitePage: React.FC = () => {
           <div className="flex items-center gap-2">
             <Globe className="w-4 h-4 text-emerald-700" />
             <span className="text-xs font-medium text-slate-700">
-              Interactive Landing Page Preview
+              Interactive Website Canvas
             </span>
+            {editMode && (
+              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                Interactive Editor
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -232,14 +442,14 @@ export const WebsitePage: React.FC = () => {
         </div>
 
         {/* Scaled Preview Frame Container */}
-        <div className="p-3 sm:p-6 md:p-8 bg-slate-100 flex justify-center items-center min-h-[500px] overflow-hidden">
+        <div className="p-3 sm:p-6 md:p-8 bg-slate-100 flex justify-center items-center min-h-[560px] overflow-hidden">
           <div
             className={`transition-all duration-300 rounded-2xl overflow-hidden border border-slate-300 shadow-xl bg-white flex flex-col ${
               previewDevice === 'mobile'
                 ? 'w-[375px] h-[640px]'
                 : previewDevice === 'tablet'
                 ? 'w-[680px] h-[600px]'
-                : 'w-full max-w-5xl h-[620px]'
+                : 'w-full max-w-5xl h-[650px]'
             }`}
           >
             {/* Mock Browser Header */}
@@ -249,46 +459,72 @@ export const WebsitePage: React.FC = () => {
                 <div className="w-2.5 h-2.5 rounded-full bg-slate-300" />
                 <div className="w-2.5 h-2.5 rounded-full bg-slate-300" />
               </div>
-              <div className="px-3 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 font-mono text-[10px] truncate max-w-[240px]">
-                {business.websiteUrl}
+              <div className="px-3 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 font-mono text-[10px] truncate max-w-[280px]">
+                {liveSiteUrl || business.websiteUrl}
               </div>
               <button
                 onClick={() => setIsFullscreenPreview(true)}
                 title="Expand full screen"
-                className="text-slate-400 hover:text-slate-700 p-0.5"
+                className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
               >
                 <Maximize2 className="w-3 h-3" />
               </button>
             </div>
 
-            {/* Rendered Website Mockup */}
-            <div className="flex-1 overflow-y-auto bg-white text-slate-900">
-              <BusinessLandingView
-                business={business}
-                isInsidePreview={true}
-                onBookingSuccess={() => showToast('New appointment reservation received!')}
-              />
+            {/* Rendered Business HTML iframe */}
+            <div className="flex-1 relative overflow-hidden bg-white">
+              {isLoadingHtml ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white text-slate-500">
+                  <Loader2 className="w-8 h-8 animate-spin text-emerald-600 mb-2" />
+                  <p className="text-xs font-medium">Loading your business website...</p>
+                </div>
+              ) : loadError ? (
+                <div className="absolute inset-0 p-6 flex flex-col items-center justify-center text-center bg-white">
+                  <AlertCircle className="w-8 h-8 text-rose-500 mb-2" />
+                  <p className="text-sm font-semibold text-slate-800">Unable to load website HTML</p>
+                  <p className="text-xs text-slate-500 mt-1 max-w-xs">{loadError}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={loadWebsiteHtml}
+                    leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              ) : (
+                <iframe
+                  ref={iframeRef}
+                  title="Business Website"
+                  srcDoc={siteHtml}
+                  onLoad={() => attachIframeListeners(iframeRef.current)}
+                  className="w-full h-full border-0 bg-white block"
+                />
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Full-Screen Live Landing Page Preview Overlay */}
+      {/* Full-Screen Live Landing Page Preview & Editor Overlay */}
       {isFullscreenPreview && (
         <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col animate-in fade-in duration-200">
-          {/* Top Bar for Owner with Device Switcher and Close */}
+          {/* Top Bar for Owner with Device Switcher, Save & Close */}
           <div className="h-14 bg-slate-950 text-white px-4 flex items-center justify-between border-b border-slate-800 z-50 shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span className="font-bold text-xs sm:text-sm tracking-tight text-white">
-                {business.name} • Public Landing Page
+                {business.name} • Live Website Editor
               </span>
-              <span className="hidden sm:inline-block text-[11px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700">
-                Live Customer View
-              </span>
+              {editMode && (
+                <span className="hidden sm:inline-block text-[11px] px-2 py-0.5 rounded-md bg-emerald-900 text-emerald-300 border border-emerald-700">
+                  Editing Active
+                </span>
+              )}
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
               <div className="flex items-center p-0.5 rounded-lg bg-slate-800 border border-slate-700 text-xs">
                 <button
                   onClick={() => setPreviewDevice('desktop')}
@@ -319,6 +555,42 @@ export const WebsitePage: React.FC = () => {
                 </button>
               </div>
 
+              {/* Edit Toggle inside Full Screen */}
+              <button
+                onClick={() => {
+                  soundEffects.playButtonClick();
+                  setEditMode((prev) => !prev);
+                }}
+                className={`h-8 px-3 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                  editMode ? 'bg-emerald-600 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                }`}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                <span>{editMode ? 'Finish Editing' : 'Edit Website'}</span>
+              </button>
+
+              {/* Save inside Full Screen */}
+              {isDirty && (
+                <button
+                  onClick={handleSaveHtml}
+                  disabled={isSaving}
+                  className="h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                >
+                  {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  <span>Save</span>
+                </button>
+              )}
+
+              {/* Deploy inside Full Screen */}
+              <button
+                onClick={handleDeploy}
+                disabled={isDeploying}
+                className="h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+              >
+                {isDeploying ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
+                <span>Publish</span>
+              </button>
+
               <button
                 onClick={() => {
                   soundEffects.playButtonClick();
@@ -332,7 +604,7 @@ export const WebsitePage: React.FC = () => {
             </div>
           </div>
 
-          {/* Canvas Wrapper */}
+          {/* Full Screen Canvas Wrapper */}
           <div className="flex-1 overflow-y-auto bg-slate-900 flex justify-center p-0 sm:p-4">
             <div
               className={`bg-white transition-all duration-300 min-h-full ${
@@ -343,84 +615,97 @@ export const WebsitePage: React.FC = () => {
                   : 'w-full max-w-6xl shadow-2xl sm:rounded-2xl sm:my-4 sm:overflow-hidden'
               }`}
             >
-              <BusinessLandingView
-                business={business}
-                isInsidePreview={false}
-                onBookingSuccess={() => showToast('New appointment reservation received!')}
+              <iframe
+                ref={fullscreenIframeRef}
+                title="Business Website Fullscreen"
+                srcDoc={siteHtml}
+                onLoad={() => attachIframeListeners(fullscreenIframeRef.current)}
+                className="w-full h-full min-h-[85vh] border-0 bg-white block"
               />
             </div>
           </div>
         </div>
       )}
 
-      {/* Visual Quick Editor BottomSheet */}
-      {isEditorOpen && (
-        <BottomSheet
-          isOpen={isEditorOpen}
-          onClose={() => setIsEditorOpen(false)}
-          title="Website Copy Editor"
-          subtitle="Update public customer-facing headlines and call-to-action text"
+      {/* Image Replacement BottomSheet/Modal */}
+      {imgPanelOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => setImgPanelOpen(false)}
         >
-          <form onSubmit={handleSaveEditor} className="space-y-3.5 text-xs">
-            <div>
-              <label className="block text-slate-700 mb-1 font-medium">
-                Hero Headline *
-              </label>
-              <input
-                type="text"
-                required
-                value={headline}
-                onChange={(e) => setHeadline(e.target.value)}
-                className="w-full h-10 px-3 rounded-xl bg-white border border-slate-300 text-slate-900 focus:outline-none focus:border-emerald-600 shadow-2xs"
-              />
+          <div
+            className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                  <ImageIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Replace Image</h3>
+                  <p className="text-[11px] text-slate-500">Update this picture on your live website</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setImgPanelOpen(false)}
+                className="text-slate-400 hover:text-slate-700 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            <div>
-              <label className="block text-slate-700 mb-1 font-medium">
-                Subheadline
-              </label>
-              <textarea
-                rows={2}
-                value={subheadline}
-                onChange={(e) => setSubheadline(e.target.value)}
-                className="w-full p-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 focus:outline-none focus:border-emerald-600 resize-none shadow-2xs"
-              />
+            {/* Current Image Preview */}
+            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 overflow-hidden flex items-center justify-center h-36">
+              {imgUrlInput ? (
+                <img
+                  src={imgUrlInput}
+                  alt="Selected preview"
+                  className="max-h-36 max-w-full object-contain"
+                />
+              ) : (
+                <ImageIcon className="w-8 h-8 text-slate-300" />
+              )}
             </div>
 
-            <div>
-              <label className="block text-slate-700 mb-1 font-medium">
-                Call-To-Action Button Label
-              </label>
-              <input
-                type="text"
-                value={ctaText}
-                onChange={(e) => setCtaText(e.target.value)}
-                className="w-full h-9 px-3 rounded-xl bg-white border border-slate-300 text-slate-900 focus:outline-none focus:border-emerald-600 shadow-2xs"
-              />
+            {/* Upload from device */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition active:scale-[0.98] mb-3 cursor-pointer"
+            >
+              <UploadCloud className="w-4 h-4" /> Upload from Your Device
+            </button>
+
+            <div className="flex items-center gap-2 mb-3">
+              <span className="h-px flex-1 bg-slate-200" />
+              <span className="text-[10px] uppercase font-bold text-slate-400">or paste image URL</span>
+              <span className="h-px flex-1 bg-slate-200" />
             </div>
 
-            <div>
-              <label className="block text-slate-700 mb-1 font-medium">
-                Top Announcement Banner (Optional)
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Now scheduling appointments for next week!"
-                value={announcement}
-                onChange={(e) => setAnnouncement(e.target.value)}
-                className="w-full h-9 px-3 rounded-xl bg-white border border-slate-300 text-slate-900 focus:outline-none focus:border-emerald-600 shadow-2xs"
-              />
+            <div className="flex items-center gap-2">
+              <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 focus-within:border-emerald-600 focus-within:bg-white transition">
+                <Link2 className="w-4 h-4 text-slate-400 shrink-0" />
+                <input
+                  type="text"
+                  placeholder="https://images.unsplash.com/..."
+                  value={imgUrlInput}
+                  onChange={(e) => setImgUrlInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') applyImageUrl();
+                  }}
+                  className="w-full text-xs text-slate-900 bg-transparent focus:outline-none"
+                />
+              </div>
+              <button
+                onClick={applyImageUrl}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition cursor-pointer"
+              >
+                Apply
+              </button>
             </div>
-
-            <div className="pt-2">
-              <Button type="submit" variant="primary" className="w-full">
-                Apply & Save Changes
-              </Button>
-            </div>
-          </form>
-        </BottomSheet>
+          </div>
+        </div>
       )}
     </div>
   );
 };
-
