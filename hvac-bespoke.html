@@ -10921,20 +10921,10 @@
       },
 
       getBookingEndpoints() {
-        const list = [];
-        if (window.LUNAO_BOOKING_API_URL && typeof window.LUNAO_BOOKING_API_URL === 'string') {
-          list.push(window.LUNAO_BOOKING_API_URL.replace(/\/+$/, ''));
-        }
-        const supabaseBase = window.LUNAO_SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
-        list.push(`${supabaseBase.replace(/\/+$/, '')}/functions/v1/public-bookings`);
-        if (window.location && /^https?:$/i.test(window.location.protocol)) {
-          list.push('/functions/v1/public-bookings');
-          list.push('/api/bookings');
-          list.push('/api/public/bookings');
-        }
-        list.push('https://api.lunao.app/api/bookings');
-        list.push('https://lunao.app/api/bookings');
-        return [...new Set(list)];
+        const canonical = (window.LUNAO_BOOKING_API_URL && typeof window.LUNAO_BOOKING_API_URL === 'string')
+          ? window.LUNAO_BOOKING_API_URL.replace(/\/+$/, '')
+          : ((window.location && window.location.origin) ? (window.location.origin.replace(/\/+$/, '') + '/api/bookings') : '/api/bookings');
+        return [canonical];
       },
 
       getLeadEndpoints() {

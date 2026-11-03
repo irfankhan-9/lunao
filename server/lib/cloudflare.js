@@ -179,11 +179,16 @@ export async function publishBatch() {
           await fs.cp(srcSite, dstSite, { recursive: true });
         }
       }
-      // Ensure _worker.js is present in dist
+      // Ensure _worker.js and lunao-booking-bridge.js are present in dist
       const srcWorker = path.join(ROOT_DIR, 'public', '_worker.js');
       const dstWorker = path.join(distDir, '_worker.js');
       if (fsSync.existsSync(srcWorker)) {
         await fs.copyFile(srcWorker, dstWorker);
+      }
+      const srcBridge = path.join(ROOT_DIR, 'public', 'lunao-booking-bridge.js');
+      const dstBridge = path.join(distDir, 'lunao-booking-bridge.js');
+      if (fsSync.existsSync(srcBridge)) {
+        await fs.copyFile(srcBridge, dstBridge);
       }
       deployDir = distDir;
       console.log(`[cloudflare] Merged ${stagedFiles} site(s) into dist/ for unified deployment`);

@@ -16,10 +16,9 @@
   if (window.__LUNAO_BOOKING_BRIDGE_INITIALIZED__) return;
   window.__LUNAO_BOOKING_BRIDGE_INITIALIZED__ = true;
 
-  // Set global default booking endpoint so inline template scripts also use /api/bookings
-  if (!window.LUNAO_BOOKING_API_URL) {
-    window.LUNAO_BOOKING_API_URL = '/api/bookings';
-  }
+  // Set global default booking endpoint so inline template scripts also use canonical origin-rooted /api/bookings
+  var bridgeOrigin = window.location.origin || (window.location.protocol + '//' + window.location.host);
+  window.LUNAO_BOOKING_API_URL = bridgeOrigin + '/api/bookings';
 
   var isIframe = false;
   try {
@@ -296,25 +295,15 @@
       }
     }
 
-    // Strict persistence with automatic multi-endpoint failover
+    // Canonical same-origin booking persistence
     var idempotencyKey = 'bk_' + Date.now() + '_' + Math.random().toString(36).substr(2, 8);
     
-    // Prioritize relative /api/bookings which is proxied to EC2 with zero CORS overhead
-    var candidateEndpoints = [
-      '/api/bookings',
-      '/api/public/bookings',
-      '/functions/v1/public-bookings',
-      'https://lunao-web-designn.pages.dev/api/bookings'
-    ];
-    if (window.LUNAO_BOOKING_API_URL && typeof window.LUNAO_BOOKING_API_URL === 'string') {
-      var customUrl = window.LUNAO_BOOKING_API_URL.replace(/\/+$/, '');
-      if (candidateEndpoints.indexOf(customUrl) === -1) {
-        candidateEndpoints.unshift(customUrl);
-      }
-    }
+    // Canonical same-origin endpoint rooted strictly at origin (never relative to slug)
+    var origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
+    var bookingUrl = origin + '/api/bookings';
 
-    function sendBookingRequest(url) {
-      return fetch(url, {
+    function sendBookingRequest() {
+      return fetch(bookingUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -323,7 +312,7 @@
         body: JSON.stringify(payload)
       }).then(function(res) {
         var contentType = (res.headers && res.headers.get && res.headers.get('content-type')) || '';
-        if (res.ok || res.status === 200 || res.status === 201 || res.status === 403) {
+        if (res.ok || res.status === 200 || res.status === 201) {
           if (contentType.indexOf('application/json') !== -1) {
             return res.json().then(function(data) {
               if (data && data.code === 'PWA_ACTIVATION_REQUIRED') {
@@ -349,18 +338,7 @@
       });
     }
 
-    function tryNextEndpoint(endpoints, index) {
-      if (index >= endpoints.length) {
-        return Promise.reject(new Error('Unable to confirm booking. Please call us directly.'));
-      }
-      var targetUrl = endpoints[index];
-      return sendBookingRequest(targetUrl).catch(function(err) {
-        console.warn('[LunaoBookingBridge] Booking attempt failed for ' + targetUrl + ':', err.message);
-        return tryNextEndpoint(endpoints, index + 1);
-      });
-    }
-
-    tryNextEndpoint(candidateEndpoints, 0)
+    sendBookingRequest()
       .then(function(resData) {
         showSuccessUI();
 
@@ -384,7 +362,7 @@
         }
       })
       .catch(function(err) {
-        console.error('[LunaoBookingBridge] Booking persistence failed across endpoints:', err.message);
+        console.error('[LunaoBookingBridge] Booking persistence failed:', err.message);
         showErrorUI(err.message);
 
         if (isIframe) {

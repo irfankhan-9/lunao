@@ -1739,15 +1739,9 @@
       if (window.LUNAO_BOOKING_API_URL && typeof window.LUNAO_BOOKING_API_URL === 'string') {
         list.push(window.LUNAO_BOOKING_API_URL.replace(/\/+$/, ''));
       }
-      const supabaseBase = window.LUNAO_SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
-      list.push(`${supabaseBase.replace(/\/+$/, '')}/functions/v1/public-bookings`);
-      if (window.location && /^https?:$/i.test(window.location.protocol)) {
-        list.push('/api/bookings');
-        list.push('/api/public/bookings');
-        list.push('/functions/v1/public-bookings');
-      }
-      list.push('https://api.lunao.app/api/bookings');
-      list.push('https://lunao.app/api/bookings');
+      var origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
+      list.push(origin + '/api/bookings');
+      list.push('/api/bookings');
       return [...new Set(list)];
     }
 

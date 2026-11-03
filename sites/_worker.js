@@ -2,19 +2,21 @@
   Lunao SaaS — Production Cloudflare Pages Edge Worker (_worker.js)
   
   Security & Routing Architecture:
-  1. API & Backend Proxying: Transparently routes /api/* and /owner/* to EC2 backend
+  1. API & Backend Proxying: Routes /api/*, /owner/*, /sites/* to AWS EC2 backend DNS
   2. Edge User Sites: Directly serves personalized client sites from Supabase at edge speed
   3. Static SPA Assets: Serves React frontend bundles with immutable caching
   4. SPA Fallback: Routes client-side browser navigation to index.html
   5. Security Headers: Hardens all responses against XSS, clickjacking, and MIME sniffing
 */
 
+// Primary EC2 backend DNS endpoint (Cloudflare requires valid DNS hostname, not raw IP)
 const BACKEND_ORIGIN = 'http://ec2-51-21-181-63.eu-north-1.compute.amazonaws.com';
 const SUPABASE_URL = 'https://wqlbuadknltsjfzrltpe.supabase.co';
 const SUPABASE_KEY =
   (typeof env !== 'undefined' && (env.SUPABASE_KEY || env.SUPABASE_SECRET_KEY)) ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndxbGJ1YWRrbmx0c2pmenJsdHBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxMzE3ODksImV4cCI6MjEwNzcwNzc4OX0.et1OsefPRtiP3OTodktsfhf3Bxbaq6_zY7XdMUZ53Bw';
 
+// Standard security headers to inject on all responses
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'SAMEORIGIN',
@@ -42,8 +44,9 @@ export default {
     const path = url.pathname;
 
     // ─── 1. PROXY API & BACKEND SERVICES TO EC2 ─────────────────────────
-    if (path.startsWith('/api/') || path.startsWith('/owner') || path.startsWith('/sites/')) {
-      const backendUrl = new URL(path + url.search, env.BACKEND_URL || BACKEND_ORIGIN);
+    if (path.startsWith('/api/') || path.startsWith('/owner') || path.startsWith('/sites/') || path.startsWith('/functions/')) {
+      const origin = env.BACKEND_URL || env.LUNAO_API_ORIGIN || BACKEND_ORIGIN;
+      const backendUrl = new URL(path + url.search, origin);
       const reqHeaders = new Headers(request.headers);
       reqHeaders.set('X-Forwarded-Host', url.host);
       reqHeaders.set('X-Forwarded-Proto', url.protocol.replace(':', ''));
@@ -58,7 +61,7 @@ export default {
         return addSecurityHeaders(backendRes);
       } catch (err) {
         return new Response(
-          JSON.stringify({ ok: false, error: 'Backend unreachable: ' + err.message }),
+          JSON.stringify({ ok: false, error: 'Backend connection error: ' + err.message }),
           {
             status: 502,
             headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS },
@@ -97,7 +100,11 @@ export default {
           if (sbRes.ok) {
             const data = await sbRes.json();
             if (data && data.length > 0 && data[0].compiled_html) {
-              return new Response(data[0].compiled_html, {
+              let html = data[0].compiled_html;
+              html = html.replace(/https:\/\/wqlbuadknltsjfzrltpe\.supabase\.co\/functions\/v1\/public-bookings/g, '/api/bookings');
+              html = html.replace(/https:\/\/ais-dev-[^\/]+\.run\.app\/api\/bookings/g, '/api/bookings');
+              html = html.replace(/\/functions\/v1\/public-bookings/g, '/api/bookings');
+              return new Response(html, {
                 status: 200,
                 headers: {
                   'Content-Type': 'text/html; charset=utf-8',

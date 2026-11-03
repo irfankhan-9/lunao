@@ -45,7 +45,7 @@ export default {
 
     // ─── 1. PROXY API & BACKEND SERVICES TO EC2 ─────────────────────────
     if (path.startsWith('/api/') || path.startsWith('/owner') || path.startsWith('/sites/') || path.startsWith('/functions/')) {
-      const origin = env.BACKEND_URL || BACKEND_ORIGIN;
+      const origin = env.BACKEND_URL || env.LUNAO_API_ORIGIN || BACKEND_ORIGIN;
       const backendUrl = new URL(path + url.search, origin);
       const reqHeaders = new Headers(request.headers);
       reqHeaders.set('X-Forwarded-Host', url.host);
@@ -100,7 +100,11 @@ export default {
           if (sbRes.ok) {
             const data = await sbRes.json();
             if (data && data.length > 0 && data[0].compiled_html) {
-              return new Response(data[0].compiled_html, {
+              let html = data[0].compiled_html;
+              html = html.replace(/https:\/\/wqlbuadknltsjfzrltpe\.supabase\.co\/functions\/v1\/public-bookings/g, '/api/bookings');
+              html = html.replace(/https:\/\/ais-dev-[^\/]+\.run\.app\/api\/bookings/g, '/api/bookings');
+              html = html.replace(/\/functions\/v1\/public-bookings/g, '/api/bookings');
+              return new Response(html, {
                 status: 200,
                 headers: {
                   'Content-Type': 'text/html; charset=utf-8',

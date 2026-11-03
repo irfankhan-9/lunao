@@ -2548,13 +2548,13 @@
                 });
             });
 
-            // 5. Authoritative Booking Form validations & Supabase/API Persistence
+            // 5. Authoritative Booking Form validations & API Persistence
             function getBookingSubmissionUrl() {
                 if (window.LUNAO_BOOKING_API_URL && typeof window.LUNAO_BOOKING_API_URL === 'string') {
                     return window.LUNAO_BOOKING_API_URL.replace(/\/+$/, '');
                 }
-                const supabaseBase = window.LUNAO_SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
-                return `${supabaseBase.replace(/\/+$/, '')}/functions/v1/public-bookings`;
+                var origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
+                return origin + '/api/bookings';
             }
 
             function getResolvedSlug() {
@@ -2713,15 +2713,6 @@
                     };
 
                     let res = await fetch(endpoint, reqOptions);
-
-                    if (
-                        res.status === 404 &&
-                        !window.LUNAO_BOOKING_API_URL &&
-                        window.location &&
-                        /^https?:$/i.test(window.location.protocol)
-                    ) {
-                        res = await fetch('/functions/v1/public-bookings', reqOptions);
-                    }
 
                     clearTimeout(timeoutId);
 

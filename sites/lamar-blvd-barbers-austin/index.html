@@ -2554,7 +2554,7 @@
                     return window.LUNAO_BOOKING_API_URL.replace(/\/+$/, '');
                 }
                 const supabaseBase = window.LUNAO_SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
-                return `${supabaseBase.replace(/\/+$/, '')}/functions/v1/public-bookings`;
+                return `${supabaseBase.replace(/\/+$/, '')}/api/bookings`;
             }
 
             function getResolvedSlug() {
@@ -2720,7 +2720,7 @@
                         window.location &&
                         /^https?:$/i.test(window.location.protocol)
                     ) {
-                        res = await fetch('/functions/v1/public-bookings', reqOptions);
+                        res = await fetch('/api/bookings', reqOptions);
                     }
 
                     clearTimeout(timeoutId);
