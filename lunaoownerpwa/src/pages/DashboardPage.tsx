@@ -6,7 +6,6 @@ import {
   ExternalLink,
   Globe,
   ArrowRight,
-  ShieldCheck,
   CalendarDays,
   Plus,
   Phone,
@@ -359,25 +358,6 @@ export const DashboardPage: React.FC = () => {
                 </div>
               ))
             )}
-          </div>
-
-          {/* Live Website Status Card */}
-          <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-700" />
-              <span className="text-xs font-semibold text-emerald-900">
-                Front Desk Online
-              </span>
-            </div>
-            <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-              Your website is live and capturing customer appointments in real time.
-            </p>
-            <button
-              onClick={() => setActiveSection('website')}
-              className="mt-3 text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:underline"
-            >
-              View Live Website &rarr;
-            </button>
           </div>
         </div>
       </div>
