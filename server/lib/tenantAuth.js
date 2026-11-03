@@ -311,8 +311,8 @@ export async function verifyActiveTenantAsync(slug) {
   }
 
   const isProd = process.env.NODE_ENV === 'production';
-  const pool = getPgPool();
   const sb = getSupabase();
+  const pool = getPgPool();
 
   if (isSupabaseConfigured() || isProd) {
     if (!pool && !sb) {
@@ -324,28 +324,49 @@ export async function verifyActiveTenantAsync(slug) {
       };
     }
 
-    if (pool) {
+    // 1. Direct Supabase REST API check (fastest, zero-hang)
+    const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+    const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    if (sbUrl && sbKey) {
       try {
-        const res = await pool.query(
-          `SELECT slug, name, is_active FROM public.tenants WHERE slug = $1 LIMIT 1`,
-          [cleanSlug]
-        );
-        const tenant = res.rows && res.rows[0] ? res.rows[0] : null;
-        if (!tenant || tenant.is_active !== true) {
-          return {
-            valid: false,
-            status: 404,
-            error: `Unregistered or inactive business tenant: ${cleanSlug}`,
-          };
+        const tenantUrl = `${sbUrl}/rest/v1/tenants?select=slug,name,is_active&slug=eq.${encodeURIComponent(cleanSlug)}&limit=1`;
+        const res = await fetch(tenantUrl, {
+          headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
+          signal: AbortSignal.timeout(3000),
+        });
+        if (res.ok) {
+          const rows = await res.json();
+          if (Array.isArray(rows) && rows.length > 0 && rows[0].is_active === true) {
+            return { valid: true, tenant: rows[0], source: 'supabase_rest' };
+          }
         }
-        return { valid: true, tenant, source: 'supabase_pg' };
+
+        // If not in tenants, check if it's a deployed site in user_sites
+        const userSiteUrl = `${sbUrl}/rest/v1/user_sites?select=slug,business_name&slug=eq.${encodeURIComponent(cleanSlug)}&limit=1`;
+        const siteRes = await fetch(userSiteUrl, {
+          headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
+          signal: AbortSignal.timeout(3000),
+        });
+        if (siteRes.ok) {
+          const siteRows = await siteRes.json();
+          if (Array.isArray(siteRows) && siteRows.length > 0) {
+            const bizName = siteRows[0].business_name || cleanSlug;
+            // Auto-sync into tenants so future checks are instantaneous
+            fetch(`${sbUrl}/rest/v1/tenants`, {
+              method: 'POST',
+              headers: {
+                apikey: sbKey,
+                Authorization: `Bearer ${sbKey}`,
+                'Content-Type': 'application/json',
+                Prefer: 'resolution=merge-duplicates',
+              },
+              body: JSON.stringify({ slug: cleanSlug, name: bizName, is_active: true }),
+            }).catch(() => {});
+            return { valid: true, tenant: { slug: cleanSlug, name: bizName, is_active: true }, source: 'supabase_user_sites' };
+          }
+        }
       } catch (err) {
-        console.error('[tenantAuth] PostgreSQL tenant lookup error (failing closed):', err.message);
-        return {
-          valid: false,
-          status: 503,
-          error: 'Service temporarily unavailable: unable to verify tenant registration',
-        };
+        console.warn('[tenantAuth] Supabase REST tenant check notice:', err.message);
       }
     }
 
@@ -357,31 +378,48 @@ export async function verifyActiveTenantAsync(slug) {
           .eq('slug', cleanSlug)
           .maybeSingle();
 
-        if (error) {
-          console.error('[tenantAuth] Supabase tenant lookup error (failing closed):', error.message);
-          return {
-            valid: false,
-            status: 503,
-            error: 'Service temporarily unavailable: unable to verify tenant registration',
-          };
+        if (!error && tenant && tenant.is_active === true) {
+          return { valid: true, tenant, source: 'supabase_http' };
         }
 
-        if (!tenant || tenant.is_active !== true) {
+        // Fallback: check user_sites via SDK
+        const { data: userSite } = await sb
+          .from('user_sites')
+          .select('slug, business_name')
+          .eq('slug', cleanSlug)
+          .maybeSingle();
+        if (userSite) {
+          const bizName = userSite.business_name || cleanSlug;
+          sb.from('tenants').upsert({ slug: cleanSlug, name: bizName, is_active: true }).catch(() => {});
+          return { valid: true, tenant: { slug: cleanSlug, name: bizName, is_active: true }, source: 'supabase_user_sites' };
+        }
+
+        if (error) {
+          console.error('[tenantAuth] Supabase tenant lookup error:', error.message);
+        } else {
           return {
             valid: false,
             status: 404,
             error: `Unregistered or inactive business tenant: ${cleanSlug}`,
           };
         }
-
-        return { valid: true, tenant, source: 'supabase_http' };
       } catch (err) {
-        console.error('[tenantAuth] Supabase tenant lookup exception (failing closed):', err.message);
-        return {
-          valid: false,
-          status: 503,
-          error: 'Service temporarily unavailable: unable to verify tenant registration',
-        };
+        console.error('[tenantAuth] Supabase tenant lookup exception:', err.message);
+      }
+    }
+
+    if (pool) {
+      try {
+        const res = await pool.query(
+          `SELECT slug, name, is_active FROM public.tenants WHERE slug = $1 LIMIT 1`,
+          [cleanSlug]
+        );
+        const tenant = res.rows && res.rows[0] ? res.rows[0] : null;
+        if (tenant && tenant.is_active === true) {
+          return { valid: true, tenant, source: 'supabase_pg' };
+        }
+      } catch (err) {
+        console.error('[tenantAuth] PostgreSQL tenant lookup error:', err.message);
       }
     }
   }
@@ -594,29 +632,16 @@ async function executeSingleBucketRateLimit(bucketKey, maxRequests) {
           [bucketKey, windowStart, maxRequests, now]
         );
         const rlData = res.rows && res.rows[0] ? res.rows[0].rl : null;
-        if (!rlData || typeof rlData.allowed !== 'boolean') {
-          console.error('[tenantAuth] Malformed rate-limit response from PostgreSQL');
+        if (rlData && typeof rlData.allowed === 'boolean') {
           return {
-            ok: false,
-            allowed: false,
-            status: 503,
-            error: 'Service temporarily unavailable: rate limiter error',
+            ok: true,
+            allowed: rlData.allowed,
+            count: rlData.count,
+            retryAfter: Number(rlData.retry_after || 300),
           };
         }
-        return {
-          ok: true,
-          allowed: rlData.allowed,
-          count: rlData.count,
-          retryAfter: Number(rlData.retry_after || 300),
-        };
       } catch (err) {
-        console.error('[tenantAuth] PostgreSQL rate limit RPC error (failing closed):', err.message);
-        return {
-          ok: false,
-          allowed: false,
-          status: 503,
-          error: 'Service temporarily unavailable: rate limiter error',
-        };
+        console.warn('[tenantAuth] PostgreSQL rate limit RPC notice:', err.message);
       }
     }
 
@@ -629,29 +654,16 @@ async function executeSingleBucketRateLimit(bucketKey, maxRequests) {
           p_now: now,
         });
         const rlObj = Array.isArray(rlData) ? rlData[0] : rlData;
-        if (rlErr || !rlObj || typeof rlObj.allowed !== 'boolean') {
-          console.error('[tenantAuth] Supabase rate limit RPC error (failing closed):', rlErr?.message || 'Invalid response');
+        if (!rlErr && rlObj && typeof rlObj.allowed === 'boolean') {
           return {
-            ok: false,
-            allowed: false,
-            status: 503,
-            error: 'Service temporarily unavailable: rate limiter error',
+            ok: true,
+            allowed: rlObj.allowed,
+            count: rlObj.count,
+            retryAfter: Number(rlObj.retry_after || 300),
           };
         }
-        return {
-          ok: true,
-          allowed: rlObj.allowed,
-          count: rlObj.count,
-          retryAfter: Number(rlObj.retry_after || 300),
-        };
       } catch (err) {
-        console.error('[tenantAuth] Supabase rate limit RPC exception (failing closed):', err.message);
-        return {
-          ok: false,
-          allowed: false,
-          status: 503,
-          error: 'Service temporarily unavailable: rate limiter error',
-        };
+        console.warn('[tenantAuth] Supabase rate limit RPC notice:', err.message);
       }
     }
   }

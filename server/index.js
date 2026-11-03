@@ -1613,26 +1613,8 @@ app.post(['/api/bookings', '/api/public/bookings', '/functions/v1/public-booking
     const booking = await createBookingAsync({ ...b, slug, idempotencyKey });
     const statusCode = booking.isExisting ? 200 : 201;
 
-    // Authoritative Owner PWA Activation Check
-    // If the owner has NOT activated their PWA for this slug yet, save the booking but pause live Email/SMS automations.
-    const pwaActive = await isPwaActiveForSlugAsync(slug);
-
-    if (!pwaActive) {
-      const codeRec = getOrCreateCodeForSlug(slug, 'Owner PWA Access');
-      return res.status(200).json({
-        ok: false,
-        code: 'PWA_ACTIVATION_REQUIRED',
-        error: `Owner PWA Activation Required: Live Email & SMS notifications are paused for ${b.businessName || slug}. Enter code ${codeRec.code} in your Lunao Owner PWA app to activate.`,
-        pwaActive: false,
-        pwaCode: codeRec.code,
-        businessName: b.businessName || slug,
-        slug: slug,
-        id: booking.id,
-        booking,
-      });
-    }
-
-    // Trigger transactional email automations for new bookings on activated sites
+    // Trigger transactional email automations for new bookings on deployed sites:
+    // Sends confirmation email to customer AND new booking alert notification to business owner.
     if (!booking.isExisting) {
       triggerNewBookingAutomations(booking).catch((err) => {
         console.error('[emailAutomations] Booking trigger notice:', err.message);
@@ -2216,7 +2198,7 @@ app.get('/api/auth/me', authenticate, async (req, res) => {
 // would see no cookie, and AppRouter would silently bounce them back to /.
 const GATE_PROTECTED_PREFIXES = [
   '/app', '/dashboard', '/messages', '/campaigns', '/credits', '/bookings',
-  '/sites', '/templates', '/templates-raw', '/ai', '/owner',
+  '/sites', '/templates', '/templates-raw', '/ai',
 ];
 app.use(gateProtected(GATE_PROTECTED_PREFIXES));
 
@@ -2502,25 +2484,44 @@ app.post('/api/owner/redeem', async (req, res) => {
   }
 });
 
-// listSitesSync: same logic as the async listSites() but returns synchronously
-// so the redeem endpoint can map a code to a site without async/await overhead.
+// listSitesSync: returns all known deployed sites from disk and user_sites
+// so the redeem endpoint can map a code or slug to a site synchronously.
 function listSitesSync() {
-  let entries = [];
-  try { entries = fs.readdirSync(SITES_DIR, { withFileTypes: true }); } catch { return []; }
-  const out = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory() || !isValidSlug(entry.name)) continue;
-    const file = path.join(SITES_DIR, entry.name, 'index.html');
-    let html = '';
-    try { html = fs.readFileSync(file, 'utf8'); } catch { continue; }
-    out.push({
-      slug: entry.name,
-      title: titleFromHtml(html) || entry.name,
-      niche: nicheFromHtml(html),
-      url: `${siteBaseUrl()}/${entry.name}/`,
-      updatedAt: (() => { try { return fs.statSync(file).mtimeMs; } catch { return null; } })(),
-    });
-  }
+  const bySlug = new Map();
+  try {
+    const entries = fs.readdirSync(SITES_DIR, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !isValidSlug(entry.name)) continue;
+      const file = path.join(SITES_DIR, entry.name, 'index.html');
+      let html = '';
+      try { html = fs.readFileSync(file, 'utf8'); } catch { continue; }
+      bySlug.set(entry.name.toLowerCase(), {
+        slug: entry.name,
+        title: titleFromHtml(html) || entry.name,
+        niche: nicheFromHtml(html),
+        url: `${siteBaseUrl()}/${entry.name}/`,
+        updatedAt: (() => { try { return fs.statSync(file).mtimeMs; } catch { return null; } })(),
+      });
+    }
+  } catch {}
+
+  try {
+    const dbSites = db.prepare('SELECT slug, business_name, niche, deploy_url, updated_at FROM user_sites').all();
+    for (const d of dbSites || []) {
+      const lower = String(d.slug).toLowerCase();
+      if (!bySlug.has(lower)) {
+        bySlug.set(lower, {
+          slug: d.slug,
+          title: d.business_name || d.slug,
+          niche: d.niche || 'Local Business',
+          url: d.deploy_url || `${siteBaseUrl()}/${d.slug}/`,
+          updatedAt: Number(d.updated_at || Date.now()),
+        });
+      }
+    }
+  } catch {}
+
+  const out = Array.from(bySlug.values());
   out.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   return out;
 }

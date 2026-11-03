@@ -193,9 +193,15 @@ export const supabase = {
 };
 
 export const resend = {
-  apiKey: env.RESEND_API_KEY || '',
-  from: env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
-  testRecipient: env.RESEND_TEST_RECIPIENT || '',
+  get apiKey() {
+    return process.env.RESEND_API_KEY || env.RESEND_API_KEY || '';
+  },
+  get from() {
+    return process.env.RESEND_FROM_EMAIL || env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+  },
+  get testRecipient() {
+    return process.env.RESEND_TEST_RECIPIENT || env.RESEND_TEST_RECIPIENT || '';
+  },
   get live() {
     return Boolean(this.apiKey && this.apiKey.startsWith('re_'));
   },

@@ -311,12 +311,12 @@ export const tenantAuthService = {
     }
     const codeToSend = /^LUNAO-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(normalized) ? normalized : rawInput;
 
-    // 1. Attempt backend validation with strict 1200ms abort to prevent hangs
+    // 1. Attempt backend validation with 8000ms timeout
     let data: any = null;
     let ok = false;
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1200);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
       const resp = await fetch('/api/owner/redeem', {
         method: 'POST',

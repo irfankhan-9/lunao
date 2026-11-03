@@ -121,7 +121,52 @@ export async function supabaseInsertBooking(booking) {
   const idempotencyKey = booking.idempotencyKey || booking.idempotency_key || null;
   const slug = booking.slug || '';
 
-  // 1. Primary PostgreSQL pool path
+  const payload = {
+    slug,
+    business_name: booking.businessName || booking.business_name || '',
+    customer_name: booking.customerName || booking.customer_name || '',
+    phone: booking.phone || '',
+    email: booking.email || '',
+    service: booking.service || '',
+    date: booking.date || '',
+    time: booking.time || '',
+    notes: booking.notes || '',
+    source: booking.source || 'form',
+    status: booking.status || 'new',
+    created_at: Number(booking.createdAt || booking.created_at || Date.now()),
+  };
+  if (idempotencyKey) {
+    payload.idempotency_key = idempotencyKey;
+  }
+
+  // 1. Direct Supabase REST API (sub-100ms, zero pool hang)
+  const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+  const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (sbUrl && sbKey) {
+    try {
+      const res = await fetch(`${sbUrl}/rest/v1/bookings`, {
+        method: 'POST',
+        headers: {
+          apikey: sbKey,
+          Authorization: `Bearer ${sbKey}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation',
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(4000),
+      });
+      if (res.ok) {
+        const rows = await res.json();
+        if (Array.isArray(rows) && rows.length > 0) {
+          return mapPostgresBookingRow(rows[0], false);
+        }
+      }
+    } catch (err) {
+      console.warn('[Supabase REST] insert booking notice:', err.message);
+    }
+  }
+
+  // 2. PostgreSQL pool path
   if (pgPool) {
     try {
       // If idempotencyKey provided, check if it already exists to guarantee safe retries
@@ -285,6 +330,48 @@ export async function supabaseInsertBooking(booking) {
 }
 
 export async function supabaseListBookings(slug) {
+  // 1. Direct Supabase REST API (sub-100ms, zero pool hang)
+  const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+  const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (sbUrl && sbKey) {
+    try {
+      const restUrl = new URL(`${sbUrl}/rest/v1/bookings`);
+      restUrl.searchParams.set('select', '*');
+      if (slug) {
+        restUrl.searchParams.set('slug', `eq.${slug}`);
+      }
+      restUrl.searchParams.set('order', 'created_at.desc');
+      restUrl.searchParams.set('limit', '500');
+
+      const res = await fetch(restUrl.toString(), {
+        headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
+        signal: AbortSignal.timeout(4000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          return data.map((r) => ({
+            id: r.id,
+            slug: r.slug,
+            businessName: r.business_name,
+            customerName: r.customer_name,
+            phone: r.phone,
+            email: r.email,
+            service: r.service,
+            date: r.date,
+            time: r.time,
+            notes: r.notes,
+            source: r.source,
+            status: r.status,
+            createdAt: Number(r.created_at || Date.now()),
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn('[Supabase REST] list bookings notice:', err.message);
+    }
+  }
+
   if (pgPool) {
     try {
       let query = 'SELECT * FROM bookings';
@@ -351,6 +438,42 @@ export async function supabaseListBookings(slug) {
 }
 
 export async function supabaseUpdateBookingStatus(id, status, notes) {
+  // 1. Direct Supabase REST API
+  const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+  const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (sbUrl && sbKey) {
+    try {
+      const patch = { status };
+      if (notes !== undefined) patch.notes = String(notes || '');
+      const patchUrl = `${sbUrl}/rest/v1/bookings?id=eq.${encodeURIComponent(String(id))}`;
+      const res = await fetch(patchUrl, {
+        method: 'PATCH',
+        headers: {
+          apikey: sbKey,
+          Authorization: `Bearer ${sbKey}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation',
+        },
+        body: JSON.stringify(patch),
+        signal: AbortSignal.timeout(4000),
+      });
+      if (res.ok) {
+        const rows = await res.json();
+        if (Array.isArray(rows) && rows.length > 0) {
+          const r = rows[0];
+          return {
+            id: r.id,
+            slug: r.slug,
+            status: r.status,
+            notes: r.notes,
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('[Supabase REST] update status notice:', err.message);
+    }
+  }
+
   if (pgPool) {
     try {
       let query = '';

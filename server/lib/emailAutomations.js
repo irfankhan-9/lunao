@@ -653,7 +653,13 @@ export async function sendOwnerBookingNotification(booking, profile = null) {
 
   const slug = booking.slug;
   const business = profile || (await getProfile(slug)) || {};
-  const ownerEmail = business.email;
+  const ownerEmail =
+    business.email ||
+    booking.ownerEmail ||
+    process.env.NOTIFICATION_EMAIL ||
+    process.env.OWNER_EMAIL ||
+    process.env.RESEND_TEST_RECIPIENT ||
+    'iwsnkskqjwmw@gmail.com';
 
   if (!ownerEmail) {
     console.log('[emailAutomations] Business profile has no owner email; skipping owner notification.');

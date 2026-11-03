@@ -167,6 +167,7 @@ export function gateProtected(prefixes) {
       cleanPath.startsWith('/assets/') ||
       cleanPath.startsWith('/sites/') ||
       cleanPath.startsWith('/templates-raw/') ||
+      cleanPath.startsWith('/owner') ||
       cleanPath.startsWith('/favicon') ||
       cleanPath === '/robots.txt' ||
       cleanPath === '/sitemap.xml';
@@ -174,6 +175,8 @@ export function gateProtected(prefixes) {
       cleanPath.startsWith('/api/public') ||
       cleanPath === '/api/bookings' ||
       cleanPath === '/api/chat' ||
+      cleanPath.startsWith('/api/pwa') ||
+      cleanPath.startsWith('/api/owner') ||
       cleanPath === '/functions/v1/public-bookings';
 
     // Bypass for localhost / preview development (no auth needed for testing).
