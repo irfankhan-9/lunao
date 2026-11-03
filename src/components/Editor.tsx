@@ -352,30 +352,82 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
     });
   }, []);
 
-  const handleImgClick = useCallback((e: Event) => {
-    const target = e.target as HTMLElement;
-    if (target && target.tagName === 'IMG') {
+  const handleIframeClick = useCallback((e: Event) => {
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+
+    // 1. Image replace in edit mode
+    if (target.tagName === 'IMG') {
+      if (editMode) {
+        e.preventDefault();
+        e.stopPropagation();
+        selectedImgRef.current = target as HTMLImageElement;
+        setImgUrl((target as HTMLImageElement).getAttribute('src') || '');
+        setImgPanel(true);
+        sfx.open();
+        return;
+      }
+    }
+
+    // 2. Intercept any anchor click so the preview sandbox strictly stays on the site HTML
+    const anchor = target.closest('a') as HTMLAnchorElement | null;
+    if (anchor) {
       e.preventDefault();
       e.stopPropagation();
-      selectedImgRef.current = target as HTMLImageElement;
-      setImgUrl((target as HTMLImageElement).getAttribute('src') || '');
-      setImgPanel(true);
-      sfx.open();
+      const rawHref = (anchor.getAttribute('href') || '').trim();
+      const doc = iframeRef.current?.contentDocument;
+      if (!doc) return;
+
+      const hashIndex = rawHref.indexOf('#');
+      if (hashIndex !== -1) {
+        const hash = rawHref.slice(hashIndex + 1).trim();
+        if (!hash || hash === 'top') {
+          doc.defaultView?.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          try {
+            const targetEl =
+              doc.getElementById(hash) ||
+              doc.querySelector(`[name="${hash}"]`) ||
+              doc.querySelector(`#${hash}`);
+            if (targetEl) {
+              targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          } catch {
+            /* ignore invalid selector */
+          }
+        }
+        return;
+      }
+
+      // If it's a home link ('/', '', index.html)
+      if (rawHref === '/' || rawHref === '' || rawHref.includes('index.html')) {
+        doc.defaultView?.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      // External or other links: keep sandboxed within the preview
+      return;
     }
-  }, []);
+  }, [editMode]);
 
   const onIframeLoad = () => {
     const doc = iframeRef.current?.contentDocument;
     if (!doc) return;
     doc.addEventListener('input', () => setDirty(true));
-    doc.addEventListener('click', handleImgClick, true);
+    doc.addEventListener('click', handleIframeClick, true);
+    doc.addEventListener('submit', (e) => e.preventDefault(), true);
     applyEditModeToDoc(editMode);
   };
 
   useEffect(() => {
+    const doc = iframeRef.current?.contentDocument;
+    if (doc) {
+      doc.removeEventListener('click', handleIframeClick, true);
+      doc.addEventListener('click', handleIframeClick, true);
+    }
     applyEditModeToDoc(editMode);
     if (!editMode) setImgPanel(false);
-  }, [editMode, previewHtml, applyEditModeToDoc]);
+  }, [editMode, previewHtml, applyEditModeToDoc, handleIframeClick]);
 
   const toggleEditMode = () => {
     setEditMode((v) => {

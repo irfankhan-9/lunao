@@ -25,34 +25,6 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { soundEffects } from '../utils/soundEffects';
 
-// Curated library of royalty-free, high-definition stock photos for instant one-click replacement
-const CURATED_SITE_PHOTOS: Record<string, { label: string; url: string }[]> = {
-  hvac: [
-    { label: 'Air Conditioning System', url: 'https://images.unsplash.com/photo-1585338107529-13afc5f02586?auto=format&fit=crop&w=800&q=80' },
-    { label: 'Modern Heating Furnace', url: 'https://images.unsplash.com/photo-1605647540924-852290f6b0d5?auto=format&fit=crop&w=800&q=80' },
-    { label: 'Clean Air Filtration', url: 'https://images.unsplash.com/photo-1473081556163-2a17de81fc97?auto=format&fit=crop&w=800&q=80' },
-    { label: 'HVAC Certified Technician', url: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80' },
-    { label: 'Smart Thermostat Controls', url: 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=800&q=80' },
-    { label: 'Equipment Heat Exchanger', url: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=800&q=80' },
-  ],
-  barber: [
-    { label: 'Classic Barber Station', url: 'https://images.unsplash.com/photo-1549488344-1f9b8d2bd1f3?auto=format&fit=crop&w=800&q=80' },
-    { label: 'Precision Hair Cut', url: 'https://images.unsplash.com/photo-1622286342621-4bd786c2447c?auto=format&fit=crop&w=800&q=80' },
-    { label: 'Vintage Shaving Tools', url: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=800&q=80' },
-    { label: 'Barber Styling Lounge', url: 'https://images.unsplash.com/photo-1621605815971-fbc98d665033?auto=format&fit=crop&w=800&q=80' },
-    { label: 'Beard Trim & Grooming', url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=800&q=80' },
-    { label: 'Modern Studio Chair', url: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=800&q=80' },
-  ],
-  general: [
-    { label: 'Professional Office', url: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=800&q=80' },
-    { label: 'Friendly Staff Member', url: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=800&q=80' },
-    { label: 'Modern Work Environment', url: 'https://images.unsplash.com/photo-1497215728101-856f4ea42174?auto=format&fit=crop&w=800&q=80' },
-    { label: 'Team Collaboration', url: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=800&q=80' },
-    { label: 'Customer Satisfaction', url: 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?auto=format&fit=crop&w=800&q=80' },
-    { label: 'Quality Guarantee', url: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=800&q=80' },
-  ],
-};
-
 export const WebsitePage: React.FC = () => {
   const { business, updateWebsiteConfig, showToast } = useBusiness();
   const [isDeploying, setIsDeploying] = useState(false);
@@ -71,7 +43,6 @@ export const WebsitePage: React.FC = () => {
   // Image replacement panel
   const [imgPanelOpen, setImgPanelOpen] = useState(false);
   const [imgUrlInput, setImgUrlInput] = useState('');
-  const [existingSiteImages, setExistingSiteImages] = useState<string[]>([]);
   const selectedImgRef = useRef<HTMLImageElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -107,24 +78,6 @@ export const WebsitePage: React.FC = () => {
   useEffect(() => {
     loadWebsiteHtml();
   }, [loadWebsiteHtml]);
-
-  // Extract all existing images from the active document so owner can re-use with 1 click
-  const extractExistingImages = useCallback((doc: Document | null) => {
-    if (!doc) return;
-    try {
-      const imgs = Array.from(doc.images || []);
-      const urls: string[] = [];
-      imgs.forEach((img) => {
-        const src = (img as HTMLImageElement).getAttribute('src') || '';
-        if (src && !src.startsWith('data:image/svg') && !urls.includes(src)) {
-          urls.push(src);
-        }
-      });
-      setExistingSiteImages(urls);
-    } catch {
-      /* ignore */
-    }
-  }, []);
 
   // 2. Apply editMode (designMode + outline on clickable images)
   const applyEditMode = useCallback((doc: Document | null, on: boolean) => {
@@ -167,21 +120,68 @@ export const WebsitePage: React.FC = () => {
     return current;
   }, [isFullscreenPreview, siteHtml, editMode, applyEditMode]);
 
-  const handleImgClick = useCallback((e: Event) => {
-    const target = e.target as HTMLElement;
-    if (target && target.tagName === 'IMG') {
-      e.preventDefault();
-      e.stopPropagation();
-      selectedImgRef.current = target as HTMLImageElement;
-      setImgUrlInput((target as HTMLImageElement).getAttribute('src') || '');
+  // 4. Intercept clicks: image replacement in edit mode & isolated navigation in preview
+  const handleIframeClick = useCallback(
+    (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
 
-      const activeIframe = isFullscreenPreview ? fullscreenIframeRef.current : iframeRef.current;
-      extractExistingImages(activeIframe?.contentDocument || null);
+      // 1. If an image is clicked in edit mode, open the image replacement modal
+      if (target.tagName === 'IMG') {
+        if (editMode) {
+          e.preventDefault();
+          e.stopPropagation();
+          selectedImgRef.current = target as HTMLImageElement;
+          setImgUrlInput((target as HTMLImageElement).getAttribute('src') || '');
+          setImgPanelOpen(true);
+          soundEffects.playDialogPop();
+          return;
+        }
+      }
 
-      setImgPanelOpen(true);
-      soundEffects.playDialogPop();
-    }
-  }, [isFullscreenPreview, extractExistingImages]);
+      // 2. Intercept any anchor click so the preview sandbox strictly stays on the site HTML
+      const anchor = target.closest('a') as HTMLAnchorElement | null;
+      if (anchor) {
+        e.preventDefault();
+        e.stopPropagation();
+        const rawHref = (anchor.getAttribute('href') || '').trim();
+        const activeIframe = isFullscreenPreview ? fullscreenIframeRef.current : iframeRef.current;
+        const doc = activeIframe?.contentDocument;
+        if (!doc) return;
+
+        const hashIndex = rawHref.indexOf('#');
+        if (hashIndex !== -1) {
+          const hash = rawHref.slice(hashIndex + 1).trim();
+          if (!hash || hash === 'top') {
+            doc.defaultView?.scrollTo({ top: 0, behavior: 'smooth' });
+          } else {
+            try {
+              const targetEl =
+                doc.getElementById(hash) ||
+                doc.querySelector(`[name="${hash}"]`) ||
+                doc.querySelector(`#${hash}`);
+              if (targetEl) {
+                targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }
+            } catch {
+              /* ignore invalid selector */
+            }
+          }
+          return;
+        }
+
+        // If it's a home link ('/', '', index.html)
+        if (rawHref === '/' || rawHref === '' || rawHref.includes('index.html')) {
+          doc.defaultView?.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+
+        // External or other links: keep sandboxed within the preview
+        return;
+      }
+    },
+    [editMode, isFullscreenPreview]
+  );
 
   const attachIframeListeners = useCallback(
     (iframeEl: HTMLIFrameElement | null) => {
@@ -192,22 +192,31 @@ export const WebsitePage: React.FC = () => {
       doc.addEventListener('input', () => {
         setIsDirty(true);
       });
-      doc.addEventListener('click', handleImgClick, true);
+      doc.removeEventListener('click', handleIframeClick, true);
+      doc.addEventListener('click', handleIframeClick, true);
+      doc.addEventListener('submit', (e) => e.preventDefault(), true);
       applyEditMode(doc, editMode);
-      extractExistingImages(doc);
     },
-    [handleImgClick, applyEditMode, editMode, extractExistingImages]
+    [handleIframeClick, applyEditMode, editMode]
   );
 
   useEffect(() => {
     const doc1 = iframeRef.current?.contentDocument;
-    if (doc1) applyEditMode(doc1, editMode);
+    if (doc1) {
+      doc1.removeEventListener('click', handleIframeClick, true);
+      doc1.addEventListener('click', handleIframeClick, true);
+      applyEditMode(doc1, editMode);
+    }
 
     const doc2 = fullscreenIframeRef.current?.contentDocument;
-    if (doc2) applyEditMode(doc2, editMode);
+    if (doc2) {
+      doc2.removeEventListener('click', handleIframeClick, true);
+      doc2.addEventListener('click', handleIframeClick, true);
+      applyEditMode(doc2, editMode);
+    }
 
     if (!editMode) setImgPanelOpen(false);
-  }, [editMode, applyEditMode]);
+  }, [editMode, applyEditMode, handleIframeClick]);
 
   // 4. Save edits without deploying
   const handleSaveHtml = async () => {
@@ -281,14 +290,6 @@ export const WebsitePage: React.FC = () => {
   };
 
   const domainDisplay = (liveSiteUrl || business.websiteUrl || '').replace('https://', '').replace(/\/$/, '');
-
-  // Resolve curated photos based on niche
-  const nicheKey = (business.niche || '').toLowerCase();
-  const relevantCuratedPhotos = nicheKey.includes('barber')
-    ? CURATED_SITE_PHOTOS.barber
-    : nicheKey.includes('hvac') || nicheKey.includes('cooling') || nicheKey.includes('heating')
-    ? CURATED_SITE_PHOTOS.hvac
-    : CURATED_SITE_PHOTOS.general;
 
   return (
     <div className="space-y-6">
@@ -697,25 +698,22 @@ export const WebsitePage: React.FC = () => {
         </div>
       )}
 
-      {/* Image Replacement BottomSheet/Modal */}
+      {/* Image Replacement Modal — Exact straight-forward experience as Lunao Software */}
       {imgPanelOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150"
           onClick={() => setImgPanelOpen(false)}
         >
           <div
-            className="w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-2xl p-5 my-8 max-h-[90vh] flex flex-col"
+            className="relative w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-2xl p-5"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-700">
                   <ImageIcon className="w-4 h-4" />
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">Replace Photo</h3>
-                  <p className="text-[11px] text-slate-500">Pick any image below or upload your own in 1 click</p>
-                </div>
+                <span className="text-sm font-bold text-slate-900">Replace image</span>
               </div>
               <button
                 onClick={() => setImgPanelOpen(false)}
@@ -725,124 +723,52 @@ export const WebsitePage: React.FC = () => {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto py-4 space-y-4 pr-1">
-              {/* Current Selected Image Preview */}
-              <div>
-                <span className="text-[11px] font-semibold text-slate-600 block mb-1.5 uppercase tracking-wide">
-                  Current Photo On Page
-                </span>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden flex items-center justify-center h-32 relative">
-                  {imgUrlInput ? (
-                    <img
-                      src={imgUrlInput}
-                      alt="Current"
-                      className="max-h-32 max-w-full object-contain"
-                    />
-                  ) : (
-                    <ImageIcon className="w-8 h-8 text-slate-300" />
-                  )}
-                </div>
-              </div>
-
-              {/* 1-Click Fast Upload Button */}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition active:scale-[0.98] cursor-pointer shadow-xs"
-              >
-                <UploadCloud className="w-4 h-4" /> Upload from Your Phone or PC
-              </button>
-
-              {/* 1-Click Existing Site Images */}
-              {existingSiteImages.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
-                      Existing Photos On This Website
-                    </span>
-                    <span className="text-[10px] text-slate-400">1-click swap</span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    {existingSiteImages.slice(0, 8).map((url, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => replaceWithImage(url)}
-                        className="group relative rounded-lg border border-slate-200 overflow-hidden h-16 bg-slate-50 hover:border-emerald-500 hover:shadow-md transition active:scale-95 cursor-pointer"
-                        title="Click to apply this photo"
-                      >
-                        <img
-                          src={url}
-                          alt={`Existing site image ${i + 1}`}
-                          className="w-full h-full object-cover group-hover:scale-105 transition duration-200"
-                        />
-                        <div className="absolute inset-0 bg-emerald-950/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                          <span className="text-[9px] font-bold text-white bg-emerald-600/90 px-1.5 py-0.5 rounded">
-                            Apply
-                          </span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+            {/* Current image preview */}
+            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 overflow-hidden flex items-center justify-center h-32">
+              {imgUrlInput ? (
+                <img
+                  src={imgUrlInput}
+                  alt="Selected"
+                  className="max-h-32 max-w-full object-contain"
+                />
+              ) : (
+                <ImageIcon className="w-8 h-8 text-slate-300" />
               )}
+            </div>
 
-              {/* 1-Click Curated Professional Industry Photos */}
-              <div>
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                  <span className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
-                    Curated Industry Photos
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {relevantCuratedPhotos.map((item, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => replaceWithImage(item.url)}
-                      className="group relative rounded-xl border border-slate-200 overflow-hidden h-20 bg-slate-50 hover:border-emerald-500 hover:shadow-md transition active:scale-95 cursor-pointer text-left flex flex-col justify-end p-1.5"
-                    >
-                      <img
-                        src={item.url}
-                        alt={item.label}
-                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition duration-200"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent" />
-                      <span className="relative z-10 text-[10px] font-semibold text-white truncate drop-shadow-sm">
-                        {item.label}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition active:scale-[0.98] cursor-pointer mb-3 shadow-xs"
+            >
+              <UploadCloud className="w-4 h-4" /> Upload from your PC
+            </button>
 
-              {/* Paste URL Option */}
-              <div className="pt-2 border-t border-slate-100">
-                <span className="text-[11px] font-semibold text-slate-500 block mb-1.5">
-                  Or Paste Custom Image URL
-                </span>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 focus-within:border-emerald-600 focus-within:bg-white transition">
-                    <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <input
-                      type="text"
-                      placeholder="https://images.unsplash.com/..."
-                      value={imgUrlInput}
-                      onChange={(e) => setImgUrlInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') replaceWithImage(imgUrlInput);
-                      }}
-                      className="w-full text-xs text-slate-900 bg-transparent focus:outline-none"
-                    />
-                  </div>
-                  <button
-                    onClick={() => replaceWithImage(imgUrlInput)}
-                    className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition cursor-pointer shrink-0"
-                  >
-                    Apply URL
-                  </button>
-                </div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="h-px flex-1 bg-slate-200" />
+              <span className="text-[10px] uppercase tracking-wide font-bold text-slate-400">or paste a URL</span>
+              <span className="h-px flex-1 bg-slate-200" />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 focus-within:border-emerald-600 focus-within:bg-white transition">
+                <Link2 className="w-4 h-4 text-slate-400 shrink-0" />
+                <input
+                  value={imgUrlInput}
+                  onChange={(e) => setImgUrlInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') replaceWithImage(imgUrlInput);
+                  }}
+                  placeholder="https://…"
+                  className="flex-1 bg-transparent py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none min-w-0"
+                />
               </div>
+              <button
+                onClick={() => replaceWithImage(imgUrlInput)}
+                disabled={!imgUrlInput.trim()}
+                className="px-4 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition active:scale-[0.98] disabled:opacity-50 shrink-0 cursor-pointer"
+              >
+                Apply
+              </button>
             </div>
           </div>
         </div>
