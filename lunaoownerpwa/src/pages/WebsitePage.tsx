@@ -12,12 +12,8 @@ import {
   X,
   Save,
   Pencil,
-  Image as ImageIcon,
-  UploadCloud,
-  Link2,
   AlertCircle,
   Loader2,
-  Sparkles,
 } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 import { websiteService } from '../services/websiteService';
@@ -40,9 +36,7 @@ export const WebsitePage: React.FC = () => {
   const [isDirty, setIsDirty] = useState<boolean>(false);
   const [editMode, setEditMode] = useState<boolean>(false);
 
-  // Image replacement panel
-  const [imgPanelOpen, setImgPanelOpen] = useState(false);
-  const [imgUrlInput, setImgUrlInput] = useState('');
+  // Image replacement ref
   const selectedImgRef = useRef<HTMLImageElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -120,21 +114,20 @@ export const WebsitePage: React.FC = () => {
     return current;
   }, [isFullscreenPreview, siteHtml, editMode, applyEditMode]);
 
-  // 4. Intercept clicks: image replacement in edit mode & isolated navigation in preview
+  // 4. Intercept clicks: direct photo upload in edit mode & isolated navigation in preview
   const handleIframeClick = useCallback(
     (e: Event) => {
       const target = e.target as HTMLElement | null;
       if (!target) return;
 
-      // 1. If an image is clicked in edit mode, open the image replacement modal
+      // 1. If an image is clicked in edit mode, immediately open device file picker
       if (target.tagName === 'IMG') {
         if (editMode) {
           e.preventDefault();
           e.stopPropagation();
           selectedImgRef.current = target as HTMLImageElement;
-          setImgUrlInput((target as HTMLImageElement).getAttribute('src') || '');
-          setImgPanelOpen(true);
-          soundEffects.playDialogPop();
+          soundEffects.playButtonClick();
+          fileInputRef.current?.click();
           return;
         }
       }
@@ -214,8 +207,6 @@ export const WebsitePage: React.FC = () => {
       doc2.addEventListener('click', handleIframeClick, true);
       applyEditMode(doc2, editMode);
     }
-
-    if (!editMode) setImgPanelOpen(false);
   }, [editMode, applyEditMode, handleIframeClick]);
 
   // 4. Save edits without deploying
@@ -273,7 +264,6 @@ export const WebsitePage: React.FC = () => {
     setIsDirty(true);
     soundEffects.playSoftBubble();
     showToast('Photo replaced successfully');
-    setImgPanelOpen(false);
   };
 
   const handlePickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -693,82 +683,6 @@ export const WebsitePage: React.FC = () => {
                 onLoad={() => attachIframeListeners(fullscreenIframeRef.current)}
                 className="w-full h-full min-h-[85vh] border-0 bg-white block"
               />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Image Replacement Modal — Exact straight-forward experience as Lunao Software */}
-      {imgPanelOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150"
-          onClick={() => setImgPanelOpen(false)}
-        >
-          <div
-            className="relative w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-2xl p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-700">
-                  <ImageIcon className="w-4 h-4" />
-                </div>
-                <span className="text-sm font-bold text-slate-900">Replace image</span>
-              </div>
-              <button
-                onClick={() => setImgPanelOpen(false)}
-                className="text-slate-400 hover:text-slate-700 p-1 rounded-md"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Current image preview */}
-            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 overflow-hidden flex items-center justify-center h-32">
-              {imgUrlInput ? (
-                <img
-                  src={imgUrlInput}
-                  alt="Selected"
-                  className="max-h-32 max-w-full object-contain"
-                />
-              ) : (
-                <ImageIcon className="w-8 h-8 text-slate-300" />
-              )}
-            </div>
-
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition active:scale-[0.98] cursor-pointer mb-3 shadow-xs"
-            >
-              <UploadCloud className="w-4 h-4" /> Upload from your PC
-            </button>
-
-            <div className="flex items-center gap-2 mb-3">
-              <span className="h-px flex-1 bg-slate-200" />
-              <span className="text-[10px] uppercase tracking-wide font-bold text-slate-400">or paste a URL</span>
-              <span className="h-px flex-1 bg-slate-200" />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 focus-within:border-emerald-600 focus-within:bg-white transition">
-                <Link2 className="w-4 h-4 text-slate-400 shrink-0" />
-                <input
-                  value={imgUrlInput}
-                  onChange={(e) => setImgUrlInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') replaceWithImage(imgUrlInput);
-                  }}
-                  placeholder="https://…"
-                  className="flex-1 bg-transparent py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none min-w-0"
-                />
-              </div>
-              <button
-                onClick={() => replaceWithImage(imgUrlInput)}
-                disabled={!imgUrlInput.trim()}
-                className="px-4 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition active:scale-[0.98] disabled:opacity-50 shrink-0 cursor-pointer"
-              >
-                Apply
-              </button>
             </div>
           </div>
         </div>
