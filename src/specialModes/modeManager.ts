@@ -24,7 +24,7 @@ const UGC_CREATOR_FLAG_KEY = 'lunao_ugc_creator_v4';
 
 export const SPECIAL_CAMPAIGN_ID = 'camp-edmonton-230-hvac-sms';
 export const SENDER_PHONE_NUMBER = '+1 (587) 409-8821';
-export const CLOUDFLARE_PAGES_BASE_URL = 'https://lunao-web-designn.pages.dev';
+export const CLOUDFLARE_PAGES_BASE_URL = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'https://lunao.org';
 
 let didAutoSyncThisLoad = false;
 

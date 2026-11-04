@@ -21,7 +21,7 @@ import { registerOwnerBusinessAsync } from './tenantAuth.js';
 import { getPgPool } from './supabase.js';
 import { validateBookingContract, CONTRACT_REJECTION_MESSAGE } from './bookingContractValidator.js';
 import { slugify } from './slug.js';
-import { cloudflare } from './config.js';
+import { cloudflare, siteBaseUrl } from './config.js';
 import { pgUpsertCustomTemplate } from './supabaseSync.js';
 import { isOfficialBuiltinPwaTemplate } from './templates.js';
 
@@ -193,8 +193,7 @@ export async function executeUnifiedLeadRebrandAndDeploy({
   // STAGE 2: PERMANENT SUPABASE CLOUD PERSISTENCE FIRST (+ STAGE ON DISK)
   // ============================================================================
   const supabaseStartMs = Date.now();
-  const projName = cloudflare.project || 'lunao-web-designn';
-  const liveUrl = `https://${projName}.pages.dev/${slug}/`;
+  const liveUrl = `${siteBaseUrl()}/${slug}/`;
 
   emitStage('supabase_saving', {
     slug,

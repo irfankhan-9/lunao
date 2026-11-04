@@ -87,7 +87,7 @@ export const OwnerPWADrawer: React.FC<OwnerPWADrawerProps> = ({
           address: contractor ? contractor.address : '10420 Jasper Ave, Edmonton, AB',
           city: contractor ? contractor.city : 'Edmonton, AB',
           timezone: 'America/Edmonton',
-          websiteUrl: siteUrl || `https://lunao-web-designn.pages.dev/${slug}/`,
+          websiteUrl: siteUrl || (typeof window !== 'undefined' && window.location?.origin ? `${window.location.origin}/${slug}/` : `https://lunao.org/${slug}/`),
           socialLinks: { instagram: `${slug}_official` },
           theme: {
             accent: '#059669',
@@ -106,7 +106,7 @@ export const OwnerPWADrawer: React.FC<OwnerPWADrawerProps> = ({
             bookingEnabled: true,
           },
           websiteConfig: {
-            url: siteUrl || `https://lunao-web-designn.pages.dev/${slug}/`,
+            url: siteUrl || (typeof window !== 'undefined' && window.location?.origin ? `${window.location.origin}/${slug}/` : `https://lunao.org/${slug}/`),
             status: 'deployed',
             headline: `Exceptional HVAC Experiences`,
           },

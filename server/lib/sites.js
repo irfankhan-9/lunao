@@ -266,8 +266,7 @@ async function healMisclassifiedRows(rows) {
 function formatEditorSiteRow(r) {
   if (!r) return null;
   const slug = r.slug;
-  const projName = cloudflare.project || 'lunao-web-designn';
-  const defaultDeployUrl = `https://${projName}.pages.dev/${slug}/`;
+  const defaultDeployUrl = `${siteBaseUrl()}/${slug}/`;
   const deployUrl = r.deploy_url || r.deployUrl || defaultDeployUrl;
   const htmlTitle = r.compiled_html ? titleFromHtml(r.compiled_html) : '';
   const businessTitle = r.business_name
@@ -334,8 +333,7 @@ export async function registerUserRebrandedSite({
   const finalTemplateKey = resolvedTemplate?.key || templateKey || canonicalBuiltin.id || canonicalBuiltin.key || 'barber-dark-luxury';
   const finalNiche = normalizeOfficialNiche(resolvedTemplate?.niche || niche || canonicalBuiltin.niche);
   const finalCampaignSource = normalizeCampaignSource(campaignSource);
-  const projName = cloudflare.project || 'lunao-web-designn';
-  const finalDeployUrl = deployUrl || `https://${projName}.pages.dev/${cleanSlug}/`;
+  const finalDeployUrl = deployUrl || `${siteBaseUrl()}/${cleanSlug}/`;
   const now = Date.now();
 
   if (html && typeof html === 'string' && html.trim()) {

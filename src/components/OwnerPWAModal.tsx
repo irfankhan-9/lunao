@@ -80,7 +80,7 @@ export const OwnerPWAModal: React.FC<OwnerPWAModalProps> = ({
           address: contractor ? contractor.address : '3801 Capital of Texas Hwy, Suite 200',
           city: contractor ? contractor.city : 'Austin, TX',
           timezone: contractor ? 'America/Edmonton' : 'America/Chicago',
-          websiteUrl: siteUrl || `https://lunao-web-designn.pages.dev/${slug}/`,
+          websiteUrl: siteUrl || (typeof window !== 'undefined' && window.location?.origin ? `${window.location.origin}/${slug}/` : `https://lunao.org/${slug}/`),
           socialLinks: { instagram: `${slug}_official` },
           theme: {
             accent: '#059669',

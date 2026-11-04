@@ -17,7 +17,7 @@ import { stageSite, publishBatch, validateCloudflareToken, verifyLiveCloudflareU
 import { registerUserRebrandedSite } from './sites.js';
 import { sendSms, renderSms, countSegments, toE164, fetchMessageStatus } from './telnyx.js';
 import { slugify } from './slug.js';
-import { cloudflare, telnyx, modeSummary } from './config.js';
+import { cloudflare, telnyx, modeSummary, siteBaseUrl } from './config.js';
 import {
   recordLeadResult,
   logSmsAttempt,
@@ -163,8 +163,7 @@ export async function runPipeline({
     try {
       const { html, resolved } = await compileSite(biz, effectiveKey, ownerKey, rowRawHtml);
       const siteUrl = await stageSite(slug, html);
-      const projName = cloudflare.project || 'lunao-web-designn';
-      const expectedDeployUrl = `https://${projName}.pages.dev/${slug}/`;
+      const expectedDeployUrl = `${siteBaseUrl()}/${slug}/`;
       if (ownerKey) {
         try {
           await registerUserRebrandedSite({
@@ -290,10 +289,9 @@ export async function runPipeline({
       if (cloudflare.live) {
         const publish = await publishBatch();
         if (publish?.deployed) {
-          const projName = cloudflare.project || 'lunao-web-designn';
           let verifiedCount = 0;
           for (const r of staged) {
-            const candidateUrl = `https://${projName}.pages.dev/${r.slug}/`;
+            const candidateUrl = `${siteBaseUrl()}/${r.slug}/`;
             const check = await verifyLiveCloudflareUrl(candidateUrl, r.name, 4);
             if (check.ok) {
               r.siteStatus = 'live';

@@ -38,7 +38,7 @@ export const telnyx = {
     return env.TELNYX_MESSAGING_PROFILE_ID || '40019ed1-f7a4-4e7b-a4bc-ffc748846765';
   },
   get PUBLIC_API_BASE_URL() {
-    return env.PUBLIC_API_BASE_URL || env.LUNAO_API_BASE_URL || 'https://lunao-web-designn.pages.dev';
+    return env.PUBLIC_API_BASE_URL || env.LUNAO_API_BASE_URL || 'https://lunao.org';
   },
   get enabled() {
     if (env.SMS_ENABLED !== undefined) {
@@ -174,13 +174,12 @@ export const emailCrypto = {
 export const PUBLIC_API_BASE_URL = (env.PUBLIC_API_BASE_URL || `http://localhost:${PORT}`).replace(/\/+$/, '');
 
 // Public base used to build the clickable site link inside email and SMS outreach.
-// Always defaults to Cloudflare Pages (https://lunao-web-designn.pages.dev).
+// Defaults to custom domain https://lunao.org (or SITE_BASE_URL if explicitly overridden).
 export function siteBaseUrl() {
   if (process.env.SITE_BASE_URL || env.SITE_BASE_URL) {
     return (process.env.SITE_BASE_URL || env.SITE_BASE_URL).replace(/\/+$/, '');
   }
-  const proj = cloudflare.project || process.env.CLOUDFLARE_PAGES_PROJECT || 'lunao-web-designn';
-  return `https://${proj}.pages.dev`;
+  return 'https://lunao.org';
 }
 
 export const supabase = {

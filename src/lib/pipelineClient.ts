@@ -4496,7 +4496,9 @@ export async function executeUnifiedLeadRebrandClient(
     const siteUrl =
       campaignSource === 'email'
         ? getContractorSiteUrl(slug)
-        : `https://lunao-web-designn.pages.dev/${slug}/`;
+        : (typeof window !== 'undefined' && window.location?.origin
+            ? `${window.location.origin}/${slug}/`
+            : `https://lunao.org/${slug}/`);
 
     const elapsed = Date.now() - leadStartMs;
     if (elapsed < enforcedMinMs) {

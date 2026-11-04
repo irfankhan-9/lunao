@@ -9,7 +9,7 @@ import { EDMONTON_230_CONTRACTORS } from './edmonton230Data.js';
 import { compileSite } from './compile.js';
 import { db } from './db.js';
 import { getPgPool, getSupabase } from './supabase.js';
-import { cloudflare } from './config.js';
+import { cloudflare, siteBaseUrl } from './config.js';
 import { publishBatch } from './cloudflare.js';
 
 export const UGC_SECRET_CODE = 'LNO-UGC-9X4K-77VQ';
@@ -210,7 +210,7 @@ export function getSpecialModeContractorSite(slug) {
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
         .join(' ') || 'Apex Climate Care';
   const city = contractor ? contractor.city : 'Edmonton, AB';
-  const url = `https://lunao-web-designn.pages.dev/${cleanSlug}/`;
+  const url = `${siteBaseUrl()}/${cleanSlug}/`;
   return {
     slug: cleanSlug,
     title: `${businessName} — ${city}`,

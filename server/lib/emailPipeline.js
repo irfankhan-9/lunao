@@ -13,7 +13,7 @@ import { compileSite } from './compile.js';
 import { stageSite, publishBatch } from './cloudflare.js';
 import { registerUserRebrandedSite } from './sites.js';
 import { slugify } from './slug.js';
-import { cloudflare } from './config.js';
+import { cloudflare, siteBaseUrl } from './config.js';
 import { decryptToken } from './emailCrypto.js';
 import {
   getEmailCampaign,
@@ -305,8 +305,7 @@ const phase1Workers = Array.from(
           };
           const { html, resolved } = await compileSite(business, requestedKey, campaignOwnerKey);
           const siteUrl = await stageSite(slug, html);
-          const projName = cloudflare.project || 'lunao-web-designn';
-          const expectedDeployUrl = `https://${projName}.pages.dev/${slug}/`;
+          const expectedDeployUrl = `${siteBaseUrl()}/${slug}/`;
           if (campaignOwnerKey) {
             try {
               await registerUserRebrandedSite({
@@ -388,9 +387,8 @@ try {
   }
   console.log(`[email-pipeline] Cloudflare batch deploy complete.`);
   // After a live deploy, swap every lead's staging URL (localhost) to the real
-  // Cloudflare Pages URL. Emails in Phase 3 will reference the verified-live URL.
-  const projName = cloudflare.project || 'lunao-web-designn';
-  const cfBase = `https://${projName}.pages.dev`;
+  // production URL. Emails in Phase 3 will reference the verified-live URL.
+  const cfBase = siteBaseUrl();
   updateAllLeadSiteUrls(campaignId, cfBase);
   // Refresh the in-memory readyForEmail entries so Phase 3 uses the real URLs.
   const updatedLeads = listEmailLeads(campaignId);

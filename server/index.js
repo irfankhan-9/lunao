@@ -260,6 +260,29 @@ const app = express();
 // `req.protocol`, and `req.ip` reflect the real client HTTPS.
 app.set('trust proxy', 1);
 
+// Trusted origins explicitly permitted for cross-origin requests with credentials
+const TRUSTED_CORS_ORIGINS = new Set([
+  'https://lunao.org',
+  'https://www.lunao.org',
+  'https://api.lunao.org',
+  'https://lunao-web-designn.pages.dev',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:8787',
+]);
+
+function isAllowedCorsOrigin(origin) {
+  if (!origin) return false;
+  if (TRUSTED_CORS_ORIGINS.has(origin)) return true;
+  try {
+    const url = new URL(origin);
+    if (url.hostname === 'lunao.org' || url.hostname.endsWith('.lunao.org')) return true;
+    if (url.hostname.endsWith('.pages.dev')) return true;
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return true;
+  } catch {}
+  return false;
+}
+
 // CORS and Request Tracing middleware.
 // Preflight OPTIONS requests are handled with immediate 204 No Content and never redirected.
 app.use((req, res, next) => {
@@ -289,8 +312,12 @@ app.use((req, res, next) => {
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-Key, x-owner-key, X-Idempotency-Key, Accept, Origin, X-Requested-With');
     res.header('Access-Control-Max-Age', '86400');
   } else {
-    // Authenticated API routes reflect trusted origins with credentials
-    if (origin) {
+    // Authenticated API routes reflect trusted origins (including lunao.org and www.lunao.org) with credentials
+    if (origin && isAllowedCorsOrigin(origin)) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Vary', 'Origin');
+    } else if (origin) {
       res.header('Access-Control-Allow-Origin', origin);
       res.header('Access-Control-Allow-Credentials', 'true');
       res.header('Vary', 'Origin');
@@ -1073,7 +1100,7 @@ app.get('/api/sites/all', authenticate, async (req, res) => {
                   city: s.city || null,
                   phone: s.phone || null,
                   lead_niche: s.niche || null,
-                  site_url: s.deploy_url || `https://lunao-web-designn.pages.dev/${s.slug}/`,
+                  site_url: s.deploy_url || `${siteBaseUrl()}/${s.slug}/`,
                   slug: s.slug,
                   lead_status: 'live',
                   created_at: createdTs,
@@ -1121,7 +1148,7 @@ app.get('/api/sites/all', authenticate, async (req, res) => {
             city: s.city || null,
             phone: s.phone || null,
             lead_niche: s.niche || null,
-            site_url: s.deploy_url || `https://lunao-web-designn.pages.dev/${s.slug}/`,
+            site_url: s.deploy_url || `${siteBaseUrl()}/${s.slug}/`,
             slug: s.slug,
             lead_status: 'live',
             created_at: createdTs,
@@ -1285,7 +1312,7 @@ app.put('/api/sites/:slug', authenticate, async (req, res) => {
         }
         saveSpecialModeSiteHtml(slug, html, SITES_DIR);
         const site = getSpecialModeContractorSite(slug);
-        return res.json({ ok: true, slug, url: site?.url || `https://lunao-web-designn.pages.dev/${slug}/` });
+        return res.json({ ok: true, slug, url: site?.url || `${siteBaseUrl()}/${slug}/` });
       }
       return res.status(access.status || 403).json({ ok: false, error: access.error || 'Forbidden' });
     }
@@ -1313,8 +1340,7 @@ app.post('/api/sites/:slug/deploy', authenticate, async (req, res) => {
     }
     const { slug } = req.params;
     const html = req.body?.html;
-    const projName = cloudflare.project || 'lunao-web-designn';
-    const liveUrl = `https://${projName}.pages.dev/${slug}/`;
+    const liveUrl = `${siteBaseUrl()}/${slug}/`;
     const access = await getUserEditorSite(ownerKey, slug);
     if (!access.ok) {
       if (isSpecialUgcOrSalesRequest(req, ownerKey)) {
@@ -1796,7 +1822,7 @@ app.post(['/api/admin/test-email-automations', '/api/test/email-automations'], r
       address: '3801 Capital of Texas Hwy, Austin, TX 78746',
       city: 'Austin',
       timezone: 'America/Chicago',
-      websiteUrl: 'https://lunao-web-designn.pages.dev',
+      websiteUrl: siteBaseUrl(),
       theme: { accent: '#059669' },
     };
 
@@ -3190,7 +3216,7 @@ app.get('/api/sms-logs/today', authenticate, async (req, res) => {
               const k = (s.slug || s.business_name || '').toLowerCase();
               if (!seenKeys.has(k)) {
                 seenKeys.add(k);
-                const liveUrl = s.deploy_url || `https://lunao-web-designn.pages.dev/${s.slug}/`;
+                const liveUrl = s.deploy_url || `${siteBaseUrl()}/${s.slug}/`;
                 logs.push({
                   id: `site_sms_${s.slug}`,
                   campaign_id: s.campaign_id || 'sms_campaign',

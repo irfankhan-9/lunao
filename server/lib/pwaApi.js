@@ -26,7 +26,7 @@ import fs from 'node:fs/promises';
 import { readSite, writeSite, isValidSlug } from './sites.js';
 import { validateBookingContract, CONTRACT_REJECTION_MESSAGE } from './bookingContractValidator.js';
 import { publishBatch } from './cloudflare.js';
-import { cloudflare, ROOT_DIR } from './config.js';
+import { cloudflare, ROOT_DIR, siteBaseUrl } from './config.js';
 import {
   getSupabase,
   supabaseListConversations,
@@ -693,8 +693,7 @@ export function mountPwaApi(app) {
       // Ensure local disk copy stays fresh with the latest HTML
       writeSite(slug, html).catch(() => {});
 
-      const projName = cloudflare.project || 'lunao-web-designn';
-      const liveUrl = `https://${projName}.pages.dev/${slug}/`;
+      const liveUrl = `${siteBaseUrl()}/${slug}/`;
 
       res.json({
         ok: true,
@@ -729,8 +728,7 @@ export function mountPwaApi(app) {
         });
       }
 
-      const projName = cloudflare.project || 'lunao-web-designn';
-      const liveUrl = `https://${projName}.pages.dev/${slug}/`;
+      const liveUrl = `${siteBaseUrl()}/${slug}/`;
 
       await persistPwaSiteHtmlToAllTiers(slug, html, liveUrl);
 
@@ -755,8 +753,7 @@ export function mountPwaApi(app) {
       }
 
       const html = req.body?.html;
-      const projName = cloudflare.project || 'lunao-web-designn';
-      const liveUrl = `https://${projName}.pages.dev/${slug}/`;
+      const liveUrl = `${siteBaseUrl()}/${slug}/`;
       const now = Date.now();
       const today = new Date().toISOString().slice(0, 10);
 
