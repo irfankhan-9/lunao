@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Sparkles, LogOut, CheckCircle, AlertCircle, Shield, CreditCard, User, Edit3, X, Globe, Cloud, Key, Check, Loader2, Gift, DollarSign, Share2, ArrowRight,
-  Phone, RefreshCw, Radio, Zap, ShieldCheck, ExternalLink
+  Sparkles, LogOut, CheckCircle, AlertCircle, Shield, CreditCard, User, Edit3, X, Key, Check, Loader2, Gift, DollarSign, Share2, ArrowRight,
+  Phone, RefreshCw, Radio, Zap, ShieldCheck, ExternalLink, ShieldAlert
 } from 'lucide-react';
 import { playDialogPop, playConfirmSuccess, playCancelTone, playTiktokLike, playSoftTap } from '../utils/audio';
 import { PartnerCodeBox } from '../specialModes/PartnerCodeBox';
 import { AffiliateSection } from './AffiliateSection';
 import { useGate } from '../contexts/GateContext';
+import { getCachedTelnyxData, syncTelnyxAccountLive, CachedTelnyxData } from '../lib/telnyxClient';
 
 interface SettingsProps {
   userName: string;
@@ -45,24 +46,32 @@ export const Settings: React.FC<SettingsProps> = ({
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [tempName, setTempName] = useState(userName);
 
-  // Telnyx Carrier & Messaging State
-  const [telnyxConnected, setTelnyxConnected] = useState<boolean>(false);
+  // Telnyx Carrier & Messaging State (Hydrated instantly from browser cache & cookies)
+  const [initialCached] = useState<CachedTelnyxData>(() => getCachedTelnyxData());
+  const [telnyxConnected, setTelnyxConnected] = useState<boolean>(initialCached.connected);
+  const [telnyxTokenExpired, setTelnyxTokenExpired] = useState<boolean>(initialCached.tokenExpired);
+  const [isSyncingTelnyx, setIsSyncingTelnyx] = useState<boolean>(false);
   const [telnyxAccount, setTelnyxAccount] = useState<{
     email: string;
     label: string;
     status: string;
     totalNumbers: number;
   }>({
-    email: '',
-    label: '',
-    status: 'disconnected',
-    totalNumbers: 0,
+    email: initialCached.account?.email || '',
+    label: initialCached.account?.label || initialCached.account?.email || 'Telnyx Account',
+    status: initialCached.tokenExpired ? 'needs_reconnect' : (initialCached.account?.status || (initialCached.connected ? 'active' : 'disconnected')),
+    totalNumbers: initialCached.account?.totalNumbers || initialCached.numbers?.length || 0,
   });
-  const [telnyxBalance, setTelnyxBalance] = useState<{ available: string; currency: string }>({
-    available: '0.00',
-    currency: 'USD',
-  });
-  const [telnyxNumbers, setTelnyxNumbers] = useState<Array<{ number: string; type: string; sms: boolean }>>([]);
+  const [telnyxBalance, setTelnyxBalance] = useState<{ available: string; currency: string }>(
+    initialCached.balance || { available: '0.00', currency: 'USD' }
+  );
+  const [telnyxNumbers, setTelnyxNumbers] = useState<Array<{ number: string; type: string; sms: boolean }>>(
+    (initialCached.numbers || []).map((n) => ({
+      number: n.phoneNumber,
+      type: 'phone_number',
+      sms: n.smsCapable !== false,
+    }))
+  );
   const [telnyxConnecting, setTelnyxConnecting] = useState(false);
   const [telnyxStatusMsg, setTelnyxStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -130,55 +139,77 @@ export const Settings: React.FC<SettingsProps> = ({
   };
 
   const fetchTelnyxData = async () => {
+    setIsSyncingTelnyx(true);
     try {
       const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
-      const [accRes, statsRes, numRes] = await Promise.all([
-        fetch(`/api/telnyx/accounts?ownerKey=${encodeURIComponent(ownerKey)}`, { credentials: 'include' }).then(r => r.json()).catch(() => null),
-        fetch(`/api/messaging/stats?ownerKey=${encodeURIComponent(ownerKey)}`, { credentials: 'include' }).then(r => r.json()).catch(() => null),
-        fetch(`/api/numbers?ownerKey=${encodeURIComponent(ownerKey)}`, { credentials: 'include' }).then(r => r.json()).catch(() => null)
-      ]);
+      const live = await syncTelnyxAccountLive(ownerKey);
 
-      if (accRes?.ok && Array.isArray(accRes.accounts) && accRes.accounts.length > 0) {
-        const acc = accRes.accounts[0];
-        setTelnyxConnected(true);
+      setTelnyxConnected(live.connected);
+      setTelnyxTokenExpired(live.tokenExpired);
+      if (live.account) {
         setTelnyxAccount({
-          email: acc.account_email || '',
-          label: acc.account_label || acc.account_email || 'Telnyx Account',
-          status: acc.status || 'active',
-          totalNumbers: acc.total_numbers || 0,
+          email: live.account.email || '',
+          label: live.account.label || live.account.email || 'Telnyx Account',
+          status: live.tokenExpired ? 'needs_reconnect' : (live.account.status || 'active'),
+          totalNumbers: live.account.totalNumbers || live.numbers.length,
         });
       } else {
-        setTelnyxConnected(false);
         setTelnyxAccount({
           email: '',
           label: '',
-          status: 'disconnected',
+          status: live.tokenExpired ? 'needs_reconnect' : 'disconnected',
           totalNumbers: 0,
         });
       }
 
-      if (statsRes?.ok && statsRes.stats) {
-        if (statsRes.stats.balance) {
-          setTelnyxBalance(statsRes.stats.balance);
-        }
+      if (live.balance) {
+        setTelnyxBalance(live.balance);
       }
 
-      if (numRes?.ok && Array.isArray(numRes.numbers) && numRes.numbers.length > 0) {
-        setTelnyxNumbers(numRes.numbers.map((n: any) => ({
-          number: n.number || n.phoneNumber,
-          type: n.type || 'phone_number',
-          sms: n.sms !== false
+      if (Array.isArray(live.numbers) && live.numbers.length > 0) {
+        setTelnyxNumbers(live.numbers.map((n) => ({
+          number: n.phoneNumber,
+          type: 'phone_number',
+          sms: n.smsCapable !== false,
         })));
-      } else {
+      } else if (!live.connected) {
         setTelnyxNumbers([]);
       }
     } catch {
       // non-fatal
+    } finally {
+      setIsSyncingTelnyx(false);
     }
   };
 
   useEffect(() => {
     fetchTelnyxData();
+
+    const handleSync = (e: any) => {
+      const detail: CachedTelnyxData = e.detail;
+      if (!detail) return;
+      setTelnyxConnected(detail.connected);
+      setTelnyxTokenExpired(detail.tokenExpired);
+      if (detail.account) {
+        setTelnyxAccount({
+          email: detail.account.email || '',
+          label: detail.account.label || detail.account.email || 'Telnyx Account',
+          status: detail.tokenExpired ? 'needs_reconnect' : (detail.account.status || 'active'),
+          totalNumbers: detail.account.totalNumbers || detail.numbers.length,
+        });
+      }
+      if (detail.balance) setTelnyxBalance(detail.balance);
+      if (detail.numbers) {
+        setTelnyxNumbers(detail.numbers.map((n) => ({
+          number: n.phoneNumber,
+          type: 'phone_number',
+          sms: n.smsCapable !== false,
+        })));
+      }
+    };
+
+    window.addEventListener('lunao:telnyx_sync', handleSync);
+    return () => window.removeEventListener('lunao:telnyx_sync', handleSync);
   }, []);
 
   const handleConnectTelnyx = async () => {
@@ -523,8 +554,16 @@ export const Settings: React.FC<SettingsProps> = ({
 
       </div>
 
-      {/* Telnyx Carrier & 10DLC Messaging Section */}
-      <div id="settings-telnyx-card" className="bg-white border border-border-main rounded-xl p-6 md:p-8 shadow-sm space-y-6">
+      {/* Telnyx Carrier & 10DLC Messaging Section (Strictly removed on Free Plan) */}
+      {!userPlan.toLowerCase().includes('free') && (
+      <div id="settings-telnyx-card" className="bg-white border border-border-main rounded-xl p-6 md:p-8 shadow-sm space-y-6 relative overflow-hidden">
+        {/* Real-time Catching Progress Bar */}
+        {isSyncingTelnyx && (
+          <div className="absolute top-0 left-0 right-0 h-1 bg-accent/20 overflow-hidden">
+            <div className="h-full bg-accent animate-pulse w-full" />
+          </div>
+        )}
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-border-light gap-4">
           <div className="space-y-1">
             <span className="text-[10px] uppercase font-bold tracking-widest text-accent font-sans">Carrier SMS & 10DLC Infrastructure</span>
@@ -534,12 +573,40 @@ export const Settings: React.FC<SettingsProps> = ({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-3xs">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Connected · {telnyxAccount.email}
-            </span>
+            {telnyxTokenExpired ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-3xs">
+                <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+                Cookie / Token Expired — Reconnect needed
+              </span>
+            ) : telnyxConnected ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-3xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Connected · {telnyxAccount.email || 'Active Carrier'}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-surface text-ink-secondary border border-border-main shadow-3xs">
+                <span className="w-2 h-2 rounded-full bg-ink-tertiary" />
+                Not Connected
+              </span>
+            )}
           </div>
         </div>
+
+        {telnyxTokenExpired && (
+          <div className="p-3.5 rounded-xl border border-rose-200 bg-rose-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-fade-in">
+            <div className="flex items-center gap-2 text-rose-800">
+              <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>Telnyx session or cookie expired. Reconnect to resume carrier sending without re-configuring numbers.</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleConnectTelnyx}
+              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold shrink-0 cursor-pointer text-xs transition-colors shadow-xs"
+            >
+              Reconnect Telnyx
+            </button>
+          </div>
+        )}
 
         {telnyxStatusMsg && (
           <div className={`p-4 rounded-xl border text-xs font-medium flex items-center justify-between gap-3 animate-fade-in ${
@@ -645,7 +712,7 @@ export const Settings: React.FC<SettingsProps> = ({
               }}
               className="px-3.5 py-2 rounded-lg bg-surface hover:bg-off-white border border-border-main text-xs font-semibold text-ink-secondary hover:text-ink transition-colors cursor-pointer flex items-center gap-1.5"
             >
-              <span>Outreach Analytics</span>
+              <span>Messaging Settings</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
             <button
@@ -659,6 +726,11 @@ export const Settings: React.FC<SettingsProps> = ({
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   <span>Connecting...</span>
                 </>
+              ) : telnyxConnected ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 text-white" />
+                  <span>Re-auth / Connect Different Account</span>
+                </>
               ) : (
                 <>
                   <ShieldCheck className="w-3.5 h-3.5 text-blue-100" />
@@ -669,64 +741,8 @@ export const Settings: React.FC<SettingsProps> = ({
           </div>
         </div>
       </div>
+      )}
 
-      {/* Lunao Global Edge Servers Panel */}
-      <div id="settings-edge-servers-card" className="bg-white border border-border-main rounded-xl p-6 md:p-8 shadow-sm space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-border-light gap-3">
-          <div className="space-y-1">
-            <span className="text-[10px] uppercase font-bold tracking-widest text-accent font-sans">Edge Hosting & Distribution</span>
-            <h3 className="text-xl font-serif text-ink tracking-tight font-normal">Lunao High-Speed Edge Servers</h3>
-            <p className="text-xs text-ink-secondary">
-              Personalized websites are automatically compiled, verified with native booking integration, and served live across Lunao worldwide distributed edge nodes with HTTP 200 live response.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-success-soft text-success border border-success/20">
-              <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
-              Lunao Edge Servers Active
-            </span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="p-4 rounded-xl bg-surface border border-border-light space-y-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-ink-secondary">Server Network</p>
-            <p className="text-sm font-bold text-ink flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              Lunao Global Anycast
-            </p>
-            <p className="text-[11px] text-ink-tertiary">Distributed ultra-low latency nodes</p>
-          </div>
-
-          <div className="p-4 rounded-xl bg-surface border border-border-light space-y-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-ink-secondary">Deployment Verification</p>
-            <p className="text-sm font-bold text-ink flex items-center gap-1.5">
-              <CheckCircle className="w-3.5 h-3.5 text-accent" />
-              HTTP 200 Edge Health
-            </p>
-            <p className="text-[11px] text-ink-tertiary">Automated live edge confirmation</p>
-          </div>
-
-          <div className="p-4 rounded-xl bg-surface border border-border-light space-y-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-ink-secondary">SSL & Routing</p>
-            <p className="text-sm font-bold text-ink flex items-center gap-1.5">
-              <Globe className="w-3.5 h-3.5 text-accent" />
-              Automated HTTPS / SSL
-            </p>
-            <p className="text-[11px] text-ink-tertiary">Zero-configuration secure tunnels</p>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between pt-2 border-t border-border-light">
-          <p className="text-xs text-ink-secondary">
-            All campaign deployments and live prospect preview sites are managed automatically by Lunao production servers.
-          </p>
-          <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
-            <Check className="w-3.5 h-3.5" />
-            Infrastructure Connected
-          </span>
-        </div>
-      </div>
 
       {/* Desktop-only Partner & Enterprise Access Code Box */}
       <PartnerCodeBox />

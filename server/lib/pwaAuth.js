@@ -59,16 +59,6 @@ export async function pwaAuth(req, res, next) {
     } catch {}
   }
   if (!row) {
-    // If not found by invite code (e.g. server restart / cache miss), check target slug
-    const targetSlug = String(req.params.slug || req.headers['x-tenant-slug'] || req.query.slug || '').trim().toLowerCase();
-    if (targetSlug) {
-      try {
-        const { getOrCreateCodeForSlugAsync } = await import('./inviteCodes.js');
-        row = await getOrCreateCodeForSlugAsync(targetSlug, decoded.code);
-      } catch {}
-    }
-  }
-  if (!row) {
     return res
       .status(401)
       .json({ ok: false, error: 'Invalid or revoked invite code.' });

@@ -308,6 +308,17 @@ export function rebrandTemplate(rawHtml, business) {
     return `href="tel:${digits || cleanDigits}"`;
   });
 
+  // 4. Sanitize email mailto: and social media URLs to clean URL-safe slugs without raw spaces
+  result = result.replace(/mailto:\s*([a-zA-Z0-9._%+-]+)@([^\s"'>]+)/gi, (_match, user, domain) => {
+    const cleanDomain = domain.toLowerCase().replace(/[^a-z0-9.-]/g, '');
+    return `mailto:${user}@${cleanDomain || safeSlug + '.com'}`;
+  });
+
+  result = result.replace(/href=["']https?:\/\/(?:www\.)?(instagram\.com|facebook\.com|tiktok\.com|twitter\.com|x\.com|youtube\.com|linkedin\.com)\/([^"'>]+)["']/gi, (_match, platform, path) => {
+    const cleanPath = path.replace(/\s+/g, '').toLowerCase();
+    return `href="https://${platform}/${cleanPath}"`;
+  });
+
   return result;
 }
 

@@ -9,7 +9,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { db } from './db.js';
-import { SITES_DIR, siteBaseUrl } from './config.js';
+import { SITES_DIR, siteBaseUrl, siteUrlForSlug, normalizeSiteDeployUrl } from './config.js';
 
 const DEFAULT_THEME = {
   accent: '#059669',
@@ -34,7 +34,7 @@ function rowToProfile(row) {
     state: row.state || '',
     timezone: row.timezone || '',
     logoUrl: row.logo_url || null,
-    websiteUrl: row.website_url || `${siteBaseUrl()}/${row.slug}/`,
+    websiteUrl: normalizeSiteDeployUrl(row.website_url, row.slug),
     socialLinks: {
       instagram: row.social_instagram || '',
       facebook: row.social_facebook || '',
@@ -155,7 +155,7 @@ export function extractProfileFromHtml(slug, html) {
     state,
     timezone: '',
     logoUrl: logo || null,
-    websiteUrl: website || `${siteBaseUrl()}/${slug}/`,
+    websiteUrl: normalizeSiteDeployUrl(website, slug),
     socialLinks: {
       instagram: readMeta(html, 'business-instagram'),
       facebook: readMeta(html, 'business-facebook'),

@@ -38,8 +38,7 @@ export async function signOutGoogle(): Promise<void> {
 export async function connectGmailWithFirebase(): Promise<{ email: string; displayName: string; accessToken: string }> {
   const provider = new GoogleAuthProvider();
   provider.addScope('https://www.googleapis.com/auth/gmail.send');
-  provider.addScope('https://www.googleapis.com/auth/gmail.readonly');
-  provider.setCustomParameters({ prompt: 'select_account' });
+  provider.setCustomParameters({ prompt: 'select_account consent' });
 
   const result = await signInWithPopup(auth, provider);
   const credential = GoogleAuthProvider.credentialFromResult(result);

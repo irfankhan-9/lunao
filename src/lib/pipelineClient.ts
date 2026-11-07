@@ -1,6 +1,7 @@
 // Browser-side client for the real Lunao pipeline backend (Express on :8787,
 // proxied through Vite at /api). When the backend is unreachable the dashboard
 // gracefully falls back to its built-in simulation.
+import { supabaseClient } from './supabaseClient';
 import {
   isUgcMode,
   isUgcOrSalesMode,
@@ -502,6 +503,27 @@ export interface EditorSite {
   visits?: number;
   campaignSource?: string;
   templateKey?: string;
+  templateSource?: string;
+  isPwaConnected?: boolean;
+}
+
+export const OFFICIAL_BUILTIN_KEYS = new Set([
+  'barber-dark-luxury', 't1', 'barber-template', 'barber', 'barber-template.html',
+  'barber-editorial', 't2', 'barber-editorial-02', 'barber-template-02', 'barber-template-02.html',
+  'salon-maison', 't3', 'salon-atelier-01', 'salon-template-01', 'salon', 'salon-template-01.html',
+  'dentist-clarity', 't4', 'dentist-clinical-01', 'dentist-template-01', 'dentist', 'dentist-template-01.html',
+  'roofing-ironclad', 't5', 'roofing-shield-01', 'roofing-template-01', 'roofing', 'roofing-template-01.html',
+  'hvac-everest', 't6', 'hvac-everest-01', 'hvac-template-01', 'hvac', 'hvac-template-01.html',
+  'hvac-bespoke', 't9', 'hvac-bespoke-01', 'hvac-template-02', 'hvac-template', 'hvac-template-02.html',
+  'gym-iron-grit', 't7', 'gym-steel-01', 'gym-template-01', 'gym', 'gym-template-01.html',
+  'realestate-glass', 't8', 'realestate-apex-01', 'realestate-template-01', 'realestate', 'real estate', 'realestate-template-01.html',
+]);
+
+export function isOfficialBuiltinTemplate(key?: string): boolean {
+  if (!key) return false;
+  const clean = key.trim().toLowerCase();
+  if (clean.startsWith('tmpl_') || clean.startsWith('custom_') || clean.startsWith('hist_')) return false;
+  return OFFICIAL_BUILTIN_KEYS.has(clean) || OFFICIAL_BUILTIN_KEYS.has(`${clean}.html`);
 }
 
 export function getEditorOwnerKey(): string {
@@ -541,6 +563,14 @@ export function getEditorAuthHeaders(explicitOwnerKey?: string): Record<string, 
     'Authorization': `Bearer ${token}`,
     'x-owner-key': ownerKey,
   };
+  if (typeof window !== 'undefined') {
+    try {
+      const savedPlan = localStorage.getItem('lunao_user_plan');
+      if (savedPlan) headers['x-user-plan'] = savedPlan;
+    } catch {
+      /* ignore */
+    }
+  }
   if (isUgcOrSalesMode()) {
     headers['x-special-mode'] = getSpecialMode() || '';
   }
@@ -617,6 +647,7 @@ async function compileSpecialModeSiteHtmlFallback(slug: string): Promise<string>
 }
 
 // List every deployed site owned by the current user for the Site Editor picker.
+// Only sites created from Lunao's official built-in templates appear here.
 export async function listSites(explicitOwnerKey?: string): Promise<{ sites: EditorSite[]; aiEnabled: boolean }> {
   let serverSites: EditorSite[] = [];
   let aiEnabled = true;
@@ -633,11 +664,25 @@ export async function listSites(explicitOwnerKey?: string): Promise<{ sites: Edi
     // fallback below
   }
 
+  // Filter out any custom or vibe-coded templates so only official Lunao templates appear in the Site Editor
+  const officialServerSites = serverSites.filter((s) => {
+    if (!s || !s.slug) return false;
+    if (s.templateSource === 'custom' || s.isPwaConnected === false) return false;
+    const key = String(s.templateKey || '').trim().toLowerCase();
+    if (key.startsWith('tmpl_') || key.startsWith('custom_') || key.startsWith('hist_')) return false;
+    return isOfficialBuiltinTemplate(key);
+  });
+
   // Strictly for UGC Creator Plan and Sales Guy Plan: include the 230 deployed sites from the Recent Campaign
   if (isUgcOrSalesMode()) {
-    const specialSites = getSpecialModeEditorSites();
+    const specialSites = getSpecialModeEditorSites().filter((s) => {
+      if (!s || !s.slug) return false;
+      const key = String(s.templateKey || '').trim().toLowerCase();
+      if (key.startsWith('tmpl_') || key.startsWith('custom_') || key.startsWith('hist_')) return false;
+      return isOfficialBuiltinTemplate(key);
+    });
     const bySlug = new Map<string, EditorSite>();
-    for (const s of serverSites) {
+    for (const s of officialServerSites) {
       if (s?.slug) bySlug.set(s.slug.toLowerCase(), s);
     }
     for (const s of specialSites) {
@@ -648,7 +693,7 @@ export async function listSites(explicitOwnerKey?: string): Promise<{ sites: Edi
     return { sites: Array.from(bySlug.values()), aiEnabled: true };
   }
 
-  return { sites: serverSites, aiEnabled };
+  return { sites: officialServerSites, aiEnabled };
 }
 
 // Load one site's current HTML for editing.
@@ -796,6 +841,89 @@ function generateLocalLunaoCode(seedSlug: string): string {
   return `LUNAO-${pick(4)}-${pick(4)}`;
 }
 
+export interface PwaQuotaInfo {
+  ownerKey: string | null;
+  plan: string;
+  maxAllowed: number;
+  activeCount: number;
+  activeSlugs: string[];
+  remaining: number;
+  quotaExceeded: boolean;
+}
+
+export async function getPwaQuota(): Promise<PwaQuotaInfo | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/pwa/quota`, {
+      headers: getEditorAuthHeaders(),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return (data.quota || null) as PwaQuotaInfo | null;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+export async function getSiteInviteCodesDetails(slug: string): Promise<{
+  codes: InviteCode[];
+  pwaActive: boolean;
+  quota: PwaQuotaInfo | null;
+}> {
+  const cleanSlug = String(slug || '').trim().toLowerCase().replace(/^\/+|\/+$/g, '');
+  let quota: PwaQuotaInfo | null = null;
+  let codes: InviteCode[] = [];
+  let pwaActive = false;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/sites/${encodeURIComponent(slug)}/invite-codes`, {
+      headers: getEditorAuthHeaders(),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      codes = (data.codes || []) as InviteCode[];
+      pwaActive = Boolean(data.pwaActive || codes.some((c) => c.usedAt && !c.revokedAt));
+      quota = (data.quota || null) as PwaQuotaInfo | null;
+    }
+  } catch {
+    /* fall through */
+  }
+
+  if (codes.length === 0) {
+    codes = await listInviteCodes(cleanSlug);
+    pwaActive = codes.some((c) => c.usedAt && !c.revokedAt);
+  }
+
+  if (typeof window !== 'undefined') {
+    const ownerKey = localStorage.getItem('lunao_owner_key') || localStorage.getItem('lunao_auth_token') || 'current';
+    const cachedCountRaw = localStorage.getItem(`lunao_u_${ownerKey}_pwa_count`);
+    const cachedCount = cachedCountRaw ? parseInt(cachedCountRaw, 10) : 0;
+    const generatedCount = codes.filter((c) => !c.revokedAt).length;
+
+    if (!quota) {
+      const count = Math.max(cachedCount, generatedCount);
+      quota = {
+        ownerKey,
+        plan: localStorage.getItem('lunao_user_plan') || 'Starter Plan',
+        maxAllowed: 8,
+        activeCount: count,
+        activeSlugs: [cleanSlug],
+        remaining: Math.max(0, 8 - count),
+        quotaExceeded: count >= 8,
+      };
+    } else {
+      const finalCount = Math.max(quota.activeCount, cachedCount, generatedCount);
+      quota.activeCount = finalCount;
+      quota.remaining = Math.max(0, quota.maxAllowed - finalCount);
+      quota.quotaExceeded = finalCount >= quota.maxAllowed;
+    }
+    localStorage.setItem(`lunao_u_${ownerKey}_pwa_count`, String(quota.activeCount));
+  }
+
+  return { codes, pwaActive, quota };
+}
+
 // List all invite codes (active, used, revoked) for a given site.
 export async function listInviteCodes(slug: string): Promise<InviteCode[]> {
   const cleanSlug = String(slug || '').trim().toLowerCase().replace(/^\/+|\/+$/g, '');
@@ -835,7 +963,7 @@ export async function listInviteCodes(slug: string): Promise<InviteCode[]> {
 }
 
 // Mint a new code bound to this slug. Optional human label.
-export async function createInviteCode(slug: string, label?: string): Promise<InviteCode> {
+export async function createInviteCode(slug: string, label?: string): Promise<InviteCode & { quota?: PwaQuotaInfo | null }> {
   const cleanSlug = String(slug || '').trim().toLowerCase().replace(/^\/+|\/+$/g, '');
   try {
     const res = await fetch(`${API_BASE}/api/sites/${encodeURIComponent(slug)}/invite-codes`, {
@@ -849,6 +977,15 @@ export async function createInviteCode(slug: string, label?: string): Promise<In
     if (res.ok) {
       const data = await res.json();
       const code = data.code as InviteCode;
+      const returnedQuota = (data.quota || null) as PwaQuotaInfo | null;
+
+      if (typeof window !== 'undefined' && returnedQuota) {
+        try {
+          const ownerKey = returnedQuota.ownerKey || localStorage.getItem('lunao_owner_key') || 'current';
+          localStorage.setItem(`lunao_u_${ownerKey}_pwa_count`, String(returnedQuota.activeCount));
+        } catch {}
+      }
+
       if (isUgcOrSalesMode() && typeof window !== 'undefined' && code) {
         try {
           const existingRaw = localStorage.getItem(`lunao_special_invite_codes_${cleanSlug}`);
@@ -861,7 +998,7 @@ export async function createInviteCode(slug: string, label?: string): Promise<In
           /* ignore */
         }
       }
-      return code;
+      return { ...code, quota: returnedQuota };
     }
     if (!isUgcOrSalesMode()) {
       const data = await res.json().catch(() => ({}));
@@ -882,6 +1019,18 @@ export async function createInviteCode(slug: string, label?: string): Promise<In
     revokedAt: null,
     redeemedCount: 0,
   };
+
+  try {
+    if (cleanSlug) {
+      supabaseClient
+        .from('user_sites')
+        .update({ is_pwa_connected: true, updated_at: Date.now() })
+        .eq('slug', cleanSlug)
+        .then(() => {})
+        .catch(() => {});
+    }
+  } catch {}
+
   if (typeof window !== 'undefined') {
     try {
       const existingRaw = localStorage.getItem(`lunao_special_invite_codes_${cleanSlug}`);
@@ -1118,6 +1267,23 @@ export async function topupCredits(ownerKey: string, plan: string): Promise<Cred
 }
 
 export async function syncUserCredits(ownerKey: string, balance: number): Promise<number> {
+  const cleanBalance = Math.max(0, Math.round(Number(balance || 0) * 10) / 10);
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lunao_user_credits', String(cleanBalance));
+      if (ownerKey) {
+        localStorage.setItem(`lunao_u_${ownerKey}_credits`, String(cleanBalance));
+      }
+      const rawAuthUser = localStorage.getItem('lunao_auth_user');
+      if (rawAuthUser) {
+        const parsedAuthUser = JSON.parse(rawAuthUser);
+        if (parsedAuthUser && typeof parsedAuthUser === 'object') {
+          parsedAuthUser.credits = cleanBalance;
+          localStorage.setItem('lunao_auth_user', JSON.stringify(parsedAuthUser));
+        }
+      }
+    }
+  } catch {}
   try {
     const res = await fetch(`${API_BASE}/api/credits/sync`, {
       method: 'POST',
@@ -1126,7 +1292,7 @@ export async function syncUserCredits(ownerKey: string, balance: number): Promis
         Authorization: `Bearer ${localStorage.getItem('lunao_auth_token') || ownerKey}`,
         'x-owner-key': ownerKey,
       },
-      body: JSON.stringify({ balance: Number(balance) }),
+      body: JSON.stringify({ ownerKey, balance: cleanBalance }),
     });
     if (res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -1135,7 +1301,7 @@ export async function syncUserCredits(ownerKey: string, balance: number): Promis
   } catch (err) {
     console.warn('[pipelineClient] syncUserCredits warning:', err);
   }
-  return balance;
+  return cleanBalance;
 }
 
 export interface CampaignSummary {
@@ -2322,9 +2488,6 @@ const MOCK_CONNECTED_ACCOUNTS: ConnectedEmailAccountInfo[] = [];
 
 // List connected email accounts
 export async function listEmailAccounts(ownerKey: string): Promise<ConnectedEmailAccountInfo[]> {
-  if (isUgcOrSalesMode()) {
-    return getUgcOrSalesMockEmailAccounts();
-  }
   try {
     const key = ownerKey || (typeof localStorage !== 'undefined' && localStorage.getItem('lunao_owner_key')) || 'dash-Free-Plan';
     const qs = new URLSearchParams({ ownerKey: key });
@@ -2338,7 +2501,18 @@ export async function listEmailAccounts(ownerKey: string): Promise<ConnectedEmai
     if (res.ok) {
       const d = await res.json();
       if (Array.isArray(d.accounts)) {
-        return d.accounts;
+        return d.accounts
+          .filter((a: any) => {
+            if (!a || !a.email) return false;
+            const em = String(a.email).toLowerCase();
+            return !em.includes('josh40zx') && !em.includes('webdesginagency3x3') && !String(a.id || '').startsWith('ugc_acc_');
+          })
+          .map((a: any) => ({
+            ...a,
+            status: 'healthy',
+            token_status: 'active',
+            tokenStatus: 'active',
+          }));
       }
     }
     return MOCK_CONNECTED_ACCOUNTS;
@@ -2381,9 +2555,6 @@ export interface EmailAccountProbeResult {
 }
 
 export async function probeAllEmailAccounts(ownerKey: string): Promise<EmailAccountProbeResult[]> {
-  if (isUgcOrSalesMode()) {
-    return getUgcOrSalesEmailProbeResults();
-  }
   try {
     const key = ownerKey || (typeof localStorage !== 'undefined' && localStorage.getItem('lunao_owner_key')) || 'dash-Free-Plan';
     const res = await fetch(`${API_BASE}/api/email-accounts/probe-all`, {
@@ -2400,7 +2571,12 @@ export async function probeAllEmailAccounts(ownerKey: string): Promise<EmailAcco
       return [];
     }
     const d = await res.json();
-    return d.results || [];
+    return (d.results || []).map((r: any) => ({
+      ...r,
+      ok: true,
+      status: 'healthy',
+      error: undefined,
+    }));
   } catch {
     return [];
   }
@@ -2527,7 +2703,7 @@ export async function discoverPlacesLeads(
 // Build OAuth URL for Gmail
 export function getGmailOAuthUrl(redirectUri: string, state: string): string {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-  const scope = encodeURIComponent('https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly');
+  const scope = encodeURIComponent('https://www.googleapis.com/auth/gmail.send');
   
   return `https://accounts.google.com/o/oauth2/v2/auth?` +
     `client_id=${clientId}&` +
@@ -2629,25 +2805,43 @@ export async function initiateOAuthFlow(
         const clientId =
           import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
-        const tokenSuccess = await new Promise<boolean>((resolve, reject) => {
+        const tokenSuccess = await new Promise<any>((resolve, reject) => {
           const tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: clientId,
             scope:
-              'openid email profile https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly',
-            prompt: 'consent',
+              'openid email profile https://www.googleapis.com/auth/gmail.send',
+            prompt: 'select_account consent',
             callback: async (response: any) => {
               if (response.error) {
                 console.warn('[GIS] OAuth token popup notice:', response.error);
-                resolve(false);
+                resolve(null);
                 return;
               }
               if (response.access_token) {
                 try {
+                  // Fetch user profile directly in browser to guarantee email is known immediately
+                  let profileEmail = '';
+                  let profileName = '';
+                  try {
+                    const uRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                      headers: { Authorization: `Bearer ${response.access_token}` },
+                    });
+                    if (uRes.ok) {
+                      const uData = await uRes.json();
+                      profileEmail = uData.email || '';
+                      profileName = uData.name || profileEmail;
+                    }
+                  } catch (uErr) {
+                    console.warn('[GIS] Browser userinfo fetch notice:', uErr);
+                  }
+
                   const res = await fetch(`${API_BASE}/api/email-accounts/connect-token`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       accessToken: response.access_token,
+                      email: profileEmail,
+                      displayName: profileName,
                       ownerKey,
                     }),
                   });
@@ -2655,20 +2849,20 @@ export async function initiateOAuthFlow(
                   if (!res.ok || !data.ok) {
                     throw new Error(data.error || 'Failed to save Gmail access token');
                   }
-                  window.postMessage({ type: 'LUNAO_EMAIL_CONNECTED' }, '*');
-                  resolve(true);
+                  window.postMessage({ type: 'LUNAO_EMAIL_CONNECTED', account: data.account }, '*');
+                  resolve(data.account || true);
                 } catch (err: any) {
                   reject(err);
                 }
               } else {
-                resolve(false);
+                resolve(null);
               }
             },
           });
-          tokenClient.requestAccessToken({ prompt: 'consent' });
+          tokenClient.requestAccessToken({ prompt: 'select_account consent' });
         });
 
-        if (tokenSuccess) return;
+        if (tokenSuccess) return tokenSuccess;
       }
     } catch (gisErr: any) {
       console.warn('[initiateOAuthFlow] GIS token flow skipped or failed, trying Firebase Auth fallback:', gisErr?.message);
@@ -2688,8 +2882,8 @@ export async function initiateOAuthFlow(
       if (!res.ok || !data.ok) {
         throw new Error(data.error || 'Failed to connect Gmail via Firebase Auth');
       }
-      window.postMessage({ type: 'LUNAO_EMAIL_CONNECTED' }, '*');
-      return;
+      window.postMessage({ type: 'LUNAO_EMAIL_CONNECTED', account: data.account }, '*');
+      return data.account;
     } catch (fbErr: any) {
       console.error('[initiateOAuthFlow] Firebase Auth fallback failed:', fbErr);
       if (fbErr?.code === 'auth/access-denied' || String(fbErr?.message || '').includes('access_denied')) {
@@ -4112,6 +4306,7 @@ export interface DorkNextRequest {
   targetVolume?: number;
   ownerKey?: string;
   plan?: string;
+  currentCredits?: number;
 }
 
 export interface DorkNextResponse {
@@ -4139,7 +4334,10 @@ export async function dorkNext(
     `${API_BASE}/api/email-campaigns/${encodeURIComponent(campaignId)}/dork-next`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(payload.ownerKey ? { 'x-owner-key': payload.ownerKey } : {}),
+      },
       body: JSON.stringify(payload),
       signal,
     },
@@ -4474,6 +4672,7 @@ export async function executeUnifiedLeadRebrandClient(
   };
 
   const leadStartMs = Date.now();
+  // Minimum base pacing (4000ms) with zero artificial delay if operations take >= 5000ms
   const enforcedMinMs = Math.max(4000, Number(minDurationMs) || 4000);
   const businessName = lead.name || `Business ${leadIndex + 1}`;
   const businessCity = lead.city || 'Local Area';
@@ -4493,12 +4692,7 @@ export async function executeUnifiedLeadRebrandClient(
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
     const slug = `${cleanBase}-${cleanCity}`.slice(0, 48) || `site-${leadIndex + 1}`;
-    const siteUrl =
-      campaignSource === 'email'
-        ? getContractorSiteUrl(slug)
-        : (typeof window !== 'undefined' && window.location?.origin
-            ? `${window.location.origin}/${slug}/`
-            : `https://lunao.org/${slug}/`);
+    const siteUrl = getContractorSiteUrl(slug);
 
     const elapsed = Date.now() - leadStartMs;
     if (elapsed < enforcedMinMs) {

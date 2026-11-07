@@ -5,6 +5,8 @@ import { SidebarTab } from '../types';
 import { PartnerCodeBox } from '../specialModes/PartnerCodeBox';
 import { clearSpecialModeStorage } from '../specialModes/modeManager';
 import { resetVibeCreditsToPlan } from '../lib/vibeCredits';
+import { syncPlanWithAffiliate } from '../lib/referralTracker';
+import { Loader2 } from 'lucide-react';
 
 interface PlansProps {
   setActiveTab: (tab: SidebarTab) => void;
@@ -21,6 +23,22 @@ export const Plans: React.FC<PlansProps> = ({
 }) => {
   const [agencySeats, setAgencySeats] = useState(170);
   const [proSeats, setProSeats] = useState(400);
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Check if redirected back from successful Stripe checkout
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const billingStatus = urlParams.get('billing');
+      const paidPlan = urlParams.get('plan');
+      if (billingStatus === 'success' && paidPlan) {
+        setUserPlan(paidPlan);
+        resetVibeCreditsToPlan(paidPlan);
+        playConfirmSuccess();
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
+  }, [setUserPlan]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -38,12 +56,44 @@ export const Plans: React.FC<PlansProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  const handleSelectPlan = (planName: string) => {
-    clearSpecialModeStorage();
-    setUserPlan(planName);
-    resetVibeCreditsToPlan(planName);
-    window.dispatchEvent(new Event('lunao:plan-changed'));
-    playConfirmSuccess();
+  const handleSelectPlan = async (planName: string) => {
+    const cleanPlan = planName.includes('Plan') ? planName : `${planName} Plan`;
+    if (cleanPlan.toLowerCase().includes('free')) {
+      clearSpecialModeStorage();
+      setUserPlan(cleanPlan);
+      resetVibeCreditsToPlan(cleanPlan);
+      window.dispatchEvent(new Event('lunao:plan-changed'));
+      const ownerKey = typeof window !== 'undefined' ? localStorage.getItem('lunao_owner_key') || 'dashboard' : 'dashboard';
+      syncPlanWithAffiliate(ownerKey, cleanPlan);
+      return;
+    }
+
+    try {
+      setLoadingPlan(cleanPlan);
+      const ownerKey = typeof window !== 'undefined' ? localStorage.getItem('lunao_owner_key') || 'dashboard' : 'dashboard';
+      const userEmail = typeof window !== 'undefined' ? localStorage.getItem('lunao_user_email') || '' : '';
+      
+      const res = await fetch('/api/billing/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan: cleanPlan,
+          email: userEmail,
+          returnUrl: typeof window !== 'undefined' ? window.location.origin : 'https://lunao.org',
+        }),
+      });
+
+      const data = await res.json();
+      if (data.ok && data.url) {
+        window.location.href = data.url;
+      } else {
+        alert(data.error || 'Could not initiate Stripe checkout. Please try again.');
+      }
+    } catch (err: any) {
+      alert(`Stripe Checkout error: ${err?.message || 'Server busy'}`);
+    } finally {
+      setLoadingPlan(null);
+    }
   };
 
   const planCards = [
@@ -63,7 +113,9 @@ export const Plans: React.FC<PlansProps> = ({
         '1 trial Owner PWA business',
         'Rebrand & deploy websites (3 credits/site)',
         'Find SMS lead (1.5 credits/lead)',
-        'Per email discovery: 1.5 credits',
+        'SMS outreach: Canada only',
+        'Email discovery (1.5 credits/email)',
+        'Email sending: 0 credits (Free for all)',
         'Standard processing speeds & basic templates'
       ]
     },
@@ -84,9 +136,9 @@ export const Plans: React.FC<PlansProps> = ({
         'AI Vibe Coding Studio & multi-page templates',
         'Rebrand & deploy websites (3 credits/site)',
         'Find SMS lead (1.5 credits/lead)',
-        'Per email discovery: 1.5 credits',
-        'Send 1-seg SMS (4 cr) / 2-seg SMS (8 cr)',
-        'Connect own Telnyx account (0 credits per SMS)'
+        'SMS sending: 0 credits (Worldwide to any country)',
+        'Email sending: 0 credits (Free for all)',
+        'Email discovery (1.5 credits/email)'
       ]
     },
     {
@@ -112,9 +164,9 @@ export const Plans: React.FC<PlansProps> = ({
         'AI Vibe Coding Studio & multi-page templates',
         'Rebrand & deploy websites (3 credits/site)',
         'Find SMS lead (1.5 credits/lead)',
-        'Per email discovery: 1.5 credits',
-        'Send 1-seg SMS (4 cr) / 2-seg SMS (8 cr)',
-        'Connect own Telnyx account (0 credits per SMS)'
+        'SMS sending: 0 credits (Worldwide to any country)',
+        'Email sending: 0 credits (Free for all)',
+        'Email discovery (1.5 credits/email)'
       ]
     },
     {
@@ -139,9 +191,9 @@ export const Plans: React.FC<PlansProps> = ({
         'AI Vibe Coding Studio (Full access)',
         'Rebrand & deploy websites (3 credits/site)',
         'Find SMS lead (1.5 credits/lead)',
-        'Per email discovery: 1.5 credits',
-        'Send 1-seg SMS (4 cr) / 2-seg SMS (8 cr)',
-        'Connect own Telnyx account (0 credits per SMS)',
+        'SMS sending: 0 credits (Worldwide to any country)',
+        'Email sending: 0 credits (Free for all)',
+        'Email discovery (1.5 credits/email)',
         'Multi-client management & custom domain routing'
       ]
     }
@@ -347,16 +399,28 @@ export const Plans: React.FC<PlansProps> = ({
               {/* Purchase / Select Button */}
               <div className="p-6 pt-0 mt-6 shrink-0">
                 <button
+                  disabled={Boolean(loadingPlan)}
                   onClick={() => handleSelectPlan(`${plan.name} Plan`)}
-                  className={`w-full py-2.5 rounded text-center text-xs font-bold uppercase tracking-wider transition-all duration-150 active:scale-97 cursor-pointer ${
-                    isActive
+                  className={`w-full py-2.5 rounded text-center text-xs font-bold uppercase tracking-wider transition-all duration-150 active:scale-97 cursor-pointer flex items-center justify-center gap-2 ${
+                    loadingPlan === `${plan.name} Plan`
+                      ? 'opacity-80 cursor-wait bg-ink text-white'
+                      : isActive
                       ? 'bg-ink text-white hover:bg-ink-secondary shadow-sm'
                       : plan.isPopular
                       ? 'bg-accent text-white hover:bg-accent-hover shadow-md'
                       : 'bg-off-white border border-border-main text-ink hover:bg-surface'
                   }`}
                 >
-                  {isActive ? 'Current Active Tier' : `Select ${plan.name}`}
+                  {loadingPlan === `${plan.name} Plan` ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Redirecting...</span>
+                    </>
+                  ) : isActive ? (
+                    'Current Active Tier'
+                  ) : (
+                    `Select ${plan.name}`
+                  )}
                 </button>
               </div>
             </div>

@@ -28,13 +28,46 @@
   }
 
   // Core contact field normalizers
-  var NAME_KEYS = ['name', 'customer_name', 'customername', 'fullname', 'full_name', 'first_name', 'client_name'];
-  var PHONE_KEYS = ['phone', 'tel', 'telephone', 'mobile', 'cell', 'phone_number', 'phonenumber'];
-  var EMAIL_KEYS = ['email', 'email_address', 'mail'];
-  var SERVICE_KEYS = ['service', 'treatment', 'package', 'plan', 'tier', 'service_type', 'type'];
-  var DATE_KEYS = ['date', 'service_date', 'appointment_date', 'booking_date', 'day'];
-  var TIME_KEYS = ['time', 'appointment_time', 'booking_time', 'slot', 'preferred_time'];
-  var NOTES_KEYS = ['notes', 'message', 'comments', 'details', 'special_requests', 'description'];
+  var NAME_KEYS = [
+    'name', 'customer_name', 'customername', 'fullname', 'full_name', 'first_name',
+    'client_name', 'clientname', 'formname', 'form_name', 'frm_name', 'frmname',
+    'frm_fullname', 'frmfullname', 'contactname', 'contact_name', 'feasibilityname',
+    'workshopcontactname', 'specimenname', 'warrantyclientname', 'revformname'
+  ];
+  var PHONE_KEYS = [
+    'phone', 'tel', 'telephone', 'mobile', 'cell', 'phone_number', 'phonenumber',
+    'clientphone', 'client_phone', 'formphone', 'form_phone', 'frm_phone', 'frmphone',
+    'phonenum', 'phone_num', 'contactphone', 'contact_phone', 'feasibilityphone',
+    'workshopcontactphone', 'specimenphone', 'warrantyphone'
+  ];
+  var EMAIL_KEYS = [
+    'email', 'email_address', 'emailaddress', 'mail', 'clientemail', 'client_email',
+    'formemail', 'form_email', 'frm_email', 'frmemail', 'contactemail', 'contact_email',
+    'feasibilityemail', 'specimenemail', 'dispatchemail'
+  ];
+  var SERVICE_KEYS = [
+    'service', 'services', 'treatment', 'package', 'plan', 'tier', 'service_type',
+    'servicetype', 'type', 'bookingservice', 'booking_service', 'serviceselect',
+    'service_select', 'serviceneeded', 'service_needed', 'frm_service', 'frmservice',
+    'formgoal', 'form_goal', 'goal', 'workshoptype', 'propertytype', 'property_type',
+    'warrantyyear', 'revformproject'
+  ];
+  var DATE_KEYS = [
+    'date', 'service_date', 'servicedate', 'appointment_date', 'appointmentdate',
+    'booking_date', 'bookingdate', 'day', 'frm_date', 'frmdate', 'dateinput', 'date_input'
+  ];
+  var TIME_KEYS = [
+    'time', 'appointment_time', 'appointmenttime', 'booking_time', 'bookingtime',
+    'slot', 'timeslot', 'time_slot', 'preferred_time', 'preferredtime', 'frm_time',
+    'frmtime', 'timeinput', 'time_input'
+  ];
+  var NOTES_KEYS = [
+    'notes', 'message', 'comments', 'details', 'special_requests', 'specialrequests',
+    'description', 'bookingnotes', 'booking_notes', 'frm_notes', 'frmnotes',
+    'formdesc', 'form_desc', 'desc', 'addressincity', 'address', 'feasibilitynotes',
+    'feasibilityaddress', 'contactscope', 'specimennotes', 'specimenaddress',
+    'warrantyadjustment', 'warrantyaddress', 'revformquote'
+  ];
 
   function matchKey(name, list) {
     if (!name) return false;
@@ -42,10 +75,36 @@
     return list.indexOf(clean) !== -1;
   }
 
+  function resolveSiteSlug() {
+    if (window.LUNAO_SLUG && typeof window.LUNAO_SLUG === 'string' && window.LUNAO_SLUG.indexOf('{') === -1) {
+      var winSlug = window.LUNAO_SLUG.trim().toLowerCase();
+      if (winSlug && winSlug !== 'preview') return winSlug;
+    }
+    var host = (window.location.hostname || '').toLowerCase();
+    if (host.endsWith('.lunao.org')) {
+      var sub = host.slice(0, -'.lunao.org'.length);
+      if (sub && sub !== 'www' && sub !== 'api' && sub !== 'app' && sub !== 'admin' && sub.indexOf('.') === -1) {
+        return sub;
+      }
+    }
+    var rawPath = (window.location.pathname || '').replace(/^\/+|\/+$/g, '');
+    if (rawPath) {
+      var parts = rawPath.split('/').filter(Boolean);
+      var sitesIdx = parts.indexOf('sites');
+      if (sitesIdx !== -1 && parts[sitesIdx + 1]) {
+        return parts[sitesIdx + 1].replace(/\.html?$/i, '').toLowerCase();
+      }
+      var lastPart = parts[parts.length - 1] || '';
+      var cleaned = lastPart.replace(/\.html?$/i, '').toLowerCase();
+      if (cleaned) return cleaned;
+    }
+    return 'studio-preview';
+  }
+
   function extractPayloadFromForm(form) {
     var raw = {};
-    
-    // 1. Native FormData extraction (standard HTML inputs)
+
+    // 1. Native FormData extraction (standard HTML inputs with name="")
     try {
       var formData = new FormData(form);
       formData.forEach(function(value, key) {
@@ -55,15 +114,26 @@
       });
     } catch (e) {}
 
-    // 2. data-lunao-bind override/fallback
-    var boundInputs = form.querySelectorAll('[data-lunao-bind]');
-    boundInputs.forEach(function(el) {
-      var bindKey = el.getAttribute('data-lunao-bind');
-      var val = (el.value || el.innerText || '').trim();
-      if (bindKey && val) raw[bindKey] = val;
+    // 2. Scan all form controls (including inputs that only have id="" and no name="")
+    var allInputs = form.querySelectorAll('input, select, textarea');
+    allInputs.forEach(function(el) {
+      var tag = (el.tagName || '').toLowerCase();
+      var type = (el.getAttribute('type') || '').toLowerCase();
+      if (type === 'submit' || type === 'button' || type === 'reset' || type === 'hidden' || type === 'image') return;
+      if ((type === 'checkbox' || type === 'radio') && !el.checked) return;
+
+      var key = el.getAttribute('data-lunao-bind') || el.getAttribute('name') || el.getAttribute('id') || '';
+      if (!key) return;
+      // Privacy safeguard: skip Date of Birth fields
+      if (/dob|birth/i.test(key)) return;
+
+      var val = (el.value || '').trim();
+      if (val && !raw[key]) {
+        raw[key] = val;
+      }
     });
 
-    // 3. Normalize into Core Contacts + Schema-Agnostic customFields
+    // 3. Normalize into Core Contacts
     var payload = {
       customerName: '',
       phone: '',
@@ -72,14 +142,23 @@
       date: '',
       time: '',
       notes: '',
-      source: 'website_form',
-      slug: (window.location.pathname.replace(/^\/|\/$/g, '') || 'studio-preview'),
-      businessName: document.title || 'Local Business',
+      source: 'form',
+      slug: resolveSiteSlug(),
+      businessName: (window.LUNAO_BUSINESS_NAME && window.LUNAO_BUSINESS_NAME.indexOf('{') === -1)
+        ? window.LUNAO_BUSINESS_NAME
+        : (document.title || 'Local Business'),
       customFields: {}
     };
 
+    var extraNotes = [];
+
     Object.keys(raw).forEach(function(key) {
       var val = raw[key];
+      if (!val) return;
+      var lowerKey = key.toLowerCase();
+      if (/dob|birth|referral|frm_hear|frm_source/i.test(lowerKey)) {
+        return;
+      }
 
       if (!payload.customerName && matchKey(key, NAME_KEYS)) {
         payload.customerName = val;
@@ -93,25 +172,88 @@
         payload.date = val;
       } else if (!payload.time && matchKey(key, TIME_KEYS)) {
         payload.time = val;
-      } else if (!payload.notes && matchKey(key, NOTES_KEYS)) {
-        payload.notes = val;
+      } else if (matchKey(key, NOTES_KEYS)) {
+        if (!payload.notes) {
+          payload.notes = val;
+        } else if (payload.notes.indexOf(val) === -1) {
+          extraNotes.push(val);
+        }
       } else {
-        payload.customFields[key] = val;
+        if (val !== 'No Preference') {
+          var cleanLabel = key.replace(/^(service_|frm_|form_)/i, '').replace(/[_-]+/g, ' ');
+          extraNotes.push(cleanLabel + ': ' + val);
+        }
       }
     });
 
-    // Fallback: if no explicit name was matched, pick the first non-empty text input
+    // 4. Explicit DOM fallbacks for forms with non-standard IDs
     if (!payload.customerName) {
-      var textInputs = form.querySelectorAll('input[type="text"]:not([type="hidden"])');
-      if (textInputs.length > 0 && textInputs[0].value.trim()) {
-        payload.customerName = textInputs[0].value.trim();
+      var nameEl = form.querySelector('input[id*="name" i], input[name*="name" i], input[type="text"]:not([type="hidden"])');
+      if (nameEl && nameEl.value && nameEl.value.trim()) {
+        payload.customerName = nameEl.value.trim();
+      }
+    }
+    if (!payload.phone) {
+      var phoneEl = form.querySelector('input[type="tel"], input[id*="phone" i], input[name*="phone" i]');
+      if (phoneEl && phoneEl.value && phoneEl.value.trim()) {
+        payload.phone = phoneEl.value.trim();
+      }
+    }
+    if (!payload.email) {
+      var emailEl = form.querySelector('input[type="email"], input[id*="email" i], input[name*="email" i]');
+      if (emailEl && emailEl.value && emailEl.value.trim()) {
+        payload.email = emailEl.value.trim();
+      }
+    }
+    if (!payload.service) {
+      var serviceEl = form.querySelector('select[id*="service" i], select[name*="service" i], select[id*="goal" i], select[name*="goal" i], select');
+      if (serviceEl && serviceEl.value && serviceEl.value.trim()) {
+        payload.service = serviceEl.value.trim();
+      }
+    }
+    if (!payload.service) {
+      payload.service = 'General Consultation';
+    }
+    if (!payload.date) {
+      var dateEl = form.querySelector('input[type="date"]:not([id*="dob" i]):not([name*="dob" i])');
+      if (dateEl && dateEl.value && dateEl.value.trim()) {
+        payload.date = dateEl.value.trim();
       }
     }
 
-    // Attempt to extract business name from {{BUSINESS_NAME}} or header
-    var headerEl = document.querySelector('header, .logo, h1, .brand-title');
-    if (headerEl && headerEl.innerText) {
-      payload.businessName = headerEl.innerText.trim().slice(0, 60);
+    // 5. Normalize preferred time to contract-approved format
+    if (payload.time) {
+      var t = payload.time.trim();
+      if (/^morning$/i.test(t)) {
+        payload.time = '09:00 AM';
+      } else if (/^afternoon$/i.test(t)) {
+        payload.time = '01:00 PM';
+      } else if (/^late\s*afternoon$/i.test(t)) {
+        payload.time = '04:00 PM';
+      } else if (/^evening$/i.test(t)) {
+        payload.time = '05:00 PM';
+      } else {
+        var isFlexible = /^flexible$/i.test(t);
+        var isTime12 = /^(0?[1-9]|1[0-2]):[0-5][0-9]\s*(AM|PM)$/i.test(t);
+        var isTime24 = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(t);
+        if (!isFlexible && !isTime12 && !isTime24) {
+          extraNotes.push('Preferred Time: ' + t);
+          payload.time = 'Flexible';
+        }
+      }
+    }
+
+    if (extraNotes.length > 0) {
+      var extraStr = extraNotes.join(' | ');
+      payload.notes = payload.notes ? (payload.notes + ' | ' + extraStr) : extraStr;
+    }
+
+    // Attempt to extract business name from {{BUSINESS_NAME}} or header if not set via window.LUNAO_BUSINESS_NAME
+    if (!window.LUNAO_BUSINESS_NAME || window.LUNAO_BUSINESS_NAME.indexOf('{') !== -1) {
+      var headerEl = document.querySelector('header .logo, .logo, h1, .brand-title');
+      if (headerEl && headerEl.innerText) {
+        payload.businessName = headerEl.innerText.trim().slice(0, 60);
+      }
     }
 
     return payload;
@@ -275,24 +417,32 @@
 
     function showErrorUI(errMsg) {
       if (submitBtn) {
-        submitBtn.disabled = originalDisabled;
-        submitBtn.innerHTML = originalBtnHtml;
-        submitBtn.style.backgroundColor = '';
-        submitBtn.style.borderColor = '';
-        submitBtn.style.color = '';
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '✕ Booking Failed — Action Required';
+        submitBtn.style.backgroundColor = '#dc2626';
+        submitBtn.style.borderColor = '#dc2626';
+        submitBtn.style.color = '#ffffff';
+        setTimeout(function() {
+          if (submitBtn) {
+            submitBtn.disabled = originalDisabled;
+            submitBtn.innerHTML = originalBtnHtml;
+            submitBtn.style.backgroundColor = '';
+            submitBtn.style.borderColor = '';
+            submitBtn.style.color = '';
+          }
+        }, 3500);
       }
 
       var existingError = form.querySelector('.lunao-booking-error-banner');
-      if (!existingError) {
-        var banner = document.createElement('div');
-        banner.className = 'lunao-booking-error-banner';
-        banner.style.cssText = 'margin-top:14px;padding:12px 16px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;color:#991b1b;font-family:system-ui,-apple-system,sans-serif;font-size:13px;line-height:1.5;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);animation:fadeIn 0.3s ease;';
-        banner.innerHTML = '<strong>Request could not be sent</strong><br><span style="font-size:12px;color:#b91c1c;">' + (errMsg || 'Please verify your details and try again or call us directly.') + '</span>';
-        form.appendChild(banner);
-        setTimeout(function() {
-          try { banner.remove(); } catch(e) {}
-        }, 7000);
+      if (existingError) {
+        try { existingError.remove(); } catch (e) {}
       }
+
+      var banner = document.createElement('div');
+      banner.className = 'lunao-booking-error-banner';
+      banner.style.cssText = 'margin-top:14px;padding:14px 16px;background:#fef2f2;border:1.5px solid #ef4444;border-radius:10px;color:#991b1b;font-family:system-ui,-apple-system,sans-serif;font-size:13px;line-height:1.5;text-align:center;box-shadow:0 4px 12px rgba(239,68,68,0.15);animation:fadeIn 0.3s ease;';
+      banner.innerHTML = '<strong style="color:#dc2626;display:block;margin-bottom:4px;">⚠️ Action Required</strong><span style="font-size:12px;color:#b91c1c;">' + escapeHtmlStr(errMsg || 'Generate QR code for this site inside Lunao first to activate bookings.') + '</span>';
+      form.appendChild(banner);
     }
 
     // Canonical same-origin booking persistence
@@ -311,40 +461,23 @@
         },
         body: JSON.stringify(payload)
       }).then(function(res) {
-        var contentType = (res.headers && res.headers.get && res.headers.get('content-type')) || '';
-        if (res.ok || res.status === 200 || res.status === 201) {
-          if (contentType.indexOf('application/json') !== -1) {
-            return res.json().then(function(data) {
-              if (data && data.code === 'PWA_ACTIVATION_REQUIRED') {
-                return data;
-              }
-              if (data && data.ok === false) {
-                throw new Error(data.error || 'Server rejected booking confirmation.');
-              }
-              return data;
-            });
+        return res.json().catch(function() { return null; }).then(function(data) {
+          if (!res.ok || (data && (data.ok === false || data.code === 'PWA_ACTIVATION_REQUIRED' || data.pwaActive === false))) {
+            var errMsg = (data && (data.error || data.message)) || ('Booking rejected by server (HTTP ' + res.status + ').');
+            throw new Error(errMsg);
           }
-          return { ok: true, id: idempotencyKey, booking: payload };
-        }
-        return res.json().then(function(data) {
-          if (data && data.code === 'PWA_ACTIVATION_REQUIRED') {
-            return data;
-          }
-          throw new Error(data.error || ('HTTP ' + res.status + ' error'));
-        }).catch(function(err) {
-          if (err && err.code === 'PWA_ACTIVATION_REQUIRED') return err;
-          throw new Error('HTTP ' + res.status + ' error');
+          return data || { ok: true, id: idempotencyKey, booking: payload };
         });
       });
     }
 
     sendBookingRequest()
       .then(function(resData) {
-        showSuccessUI();
-
-        if (resData && (resData.code === 'PWA_ACTIVATION_REQUIRED' || resData.pwaActive === false)) {
-          renderPwaActivationModal(resData);
+        var existingError = form.querySelector('.lunao-booking-error-banner');
+        if (existingError) {
+          try { existingError.remove(); } catch (e) {}
         }
+        showSuccessUI();
 
         if (isIframe) {
           try {
@@ -352,8 +485,7 @@
               type: 'LUNAO_CONFIRMED_BOOKING',
               data: resData.booking || payload,
               id: resData.id || idempotencyKey,
-              pwaActive: resData.pwaActive !== false,
-              pwaCode: resData.pwaCode,
+              pwaActive: true,
               timestamp: Date.now()
             }, '*');
           } catch (postErr) {
@@ -388,6 +520,16 @@
     });
   }
 
+  // Intercept all booking submissions at document capture phase before any inline template scripts
+  try {
+    document.addEventListener('submit', function(e) {
+      var form = e.target;
+      if (form && form.tagName === 'FORM' && isBookingForm(form)) {
+        handleFormSubmit(e);
+      }
+    }, true);
+  } catch (e) {}
+
   // Initial binding
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', bindForms);
@@ -406,9 +548,15 @@
     });
   } catch (e) {}
 
+  if (typeof window.handleBarberBooking !== 'function') {
+    window.handleBarberBooking = function(e) {
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    };
+  }
+
   // Expose API for programmatic triggers & inspection
   window.LunaoBooking = {
-    version: '1.0.0',
+    version: '1.1.0',
     bindForms: bindForms,
     extractPayload: extractPayloadFromForm
   };

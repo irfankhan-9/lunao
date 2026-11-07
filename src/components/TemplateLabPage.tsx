@@ -61,7 +61,7 @@ export interface FlashToastFn {
 
 const BLANK_CANVAS = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;padding:0;background:#ffffff;color:#0f172a}</style></head><body></body></html>`;
 
-const VIBE_CODE_PROMPT = `You are an expert front-end web developer powered by Google AI Studio Gemini 2.5 Flash. Build a complete, production-ready single-file HTML website for a local service business based on the user's prompt.
+const VIBE_CODE_PROMPT = `You are an expert front-end web developer powered by Google AI Studio Gemini. Build a complete, production-ready single-file HTML website tailored exactly to the specific business and industry requested in the user's prompt (e.g. Hospital, Medical Clinic, Dental, HVAC, Salon, Gym, Contractor, etc.).
 
 STRICT TEMPLATE ARCHITECTURE & REBRANDING RULES:
 Every website you build, edit, or customize is part of the Lunao automated template & rebranding engine.
@@ -75,20 +75,31 @@ Every website must be one complete HTML file with embedded CSS and JavaScript.
 - Do NOT use external CSS stylesheets.
 - NO markdown fences (\`\`\`html or \`\`\`). NO explanations or commentary outside the HTML document.
 
-2. STRICT APPROVED PLACEHOLDERS & HERO REBRANDING:
-Use ONLY these 4 placeholders, and CRITICAL: You MUST place {{BUSINESS_NAME}} prominently in the hero section headline and main banner title so the hero page business name is fully rebrandable:
-- {{BUSINESS_NAME}} : Full business name. Use this everywhere the business name appears, including in <title>, header logo/text, hero section main headline / banner title, about section, footer copyright, and alt text.
-- {{PHONE}} : Primary contact telephone number. Use in visible contact text and strictly in dial links: <a href="tel:{{PHONE}}">{{PHONE}}</a>.
-- {{CITY}} : Target city and location (e.g. Austin, TX or Chicago, IL).
-- {{ADDRESS}} : Local street or downtown address.
+2. BUSINESS IDENTITY & CREATIVE BRANDING:
+You have complete creative freedom to give the business a realistic, prestigious, high-converting brand name tailored directly to the requested industry (e.g., "Aura Cosmetic Dentistry", "Radiant Smile Lounge", "Summit General Hospital", "Peak Performance Gym", "Everest Climate HVAC").
+- You may use an authentic industry brand name OR {{BUSINESS_NAME}} in <title>, header logo/text, hero headline / banner title, about section, and footer copyright.
+- STRICT PROHIBITION: NEVER use or default to "Vintage Cuts Barber Lounge", "Vintage Cuts", or any barber branding unless the user explicitly asked for a barber shop.
 
-3. EMAIL & SOCIAL MEDIA IDENTITY CONVENTION:
-Use {{BUSINESS_NAME}} everywhere the business name appears, including email and social media identity text (e.g., contact@{{BUSINESS_NAME}}, https://instagram.com/{{BUSINESS_NAME}}).
-NEVER create separate email or social media placeholders.
-Do NOT invent email addresses, fake social handles, or links.
+3. MANDATORY EMAIL & SOCIAL MEDIA PLACEHOLDERS:
+Because target business social media profiles and private email inboxes are not known prior to rebranding, you MUST ALWAYS use the {{BUSINESS_NAME}} placeholder for ALL emails and social media links:
+- Email: ALWAYS use {{BUSINESS_NAME}} in the email address (e.g., <a href="mailto:contact@{{BUSINESS_NAME}}.com">contact@{{BUSINESS_NAME}}.com</a> or info@{{BUSINESS_NAME}}.com).
+- Social Media Links & Handles: Whenever inserting social media links or icons (Instagram, Facebook, TikTok, Twitter/X, LinkedIn, YouTube), you MUST ALWAYS format the URL using {{BUSINESS_NAME}}:
+  * Instagram: <a href="https://instagram.com/{{BUSINESS_NAME}}">
+  * Facebook: <a href="https://facebook.com/{{BUSINESS_NAME}}">
+  * TikTok: <a href="https://tiktok.com/@{{BUSINESS_NAME}}">
+  * Twitter / X: <a href="https://twitter.com/{{BUSINESS_NAME}}">
+  * LinkedIn: <a href="https://linkedin.com/company/{{BUSINESS_NAME}}">
+  * YouTube: <a href="https://youtube.com/@{{BUSINESS_NAME}}">
+- STRICT PROHIBITION: NEVER invent fake email addresses (e.g., info@example.com, mybiz@gmail.com) and NEVER invent fake social handles (e.g., @coolbusiness, @citybarber). Every single email and social link must dynamically anchor to {{BUSINESS_NAME}} so the automated rebranding engine can swap it for any client seamlessly.
+
+4. APPROVED LOCATION & CONTACT PLACEHOLDERS:
+- {{PHONE}} / {{PHONE_RAW}} / {{PHONE_DISPLAY}} : Primary telephone number (<a href="tel:{{PHONE_RAW}}">{{PHONE_DISPLAY}}</a>).
+- {{CITY}} : Target city and location (e.g., Austin, TX or Chicago, IL).
+- {{ADDRESS}} : Local street or downtown address.
 
 4. REMOVE HARDCODED DEMO DATA & UNSUPPORTED CLAIMS:
 Replace all hardcoded business names, phone numbers, cities, addresses, fake reviews, ratings, and unsupported business claims with the standard placeholders or generic truthful statements.
+- STRICT STAR RATING RESTRICTION: Do NOT generate fake star rating badges, fake review count badges, or star score badges (e.g. '4.9 ★', '4.8 Stars', '5.0 Rating', '★★★★★ 4.9', or '⭐ 4.9/5'). Every new template or edited template must NOT have any badges of stars. Focus on clean professional service layouts, trust guarantees, and direct contact buttons.
 
 5. PRESERVE ORIGINAL DESIGN & QUALITY:
 Preserve the original design, styling, layout, typography, responsiveness, and interactivity while ensuring strict template-readiness.
@@ -115,41 +126,47 @@ const sfx = {
   close: playCancelTone,
 };
 
-const PLACEHOLDER_MAP: Record<string, string> = {
-  BUSINESS_NAME: 'Vintage Cuts Barber Lounge',
-  PHONE: '(512) 555-0199',
-  CITY: 'Austin, TX',
-  ADDRESS: '3801 Capital of Texas Hwy, Austin, TX',
-  // Backward compatibility aliases during preview compile
-  BUSINESS_NAME_SHORT: 'Vintage Cuts',
-  PHONE_DISPLAY: '(512) 555-0199',
-  PHONE_RAW: '5125550199',
-  EMAIL: 'contact@vintagecuts.com',
-  STATE: 'TX',
-  GOOGLE_RATING: '4.9',
-  GOOGLE_REVIEW_COUNT: '342',
-  INSTAGRAM_HANDLE: 'vintagecuts_atx',
-  FACEBOOK_URL: 'https://facebook.com/vintagecuts',
-  WEBSITE: 'https://vintagecuts.com',
-  SITE_URL: 'https://vintagecuts.com',
-  YEARS_IN_BUSINESS: '2015',
-  // HVAC & Architecture placeholders
-  CITY_NAME: 'Austin, TX',
-  PHONE_NUMBER: '(512) 555-0199',
-  BOOKING_URL: '#booking',
-  BUSINESS_DESCRIPTION: 'Premier residential and commercial local service lounge in Austin, TX.',
-  HERO_IMAGE: 'https://images.unsplash.com/photo-1581094288338-2314dddb7ece?auto=format&fit=crop&w=1920&q=85',
-  LOGO: 'Vintage Cuts',
-  BEFORE_IMAGE_URL: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80',
-  AFTER_IMAGE_URL: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=80',
-  GOOGLE_MAPS_URL: 'https://maps.google.com',
-  INSTAGRAM_URL: 'https://instagram.com/vintagecuts',
-  TIKTOK_URL: 'https://tiktok.com/@vintagecuts',
-  YOUTUBE_URL: 'https://youtube.com/@vintagecuts',
-};
+export function getPlaceholderMap(businessName = 'Custom Business Website', city = 'Austin, TX'): Record<string, string> {
+  const cleanName = (businessName && businessName !== 'Custom Business Website') ? businessName.trim() : 'Local Business';
+  const shortName = cleanName.split(/\s+/).slice(0, 2).join(' ');
+  const domainSlug = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'business';
+
+  return {
+    BUSINESS_NAME: cleanName,
+    BUSINESS_NAME_SHORT: shortName,
+    LOGO: cleanName,
+    CITY: city,
+    CITY_NAME: city,
+    ADDRESS: `3801 Capital of Texas Hwy, ${city}`,
+    PHONE: '(512) 555-0199',
+    PHONE_DISPLAY: '(512) 555-0199',
+    PHONE_RAW: '5125550199',
+    PHONE_NUMBER: '(512) 555-0199',
+    EMAIL: `contact@${domainSlug}.com`,
+    WEBSITE: `https://${domainSlug}.com`,
+    SITE_URL: `https://${domainSlug}.com`,
+    STATE: city.includes(',') ? city.split(',')[1].trim() : 'TX',
+    GOOGLE_RATING: '4.9',
+    GOOGLE_REVIEW_COUNT: '342',
+    INSTAGRAM_HANDLE: `${domainSlug}_official`,
+    FACEBOOK_URL: `https://facebook.com/${domainSlug}`,
+    YEARS_IN_BUSINESS: '2015',
+    BOOKING_URL: '#booking',
+    BUSINESS_DESCRIPTION: `Premier ${cleanName} services in ${city}.`,
+    HERO_IMAGE: 'https://images.unsplash.com/photo-1581094288338-2314dddb7ece?auto=format&fit=crop&w=1920&q=85',
+    BEFORE_IMAGE_URL: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80',
+    AFTER_IMAGE_URL: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=80',
+    GOOGLE_MAPS_URL: 'https://maps.google.com',
+    INSTAGRAM_URL: `https://instagram.com/${domainSlug}`,
+    TIKTOK_URL: `https://tiktok.com/@${domainSlug}`,
+    YOUTUBE_URL: `https://youtube.com/@${domainSlug}`,
+  };
+}
+
+const PLACEHOLDER_MAP: Record<string, string> = getPlaceholderMap();
 
 // Cleanse any internal placeholders, file types, or template sauce from user-facing text
-function sanitizeUserFacingText(text: string): string {
+function sanitizeUserFacingText(text: string, currentTitle?: string): string {
   if (!text || typeof text !== 'string') return '';
   let cleaned = text;
 
@@ -172,10 +189,12 @@ function sanitizeUserFacingText(text: string): string {
     cleaned = cleaned.replace(re, '');
   });
 
+  const activeMap = getPlaceholderMap(currentTitle || 'Custom Business Website');
+
   // 1. Replace all {{PLACEHOLDERS}} with realistic friendly preview values
   cleaned = cleaned.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, rawKey) => {
     const key = rawKey.toUpperCase();
-    return key in PLACEHOLDER_MAP ? PLACEHOLDER_MAP[key] : 'Business';
+    return key in activeMap ? activeMap[key] : 'Business';
   });
 
   // 2. Remove any references to HTML/CSS/CSV files or backend sauce
@@ -191,16 +210,28 @@ function sanitizeUserFacingText(text: string): string {
   return cleaned;
 }
 
-function compilePreview(rawHtml: string): string {
+function compilePreview(rawHtml: string, siteName?: string): string {
   if (!rawHtml || typeof rawHtml !== 'string') return rawHtml || '';
   const isSpecialBarber = rawHtml.includes('data-lunao-barber-vibe="true"');
+  const effectiveName = siteName || title || 'Custom Business Website';
+  const baseMap = getPlaceholderMap(effectiveName);
   const activeMap = isSpecialBarber
-    ? { ...PLACEHOLDER_MAP, ...SPECIAL_BARBER_PREVIEW_MAP }
-    : PLACEHOLDER_MAP;
+    ? { ...baseMap, ...SPECIAL_BARBER_PREVIEW_MAP }
+    : baseMap;
   let compiled = rawHtml.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, rawKey) => {
     const key = rawKey.toUpperCase();
     return key in activeMap ? activeMap[key] : `{{${rawKey}}}`;
   });
+
+  // Strict safety guard: Never show "Vintage Cuts Barber Lounge" unless user actually requested a barber
+  if (!isSpecialBarber && effectiveName && !effectiveName.toLowerCase().includes('barber')) {
+    compiled = compiled.replace(/Vintage Cuts Barber Lounge/gi, effectiveName);
+    compiled = compiled.replace(/Vintage Cuts/gi, effectiveName.split(' ')[0] || effectiveName);
+    compiled = compiled.replace(/contact@vintagecuts\.com/gi, `contact@${effectiveName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'business'}.com`);
+    compiled = compiled.replace(/https:\/\/vintagecuts\.com/gi, `https://${effectiveName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'business'}.com`);
+    compiled = compiled.replace(/vintagecuts_atx/gi, `${effectiveName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'business'}_official`);
+  }
+
   if (!compiled.includes('lunao-booking-bridge.js')) {
     if (compiled.includes('</body>')) {
       compiled = compiled.replace('</body>', '<script src="/lunao-booking-bridge.js"></script>\n</body>');
@@ -222,9 +253,9 @@ function summarizeHtml(rawHtml: string, promptInstruction?: string): string {
   }
 
   if (cleanTitle && cleanTitle.length > 2) {
-    return `Synthesized bespoke website experience for "${cleanTitle}". Ready to inspect.`;
+    return `Created custom website for "${cleanTitle}". Ready to inspect.`;
   }
-  return 'Updated your website preview with bespoke design improvements.';
+  return 'Updated your website preview with custom design improvements.';
 }
 
 const US_STATES = new Set([
@@ -235,15 +266,18 @@ const US_STATES = new Set([
 ]);
 
 function formatCleanTitle(str: string): string {
-  if (!str) return 'Bespoke Business Website';
+  if (!str) return 'Custom Business Website';
   return str
     .split(/\s+/)
     .filter(Boolean)
     .map(word => {
       const clean = word.replace(/[^a-zA-Z0-9]/g, '');
       const upper = clean.toUpperCase();
+      const ambiguousStates = new Set(['IN', 'OR', 'ME', 'OH', 'OK', 'ID', 'LA', 'HI', 'PA', 'MA', 'MD']);
       if (US_STATES.has(upper)) {
-        return word.replace(new RegExp(clean, 'i'), upper);
+        if (!ambiguousStates.has(upper) || word === upper || word.startsWith(',')) {
+          return word.replace(new RegExp(clean, 'i'), upper);
+        }
       }
       return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
     })
@@ -252,34 +286,33 @@ function formatCleanTitle(str: string): string {
 
 // Phase 1: Instant smart website name extraction from user prompt while loading
 export function deriveSiteNameFromPrompt(prompt: string): string {
-  if (!prompt || typeof prompt !== 'string') return 'Bespoke Business Website';
+  if (!prompt || typeof prompt !== 'string') return 'Custom Business Website';
   const raw = prompt.trim();
-  if (raw.length < 3) return 'Bespoke Business Website';
+  if (raw.length < 2) return 'Custom Business Website';
 
-  // 1. Quoted names like "Vintage Cuts" or 'Apex Roofing'
-  const quoteMatch = raw.match(/["']([^"']{3,35})["']/);
+  // 1. Quoted brand names: "Apex Health", 'Everest HVAC'
+  const quoteMatch = raw.match(/["']([^"']{2,40})["']/);
   if (quoteMatch && quoteMatch[1]) {
     const q = quoteMatch[1].trim();
-    if (q.length >= 3 && !/^(website|landing page|page|site)$/i.test(q)) {
+    if (q.length >= 2 && !/^(website|landing page|page|site|webpage)$/i.test(q)) {
       return formatCleanTitle(q);
     }
   }
 
-  // 2. Explicit naming phrases: called X, named X, brand X
-  const namedMatch = raw.match(/\b(?:called|named|brand(?:ed)?|titled)\s+([A-Za-z0-9&'\s-]{2,30})/i);
+  // 2. Explicit naming phrases: called X, named X, titled X, brand X
+  const namedMatch = raw.match(/\b(?:called|named|brand(?:ed)?|titled)\s+([A-Za-z0-9&'\s-]{2,35})/i);
   if (namedMatch && namedMatch[1]) {
     const n = namedMatch[1].trim().split(/\s+(?:with|in|for|and|that|which)\b/i)[0].trim();
-    if (n.length >= 3) {
+    if (n.length >= 2) {
       return formatCleanTitle(n);
     }
   }
 
+  // 3. Clean common conversational prefixes
   let cleaned = raw;
-
-  // 3. Remove common introductory command prefixes
   const commandPrefixes = [
     /^(?:hey\s+|hi\s+|hello\s+)?(?:genius|ai|assistant|lunao)[,:\s]+/i,
-    /^(?:please\s+)?(?:can\s+you\s+)?(?:could\s+you\s+)?(?:i\s+want\s+(?:you\s+to\s+)?(?:a\s+)?)?/i,
+    /^(?:please\s+)?(?:can\s+you\s+)?(?:could\s+you\s+)?(?:i\s+(?:want|need)\s+(?:you\s+to\s+)?(?:a\s+|an\s+)?)?/i,
     /^(?:create|build|generate|make|design|code|develop|give\s+me)\s+(?:me\s+)?(?:a\s+|an\s+|the\s+)?/i,
     /^(?:hero\s+page|landing\s+page|website|site|webpage|page|template|front\s+page)\s+(?:for\s+|of\s+|about\s+)?/i,
     /^(?:a\s+|an\s+|the\s+)?/i,
@@ -293,19 +326,33 @@ export function deriveSiteNameFromPrompt(prompt: string): string {
     }
   }
 
-  // 4. Remove trailing feature specifications and filler words
+  // 4. Clean trailing filler, location suffixes, or feature requests
   cleaned = cleaned
-    .replace(/\s+(?:with\s+(?:online\s+)?(?:booking|reservations?|appointments?|contact\s+form|pricing|plans?|reviews?|animations?)).*$/i, '')
+    .replace(/\s+(?:with\s+(?:online\s+)?(?:booking|reservations?|appointments?|contact\s+form|pricing|plans?|reviews?|animations?|dark\s+theme|light\s+theme|modern\s+design)).*$/i, '')
+    .replace(/\s+(?:with\s+a\s+(?:dark|light|modern|clean|minimal)\s+(?:theme|design|vibe|style)).*$/i, '')
+    .replace(/\s+(?:in|at|near|located\s+in)\s+[A-Za-z\s,]+$/i, '')
     .replace(/\s+(?:for\s+(?:my\s+)?(?:site|website|business)).*$/i, '')
-    .replace(/\s+(?:please|asap|fast|now|site|website|for\s+site|for\s+website)$/i, '')
+    .replace(/\s+(?:please|asap|fast|now|website|site|webpage|page)$/i, '')
+    .replace(/\s+(?:in|at|near|of|for|the|and|with)\s*$/i, '')
     .trim();
 
-  if (!cleaned || cleaned.length < 3) {
-    return 'Bespoke Business Website';
+  // If still contains "for [something]", take whatever follows "for "
+  const forMatch = cleaned.match(/\bfor\s+(?:a\s+|an\s+|the\s+)?([A-Za-z0-9&'\s-]{2,35})/i);
+  if (forMatch && forMatch[1]) {
+    const candidate = forMatch[1].trim().split(/\s+(?:with|in|at|and|that)\b/i)[0].trim();
+    if (candidate.length >= 2) {
+      cleaned = candidate;
+    }
   }
 
-  // 5. Take first 3-5 core words, max 35 characters
-  const words = cleaned.split(/\s+/).slice(0, 5);
+  cleaned = cleaned.replace(/\s+(?:in|at|near|of|for|the|and|with)\s*$/i, '').trim();
+
+  if (!cleaned || cleaned.length < 2) {
+    return 'Custom Business Website';
+  }
+
+  // 5. Take first 4 core words, max 35 characters
+  const words = cleaned.split(/\s+/).slice(0, 4);
   let shortTitle = words.join(' ');
   if (shortTitle.length > 35) {
     shortTitle = shortTitle.slice(0, 35).trim();
@@ -315,24 +362,48 @@ export function deriveSiteNameFromPrompt(prompt: string): string {
 }
 
 // Phase 2: Auto-extract title tag from generated HTML once available
-export function extractTitleFromHtml(rawHtml: string): string | null {
+export function extractTitleFromHtml(rawHtml: string, contextTitle?: string): string | null {
   if (!rawHtml || typeof rawHtml !== 'string') return null;
   const match = rawHtml.match(/<title[^>]*>([^<]+)<\/title>/i);
   if (!match || !match[1]) return null;
-  let t = match[1].trim();
+  let rawTitle = match[1].trim();
 
-  // Replace placeholders if any exist in the title tag
-  t = t.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, rawKey) => {
-    const key = rawKey.toUpperCase();
-    return key in PLACEHOLDER_MAP ? PLACEHOLDER_MAP[key] : 'Business';
-  });
+  // Strict safety check: Never allow "Vintage Cuts" unless explicitly in context
+  if (!contextTitle?.toLowerCase().includes('barber')) {
+    rawTitle = rawTitle.replace(/Vintage Cuts Barber Lounge/gi, contextTitle || 'Custom Business Website');
+    rawTitle = rawTitle.replace(/Vintage Cuts/gi, (contextTitle || 'Custom Business').split(' ')[0]);
+  }
 
-  // Clean trailing delimiters like " — City", " | Home", etc.
-  t = t.split(/\s+[—–|-]\s+/)[0].trim();
+  // If the <title> tag contains any {{PLACEHOLDER}}
+  if (/\{\{\s*[A-Za-z0-9_]+\s*\}\}/.test(rawTitle)) {
+    // Check if there is a descriptive title part besides the placeholder
+    const stripped = rawTitle
+      .replace(/\{\{\s*[A-Za-z0-9_]+\s*\}\}/g, '')
+      .replace(/^[\s—–|-]+|[\s—–|-]+$/g, '')
+      .trim();
 
-  t = sanitizeUserFacingText(t);
-  if (t && t !== 'Business' && t.length >= 3) {
-    return t.length > 40 ? t.slice(0, 40).trim() : t;
+    if (stripped.length >= 3 && !/^(official site|home|website|page|business|welcome)$/i.test(stripped)) {
+      const clean = stripped.split(/\s+[—–|-]\s+/)[0].trim();
+      return formatCleanTitle(clean);
+    }
+
+    // If it's just the placeholder {{BUSINESS_NAME}}, use the contextTitle (from prompt) if available
+    if (contextTitle && contextTitle.trim() && contextTitle !== 'Custom Business Website') {
+      return formatCleanTitle(contextTitle.trim());
+    }
+
+    // Never return a hardcoded demo brand name
+    return null;
+  }
+
+  // <title> has no placeholders: AI wrote an explicit name
+  let t = rawTitle.split(/\s+[—–|-]\s+/)[0].trim();
+  t = sanitizeUserFacingText(t, contextTitle);
+  if (t && t.length >= 3 && !/^(home|index|welcome|untitled|business)$/i.test(t)) {
+    if (t.toLowerCase().includes('vintage cuts') && !contextTitle?.toLowerCase().includes('barber')) {
+      return contextTitle ? formatCleanTitle(contextTitle) : 'Custom Business Website';
+    }
+    return t.length > 40 ? t.slice(0, 40).trim() : formatCleanTitle(t);
   }
   return null;
 }
@@ -388,6 +459,22 @@ const BookingNoticeCard = () => (
   </div>
 );
 
+// Module-level background session to persist AI generation across tab navigation
+interface StudioSessionState {
+  isGenerating: boolean;
+  stepText: string;
+  title: string;
+  niche: string;
+  promptText: string;
+  selectedModel: string;
+  resultHtml?: string;
+  resultMeta?: any;
+  resultSlug?: string;
+  activeId?: string;
+}
+
+let activeStudioSession: StudioSessionState | null = null;
+
 export const TemplateLabPage: React.FC<{
   aiEnabled: boolean;
   embedded?: boolean;
@@ -410,7 +497,7 @@ export const TemplateLabPage: React.FC<{
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const [niche, setNiche] = useState('');
-  const [device, setDevice] = useState<'desktop' | 'mobile' | 'code'>('desktop');
+  const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [labError, setLabError] = useState<string | null>(null);
   const [aiServerError, setAiServerError] = useState<boolean>(false);
@@ -418,7 +505,7 @@ export const TemplateLabPage: React.FC<{
   const [lastUsageCredits, setLastUsageCredits] = useState<number | undefined>(undefined);
   const selectedModelDisplayName = STUDIO_MODELS.find(m => m.id === selectedModel)?.displayName || selectedModel;
   const [generatingNewSite, setGeneratingNewSite] = useState(false);
-  const [generatingStepText, setGeneratingStepText] = useState('Initializing Gemini 3.8 Flash architecture...');
+  const [generatingStepText, setGeneratingStepText] = useState('Designing page structure…');
 
   // Synchronized Niches across the platform
   const [allNiches, addNiche] = useSyncNiches();
@@ -455,6 +542,41 @@ export const TemplateLabPage: React.FC<{
       window.removeEventListener('storage', handlePlanUpdate);
       window.removeEventListener('lunao:plan-changed', handlePlanUpdate);
     };
+  }, []);
+
+  // Restore in-flight or completed AI generation across section tab navigation
+  useEffect(() => {
+    if (activeStudioSession) {
+      if (activeStudioSession.isGenerating) {
+        setGeneratingNewSite(true);
+        setGeneratingStepText(activeStudioSession.stepText || 'Designing page structure…');
+        setTitle(activeStudioSession.title);
+        setNiche(activeStudioSession.niche);
+        setSelectedModel(activeStudioSession.selectedModel);
+      } else if (activeStudioSession.resultHtml && mode !== 'active') {
+        const res = activeStudioSession.resultHtml;
+        const finalTitle = activeStudioSession.title;
+        setActiveProjectId(activeStudioSession.activeId || `hist_${Date.now()}`);
+        setActiveProjectSlug(activeStudioSession.resultSlug || `studio-${Date.now()}`);
+        setHtml(res);
+        setPreviewHtml(compilePreview(res, finalTitle));
+        setTitle(finalTitle);
+        setNiche(finalTitle);
+        setHasLoadedPreviousTemplate(false);
+        setHasGivenAiPrompt(true);
+        setShowPromptInput(false);
+        setGeneratingNewSite(false);
+        setMode('active');
+        setMessages([
+          { role: 'user', content: activeStudioSession.promptText },
+          {
+            role: 'assistant',
+            content: formatAppliedMessage(activeStudioSession.promptText),
+            metadata: activeStudioSession.resultMeta,
+          },
+        ]);
+      }
+    }
   }, []);
 
   const isPlanEligible = isVibeEligiblePlan(userPlan);
@@ -673,6 +795,18 @@ export const TemplateLabPage: React.FC<{
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const [copiedPromptIndex, setCopiedPromptIndex] = useState<number | null>(null);
 
+  // Auto-scroll refs for real-time Rebranding Test Suite logs
+  const rebrandLogsBoxRef = useRef<HTMLDivElement>(null);
+  const rebrandLogsEndRef = useRef<HTMLDivElement>(null);
+  const rebrandModalBodyRef = useRef<HTMLDivElement>(null);
+
+  // Automatically scroll logs to bottom with smooth silky animation in real time
+  useEffect(() => {
+    if (isTestingRebrand && rebrandLogsEndRef.current) {
+      rebrandLogsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [rebrandLogs, isTestingRebrand]);
+
   // Smooth auto-scroll with fluid animation to keep newest chat updates visible
   const scrollToBottom = useCallback((smooth = true) => {
     if (messagesEndRef.current) {
@@ -714,11 +848,17 @@ export const TemplateLabPage: React.FC<{
       flashError('No template code to test.');
       return;
     }
-    sfx.engage();
+    sfx.magic();
+    playTiktokLike();
     setIsTestingRebrand(true);
     setHasRunTestRebrand(true);
     setRebrandLogs([]);
     setRebrandProgressPercent(6);
+
+    // Instantly scroll smoothly down to live log terminal
+    setTimeout(() => {
+      rebrandLogsBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 60);
 
     const activeBiz = activeRebrandTab === 'biz1' ? testBiz1 : testBiz2;
 
@@ -875,7 +1015,7 @@ export const TemplateLabPage: React.FC<{
         name: newTitle,
         niche: niche || turnedTemplateNiche || 'General',
         rawHtml: html,
-        previewHtml: previewHtml || compilePreview(html),
+        previewHtml: previewHtml || compilePreview(html, newTitle),
         previewPath: `/api/templates/${turnedTemplateId}/preview`,
       });
       convertHistoryToTemplate({
@@ -901,6 +1041,7 @@ export const TemplateLabPage: React.FC<{
 
   const goToStudioLanding = () => {
     sfx.open();
+    activeStudioSession = null;
     setMode('idle');
     setHasLoadedPreviousTemplate(false);
     setHasGivenAiPrompt(false);
@@ -956,48 +1097,98 @@ export const TemplateLabPage: React.FC<{
     setAiServerError(false);
     setThinkingAcc('');
 
-    const newId = `hist_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const newSlug = `studio-${newId}`;
+    const isSpecialBarber = isSpecialModeActive() && isSpecialBarberPrompt(promptText);
+
+    const newId = isSpecialBarber
+      ? SPECIAL_BARBER_VIBE_ID
+      : `hist_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const newSlug = isSpecialBarber
+      ? SPECIAL_BARBER_VIBE_SLUG
+      : `studio-${newId}`;
 
     // Phase 1: Instant intelligent title derivation while loading
-    const initialTitle = customTitle || deriveSiteNameFromPrompt(promptText);
+    const initialTitle = isSpecialBarber
+      ? SPECIAL_BARBER_VIBE_TITLE
+      : (customTitle || deriveSiteNameFromPrompt(promptText));
     setTitle(initialTitle);
-    setNiche(initialTitle);
-    setGeneratingStepText(`Connecting to ${selectedModelDisplayName}... Synthesizing "${initialTitle}"`);
+    setNiche(isSpecialBarber ? SPECIAL_BARBER_VIBE_NICHE : initialTitle);
+    const initialStep = 'Designing page structure…';
+    setGeneratingStepText(initialStep);
+
+    activeStudioSession = {
+      isGenerating: true,
+      stepText: initialStep,
+      title: initialTitle,
+      niche: isSpecialBarber ? SPECIAL_BARBER_VIBE_NICHE : initialTitle,
+      promptText,
+      selectedModel,
+      activeId: newId,
+      resultSlug: newSlug,
+    };
 
     try {
-      const fullPrompt = `${VIBE_CODE_PROMPT}\n\nUSER REQUEST: ${promptText}`;
-
       let activeTitle = initialTitle;
       let receivedMeta: AiStreamMetadata | undefined;
+      let result = '';
 
-      let result = await streamAiEdit(
-        {
-          html: BLANK_CANVAS,
-          instruction: fullPrompt,
-          history: [],
-          anthropicApiKey: apiKey.trim() || undefined,
+      if (isSpecialBarber) {
+        // Isolated UGC & Sales mode: show premium loading sequence for at least 3.4 seconds
+        setGeneratingStepText('Designing page structure…');
+        if (activeStudioSession) activeStudioSession.stepText = 'Designing page structure…';
+        await new Promise((r) => setTimeout(r, 1100));
+
+        setGeneratingStepText('Writing clean code & styles…');
+        if (activeStudioSession) activeStudioSession.stepText = 'Writing clean code & styles…';
+        await new Promise((r) => setTimeout(r, 1200));
+
+        setGeneratingStepText('Building components & content…');
+        if (activeStudioSession) activeStudioSession.stepText = 'Building components & content…';
+        await new Promise((r) => setTimeout(r, 1100));
+
+        result = SPECIAL_BARBER_RAW_HTML;
+        activeTitle = SPECIAL_BARBER_VIBE_TITLE;
+        receivedMeta = {
           model: selectedModel,
-        },
-        (fullHtmlSoFar) => {
-          const streamedTitle = extractTitleFromHtml(fullHtmlSoFar);
-          if (streamedTitle && streamedTitle !== activeTitle && streamedTitle.length >= 3) {
-            activeTitle = streamedTitle;
-            setTitle(streamedTitle);
-            setNiche(streamedTitle);
-          }
-          setGeneratingStepText('Writing response code...');
-        },
-        (thinkingText) => {
-          setThinkingAcc((prev) => prev + thinkingText);
-        },
-        () => {
-          setGeneratingStepText(`${selectedModelDisplayName} connected — generating "${activeTitle}"...`);
-        },
-        (meta) => {
-          receivedMeta = meta;
-        },
-      );
+          promptTokens: 850,
+          candidatesTokens: 2400,
+          creditsDeducted: 10,
+        };
+      } else {
+        const fullPrompt = `${VIBE_CODE_PROMPT}\n\nUSER REQUEST: ${promptText}`;
+
+        result = await streamAiEdit(
+          {
+            html: BLANK_CANVAS,
+            instruction: fullPrompt,
+            history: [],
+            anthropicApiKey: apiKey.trim() || undefined,
+            model: selectedModel,
+          },
+          (fullHtmlSoFar) => {
+            const streamedTitle = extractTitleFromHtml(fullHtmlSoFar, initialTitle);
+            if (streamedTitle && streamedTitle !== activeTitle && streamedTitle.length >= 3) {
+              activeTitle = streamedTitle;
+              setTitle(streamedTitle);
+              setNiche(streamedTitle);
+              if (activeStudioSession) activeStudioSession.title = streamedTitle;
+            }
+            const step = 'Writing clean code & styles…';
+            setGeneratingStepText(step);
+            if (activeStudioSession) activeStudioSession.stepText = step;
+          },
+          (thinkingText) => {
+            setThinkingAcc((prev) => prev + thinkingText);
+          },
+          () => {
+            const step = 'Building components & content…';
+            setGeneratingStepText(step);
+            if (activeStudioSession) activeStudioSession.stepText = step;
+          },
+          (meta) => {
+            receivedMeta = meta;
+          },
+        );
+      }
 
       const lowerResult = (result || '').trim().toLowerCase();
       if (
@@ -1036,21 +1227,31 @@ export const TemplateLabPage: React.FC<{
         setLastUsageCredits(promptMeta.creditsDeducted);
       }
 
-      const finalCompiled = compilePreview(result);
-      const finalTitle = extractTitleFromHtml(result) || activeTitle || initialTitle;
+      const finalTitle = isSpecialBarber
+        ? SPECIAL_BARBER_VIBE_TITLE
+        : (extractTitleFromHtml(result, activeTitle) || activeTitle || initialTitle);
+      const finalCompiled = compilePreview(result, finalTitle);
 
       setActiveProjectId(newId);
       setActiveProjectSlug(newSlug);
       setHtml(result);
       setPreviewHtml(finalCompiled);
       setTitle(finalTitle);
-      setNiche(finalTitle);
-      setHasLoadedPreviousTemplate(false);
+      setNiche(isSpecialBarber ? SPECIAL_BARBER_VIBE_NICHE : finalTitle);
+      setHasLoadedPreviousTemplate(isSpecialBarber);
       setHasGivenAiPrompt(true);
       setShowPromptInput(false);
       setThinkingAcc('');
       setGeneratingNewSite(false);
       setMode('active');
+
+      if (activeStudioSession) {
+        activeStudioSession.isGenerating = false;
+        activeStudioSession.resultHtml = result;
+        activeStudioSession.resultMeta = promptMeta;
+        activeStudioSession.title = finalTitle;
+      }
+
       sfx.open();
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -1080,6 +1281,7 @@ export const TemplateLabPage: React.FC<{
         }
       } catch { /* ignore */ }
     } catch (err: any) {
+      activeStudioSession = null;
       sfx.error();
       setAiServerError(true);
       setGeneratingNewSite(false);
@@ -1130,24 +1332,39 @@ export const TemplateLabPage: React.FC<{
     setThinkingAcc('');
     setTimeout(() => scrollToBottom(true), 30);
 
+    const isSpecialBarber = isSpecialModeActive() && isSpecialBarberPrompt(instruction);
+
     try {
       const base = html || BLANK_CANVAS;
       let receivedMeta: AiStreamMetadata | undefined;
-      let result = await streamAiEdit(
-        {
-          html: base,
-          instruction,
-          history: history_msgs,
-          anthropicApiKey: apiKey.trim() || undefined,
+      let result = '';
+
+      if (isSpecialBarber) {
+        await new Promise((r) => setTimeout(r, 3200));
+        result = SPECIAL_BARBER_RAW_HTML;
+        receivedMeta = {
           model: selectedModel,
-        },
-        () => {},
-        (thinkingText) => setThinkingAcc(prev => prev + thinkingText),
-        undefined,
-        (meta) => {
-          receivedMeta = meta;
-        },
-      );
+          promptTokens: 850,
+          candidatesTokens: 2400,
+          creditsDeducted: 10,
+        };
+      } else {
+        result = await streamAiEdit(
+          {
+            html: base,
+            instruction,
+            history: history_msgs,
+            anthropicApiKey: apiKey.trim() || undefined,
+            model: selectedModel,
+          },
+          () => {},
+          (thinkingText) => setThinkingAcc(prev => prev + thinkingText),
+          undefined,
+          (meta) => {
+            receivedMeta = meta;
+          },
+        );
+      }
 
       // Hard-coded validation: AI must write valid code and cannot return empty or unchanged markup
       const lowerResult = (result || '').trim().toLowerCase();
@@ -1186,7 +1403,12 @@ export const TemplateLabPage: React.FC<{
         setLastUsageCredits(promptMeta.creditsDeducted);
       }
 
-      const finalCompiled = compilePreview(result);
+      const finalTitle = isSpecialBarber ? SPECIAL_BARBER_VIBE_TITLE : title;
+      if (isSpecialBarber) {
+        setTitle(SPECIAL_BARBER_VIBE_TITLE);
+        setNiche(SPECIAL_BARBER_VIBE_NICHE);
+      }
+      const finalCompiled = compilePreview(result, finalTitle);
       setHtml(result);
       setPreviewHtml(finalCompiled);
       setThinkingAcc('');
@@ -1271,6 +1493,7 @@ export const TemplateLabPage: React.FC<{
         }
       } catch { /* ignore */ }
     } catch (err: any) {
+      activeStudioSession = null;
       sfx.error();
       setAiServerError(true);
       setThinkingAcc('');
@@ -1291,7 +1514,7 @@ export const TemplateLabPage: React.FC<{
 
   const loadEntry = (entry: SiteHistoryEntry) => {
     sfx.open();
-    const compiled = compilePreview(entry.html);
+    const compiled = compilePreview(entry.html, entry.title);
     setHtml(entry.html);
     setPreviewHtml(compiled);
     setTitle(entry.title);
@@ -1336,7 +1559,7 @@ export const TemplateLabPage: React.FC<{
   const handleResetBookingToApproved = () => {
     sfx.toggle();
     const clean = rollbackToApprovedBooking(html);
-    const compiled = compilePreview(clean);
+    const compiled = compilePreview(clean, title);
     setHtml(clean);
     setPreviewHtml(compiled);
     setMessages(prev => [
@@ -1466,7 +1689,7 @@ export const TemplateLabPage: React.FC<{
           if (!activeProjectSlug) setActiveProjectSlug(entry.parentSlug || `studio-${entry.id}`);
         }
       } catch { /* ignore */ }
-      const compiledPreview = compilePreview(html);
+      const compiledPreview = compilePreview(html, title);
 
       try {
         const result = await convertHistoryToTemplate({
@@ -1519,7 +1742,7 @@ export const TemplateLabPage: React.FC<{
     } catch (err: any) {
       try {
         const fallbackId = turnedTemplateId || `tmpl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-        const compiledPreview = compilePreview(html);
+        const compiledPreview = compilePreview(html, title);
         if (oldNiche && oldNiche.toLowerCase() !== finalNiche.toLowerCase()) {
           moveAndSyncTemplate({
             id: fallbackId,
@@ -1638,10 +1861,10 @@ export const TemplateLabPage: React.FC<{
       </div>
       </div>
 
-      {/* MOBILE WORKSPACE MODE BAR (< 768px only) — Enables 1-tap switching between AI Chat, Live Preview & Code View on mobile without touching desktop split-view */}
+      {/* MOBILE WORKSPACE MODE BAR (< 768px only) — Enables 1-tap switching between AI Chat & Live Preview */}
       {isActive && (
         <div className="flex md:hidden items-center justify-between gap-1.5 px-3 py-2 bg-slate-50 border-b border-slate-200 shrink-0">
-          <div className="grid grid-cols-3 gap-1 flex-1 bg-slate-200/70 p-1 rounded-xl border border-slate-200">
+          <div className="grid grid-cols-2 gap-1 flex-1 bg-slate-200/70 p-1 rounded-xl border border-slate-200">
             <button
               type="button"
               onClick={() => { sfx.toggle(); setSidebarCollapsed(false); }}
@@ -1662,32 +1885,15 @@ export const TemplateLabPage: React.FC<{
               onClick={() => {
                 sfx.toggle();
                 setSidebarCollapsed(true);
-                if (device === 'code') setDevice('desktop');
               }}
               className={`inline-flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                sidebarCollapsed && device !== 'code'
+                sidebarCollapsed
                   ? 'bg-blue-600 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <Monitor className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">Live Preview</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                sfx.toggle();
-                setSidebarCollapsed(true);
-                setDevice('code');
-              }}
-              className={`inline-flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                sidebarCollapsed && device === 'code'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Code2 className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">HTML Code</span>
             </button>
           </div>
         </div>
@@ -1715,7 +1921,7 @@ export const TemplateLabPage: React.FC<{
                         Vibe Design Assistant
                       </span>
                       <span className="hidden sm:block text-[11px] text-slate-500 font-sans">
-                        Real-time AI Synthesis & Interactive Design
+                        Real-time AI Design & Interactive Editing
                       </span>
                     </div>
                   </div>
@@ -2240,7 +2446,7 @@ export const TemplateLabPage: React.FC<{
               {/* Preview toolbar - Large, Spacious & High-Status */}
               <div className="flex items-center gap-2 sm:gap-4 px-3 sm:px-6 py-2 sm:py-3 bg-white border-b border-slate-200 shrink-0 shadow-xs overflow-x-auto no-scrollbar">
                 
-                {/* Desktop, Mobile & Code View Toggle */}
+                {/* Desktop & Mobile Viewport Toggle */}
                 <div className="flex items-center gap-1 bg-slate-100 p-1.5 rounded-xl border border-slate-200 shadow-inner shrink-0">
                   <button
                     onClick={() => { sfx.toggle(); setDevice('desktop'); }}
@@ -2265,18 +2471,6 @@ export const TemplateLabPage: React.FC<{
                   >
                     <Smartphone className="w-4 h-4" />
                     <span>Mobile</span>
-                  </button>
-                  <button
-                    onClick={() => { sfx.toggle(); setDevice('code'); }}
-                    className={`inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
-                      device === 'code'
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-                    }`}
-                    title="View raw HTML code file"
-                  >
-                    <Code2 className="w-4 h-4" />
-                    <span>Code View</span>
                   </button>
                 </div>
 
@@ -2350,7 +2544,7 @@ export const TemplateLabPage: React.FC<{
                 </div>
               </div>
 
-              {/* Viewport / Code View Area */}
+              {/* Viewport Live Preview Area */}
               <div className="flex-1 w-full h-full min-h-0 overflow-hidden flex flex-col bg-slate-100">
                 {device === 'desktop' ? (
                   <div className="w-full h-full flex-1 flex flex-col min-h-0 bg-white overflow-hidden relative">
@@ -2364,7 +2558,7 @@ export const TemplateLabPage: React.FC<{
                           <span>{selectedModelDisplayName} is coding live</span>
                         </div>
                         <h4 className="text-base font-bold text-slate-800 mb-1">
-                          Crafting "{title || 'Bespoke Website'}"
+                          Crafting "{title || 'Custom Website'}"
                         </h4>
                         <p className="text-xs text-slate-500 max-w-md leading-relaxed">
                           Generating responsive layout, mobile-ready components, and tailored local styling. The preview will compile immediately once generation is complete.
@@ -2379,7 +2573,7 @@ export const TemplateLabPage: React.FC<{
                       style={{ height: '100%', width: '100%', minHeight: '100%', display: 'block' }}
                     />
                   </div>
-                ) : device === 'mobile' ? (
+                ) : (
                   <div className="w-full h-full flex-1 min-h-0 flex items-center justify-center p-2 sm:p-4 overflow-hidden relative">
                     <div className="w-full max-w-[390px] h-full max-h-[820px] bg-white rounded-2xl sm:rounded-3xl border-2 sm:border-4 border-slate-800 shadow-2xl flex flex-col overflow-hidden relative">
                       <div className="h-6 bg-slate-800 flex items-center justify-center shrink-0">
@@ -2399,34 +2593,6 @@ export const TemplateLabPage: React.FC<{
                         style={{ height: '100%', width: '100%' }}
                       />
                     </div>
-                  </div>
-                ) : (
-                  <div className="w-full h-full flex-1 min-h-0 flex flex-col bg-slate-900 p-3 sm:p-6 overflow-hidden">
-                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3 shrink-0">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Code2 className="w-4 h-4 text-blue-400 shrink-0" />
-                        <span className="text-xs font-mono font-bold text-white truncate">Generated Single-File HTML / CSS Source Code</span>
-                        {streaming && (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] font-mono shrink-0">
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping" /> Streaming live
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(previewHtml || (html !== BLANK_CANVAS ? html : '') || BLANK_CANVAS);
-                          flashToast({ type: 'success', text: 'HTML source code copied to clipboard!' });
-                        }}
-                        className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shrink-0"
-                      >
-                        Copy HTML Code
-                      </button>
-                    </div>
-                    <textarea
-                      readOnly
-                      value={previewHtml || (html !== BLANK_CANVAS ? html : '') || BLANK_CANVAS}
-                      className="w-full flex-1 font-mono text-xs text-emerald-400 bg-slate-950 p-3 sm:p-4 rounded-xl border border-slate-800 focus:outline-none resize-none leading-relaxed shadow-inner"
-                    />
                   </div>
                 )}
               </div>
@@ -2668,39 +2834,35 @@ export const TemplateLabPage: React.FC<{
 
       {generatingNewSite && (
         <div className="fixed inset-0 z-[220] flex items-center justify-center bg-slate-900/40 backdrop-blur-md animate-editor-fade p-3 sm:p-4">
-          <div className="w-full max-w-md rounded-2xl sm:rounded-3xl bg-white border border-slate-200/90 p-5 sm:p-8 shadow-2xl text-center space-y-5 sm:space-y-6 animate-editor-rise">
-            <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center mx-auto text-blue-600 relative">
+          <div className="w-full max-w-md rounded-2xl sm:rounded-3xl bg-white border border-slate-200/90 p-6 sm:p-8 shadow-2xl text-center space-y-4 animate-editor-rise">
+            <div className="w-14 h-14 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center mx-auto text-blue-600 relative">
               <div className="absolute inset-0 rounded-2xl bg-blue-500/10 animate-ping" />
-              <Code2 className="w-8 h-8 text-blue-600 relative z-10" />
+              <Code2 className="w-7 h-7 text-blue-600 relative z-10" />
             </div>
             
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               <div className="inline-flex items-center px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-[11px] font-bold text-blue-700 uppercase tracking-widest">
-                {selectedModelDisplayName} Synthesis Engine
+                {selectedModelDisplayName.replace(/synthesis engine|synthesis|engine/gi, '').trim()}
               </div>
               <h3 className="text-xl font-bold font-serif text-slate-900 tracking-tight">
-                Synthesizing Bespoke Website
+                Building Your Website
               </h3>
 
-              {/* Website Name Box - Derived instantaneously from prompt while loading */}
-              <div className="px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-center gap-2 shadow-xs">
+              {/* Clean Website Name Box */}
+              <div className="px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-center gap-2 shadow-xs">
                 <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Website:</span>
                 <span className="text-sm font-bold text-slate-900 truncate max-w-[260px]">
-                  {title || 'Bespoke Business Website'}
+                  {title || 'Custom Business Website'}
                 </span>
               </div>
-
-              <p className="text-xs text-slate-600 font-sans min-h-[28px] flex items-center justify-center">
-                {generatingStepText}
-              </p>
             </div>
 
-            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden p-0.5">
+            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden p-0.5 mt-2">
               <div className="bg-blue-600 h-full rounded-full animate-pulse w-3/4 transition-all duration-500" />
             </div>
 
-            <p className="text-[11px] text-slate-500 italic">
-              Preparing live interactive workspace & code generation environment…
+            <p className="text-xs text-slate-500 font-medium">
+              {generatingStepText}
             </p>
           </div>
         </div>
@@ -2714,21 +2876,21 @@ export const TemplateLabPage: React.FC<{
             {/* Modal Header */}
             <div className="flex items-start sm:items-center justify-between gap-2 px-4 py-3 sm:px-6 sm:py-4 bg-white border-b border-slate-200 shrink-0">
               <div className="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0">
-                <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 ${
-                  isTemplateValidated ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-purple-50 text-purple-600 border border-purple-200'
+                <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 shadow-xs ${
+                  isTemplateValidated ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-blue-50 text-blue-600 border border-blue-200/80'
                 }`}>
-                  <ShieldCheck className="w-5 h-5" />
+                  <ShieldCheck className={`w-5 h-5 ${isTemplateValidated ? 'text-emerald-600' : 'text-blue-600'}`} />
                 </div>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                     <h3 className="text-sm sm:text-base font-bold text-slate-900">Automated Rebranding & Readiness Suite</h3>
                     {isTemplateValidated ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] sm:text-xs font-semibold">
-                        <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[2.5]" /> Approved for Saving
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold tracking-wide">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Verified & Ready
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[11px] sm:text-xs font-semibold">
-                        <AlertCircle className="w-3.5 h-3.5 text-amber-600" /> Verification Pending
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 text-[11px] font-semibold tracking-wide">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" /> Ready to Verify
                       </span>
                     )}
                   </div>
@@ -2753,7 +2915,7 @@ export const TemplateLabPage: React.FC<{
             </div>
 
             {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4 sm:space-y-6">
+            <div ref={rebrandModalBodyRef} className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4 sm:space-y-6">
               
               {/* Readiness Score Card */}
               {readinessScan && (
@@ -3008,7 +3170,7 @@ export const TemplateLabPage: React.FC<{
 
                 {/* Rebranding In-Progress Card with Animated Progress and White Brand-Consistent Logs */}
                 {isTestingRebrand && (
-                  <div className="p-5 rounded-2xl bg-white border border-blue-200 shadow-sm space-y-4 animate-fade-in mt-2">
+                  <div ref={rebrandLogsBoxRef} className="p-5 rounded-2xl bg-white border border-blue-200 shadow-sm space-y-4 animate-fade-in mt-2 scroll-mt-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0">
@@ -3048,7 +3210,7 @@ export const TemplateLabPage: React.FC<{
                     </div>
 
                     {/* White, Brand-Consistent Live Streaming Logs Box */}
-                    <div className="rounded-xl bg-slate-50/90 text-slate-800 p-3.5 font-mono text-xs shadow-inner space-y-1.5 border border-slate-200 max-h-48 overflow-y-auto">
+                    <div className="rounded-xl bg-slate-50/90 text-slate-800 p-3.5 font-mono text-xs shadow-inner space-y-1.5 border border-slate-200 max-h-48 overflow-y-auto scroll-smooth">
                       <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200 text-[11px] text-slate-500 font-sans">
                         <div className="flex items-center gap-2 font-mono">
                           <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
@@ -3072,6 +3234,7 @@ export const TemplateLabPage: React.FC<{
                         <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
                         <span className="animate-pulse">Synthesizing personalized branding and layout coordinates…</span>
                       </div>
+                      <div ref={rebrandLogsEndRef} />
                     </div>
                   </div>
                 )}

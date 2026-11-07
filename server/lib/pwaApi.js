@@ -26,7 +26,7 @@ import fs from 'node:fs/promises';
 import { readSite, writeSite, isValidSlug } from './sites.js';
 import { validateBookingContract, CONTRACT_REJECTION_MESSAGE } from './bookingContractValidator.js';
 import { publishBatch } from './cloudflare.js';
-import { cloudflare, ROOT_DIR, siteBaseUrl } from './config.js';
+import { cloudflare, ROOT_DIR, siteBaseUrl, siteUrlForSlug } from './config.js';
 import {
   getSupabase,
   supabaseListConversations,
@@ -693,7 +693,7 @@ export function mountPwaApi(app) {
       // Ensure local disk copy stays fresh with the latest HTML
       writeSite(slug, html).catch(() => {});
 
-      const liveUrl = `${siteBaseUrl()}/${slug}/`;
+      const liveUrl = siteUrlForSlug(slug);
 
       res.json({
         ok: true,
@@ -728,7 +728,7 @@ export function mountPwaApi(app) {
         });
       }
 
-      const liveUrl = `${siteBaseUrl()}/${slug}/`;
+      const liveUrl = siteUrlForSlug(slug);
 
       await persistPwaSiteHtmlToAllTiers(slug, html, liveUrl);
 
@@ -753,7 +753,7 @@ export function mountPwaApi(app) {
       }
 
       const html = req.body?.html;
-      const liveUrl = `${siteBaseUrl()}/${slug}/`;
+      const liveUrl = siteUrlForSlug(slug);
       const now = Date.now();
       const today = new Date().toISOString().slice(0, 10);
 

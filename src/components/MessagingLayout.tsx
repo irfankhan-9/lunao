@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, Phone, BarChart3, Settings } from 'lucide-react';
+import { MessageSquare, Phone, Settings } from 'lucide-react';
 import { Messages } from './Messages';
 import { Numbers } from './Numbers';
-import { MessagingAnalytics } from './MessagingAnalytics';
 import { MessagingSettings } from './MessagingSettings';
 import { playSoftTap } from '../utils/audio';
 import { Business, SidebarTab } from '../types';
+import { canUseOwnTelnyx } from '../lib/pipelineClient';
 
-type MessagingTab = 'inbox' | 'numbers' | 'analytics' | 'settings';
+type MessagingTab = 'inbox' | 'numbers' | 'settings';
 
 interface MessagingLayoutProps {
   userPlan?: string;
@@ -22,30 +22,31 @@ export function MessagingLayout({ userPlan, businesses, setBusinesses, setActive
   const effectivePlan = (
     userPlan ||
     (typeof window !== 'undefined' ? localStorage.getItem('lunao_user_plan') : '') ||
-    'Free'
-  ).toLowerCase();
+    'Free Plan'
+  );
 
-  // Growth, Pro, and Agency plans unlock Numbers, Analytics, and Settings
-  const isAdvancedPlan = ['growth', 'pro', 'agency'].some(tier => effectivePlan.includes(tier));
+  // All plans above Free (Starter Plan, Growth Plan, Pro Plan, Agency Plan) unlock Numbers and Settings
+  const isPlanAboveFree = canUseOwnTelnyx(effectivePlan) || !effectivePlan.toLowerCase().includes('free');
 
-  // Reset to inbox if user is on Free/Starter
+  // Reset to inbox if user is on Free plan
   useEffect(() => {
-    if (!isAdvancedPlan && activeSubTab !== 'inbox') {
+    if (!isPlanAboveFree && activeSubTab !== 'inbox') {
       setActiveSubTab('inbox');
     }
-  }, [isAdvancedPlan, activeSubTab]);
+  }, [isPlanAboveFree, activeSubTab]);
 
+  // Analytics section removed for all plans above free.
+  // Starter, Growth, Pro, and Agency plans have full identical access to Inbox, Numbers, and Settings.
   const tabs = [
     { id: 'inbox' as MessagingTab, label: 'Inbox', icon: MessageSquare },
     { id: 'numbers' as MessagingTab, label: 'Numbers', icon: Phone },
-    { id: 'analytics' as MessagingTab, label: 'Analytics', icon: BarChart3 },
     { id: 'settings' as MessagingTab, label: 'Settings', icon: Settings },
   ];
 
   return (
     <div className="flex flex-col h-full animate-fade-in">
-      {/* Sub-navigation: ONLY shown for Growth, Pro, Agency plans. Free & Starter users see only Inbox */}
-      {isAdvancedPlan && (
+      {/* Sub-navigation: Shown for Starter, Pro, Agency, and all plans above Free */}
+      {isPlanAboveFree && (
         <div className="mb-6">
           <div className="flex items-center gap-1 p-1 bg-white rounded-lg border border-border-light w-fit shadow-xs">
             {tabs.map((tab) => {
@@ -73,15 +74,16 @@ export function MessagingLayout({ userPlan, businesses, setBusinesses, setActive
         </div>
       )}
 
-      {/* Content area: Free and Starter users see ONLY Inbox */}
+      {/* Content area: Starter, Pro, and Agency have full access to Numbers and Settings */}
       <div className="flex-1 overflow-hidden">
-        {(!isAdvancedPlan || activeSubTab === 'inbox') && (
+        {(!isPlanAboveFree || activeSubTab === 'inbox') && (
           <Messages businesses={businesses} setBusinesses={setBusinesses} setActiveTab={setActiveTab} />
         )}
-        {isAdvancedPlan && activeSubTab === 'numbers' && <Numbers />}
-        {isAdvancedPlan && activeSubTab === 'analytics' && <MessagingAnalytics />}
-        {isAdvancedPlan && activeSubTab === 'settings' && <MessagingSettings />}
+        {isPlanAboveFree && activeSubTab === 'numbers' && <Numbers />}
+        {isPlanAboveFree && activeSubTab === 'settings' && <MessagingSettings />}
       </div>
     </div>
   );
 }
+
+export default MessagingLayout;

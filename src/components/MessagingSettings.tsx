@@ -1,53 +1,54 @@
 import { useState, useEffect } from 'react';
-import { Settings, ExternalLink, Loader2, Phone, AlertCircle } from 'lucide-react';
+import { Settings, ExternalLink, Loader2, Phone, AlertCircle, ShieldAlert, CheckCircle } from 'lucide-react';
 import { TelnyxConnectionManager } from './TelnyxConnectionManager';
+import { getCachedTelnyxData, syncTelnyxAccountLive, CachedTelnyxData } from '../lib/telnyxClient';
 
 interface TelnyxStatus {
   connected: boolean;
   totalNumbers: number;
   senderNumber: string;
   lastSync: string | null;
+  tokenExpired: boolean;
 }
 
 export function MessagingSettings() {
+  const [initialCached] = useState<CachedTelnyxData>(() => getCachedTelnyxData());
   const [telnyxStatus, setTelnyxStatus] = useState<TelnyxStatus>({
-    connected: false,
-    totalNumbers: 0,
+    connected: initialCached.connected,
+    totalNumbers: initialCached.numbers?.length || initialCached.account?.totalNumbers || 0,
     senderNumber: '',
-    lastSync: null,
+    lastSync: initialCached.lastSyncedAt ? new Date(initialCached.lastSyncedAt).toISOString() : null,
+    tokenExpired: initialCached.tokenExpired,
   });
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [senderNumber, setSenderNumber] = useState('');
   const [senderNumberSaved, setSenderNumberSaved] = useState(false);
   const [savingSender, setSavingSender] = useState(false);
 
-  // Load the active Telnyx connection + chosen sender number from the
-  // server. Everything here is real — no simulated / fake values anywhere.
+  // Live background sync from real Telnyx account
   const refresh = async () => {
+    setIsSyncing(true);
     try {
       const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
-      const res = await fetch(`/api/telnyx/accounts?ownerKey=${encodeURIComponent(ownerKey)}`, {
-        credentials: 'include',
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      const accounts = Array.isArray(data.accounts) ? data.accounts : [];
-      const active = accounts.find((a) => a.status === 'active') || accounts[0];
+      const live = await syncTelnyxAccountLive(ownerKey);
+
       setTelnyxStatus({
-        connected: !!active,
-        totalNumbers: active?.total_numbers || 0,
+        connected: live.connected,
+        totalNumbers: live.numbers?.length || live.account?.totalNumbers || 0,
         senderNumber: '',
-        lastSync: active ? new Date().toISOString() : null,
+        lastSync: new Date().toISOString(),
+        tokenExpired: live.tokenExpired,
       });
     } catch (err) {
-      console.error('[messaging-settings] failed to load telnyx status:', err);
+      console.error('[messaging-settings] failed to sync telnyx status:', err);
+    } finally {
+      setIsSyncing(false);
     }
   };
 
   useEffect(() => {
     refresh();
-    // Restore the chosen sender number (persisted separately so the user
-    // doesn't have to re-select it on every refresh).
     const saved = localStorage.getItem('lunao_sender_number');
     if (saved) {
       setSenderNumber(saved);
@@ -56,11 +57,27 @@ export function MessagingSettings() {
       setSenderNumber('');
       setSenderNumberSaved(false);
     }
-    // Bump a hash on the URL so the OAuth callback page triggers a refresh
-    // when the popup closes.
+
     const handler = () => refresh();
     window.addEventListener('focus', handler);
-    return () => window.removeEventListener('focus', handler);
+
+    const onSync = (e: any) => {
+      const detail: CachedTelnyxData = e.detail;
+      if (!detail) return;
+      setTelnyxStatus({
+        connected: detail.connected,
+        totalNumbers: detail.numbers?.length || detail.account?.totalNumbers || 0,
+        senderNumber: '',
+        lastSync: new Date().toISOString(),
+        tokenExpired: detail.tokenExpired,
+      });
+    };
+    window.addEventListener('lunao:telnyx_sync', onSync);
+
+    return () => {
+      window.removeEventListener('focus', handler);
+      window.removeEventListener('lunao:telnyx_sync', onSync);
+    };
   }, []);
 
   const handleSaveSender = async () => {
@@ -111,23 +128,58 @@ export function MessagingSettings() {
       )}
 
       {/* Telnyx Integration Card */}
-      <div className="bg-white border border-border-main rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-white border border-border-main rounded-xl shadow-sm overflow-hidden relative">
+        {/* Dynamic Real-time Catching Progress Bar */}
+        {isSyncing && (
+          <div className="absolute top-0 left-0 right-0 h-1 bg-accent/20 overflow-hidden z-10">
+            <div className="h-full bg-accent animate-pulse w-full" />
+          </div>
+        )}
+
+        {telnyxStatus.tokenExpired && (
+          <div className="p-3.5 bg-rose-50 border-b border-rose-200 flex items-center justify-between gap-3 text-xs text-rose-800 animate-fade-in">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>Telnyx connection token or cookie expired. Please reconnect below to resume outbound messaging.</span>
+            </div>
+            <span className="px-2 py-0.5 rounded bg-rose-200/60 font-bold uppercase tracking-wider text-[10px] text-rose-900">
+              Needs Re-auth
+            </span>
+          </div>
+        )}
+
         {/* Card Header */}
         <div className="p-6 border-b border-border-light">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-xl bg-blue-50 flex items-center justify-center border border-blue-100">
-              <svg viewBox="0 0 40 40" className="w-8 h-8" fill="none">
-                <circle cx="20" cy="20" r="18" stroke="#0066FF" strokeWidth="2" />
-                <path d="M14 16C14 16 16 20 20 20C24 20 26 16 26 16" stroke="#0066FF" strokeWidth="2" strokeLinecap="round" />
-                <path d="M14 24C14 24 16 20 20 20C24 20 26 24 26 24" stroke="#0066FF" strokeWidth="2" strokeLinecap="round" />
-              </svg>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-xl bg-blue-50 flex items-center justify-center border border-blue-100 shrink-0">
+                <svg viewBox="0 0 40 40" className="w-8 h-8" fill="none">
+                  <circle cx="20" cy="20" r="18" stroke="#0066FF" strokeWidth="2" />
+                  <path d="M14 16C14 16 16 20 20 20C24 20 26 16 26 16" stroke="#0066FF" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M14 24C14 24 16 20 20 20C24 20 26 24 26 24" stroke="#0066FF" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </div>
+              <div>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h3 className="text-base font-semibold text-ink">Telnyx</h3>
+                  {telnyxStatus.connected && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-3xs">
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Telnyx Connected</span>
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-ink-secondary mt-0.5">
+                  Enterprise SMS with global coverage and real-time delivery
+                </p>
+              </div>
             </div>
-            <div className="flex-1">
-              <h3 className="text-base font-semibold text-ink">Telnyx</h3>
-              <p className="text-xs text-ink-secondary mt-0.5">
-                Enterprise SMS with global coverage and real-time delivery
-              </p>
-            </div>
+            {telnyxStatus.connected && (
+              <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Live Carrier Connection Active
+              </span>
+            )}
           </div>
         </div>
 

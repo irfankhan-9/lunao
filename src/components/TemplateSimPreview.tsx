@@ -177,7 +177,7 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
                   <p className="text-[3.5px] text-[#556960] uppercase tracking-wide">EST. — Premium Haircuts</p>
                 </div>
                 <div className="flex justify-between items-center border-y border-[#D9CDBC] py-0.5 px-0.5 text-[3.5px] font-bold">
-                  <span>⭐ 200+ Reviews</span><span>📅 7 Days</span>
+                  <span>200+ Reviews</span><span>📅 7 Days</span>
                 </div>
                 <div className="flex gap-0.5 mt-0.5">
                   {[{ n: 'CLASSIC CUT', p: '$25' }, { n: 'SKIN FADE', p: '$30' }].map((s, i) => (
@@ -370,7 +370,7 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
                 <div className="text-center py-0.5 bg-white/40 border border-[#D9CDBC] rounded-sm my-0.5">
                   <p className="text-[5px] font-bold font-serif italic">Franklin &amp; Sons</p>
                 </div>
-                <div className="border-y border-[#D9CDBC] py-0.5 text-center text-[3px] font-bold">⭐ 200+ · 7 Days</div>
+                <div className="border-y border-[#D9CDBC] py-0.5 text-center text-[3px] font-bold">200+ Reviews · 7 Days</div>
                 <div className="flex flex-col gap-0.5 mt-auto">
                   <div className="bg-white/50 border border-[#121F1A] px-0.5 py-0.5 flex items-center justify-between rounded-sm"><span className="truncate font-bold text-[3.5px] text-[#26332E]">CLASSIC</span><span className="text-[#9E3C30] font-bold text-[3.5px]">$25</span></div>
                   <div className="bg-white/50 border border-[#121F1A] px-0.5 py-0.5 flex items-center justify-between rounded-sm"><span className="truncate font-bold text-[3.5px] text-[#26332E]">FADE</span><span className="text-[#9E3C30] font-bold text-[3.5px]">$30</span></div>
@@ -515,7 +515,7 @@ export const TemplateSimPreview: React.FC<TemplateSimPreviewProps> = ({
         {/* Badge */}
         {isMostUsed ? (
           <div className="absolute top-2 left-2 px-2 py-0.5 bg-amber-500 text-white text-[8px] uppercase font-bold tracking-widest rounded-full z-[4] shadow-md scale-90">
-            ★ MOST POPULAR
+            MOST POPULAR
           </div>
         ) : (
           <div className="absolute top-2 left-2 px-2 py-0.5 bg-ink/65 backdrop-blur-xs text-white text-[8px] uppercase font-semibold tracking-wider rounded-full z-[4] shadow-md scale-90 border border-white/10">

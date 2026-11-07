@@ -41,8 +41,8 @@ Templates must be 100% brandable and rebrandable for any target business using t
 - {{GOOGLE_REVIEW_COUNT}} : Total customer reviews count (e.g. "342").
 - {{YEARS_IN_BUSINESS}} : Founding year or years serving the community (e.g. "2015").
 
-2. SOCIAL MEDIA DEFAULT CONVENTION:
-When specific social media handles are unknown for a business, use the business name formatted as a clean lowercase identifier for social handles. NEVER invent fake random brand handles.
+2. SOCIAL MEDIA & EMAIL DEFAULT CONVENTION:
+When adding social media links or emails, ALWAYS anchor to {{BUSINESS_NAME}} (e.g. <a href="https://instagram.com/{{BUSINESS_NAME}}">, <a href="https://facebook.com/{{BUSINESS_NAME}}">, <a href="mailto:contact@{{BUSINESS_NAME}}.com">). NEVER invent fake random brand handles or personal emails.
 
 3. PRESERVATION OF TEMPLATE LOGIC & PLACEHOLDERS:
 - When creating or editing a template, NEVER replace {{BUSINESS_NAME}}, {{CITY}}, or {{PHONE_DISPLAY}} with hardcoded fake business names unless the user explicitly provides specific live business details to rebrand for.

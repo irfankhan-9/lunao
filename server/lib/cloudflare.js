@@ -11,7 +11,7 @@ import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { ROOT_DIR, SITES_DIR, cloudflare, siteBaseUrl } from './config.js';
+import { ROOT_DIR, SITES_DIR, cloudflare, siteBaseUrl, siteUrlForSlug } from './config.js';
 
 async function writeSiteToDisk(slug, html) {
   if (!html || typeof html !== 'string' || html.trim().length < 2000) {
@@ -230,53 +230,60 @@ export async function publishBatch() {
 //   3. Body size is >= 2000 bytes (not an empty stub)
 //   4. Body contains the rebranded business name
 // NEVER falls back to probing localhost!
-export async function verifyLiveCloudflareUrl(liveUrl, expectedBusinessName = null, maxAttempts = 10) {
+export async function verifyLiveCloudflareUrl(liveUrl, expectedBusinessName = null, maxAttempts = 5) {
   let lastStatus = 0;
   let lastReason = 'Unreachable';
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const cacheBustUrl = `${liveUrl}${liveUrl.includes('?') ? '&' : '?'}_v=${Date.now()}_${attempt}`;
-      const res = await fetch(cacheBustUrl, {
-        method: 'GET',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-        },
-      });
-      lastStatus = res.status;
-      const body = await res.text();
+  // Extract slug if liveUrl is https://<slug>.lunao.org so we can also probe edge fallback if wildcard DNS is propagating
+  const subMatch = String(liveUrl || '').match(/^https?:\/\/([a-z0-9-]+)\.lunao\.org\/?/i);
+  const fallbackEdgeUrl = subMatch ? `https://lunao.org/${subMatch[1]}` : null;
 
-      if (res.status === 200) {
-        if (
-          body.includes('Lunao Root') ||
-          body.includes('Site Customization In Progress') ||
-          body.includes('<title>Site Deploying | Lunao Platform</title>')
-        ) {
-          lastReason = `Live URL ${liveUrl} returned root/placeholder page ("Lunao Root" or "Site Customization In Progress") instead of the rebranded business website.`;
-        } else if (!body || body.trim().length < 2000) {
-          lastReason = `Live URL ${liveUrl} returned an incomplete HTML document (${body ? body.length : 0} bytes).`;
-        } else if (expectedBusinessName && !body.toLowerCase().includes(String(expectedBusinessName).trim().toLowerCase())) {
-          lastReason = `Live page at ${liveUrl} does not contain the rebranded business name "${expectedBusinessName}".`;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const urlsToTry = fallbackEdgeUrl ? [liveUrl, fallbackEdgeUrl] : [liveUrl];
+    for (const candidateUrl of urlsToTry) {
+      try {
+        const cacheBustUrl = `${candidateUrl}${candidateUrl.includes('?') ? '&' : '?'}_v=${Date.now()}_${attempt}`;
+        const res = await fetch(cacheBustUrl, {
+          method: 'GET',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+          },
+        });
+        lastStatus = res.status;
+        const body = await res.text();
+
+        if (res.status === 200) {
+          if (
+            body.includes('Lunao Root') ||
+            body.includes('Site Customization In Progress') ||
+            body.includes('<title>Site Deploying | Lunao Platform</title>')
+          ) {
+            lastReason = `Live URL ${candidateUrl} returned root/placeholder page ("Lunao Root" or "Site Customization In Progress") instead of the rebranded business website.`;
+          } else if (!body || body.trim().length < 2000) {
+            lastReason = `Live URL ${candidateUrl} returned an incomplete HTML document (${body ? body.length : 0} bytes).`;
+          } else if (expectedBusinessName && !body.toLowerCase().includes(String(expectedBusinessName).trim().toLowerCase())) {
+            lastReason = `Live page at ${candidateUrl} does not contain the rebranded business name "${expectedBusinessName}".`;
+          } else {
+            // Successfully verified live on Cloudflare Pages / Edge!
+            return {
+              ok: true,
+              status: 200,
+              bytes: body.length,
+              attempt,
+              verifiedUrl: liveUrl,
+            };
+          }
         } else {
-          // Successfully verified live on Cloudflare Pages!
-          return {
-            ok: true,
-            status: 200,
-            bytes: body.length,
-            attempt,
-            verifiedUrl: liveUrl,
-          };
+          lastReason = `Lunao Edge probe returned HTTP ${res.status} at ${candidateUrl} (expected 200 OK).`;
         }
-      } else {
-        lastReason = `Lunao Edge probe returned HTTP ${res.status} at ${liveUrl} (expected 200 OK).`;
+      } catch (err) {
+        lastReason = `HTTPS verification request failed for ${candidateUrl}: ${err.message}`;
       }
-    } catch (err) {
-      lastReason = `HTTPS verification request failed for ${liveUrl}: ${err.message}`;
     }
 
     if (attempt < maxAttempts) {
-      await new Promise((r) => setTimeout(r, 1500));
+      await new Promise((r) => setTimeout(r, 500));
     }
   }
 
@@ -290,6 +297,6 @@ export async function verifyLiveCloudflareUrl(liveUrl, expectedBusinessName = nu
 // Compile output -> on-disk site. Returns the public URL for this slug.
 export async function stageSite(slug, html) {
   await writeSiteToDisk(slug, html);
-  return `${siteBaseUrl()}/${slug}/`;
+  return siteUrlForSlug(slug);
 }
 

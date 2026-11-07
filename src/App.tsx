@@ -11,6 +11,9 @@ import { MessagingLayout } from './components/MessagingLayout';
 import { playTiktokLike, playSoftTap } from './utils/audio';
 import { Landing } from './Landing';
 import AuthPage from './components/AuthPage';
+import { PrivacyPage } from './pages/PrivacyPage';
+import { TermsPage } from './pages/TermsPage';
+import { AdminPage } from './pages/AdminPage';
 import { GateProvider, useGate } from './contexts/GateContext';
 import { SidebarTab, Campaign, Business, SmsLog, CampaignEmailLead, CampaignDeployedSite } from './types';
 import { useSyncTemplates } from './lib/nichesSync';
@@ -22,6 +25,7 @@ import {
   SPECIAL_CAMPAIGN_ID,
 } from './specialModes/modeManager';
 import { resetVibeCreditsToPlan } from './lib/vibeCredits';
+import { captureReferralFromUrl, attributeSignupReferral, syncPlanWithAffiliate } from './lib/referralTracker';
 
 const ROUTE_STORAGE = 'lunao_route';
 
@@ -58,8 +62,17 @@ export interface ActiveCampaignRun {
   leadsTarget?: number;
 }
 
-const readRoute = (): '/' | '/auth' | '/app' => {
+export type AppRoute = '/' | '/auth' | '/app' | '/privacy' | '/terms' | '/admin';
+
+const readRoute = (): AppRoute => {
   try {
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname.toLowerCase().replace(/\/+$/, '') || '/';
+      if (p === '/privacy') return '/privacy';
+      if (p === '/terms') return '/terms';
+      if (p === '/auth') return '/auth';
+      if (p === '/admin') return '/admin';
+    }
     const r = localStorage.getItem(ROUTE_STORAGE);
     if (r === '/app') return '/app';
     if (r === '/auth') return '/auth';
@@ -69,7 +82,7 @@ const readRoute = (): '/' | '/auth' | '/app' => {
   }
 };
 
-const writeRoute = (route: '/' | '/auth' | '/app') => {
+const writeRoute = (route: AppRoute) => {
   try {
     if (route === '/app' || route === '/auth') localStorage.setItem(ROUTE_STORAGE, route);
     else localStorage.removeItem(ROUTE_STORAGE);
@@ -87,16 +100,57 @@ export default function App() {
 
 function AppRouter() {
   const { unlocked, loading, user } = useGate();
-  const [route, setRoute] = useState<'/' | '/auth' | '/app'>(() => readRoute());
+  const [route, setRoute] = useState<AppRoute>(() => readRoute());
+
+  // Capture ?ref= / ?aff= affiliate code from URL immediately on any entry page
+  useEffect(() => {
+    captureReferralFromUrl();
+  }, []);
 
   useEffect(() => {
     writeRoute(route);
   }, [route]);
 
+  // Sync with browser navigation (back/forward and URL changes)
+  useEffect(() => {
+    const onPop = () => {
+      setRoute(readRoute());
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  const navigateTo = (newRoute: AppRoute) => {
+    try {
+      if (window.location.pathname !== newRoute) {
+        window.history.pushState({}, '', newRoute);
+      }
+    } catch {
+      // ignore
+    }
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    if (typeof document !== 'undefined') {
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    }
+    setRoute(newRoute);
+  };
+
+  // Public legal pages & admin mission control are accessible without standard user authentication
+  if (route === '/privacy') {
+    return <PrivacyPage onOpenAuth={() => navigateTo('/auth')} onNavigateHome={() => navigateTo('/')} />;
+  }
+  if (route === '/terms') {
+    return <TermsPage onOpenAuth={() => navigateTo('/auth')} onNavigateHome={() => navigateTo('/')} />;
+  }
+  if (route === '/admin') {
+    return <AdminPage onNavigateHome={() => navigateTo('/')} />;
+  }
+
   // Once we know we're unlocked (authenticated), force the route to /app so
   // a reload or successful login lands on the user's dashboard.
   useEffect(() => {
-    if (!loading && unlocked && route !== '/app') {
+    if (!loading && unlocked && route !== '/app' && route !== '/privacy' && route !== '/terms' && route !== '/admin') {
       setRoute('/app');
     }
   }, [loading, unlocked, route]);
@@ -124,12 +178,12 @@ function AppRouter() {
     if (route === '/auth') {
       return (
         <AuthPage
-          onBackToLanding={() => setRoute('/')}
-          onAuthSuccess={() => setRoute('/app')}
+          onBackToLanding={() => navigateTo('/')}
+          onAuthSuccess={() => navigateTo('/app')}
         />
       );
     }
-    return <Landing onOpenAuth={() => setRoute('/auth')} />;
+    return <Landing onOpenAuth={() => navigateTo('/auth')} />;
   }
 
   // Key DashboardApp by user.ownerKey so switching Google accounts cleanly resets state
@@ -318,7 +372,7 @@ function DashboardApp() {
   const [userCredits, setUserCredits] = useState<number>(() => {
     if (typeof user?.credits === 'number') return user.credits;
     const cached = localStorage.getItem(userCreditsKey) ?? localStorage.getItem('lunao_user_credits');
-    if (cached !== null) return parseInt(cached, 10);
+    if (cached !== null) return parseFloat(cached);
     const defaultMap: Record<string, number> = {
       'Free Plan': 15, 'Starter Plan': 2500, 'Pro Plan': 6500, 'Agency Plan': 12000,
     };
@@ -342,6 +396,13 @@ function DashboardApp() {
       hasHydratedCreditsRef.current = true;
     }
   }, [user, userPlanKey, userCreditsKey]);
+
+  // Attribute referral to affiliate on signup / initial dashboard entry
+  useEffect(() => {
+    if (ownerKey && ownerKey !== 'anonymous') {
+      attributeSignupReferral(ownerKey, userEmail || user?.email || '', userPlan || 'Free Plan');
+    }
+  }, [ownerKey, userEmail, user?.email, userPlan]);
 
   const hasHydratedCreditsRef = useRef(false);
 
@@ -374,6 +435,18 @@ function DashboardApp() {
       }).catch(() => {});
     }
   }, [userCredits, userCreditsKey, ownerKey]);
+
+  // Listen for real-time credit updates dispatched from background workers / API calls
+  useEffect(() => {
+    const handleCreditsUpdated = (e: any) => {
+      const nextCreds = e.detail?.credits;
+      if (typeof nextCreds === 'number' && !Number.isNaN(nextCreds)) {
+        setUserCredits(nextCreds);
+      }
+    };
+    window.addEventListener('lunao_credits_updated', handleCreditsUpdated);
+    return () => window.removeEventListener('lunao_credits_updated', handleCreditsUpdated);
+  }, []);
 
   // Sync special mode state (UGC or Sales Closer) on load and on code redemption
   useEffect(() => {
@@ -450,6 +523,7 @@ function DashboardApp() {
     localStorage.setItem('lunao_user_plan', normalized);
     resetVibeCreditsToPlan(normalized);
     window.dispatchEvent(new Event('lunao:plan-changed'));
+    syncPlanWithAffiliate(ownerKey, normalized);
 
     const planClean = normalized.replace(' Plan', '').replace(' Tier', '');
     const defaultMap: Record<string, number> = {

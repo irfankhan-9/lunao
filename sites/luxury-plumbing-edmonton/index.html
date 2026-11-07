@@ -4302,6 +4302,53 @@
       color: var(--accent-gold);
       line-height: 1;
     }
+    
+    /* MOBILE CONCIERGE TOGGLE: Screens <= 900px render ONLY the single magic emoji ✨ */
+    @media (max-width: 900px) {
+      .atelier-concierge-fab-container {
+        bottom: calc(18px + env(safe-area-inset-bottom, 0px)) !important;
+        right: 16px !important;
+      }
+      .atelier-concierge-fab {
+        width: 48px !important;
+        height: 48px !important;
+        min-width: 48px !important;
+        max-width: 48px !important;
+        padding: 0 !important;
+        border-radius: 50% !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 0 !important;
+        box-shadow: 0 8px 24px rgba(61, 43, 31, 0.2), 0 0 16px rgba(184, 134, 11, 0.28) !important;
+        overflow: hidden !important;
+      }
+      .atelier-concierge-fab .fab-label-text,
+      .atelier-concierge-fab .fab-chevron,
+      .atelier-concierge-fab span:not(.brand-spinner-icon) {
+        display: none !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        font-size: 0 !important;
+        line-height: 0 !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+      .atelier-concierge-fab .brand-spinner-icon {
+        font-size: 1.45rem !important;
+        line-height: 1 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+      }
+    }
+
     .atelier-concierge-fab.active .fab-chevron {
       transform: rotate(180deg);
       color: #1A1205;
@@ -7427,6 +7474,52 @@
       });
     }
   </script>
+<style id="lunao-fab-mobile-lock">
+@media (max-width: 900px) {
+  .atelier-concierge-fab-container {
+    bottom: calc(18px + env(safe-area-inset-bottom, 0px)) !important;
+    right: 16px !important;
+  }
+  .atelier-concierge-fab {
+    width: 48px !important;
+    height: 48px !important;
+    min-width: 48px !important;
+    max-width: 48px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0 !important;
+    box-shadow: 0 8px 24px rgba(61, 43, 31, 0.2), 0 0 16px rgba(184, 134, 11, 0.28) !important;
+    overflow: hidden !important;
+  }
+  .atelier-concierge-fab .fab-label-text,
+  .atelier-concierge-fab .fab-chevron,
+  .atelier-concierge-fab span:not(.brand-spinner-icon) {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    font-size: 0 !important;
+    line-height: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+  .atelier-concierge-fab .brand-spinner-icon {
+    font-size: 1.45rem !important;
+    line-height: 1 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+}
+</style>
 </head>
 <body style="background-color: #FAF8F5 !important; color: #2A2118 !important;">
 
@@ -8201,7 +8294,7 @@
     <!-- Main Floating Action Toggle Button -->
     <button type="button" class="atelier-concierge-fab" id="conciergeFabBtn" onclick="app.toggleConciergeFab()" aria-label="Toggle Concierge Options">
       <span class="brand-spinner-icon">✨</span>
-      <span>CONCIERGE</span>
+      <span class="fab-label-text">CONCIERGE</span>
       <span class="fab-chevron">▲</span>
     </button>
   </div>

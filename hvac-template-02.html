@@ -1,14 +1,25 @@
 <!doctype html>
 <html lang="en" style="background-color: #FAF8F5 !important; color: #2A2118 !important;">
 <head>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="alternate icon" href="/favicon.ico" />
+  <script id="sw-killswitch">
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(registrations) {
+        for (var i = 0; i < registrations.length; i++) {
+          registrations[i].unregister();
+        }
+      });
+    }
+  </script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Aeris & Therma Climate Atelier — Bespoke HVAC & Precision Climate Engineering in Austin, TX</title>
+  <title>Everest Climate Systems — Bespoke HVAC & Precision Climate Engineering in Austin, TX</title>
   <meta name="description" content="Premier residential and commercial HVAC engineering, inverter heat pumps, concealed high-velocity zoning, and hospital-grade indoor air quality purification in Austin, TX." />
   <meta name="keywords" content="hvac contractor, heat pump installation, Austin, TX hvac, ac repair, mini split, vrf zoning, indoor air quality, geothermal hvac, heating cooling" />
   
   <!-- Open Graph / Meta -->
-  <meta property="og:title" content="Aeris & Therma Climate Atelier — Bespoke HVAC & Precision Climate Engineering in Austin, TX" />
+  <meta property="og:title" content="Everest Climate Systems — Bespoke HVAC & Precision Climate Engineering in Austin, TX" />
   <meta property="og:description" content="Premier residential and commercial HVAC engineering, inverter heat pumps, concealed high-velocity zoning, and hospital-grade indoor air quality purification in Austin, TX." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="#booking" />
@@ -19,15 +30,15 @@
   {
     "@context": "https://schema.org",
     "@type": "HVACBusiness",
-    "name": "Aeris & Therma Climate Atelier",
-    "description": "Premier residential and commercial HVAC engineering, inverter heat pumps, concealed high-velocity zoning, and hospital-grade indoor air quality purification in Austin, TX.",
-    "image": "https://images.unsplash.com/photo-1581094288338-2314dddb7ece?auto=format&fit=crop&w=1920&q=85",
-    "telephone": "(512) 555-0199",
-    "email": "concierge@aeristherma.com",
+    "name": "Everest Climate Systems",
+    "description": "",
+    "image": "",
+    "telephone": "(512) 555-0988",
+    "email": "service@everestclimate.com",
     "priceRange": "$$$$",
     "address": {
       "@type": "PostalAddress",
-      "streetAddress": "740 Congress Ave, Mechanical Suite 4A, Austin, TX",
+      "streetAddress": "3801 Capital of Texas Hwy, Austin, TX 78704",
       "addressLocality": "Austin, TX",
       "addressCountry": "US"
     },
@@ -36,17 +47,17 @@
       { "@type": "OpeningHoursSpecification", "dayOfWeek": ["Saturday"], "opens": "09:00", "closes": "16:00" }
     ],
     "sameAs": [
-      "https://instagram.com/aeris_therma",
-      "https://facebook.com/aeristherma",
-      "https://tiktok.com/@aeris_therma_climate_atelier",
-      "https://youtube.com/@aeristherma"
+      "https://instagram.com/everest_cooling",
+      "https://facebook.com/everestcooling",
+      "",
+      ""
     ]
   }
   </script>
 
   <script>
-    window.LUNAO_SLUG = "aeris-therma-climate-atelier-austin";
-    window.LUNAO_BUSINESS_NAME = "Aeris & Therma Climate Atelier";
+    window.LUNAO_SLUG = "everest";
+    window.LUNAO_BUSINESS_NAME = "Everest Climate Systems";
   </script>
 
   <!-- Typography: Cinzel (Display Luxury Serif) & Plus Jakarta Sans (Modern Body) -->
@@ -814,6 +825,47 @@
       align-items: center;
       gap: 0.75rem;
       flex-wrap: wrap;
+    }
+    /* Desktop UI toggle for bottom Concierge Chatbot & Booking launcher */
+    .concierge-desktop-toggle-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid var(--border-gold);
+      border-radius: 30px;
+      padding: 0.3rem 0.35rem;
+      box-shadow: 0 4px 16px rgba(61, 43, 31, 0.06), 0 0 12px rgba(184, 134, 11, 0.12);
+      width: auto;
+    }
+    .concierge-desktop-toggle-wrap .btn {
+      flex: 0 0 auto;
+      min-width: 140px;
+      height: 40px;
+      border-radius: 24px;
+      font-size: 0.76rem;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      margin: 0;
+      box-sizing: border-box;
+      transition: all var(--transition-fast);
+    }
+    @media (max-width: 768px) {
+      .concierge-desktop-toggle-wrap {
+        width: 100%;
+        display: flex;
+        flex-direction: row;
+        border-radius: var(--radius-sm);
+        padding: 0.25rem;
+      }
+      .concierge-desktop-toggle-wrap .btn {
+        flex: 1;
+        min-width: 0;
+      }
     }
     @media (max-width: 640px) {
       .subpage-back-bar {
@@ -4205,140 +4257,118 @@
       transition: background-color 0.5s ease;
     }
 
-    /* LUXURY FLOATING ACTION TOGGLE (BOTTOM RIGHT) */
+    /* LUXURY FLOATING ACTION TOGGLE (BOTTOM RIGHT) - 100% DESKTOP UI CONSISTENT */
     .atelier-concierge-fab-container {
       position: fixed;
-      bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-      right: 20px;
+      bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+      right: 24px;
       z-index: 1080;
       display: flex;
       flex-direction: column;
       align-items: flex-end;
-      pointer-events: none;
+      pointer-events: auto;
     }
     .atelier-concierge-fab {
       pointer-events: auto;
-      width: 60px;
-      height: 60px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, var(--accent-gold) 0%, #DFB15B 50%, #AC8239 100%);
-      border: 1.5px solid var(--accent-gold-light);
-      color: #080A0F;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      position: relative;
-      cursor: pointer;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 20px var(--accent-gold-glow);
-      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    .atelier-concierge-fab:hover {
-      transform: scale(1.08) translateY(-2px);
-      box-shadow: 0 14px 38px rgba(0, 0, 0, 0.7), 0 0 28px var(--accent-gold-glow);
-      border-color: var(--accent-gold-light);
-    }
-    .atelier-concierge-fab:active {
-      transform: scale(0.95);
-    }
-    .atelier-concierge-fab .fab-icon-default {
-      font-size: 1.5rem;
-      line-height: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: transform 0.3s ease, opacity 0.3s ease;
-    }
-    .fab-magic-sparkle {
-      animation: magicSparkleTwinkle 2s infinite ease-in-out;
-      display: inline-block;
-    }
-    .atelier-concierge-fab .fab-icon-active {
-      font-size: 1.3rem;
-      line-height: 1;
-      display: none;
-      color: #FFFFFF;
-      transition: transform 0.3s ease, opacity 0.3s ease;
-    }
-    .atelier-concierge-fab.active {
-      background: #FFFFFF;
-      color: var(--accent-gold);
-      border-color: var(--accent-gold);
-      box-shadow: 0 12px 36px rgba(61, 43, 31, 0.12), 0 0 30px var(--accent-gold-glow);
-    }
-    .atelier-concierge-fab.active .fab-icon-default {
-      display: none;
-    }
-    .atelier-concierge-fab.active .fab-icon-active {
-      display: block;
-      color: var(--accent-gold);
-      font-weight: 700;
-    }
-    .fab-pulse-ring {
-      position: absolute;
-      inset: -6px;
-      border-radius: 50%;
-      border: 1.5px solid var(--accent-gold);
-      opacity: 0.6;
-      animation: fabPulseRing 2.6s infinite cubic-bezier(0.25, 1, 0.5, 1);
-      pointer-events: none;
-    }
-    .fab-pulse-ring-outer {
-      position: absolute;
-      inset: -12px;
-      border-radius: 50%;
-      border: 1px dashed rgba(223, 177, 91, 0.4);
-      opacity: 0.3;
-      animation: fabPulseRing 2.6s infinite 0.6s cubic-bezier(0.25, 1, 0.5, 1);
-      pointer-events: none;
-    }
-    @keyframes fabPulseRing {
-      0% {
-        transform: scale(0.92);
-        opacity: 0.7;
-      }
-      50% {
-        transform: scale(1.3);
-        opacity: 0;
-      }
-      100% {
-        transform: scale(1.3);
-        opacity: 0;
-      }
-    }
-    .fab-badge-text {
-      position: absolute;
-      right: calc(100% + 12px);
-      top: 50%;
-      transform: translateY(-50%);
-      background: var(--bg-surface);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid var(--border-gold);
+      height: 48px;
+      padding: 0 1.25rem;
+      border-radius: 28px;
+      background: linear-gradient(145deg, #FFFFFF 0%, #FAF8F5 100%);
+      border: 1.5px solid var(--border-gold);
       color: var(--text-main);
-      font-family: var(--font-mono);
-      font-size: 0.72rem;
-      font-weight: 600;
-      letter-spacing: 0.12em;
-      padding: 0.4rem 0.8rem;
-      border-radius: 20px;
-      white-space: nowrap;
-      pointer-events: none;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6), 0 0 12px var(--accent-gold-glow);
-      transition: opacity 0.25s ease, transform 0.25s ease;
       display: inline-flex;
       align-items: center;
-      gap: 0.4rem;
+      justify-content: center;
+      gap: 0.55rem;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(61, 43, 31, 0.12), 0 0 16px rgba(184, 134, 11, 0.18);
+      transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      box-sizing: border-box;
+      white-space: nowrap;
+      user-select: none;
     }
-    .atelier-concierge-fab.active .fab-badge-text {
-      opacity: 0;
-      transform: translateY(-50%) translateX(10px);
+    .atelier-concierge-fab:hover {
+      background: linear-gradient(145deg, #FFF8E7 0%, #F5E8C7 100%);
+      border-color: var(--accent-gold);
+      box-shadow: 0 12px 32px rgba(184, 134, 11, 0.35);
+      transform: translateY(-2px);
+    }
+    .atelier-concierge-fab:active {
+      transform: scale(0.96);
+    }
+    .atelier-concierge-fab.active {
+      background: linear-gradient(135deg, #FFE8B6 0%, #E5B85C 50%, #C99635 100%);
+      border-color: var(--accent-gold);
+      color: #1A1205;
+      box-shadow: 0 12px 32px rgba(184, 134, 11, 0.45);
+    }
+    .atelier-concierge-fab .fab-chevron {
+      font-size: 0.7rem;
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      color: var(--accent-gold);
+      line-height: 1;
+    }
+    .atelier-concierge-fab.active .fab-chevron {
+      transform: rotate(180deg);
+      color: #1A1205;
+    }
+    
+    /* MOBILE CONCIERGE TOGGLE: Screens <= 900px render ONLY the single magic emoji ✨ */
+    @media (max-width: 900px) {
+      .atelier-concierge-fab-container {
+        bottom: calc(18px + env(safe-area-inset-bottom, 0px)) !important;
+        right: 16px !important;
+      }
+      .atelier-concierge-fab {
+        width: 48px !important;
+        height: 48px !important;
+        min-width: 48px !important;
+        max-width: 48px !important;
+        padding: 0 !important;
+        border-radius: 50% !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 0 !important;
+        box-shadow: 0 8px 24px rgba(61, 43, 31, 0.2), 0 0 16px rgba(184, 134, 11, 0.28) !important;
+        overflow: hidden !important;
+      }
+      .atelier-concierge-fab .fab-label-text,
+      .atelier-concierge-fab .fab-chevron,
+      .atelier-concierge-fab span:not(.brand-spinner-icon) {
+        display: none !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        font-size: 0 !important;
+        line-height: 0 !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+      .atelier-concierge-fab .brand-spinner-icon {
+        font-size: 1.45rem !important;
+        line-height: 1 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+      }
     }
     
     /* SPEED DIAL BACKDROP OVERLAY */
     .concierge-fab-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(4, 5, 8, 0.6);
+      background: rgba(4, 5, 8, 0.4);
       backdrop-filter: blur(4px);
       -webkit-backdrop-filter: blur(4px);
       z-index: 1075;
@@ -4351,87 +4381,65 @@
       pointer-events: auto;
     }
 
-    /* ULTRA-CLEAN, COMPACT & SHARP CONCIERGE SPEED DIAL POPUP MENU */
-    /* LUXURY RADIAL SPEED DIAL SYSTEM (LARGE CIRCULAR BUTTONS WITH INSIDE TEXT) */
-    .speed-dial-option {
+    /* ULTRA-CLEAN FLOATING MENU POPUP DIRECTLY ABOVE FAB BUTTON */
+    .concierge-desktop-menu {
       position: absolute;
-      bottom: 0;
+      bottom: calc(100% + 12px);
       right: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      pointer-events: none;
-      opacity: 0;
-      visibility: hidden;
-      transform: translate(0, 0) scale(0.4);
-      transition: transform 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease, visibility 0.3s;
-      z-index: 1079;
-    }
-    
-    /* When active, show option containers and enable pointer events */
-    .atelier-concierge-fab-container.active .speed-dial-option {
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
-    }
-
-    /* Circle 2: Booking Only moves directly UP & LEFT in a beautiful arc */
-    .atelier-concierge-fab-container.active .speed-dial-book {
-      transform: translate(-38px, -112px) scale(1);
-    }
-
-    /* Circle 1: AI Chatbot moves directly LEFT */
-    .atelier-concierge-fab-container.active .speed-dial-chat {
-      transform: translate(-112px, 0px) scale(1);
-    }
-
-    .speed-dial-circle {
-      width: 96px;
-      height: 96px;
-      border-radius: 50%;
-      background: linear-gradient(145deg, #FFFFFF 0%, #FAF8F5 100%);
-      border: 2px solid var(--accent-gold);
+      background: rgba(255, 255, 255, 0.98);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1.5px solid var(--border-gold);
+      border-radius: var(--radius-md);
+      padding: 0.6rem;
+      box-shadow: 0 14px 40px rgba(61, 43, 31, 0.18), 0 0 20px rgba(184, 134, 11, 0.2);
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 0.35rem;
-      box-shadow: 0 10px 32px rgba(61, 43, 31, 0.12), inset 0 2px 4px rgba(223, 177, 91, 0.2);
-      transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
-      position: relative;
-      cursor: pointer;
-      text-align: center;
-      padding: 0.35rem;
-      box-sizing: border-box;
-      color: #2A2118;
-    }
-    
-    /* Elegant outer ring on hover */
-    .speed-dial-circle::before {
-      content: '';
-      position: absolute;
-      top: -5px;
-      left: -5px;
-      right: -5px;
-      bottom: -5px;
-      border-radius: 50%;
-      border: 1px solid rgba(184, 134, 11, 0.4);
+      gap: 0.45rem;
+      min-width: 220px;
       opacity: 0;
-      transform: scale(0.85);
-      transition: all 0.3s ease;
+      visibility: hidden;
+      transform: translateY(10px) scale(0.95);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+      z-index: 1085;
+      box-sizing: border-box;
     }
-
-    .speed-dial-option:hover .speed-dial-circle {
-      transform: scale(1.08) translateY(-3px);
-      box-shadow: 0 14px 38px rgba(184, 134, 11, 0.4);
-      border-color: var(--accent-gold);
-      background: linear-gradient(135deg, #DFB15B 0%, #B8860B 100%);
-      color: #FFFFFF;
-    }
-
-    .speed-dial-option:hover .speed-dial-circle::before {
+    .atelier-concierge-fab-container.active .concierge-desktop-menu {
       opacity: 1;
-      transform: scale(1);
+      visibility: visible;
+      transform: translateY(0) scale(1);
+      pointer-events: auto;
+    }
+    .concierge-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      background: linear-gradient(145deg, #FFFFFF 0%, #FAF8F5 100%);
+      border: 1px solid var(--border-gold);
+      border-radius: var(--radius-sm);
+      color: var(--text-main);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      text-decoration: none;
+      white-space: nowrap;
+      user-select: none;
+    }
+    .concierge-menu-item:hover {
+      background: linear-gradient(135deg, #FFF8E7 0%, #F5E8C7 100%);
+      border-color: var(--accent-gold);
+      color: var(--accent-gold-dark);
+      transform: translateX(-3px);
+      box-shadow: 0 4px 14px rgba(184, 134, 11, 0.25);
+    }
+    .concierge-menu-item:active {
+      transform: scale(0.97);
+    }
     }
 
     .speed-dial-icon {
@@ -5608,20 +5616,41 @@
       transform: scale(0.97);
     }
 
-    @media (max-width: 640px) {
+    @media (max-width: 768px) {
       .atelier-concierge-fab-container {
-        bottom: 18px;
+        bottom: calc(18px + env(safe-area-inset-bottom, 0px));
         right: 16px;
       }
       .atelier-concierge-fab {
-        width: 52px;
-        height: 52px;
-        font-size: 1.35rem;
-        box-shadow: 0 10px 30px rgba(28, 27, 24, 0.25), 0 0 20px rgba(197, 168, 128, 0.3);
+        width: 50px !important;
+        height: 50px !important;
+        min-width: 50px !important;
+        max-width: 50px !important;
+        padding: 0 !important;
+        border-radius: 50% !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 0 !important;
+        box-shadow: 0 8px 24px rgba(61, 43, 31, 0.2), 0 0 16px rgba(184, 134, 11, 0.28) !important;
       }
-      .fab-badge-text {
-        display: none;
+      .atelier-concierge-fab > span:not(.brand-spinner-icon),
+      .atelier-concierge-fab .fab-label-text,
+      .atelier-concierge-fab .fab-chevron {
+        display: none !important;
       }
+      .atelier-concierge-fab .brand-spinner-icon {
+        font-size: 1.45rem !important;
+        line-height: 1 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+      }
+    }
+
+    @media (max-width: 640px) {
 
       .concierge-mini-item {
         padding: 0.65rem 0.75rem;
@@ -6964,35 +6993,23 @@
     }
 
     /* HIGH-CRAFT LUXURY PAGE TRANSITION VEIL & ENTER VISUAL */
-    .page-transition-veil {
+    .page-transition-veil { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important;
       position: fixed;
       top: 0;
       left: 0;
       width: 100vw;
       height: 100vh;
       z-index: 10000;
-      pointer-events: none;
-      background: radial-gradient(circle at 50% 50%, #FFFFFF 0%, #FAF8F5 100%);
-      border: 1px solid var(--border-gold);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      opacity: 0;
-      visibility: hidden;
-      transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.22s ease;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 0.75rem;
-      padding: 1.5rem;
-      box-sizing: border-box;
-      box-shadow: inset 0 0 100px rgba(184, 134, 11, 0.06);
-      text-align: center;
+      pointer-events: none !important;
+      display: none !important;
+      opacity: 0 !important;
+      visibility: hidden !important;
     }
     .page-transition-veil.active {
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
+      display: none !important;
+      opacity: 0 !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
     }
     .veil-brand-mark {
       font-family: var(--font-display);
@@ -7462,20 +7479,67 @@
     }
   </style>
 
-  <!-- Service Worker Registration for Instant Caching & Offline Capabilities -->
+  <!-- Service Worker Registration bypassed for universal zero-config hosting -->
   <script>
-    if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-          .then(registration => {
-            console.log('⚡ Atelier Caching System active with scope:', registration.scope);
-          })
-          .catch(error => {
-            console.error('Atelier Caching System registration failed:', error);
-          });
-      });
-    }
+    // Offline worker disabled
   </script>
+<style id="lunao-fab-mobile-lock">
+@media (max-width: 900px) {
+  .atelier-concierge-fab-container { bottom: calc(18px + env(safe-area-inset-bottom, 0px)) !important; right: 16px !important; }
+  .atelier-concierge-fab { width: 48px !important; height: 48px !important; min-width: 48px !important; max-width: 48px !important; padding: 0 !important; border-radius: 50% !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; gap: 0 !important; box-shadow: 0 8px 24px rgba(61, 43, 31, 0.2), 0 0 16px rgba(184, 134, 11, 0.28) !important; overflow: hidden !important; }
+  .atelier-concierge-fab .fab-label-text, .atelier-concierge-fab .fab-chevron, .atelier-concierge-fab span:not(.brand-spinner-icon) { display: none !important; visibility: hidden !important; width: 0 !important; height: 0 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; font-size: 0 !important; line-height: 0 !important; opacity: 0 !important; pointer-events: none !important; }
+  .atelier-concierge-fab .brand-spinner-icon { font-size: 1.45rem !important; line-height: 1 !important; margin: 0 !important; padding: 0 !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; }
+}
+</style>
+
+<style id="lunao-concierge-mobile-rule">
+@media (max-width: 900px) {
+  .atelier-concierge-fab-container {
+    bottom: calc(18px + env(safe-area-inset-bottom, 0px)) !important;
+    right: 16px !important;
+    z-index: 9999 !important;
+  }
+  .atelier-concierge-fab {
+    width: 48px !important;
+    height: 48px !important;
+    min-width: 48px !important;
+    max-width: 48px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0 !important;
+    box-shadow: 0 8px 24px rgba(61, 43, 31, 0.2), 0 0 16px rgba(184, 134, 11, 0.28) !important;
+    overflow: hidden !important;
+  }
+  .atelier-concierge-fab .fab-label-text,
+  .atelier-concierge-fab .fab-chevron,
+  .atelier-concierge-fab span:not(.brand-spinner-icon) {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    font-size: 0 !important;
+    line-height: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+  .atelier-concierge-fab .brand-spinner-icon {
+    font-size: 1.45rem !important;
+    line-height: 1 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+}
+</style>
+
 </head>
 <body style="background-color: #FAF8F5 !important; color: #2A2118 !important;">
 
@@ -7484,7 +7548,7 @@
     <div class="top-bar-info">
       <span class="top-bar-item">SERVICE REGION: <strong style="color: var(--text-main); font-weight: 600;">Austin, TX &amp; METRO AREA</strong></span>
       <span class="top-bar-sep">|</span>
-      <span class="top-bar-item">INQUIRIES: <a href="tel:5125550199" class="top-bar-phone">(512) 555-0199</a></span>
+      <span class="top-bar-item">INQUIRIES: <a href="tel:(512) 555-0988" class="top-bar-phone">(512) 555-0988</a></span>
     </div>
     <div class="top-bar-hours">
       STUDIO HOURS: MON–FRI 8:00 AM – 6:00 PM · SAT 9:00 AM – 4:00 PM · EMERGENCY SITE RESPONSE AVAILABLE
@@ -7501,7 +7565,7 @@
           <span></span>
         </button>
         <a href="#home" class="brand-logo" onclick="app.playClick()">
-          <span class="brand-logo-name">Aeris & Therma Climate Atelier<span class="gold-mark">.</span></span>
+          <span class="brand-logo-name">Everest Climate Systems<span class="gold-mark">.</span></span>
           <span class="brand-logo-tagline">Austin, TX</span>
         </a>
       </div>
@@ -7521,7 +7585,7 @@
       </nav>
 
       <div class="nav-actions">
-        <a href="tel:5125550199" class="mobile-nav-call-btn" title="Call Atelier Direct">
+        <a href="tel:(512) 555-0988" class="mobile-nav-call-btn" title="Call Atelier Direct">
           <span>📞</span>
           <span>CALL</span>
         </a>
@@ -7530,7 +7594,7 @@
           <span class="nav-cart-text">CART</span>
           <span class="nav-cart-count" id="cartCountBadge">(0)</span>
         </button>
-        <a href="tel:5125550199" class="btn btn-gold btn-sm nav-book-btn" title="Call Atelier Direct">
+        <a href="tel:(512) 555-0988" class="btn btn-gold btn-sm nav-book-btn" title="Call Atelier Direct">
           <span>📞</span> <span>CALL DIRECT</span>
         </a>
       </div>
@@ -7541,7 +7605,7 @@
   <div class="mobile-drawer" id="mobileDrawer">
     <div class="mobile-drawer-header">
       <a href="#home" class="brand-logo" onclick="app.closeMobileMenu()">
-        <span class="brand-logo-name">Aeris & Therma Climate Atelier<span class="gold-mark">.</span></span>
+        <span class="brand-logo-name">Everest Climate Systems<span class="gold-mark">.</span></span>
         <span class="brand-logo-tagline">Austin, TX</span>
       </a>
       <button class="mobile-drawer-close-btn" onclick="app.closeMobileMenu()" aria-label="Close Menu">✕</button>
@@ -7715,15 +7779,15 @@
         </button>
       </div>
       <div class="mobile-drawer-social-row">
-        <a href="https://instagram.com/aeris_therma" target="_blank" class="mobile-social-chip" title="Instagram" aria-label="Instagram">
+        <a href="https://instagram.com/everest_cooling" target="_blank" class="mobile-social-chip" title="Instagram" aria-label="Instagram">
           <svg class="social-svg-icon" viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
           <span>Instagram</span>
         </a>
-        <a href="https://facebook.com/aeristherma" target="_blank" class="mobile-social-chip" title="Facebook" aria-label="Facebook">
+        <a href="https://facebook.com/everestcooling" target="_blank" class="mobile-social-chip" title="Facebook" aria-label="Facebook">
           <svg class="social-svg-icon" viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
           <span>Facebook</span>
         </a>
-        <a href="https://tiktok.com/@aeris_therma_climate_atelier" target="_blank" class="mobile-social-chip" title="TikTok" aria-label="TikTok">
+        <a href="" target="_blank" class="mobile-social-chip" title="TikTok" aria-label="TikTok">
           <svg class="social-svg-icon" viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.89 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.35 0 .68.06 1 .17V9.46a6.38 6.38 0 0 0-1-.08 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.58a8.28 8.28 0 0 0 4.76 1.49V6.69h-.05z"/></svg>
           <span>TikTok</span>
         </a>
@@ -8077,7 +8141,7 @@
           WE LOOK FORWARD TO COLLABORATING
         </h3>
         <p style="max-width: 540px; margin: 0 auto 1.2rem; font-size: 0.92rem; color: var(--text-muted); line-height: 1.6;">
-          Your engineering consultation has been registered with <strong style="color: var(--text-main);">Aeris & Therma Climate Atelier</strong>. Our principal mechanical engineer will review your parameters and prepare preliminary load calculation notes prior to our session.
+          Your engineering consultation has been registered with <strong style="color: var(--text-main);">Everest Climate Systems</strong>. Our principal mechanical engineer will review your parameters and prepare preliminary load calculation notes prior to our session.
         </p>
 
         <!-- Luxurious Summary Details Grid -->
@@ -8116,7 +8180,7 @@
 
           <div style="margin-top: 1.2rem; padding-top: 0.9rem; border-top: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 0.6rem; font-size: 0.82rem; color: var(--text-dim);">
             <span>📍</span>
-            <span><strong>ENGINEERING HEADQUARTERS:</strong> 740 Congress Ave, Mechanical Suite 4A, Austin, TX, Austin, TX · Serving the Greater Austin, TX Metro</span>
+            <span><strong>ENGINEERING HEADQUARTERS:</strong> 3801 Capital of Texas Hwy, Austin, TX 78704, Austin, TX · Serving the Greater Austin, TX Metro</span>
           </div>
         </div>
 
@@ -8140,26 +8204,26 @@
     <div class="footer-grid">
       <div class="footer-col">
         <a href="#home" class="brand-logo" style="margin-bottom: 1rem;">
-          <span class="brand-logo-name">Aeris & Therma Climate Atelier<span class="gold-mark">.</span></span>
+          <span class="brand-logo-name">Everest Climate Systems<span class="gold-mark">.</span></span>
           <span class="brand-logo-tagline">Austin, TX</span>
         </a>
         <p style="margin-bottom: 1.5rem; font-size: 0.92rem; max-width: 380px;">
           Bespoke architectural climate engineering, ultra-quiet variable-speed inverter heat pumps, concealed linear slot diffusers, hospital-grade indoor air purity, and historic landmark high-velocity ducting delivered with guaranteed upfront pricing in Austin, TX.
         </p>
         <div class="social-pills-wrap">
-          <a href="https://instagram.com/aeris_therma" target="_blank" class="social-pill-btn" aria-label="Instagram">
+          <a href="https://instagram.com/everest_cooling" target="_blank" class="social-pill-btn" aria-label="Instagram">
             <svg class="social-svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
             <span>Instagram</span>
           </a>
-          <a href="https://facebook.com/aeristherma" target="_blank" class="social-pill-btn" aria-label="Facebook">
+          <a href="https://facebook.com/everestcooling" target="_blank" class="social-pill-btn" aria-label="Facebook">
             <svg class="social-svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
             <span>Facebook</span>
           </a>
-          <a href="https://tiktok.com/@aeris_therma_climate_atelier" target="_blank" class="social-pill-btn" aria-label="TikTok">
+          <a href="" target="_blank" class="social-pill-btn" aria-label="TikTok">
             <svg class="social-svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.89 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.35 0 .68.06 1 .17V9.46a6.38 6.38 0 0 0-1-.08 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.58a8.28 8.28 0 0 0 4.76 1.49V6.69h-.05z"/></svg>
             <span>TikTok</span>
           </a>
-          <a href="https://youtube.com/@aeristherma" target="_blank" class="social-pill-btn" aria-label="YouTube">
+          <a href="" target="_blank" class="social-pill-btn" aria-label="YouTube">
             <svg class="social-svg-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
             <span>YouTube</span>
           </a>
@@ -8195,7 +8259,7 @@
       <div class="footer-col">
         <h5>STUDIO &amp; HOURS</h5>
         <p style="margin-bottom: 0.8rem; font-family: var(--font-mono); font-size: 0.82rem; color: var(--text-main);">
-          740 Congress Ave, Mechanical Suite 4A, Austin, TX<br/>Austin, TX
+          3801 Capital of Texas Hwy, Austin, TX 78704<br/>Austin, TX
         </p>
         <p style="margin-bottom: 0.8rem; font-family: var(--font-mono); font-size: 0.82rem;">
           Mon–Fri: 8:00 AM – 6:00 PM<br/>
@@ -8203,15 +8267,15 @@
           Sun: Closed (Site Emergencies Only)
         </p>
         <p style="font-family: var(--font-mono); font-size: 0.82rem;">
-          <a href="tel:5125550199" style="color: var(--accent-gold);">(512) 555-0199</a><br/>
-          <a href="mailto:concierge@aeristherma.com">concierge@aeristherma.com</a>
+          <a href="tel:(512) 555-0988" style="color: var(--accent-gold);">(512) 555-0988</a><br/>
+          <a href="mailto:service@everestclimate.com">service@everestclimate.com</a>
         </p>
       </div>
     </div>
 
     <div class="footer-bottom">
       <div>
-        &copy; <span id="currentYear"></span> Aeris & Therma Climate Atelier. All Rights Reserved. Crafted for Elite Residential Climate Architecture.
+        &copy; <span id="currentYear"></span> Everest Climate Systems. All Rights Reserved. Crafted for Elite Residential Climate Architecture.
       </div>
       <div style="display: flex; gap: 1.5rem;">
         <a href="#privacy">Privacy Policy</a>
@@ -8223,42 +8287,35 @@
   </footer>
 
   <!-- PAGE TRANSITION VEIL OVERLAY (BRAND-CONSISTENT OBSIDIAN & GOLD) -->
-  <div id="atelierPageTransitionVeil" class="page-transition-veil active">
+  <div id="atelierPageTransitionVeil" class="page-transition-veil">
     <div class="veil-shine-line"></div>
-    <div class="veil-brand-mark">Aeris & Therma Climate Atelier<span>.</span></div>
+    <div class="veil-brand-mark">Everest Climate Systems<span>.</span></div>
     <div class="veil-loader-wrap">
       <div class="veil-gold-spinner"></div>
       <span class="veil-loading-label">LOADING...</span>
     </div>
   </div>
 
-  <!-- ATELIER CONCIERGE SPEED DIAL TOGGLE (BOTTOM RIGHT - LUXURY & MOBILE CONSISTENT) -->
+  <!-- ATELIER CONCIERGE SPEED DIAL TOGGLE (BOTTOM RIGHT - ULTRA LUXURY & DESKTOP CONSISTENT) -->
   <div class="concierge-fab-backdrop" id="conciergeFabBackdrop" onclick="app.toggleConciergeFab(false)"></div>
   <div class="atelier-concierge-fab-container" id="conciergeFabContainer">
-    <!-- Circle 1: AI Advisor (Pops to the left) -->
-    <div class="speed-dial-option speed-dial-chat" onclick="app.openAiChat(); app.toggleConciergeFab(false);">
-      <div class="speed-dial-circle brand-spinner-circle">
-        <span class="speed-dial-icon brand-spinner-icon">✨</span>
-        <span class="speed-dial-text">AI ADVISOR</span>
+    <!-- Desktop & Mobile Concierge Speed Dial Menu -->
+    <div class="concierge-desktop-menu" id="conciergeDesktopMenu">
+      <div class="concierge-menu-item" onclick="app.openAiChat(); app.toggleConciergeFab(false);">
+        <span class="brand-spinner-icon" style="color: var(--accent-gold);">✨</span>
+        <span>AI ADVISOR CHAT</span>
       </div>
-    </div>
-
-    <!-- Circle 2: Book (Pops upwards) -->
-    <div class="speed-dial-option speed-dial-book" onclick="app.openBookingModal(); app.toggleConciergeFab(false);">
-      <div class="speed-dial-circle brand-spinner-circle">
-        <span class="speed-dial-icon brand-spinner-icon">✦</span>
-        <span class="speed-dial-text">BOOK</span>
+      <div class="concierge-menu-item" onclick="app.openBookingModal(); app.toggleConciergeFab(false);">
+        <span class="brand-spinner-icon" style="color: var(--accent-gold);">✦</span>
+        <span>BOOK ESTIMATE</span>
       </div>
     </div>
 
     <!-- Main Floating Action Toggle Button -->
-    <button type="button" class="atelier-concierge-fab brand-spinner-fab" id="conciergeFabBtn" onclick="app.toggleConciergeFab()" aria-label="Toggle Atelier Concierge Options">
-      <div class="fab-spinner-ring"></div>
-      <div class="fab-pulse-ring"></div>
-      <div class="fab-pulse-ring-outer"></div>
-      <span class="fab-badge-text"><span class="brand-spinner-icon">✨</span> CONCIERGE</span>
-      <span class="fab-icon-default"><span class="brand-spinner-icon">✨</span></span>
-      <span class="fab-icon-active">✕</span>
+    <button type="button" class="atelier-concierge-fab" id="conciergeFabBtn" onclick="app.toggleConciergeFab()" aria-label="Toggle Concierge Options">
+      <span class="brand-spinner-icon">✨</span>
+      <span class="fab-label-text">CONCIERGE</span>
+      <span class="fab-chevron">▲</span>
     </button>
   </div>
 
@@ -8276,7 +8333,7 @@
             <h3 class="ai-chat-title">AI Climate Concierge</h3>
             <span class="ai-chat-badge">✨ LIVE LOAD &amp; REBATE ADVISOR</span>
           </div>
-          <p class="ai-chat-sub">Precision HVAC Engineering &amp; Sizing Advisory · Aeris & Therma Climate Atelier</p>
+          <p class="ai-chat-sub">Precision HVAC Engineering &amp; Sizing Advisory · Everest Climate Systems</p>
         </div>
         <div class="ai-chat-header-actions">
           <button type="button" class="ai-chat-quick-book-header-btn" onclick="app.closeAiChat(); app.openBookingModal();">📐 ESTIMATE</button>
@@ -8308,7 +8365,7 @@
             <span class="brand-spinner-icon" style="color: #8C6212; display: inline-block;">✨</span>
           </div>
           <div class="ai-msg-bubble">
-            Welcome to <strong>Aeris & Therma Climate Atelier</strong>. I am <strong>Aurum</strong>, your precision HVAC &amp; climate concierge.
+            Welcome to <strong>Everest Climate Systems</strong>. I am <strong>Aurum</strong>, your precision HVAC &amp; climate concierge.
             <div style="margin-top: 0.4rem; color: var(--text-muted); font-size: 0.8rem; line-height: 1.45;">
               I can calculate estimated heat pump tonnage, explain cold-climate vapor injection down to -15°F, review federal 25C clean heat tax credits ($2,000+), or schedule an engineering site survey.
             </div>
@@ -8344,21 +8401,21 @@
     let rawTemplateConfig = {};
     try {
       rawTemplateConfig = {
-        name: "Aeris & Therma Climate Atelier",
+        name: "Everest Climate Systems",
         city: "Austin, TX",
-        phone: "(512) 555-0199",
-        address: "740 Congress Ave, Mechanical Suite 4A, Austin, TX",
-        email: "concierge@aeristherma.com",
+        phone: "(512) 555-0988",
+        address: "3801 Capital of Texas Hwy, Austin, TX 78704",
+        email: "service@everestclimate.com",
         bookingUrl: "#booking",
-        instagram: "https://instagram.com/aeris_therma",
-        facebook: "https://facebook.com/aeristherma",
-        tiktok: "https://tiktok.com/@aeris_therma_climate_atelier",
-        youtube: "https://youtube.com/@aeristherma",
-        googleMaps: "https://maps.google.com/?q=Aeris%20%26%20Therma%20Climate%20Atelier%20Austin%2C%20TX",
-        logo: "Aeris & Therma Climate Atelier",
-        heroImage: "https://images.unsplash.com/photo-1581094288338-2314dddb7ece?auto=format&fit=crop&w=1920&q=85",
-        beforeImg: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=800&q=80",
-        afterImg: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=80"
+        instagram: "https://instagram.com/everest_cooling",
+        facebook: "https://facebook.com/everestcooling",
+        tiktok: "",
+        youtube: "",
+        googleMaps: "",
+        logo: "",
+        heroImage: "",
+        beforeImg: "",
+        afterImg: ""
       };
     } catch (e) {
       console.warn("Bot placeholder parse notice:", e);
@@ -10548,6 +10605,13 @@
             this.selectedService = preselectedService;
           }
         }
+        const cBackdrop = document.getElementById('conciergeFabBackdrop');
+        if (cBackdrop) cBackdrop.classList.remove('active');
+        const cContainer = document.getElementById('conciergeFabContainer');
+        if (cContainer) cContainer.classList.remove('active');
+        const cFab = document.getElementById('conciergeFabBtn');
+        if (cFab) cFab.classList.remove('active');
+
         const backdrop = document.getElementById('bookingModalBackdrop');
         if (backdrop) {
           backdrop.classList.add('active');
@@ -10589,6 +10653,13 @@
 
       closeBookingModal() {
         sound.playClick();
+        const cBackdrop = document.getElementById('conciergeFabBackdrop');
+        if (cBackdrop) cBackdrop.classList.remove('active');
+        const cContainer = document.getElementById('conciergeFabContainer');
+        if (cContainer) cContainer.classList.remove('active');
+        const cFab = document.getElementById('conciergeFabBtn');
+        if (cFab) cFab.classList.remove('active');
+
         const backdrop = document.getElementById('bookingModalBackdrop');
         if (backdrop) {
           backdrop.classList.remove('active');
@@ -10921,10 +10992,14 @@
       },
 
       getBookingEndpoints() {
-        const canonical = (window.LUNAO_BOOKING_API_URL && typeof window.LUNAO_BOOKING_API_URL === 'string')
-          ? window.LUNAO_BOOKING_API_URL.replace(/\/+$/, '')
-          : ((window.location && window.location.origin) ? (window.location.origin.replace(/\/+$/, '') + '/api/bookings') : '/api/bookings');
-        return [canonical];
+        const list = [];
+        if (window.LUNAO_BOOKING_API_URL && typeof window.LUNAO_BOOKING_API_URL === 'string') {
+          list.push(window.LUNAO_BOOKING_API_URL.replace(/\/+$/, ''));
+        }
+        var origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
+        list.push(origin + '/api/bookings');
+        list.push('/api/bookings');
+        return [...new Set(list)];
       },
 
       getLeadEndpoints() {
@@ -11445,15 +11520,18 @@
       toggleConciergeFab(forceState) {
         const container = document.getElementById('conciergeFabContainer');
         const fab = document.getElementById('conciergeFabBtn');
+        const backdrop = document.getElementById('conciergeFabBackdrop');
         if (!container || !fab) return;
         const willOpen = typeof forceState === 'boolean' ? forceState : !container.classList.contains('active');
         if (willOpen) {
           container.classList.add('active');
           fab.classList.add('active');
+          if (backdrop) backdrop.classList.add('active');
           sound.playConciergeToggle(true);
         } else {
           container.classList.remove('active');
           fab.classList.remove('active');
+          if (backdrop) backdrop.classList.remove('active');
           sound.playConciergeToggle(false);
         }
       },
@@ -12458,7 +12536,7 @@
     ];
 
     const BARBERS_DATA = [
-      { id: 'marcus-vance', name: 'Marcus Vance, PE, CEM', role: 'Principal Mechanical Engineer & Founder', specialty: 'Whole-Home Heat Pump Design, Geothermal Loops, Manual J/D/S Sizing', exp: '22 Years Mechanical Practice', bio: 'Licensed Professional Engineer (PE) and Certified Energy Manager. Marcus founded Aeris & Therma Climate Atelier to bring aerospace precision, acoustic silence, and carbon-neutral efficiency to high-performance residences in Austin, TX.', img: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=800&q=80' },
+      { id: 'marcus-vance', name: 'Marcus Vance, PE, CEM', role: 'Principal Mechanical Engineer & Founder', specialty: 'Whole-Home Heat Pump Design, Geothermal Loops, Manual J/D/S Sizing', exp: '22 Years Mechanical Practice', bio: 'Licensed Professional Engineer (PE) and Certified Energy Manager. Marcus founded Everest Climate Systems to bring aerospace precision, acoustic silence, and carbon-neutral efficiency to high-performance residences in Austin, TX.', img: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=800&q=80' },
       { id: 'alexander-cross', name: 'Alexander Cross, CMVP', role: 'Director of VRF & Hydronic Systems', specialty: 'Variable Refrigerant Flow, In-Floor Radiant, Concealed Fan Coils', exp: '16 Years Thermal Engineering', bio: 'Factory-certified master commissioner for Daikin, Mitsubishi Diamond Commercial, and Viessmann. Alexander coordinates complex refrigerant piping layouts and architectural slot diffuser integration.', img: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=800&q=80' },
       { id: 'david-chen', name: 'David Chen, BPI-Gold', role: 'Senior Commissioning Superintendent', specialty: 'Sub-Zero/Wolf MUA Integration, Airflow Balancing, Acoustic Isolation', exp: '15 Years Luxury Mechanical', bio: 'With over 400 premier residential systems commissioned, David oversees field trade execution, micron vacuum decay decay testing, and static pressure balancing across all active installations.', img: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=800&q=80' },
       { id: 'christian-thorne', name: 'Christian Thorne, NATE Master', role: 'Historic Preservation HVAC Lead', specialty: 'Small-Duct High-Velocity Tubing, Landmark Brownstones, Heritage Plaster Protection', exp: '18 Years Historic Mechanical', bio: 'Christian is our authority on landmark preservation board reviews and non-invasive high-velocity climate installations in historic brownstones and pre-war residences across Austin, TX.', img: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=800&q=80' },
@@ -12535,7 +12613,7 @@
         date: 'Delivered January 2026',
         verified: true,
         avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80',
-        quote: 'Commissioned Aeris & Therma Climate Atelier to engineer a surgical-grade air purification and silent climate system for our waterfront duplex. The MERV 16 filtration and titanium UV-C scrubbers completely eliminated city particulate dust, and the trimless ceiling slot diffusers blend seamlessly with our minimalist architecture.'
+        quote: 'Commissioned Everest Climate Systems to engineer a surgical-grade air purification and silent climate system for our waterfront duplex. The MERV 16 filtration and titanium UV-C scrubbers completely eliminated city particulate dust, and the trimless ceiling slot diffusers blend seamlessly with our minimalist architecture.'
       },
       {
         id: 'rev-3',
@@ -12666,7 +12744,7 @@
           <div style="border-left: 2px solid var(--accent-gold); padding: 1rem 1.5rem; margin: 2rem 0; background: var(--bg-surface); font-style: italic; color: var(--text-main);">
             "The hallmark of superior mechanical engineering is an indoor climate so perfectly regulated and silent that occupants only notice the pristine thermal comfort."
           </div>
-          <p>Consult with our engineering team at Aeris & Therma Climate Atelier in Austin, TX to model acoustic climate comfort for your residence.</p>
+          <p>Consult with our engineering team at Everest Climate Systems in Austin, TX to model acoustic climate comfort for your residence.</p>
         `
       },
       {
@@ -13169,7 +13247,7 @@
               </div>
 
               <div class="hero-meta">
-                <span>✦ DIRECT: <a href="tel:5550000" style="color: inherit; text-decoration: none;">${business.phone}</a></span>
+                <span>✦ DIRECT: <a href="tel:${business.phone}" style="color: inherit; text-decoration: none;">${business.phone}</a></span>
                 <span>✦ ATELIER: ${business.address}</span>
                 <span>✦ SERVICE REGION: ${business.city}</span>
               </div>
@@ -13481,12 +13559,12 @@
                   </div>
                 </div>
 
-                <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; width: 100%;">
-                  <button type="button" class="btn btn-gold brand-spinner-btn" onclick="app.openAiChat()" style="flex: 1; min-width: 180px;">
+                <div class="concierge-desktop-toggle-wrap">
+                  <button type="button" class="btn btn-gold brand-spinner-btn" onclick="app.openAiChat()">
                     <span class="brand-spinner-icon">✨</span> <span>AI ADVISOR</span>
                   </button>
-                  <button type="button" class="btn btn-outline brand-spinner-btn" onclick="app.openBookingModal()" style="flex: 1; min-width: 180px;">
-                    <span class="brand-spinner-icon">✦</span> <span>BOOK</span>
+                  <button type="button" class="btn btn-outline brand-spinner-btn" onclick="app.openBookingModal()">
+                    <span class="brand-spinner-icon">✦</span> <span>BOOKING</span>
                   </button>
                 </div>
               </div>
@@ -13673,7 +13751,7 @@
                   <div style="border-top: 1px solid var(--border-subtle); padding-top: 1rem;">
                     <span class="eyebrow">DIRECT STUDIO LINE</span>
                     <div style="display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.35rem;">
-                      <a href="tel:5550000" style="font-family: var(--font-mono); font-size: 1rem; color: var(--accent-gold-light); font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem;">📞 ${business.phone}</a>
+                      <a href="tel:${business.phone}" style="font-family: var(--font-mono); font-size: 1rem; color: var(--accent-gold-light); font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem;">📞 ${business.phone}</a>
                       <a href="mailto:${business.email}" style="font-family: var(--font-mono); font-size: 0.84rem; color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.4rem;">✉ ${business.email}</a>
                     </div>
                   </div>
@@ -14578,7 +14656,7 @@
             <div style="text-align: center; margin-top: 3.5rem; padding: 2.5rem; background: var(--bg-surface); border-radius: var(--radius-md); border: 1px solid var(--border-gold);">
               <h3 style="font-size: 1.3rem; margin-bottom: 0.6rem;">STILL HAVE AN UNANSWERED QUESTION?</h3>
               <p style="margin-bottom: 1.5rem; font-size: 0.9rem; color: var(--text-muted);">Our engineering concierge desk is available to discuss your property's specific thermodynamic parameters.</p>
-              <a href="tel:5550000" class="btn btn-outline btn-sm" onclick="app.playClick()">CALL ${business.phone}</a>
+              <a href="tel:${business.phone}" class="btn btn-outline btn-sm" onclick="app.playClick()">CALL ${business.phone}</a>
             </div>
           </div>
         `);
@@ -14607,7 +14685,7 @@
                   <p style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-main); margin-bottom: 0.5rem;">${loc.address}<br/>${loc.city}</p>
                   <p style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.5rem; flex: 1;">${loc.hours}</p>
                   <div style="display: flex; gap: 0.8rem; flex-wrap: wrap;">
-                    <a href="tel:5550000" class="btn btn-ghost btn-sm">CALL STUDIO</a>
+                    <a href="tel:${loc.phone}" class="btn btn-ghost btn-sm">CALL STUDIO</a>
                     <button class="btn btn-gold btn-sm" onclick="app.openBookingModal()">CONSULT ENGINEER</button>
                   </div>
                 </div>
@@ -14792,7 +14870,7 @@
                   <div>
                     <h4 style="color: var(--accent-gold); font-size: 1.1rem; margin-bottom: 0.4rem;">TELEPHONE &amp; CONCIERGE</h4>
                     <p style="font-family: var(--font-mono); font-size: 0.9rem;">
-                      <a href="tel:5550000" style="color: var(--accent-gold-light); font-weight: bold;">${business.phone}</a><br/>
+                      <a href="tel:${business.phone}" style="color: var(--accent-gold-light); font-weight: bold;">${business.phone}</a><br/>
                       <a href="mailto:${business.email}">${business.email}</a>
                     </p>
                   </div>
@@ -14991,39 +15069,45 @@
     // AUTOMATIC DOM TEMPLATE HYDRATION ENGINE
     function hydrateDOMPlaceholders() {
       const replacements = [
-        ['Aeris & Therma Climate Atelier', business.name],
+        ['Everest Climate Systems', business.name],
         ['Austin, TX', business.city],
-        ['(512) 555-0199', business.phone],
-        ['740 Congress Ave, Mechanical Suite 4A, Austin, TX', business.address],
-        ['concierge@aeristherma.com', business.email],
+        ['(512) 555-0988', business.phone],
+        ['3801 Capital of Texas Hwy, Austin, TX 78704', business.address],
+        ['service@everestclimate.com', business.email],
         ['#booking', business.bookingUrl],
-        ['https://instagram.com/aeris_therma', business.instagram],
-        ['https://facebook.com/aeristherma', business.facebook],
-        ['https://tiktok.com/@aeris_therma_climate_atelier', business.tiktok],
-        ['https://youtube.com/@aeristherma', business.youtube],
-        ['https://maps.google.com/?q=Aeris%20%26%20Therma%20Climate%20Atelier%20Austin%2C%20TX', business.googleMaps]
+        ['https://instagram.com/everest_cooling', business.instagram],
+        ['https://facebook.com/everestcooling', business.facebook],
+        ['https://tiktok.com/@summitbarber', business.tiktok],
+        ['https://youtube.com/@summitbarber', business.youtube],
+        ['https://maps.google.com/?q=Summit+Barber+Austin', business.googleMaps]
       ];
 
       // Hydrate text nodes and attribute values across static DOM
       const walk = (node) => {
-        if (node.nodeType === 3) { // Text node
+        if (!node) return;
+        if (node.nodeType === 1 && (node.tagName === 'SCRIPT' || node.tagName === 'STYLE' || node.tagName === 'NOSCRIPT')) return;
+        if (node.nodeType === 3) {
           let text = node.nodeValue;
+          if (!text) return;
           let changed = false;
           replacements.forEach(([key, val]) => {
-            if (text.includes(key)) {
-              text = text.replaceAll(key, val);
+            if (key && typeof key === 'string' && key.trim().length > 1 && text.includes(key)) {
+              text = text.replaceAll(key, val || '');
               changed = true;
             }
           });
           if (changed) node.nodeValue = text;
-        } else if (node.nodeType === 1) { // Element node
+          return;
+        }
+        if (node.nodeType === 1) {
           ['href', 'src', 'alt', 'title', 'aria-label'].forEach(attr => {
             if (node.hasAttribute(attr)) {
               let val = node.getAttribute(attr);
+              if (!val) return;
               let changed = false;
               replacements.forEach(([k, v]) => {
-                if (val.includes(k)) {
-                  val = val.replaceAll(k, v);
+                if (k && typeof k === 'string' && k.trim().length > 1 && val.includes(k)) {
+                  val = val.replaceAll(k, v || '');
                   changed = true;
                 }
               });
@@ -15169,6 +15253,5 @@
       }
     });
   </script>
-<script src="/lunao-booking-bridge.js"></script>
 </body>
 </html>

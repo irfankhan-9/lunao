@@ -7,7 +7,7 @@
 //   Step 4: Phone & 10DLC Setup (SmsAccountStep in Luxury Container)
 //   Step 5: Review & Launch (Dual-Column, Variable Chips, Mobile SMS Simulator, Cost Calculator)
 
-import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import {
   MessageSquare, Send, Upload, Check, ChevronRight, ChevronLeft,
   AlertCircle, CheckCircle, CheckCircle2, Loader2, X, Plus, Eye,
@@ -25,7 +25,7 @@ import {
   validateCsvFile, CsvValidation, PipelineLead,
   runCampaign, isAutomatedSmsPlan, canUseOwnTelnyx,
   PhoneLookupItem, auditPhoneNumbers, getCachedPhoneAudit, isStrictSmsCapableItem,
-  executeUnifiedLeadRebrandClient, sanitizeToLunaoServers,
+  executeUnifiedLeadRebrandClient, sanitizeToLunaoServers, syncUserCredits,
 } from '../lib/pipelineClient';
 import { useSyncNiches, getLocalTemplates } from '../lib/nichesSync';
 import { Template } from '../types';
@@ -117,7 +117,7 @@ export const interpolateSmsVariables = (
 ): string => {
   const bName = data.businessName || 'there';
   const city = data.city || 'your area';
-  const url = data.siteUrl || (typeof window !== 'undefined' ? `${window.location.origin}/sites/preview/` : 'https://lunao.app/sites/preview/');
+  const url = data.siteUrl || 'https://preview.lunao.org';
   const niche = (data.niche || 'business').toLowerCase();
 
   return template
@@ -433,11 +433,11 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
   };
 
   // Phone number selection handler
-  const handleSelectPhone = (phone: string, accountId: string, profileId: string | null) => {
+  const handleSelectPhone = useCallback((phone: string, accountId: string, profileId: string | null) => {
     setSelectedPhoneNumber(phone);
     setSelectedAccountId(accountId);
     setSelectedProfileId(profileId);
-  };
+  }, []);
 
   // Exclude incompatible destination leads from campaign pipeline
   const handleExcludeIncompatibleLeads = (indexesToRemove: number[]) => {
@@ -702,11 +702,15 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
 
     const resolvedOwnerKey = ownerKey || localStorage.getItem('lunao_owner_key') || `dash-${userPlan.replace(/\s+/g, '-')}`;
 
-    // Deduct credits optimistically
-    const nextCredits = Math.max(0, userCredits - totalCost);
+    // Deduct credits immediately and write permanently to Supabase
+    const baseCredits = typeof userCredits === 'number' && !Number.isNaN(userCredits)
+      ? userCredits
+      : parseFloat(localStorage.getItem('lunao_user_credits') || '15');
+    const nextCredits = Math.max(0, Math.round((baseCredits - totalCost) * 10) / 10);
     onCreditsChange?.(nextCredits);
     localStorage.setItem('lunao_user_credits', nextCredits.toString());
     localStorage.setItem(`lunao_u_${resolvedOwnerKey}_credits`, nextCredits.toString());
+    syncUserCredits(resolvedOwnerKey, nextCredits).catch(() => {});
 
     const newCampId = 'sms_' + Date.now();
     const finalName = campaignName || `${selectedNiche} SMS Campaign`;
@@ -825,11 +829,12 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
           setDispatchedSmsList([...completedAccumulator as any]);
 
           // Refund 7.0 credits (4 SMS + 3 Site) if site deployment fails
-          const curCreds = parseInt(localStorage.getItem('lunao_user_credits') || '0', 10) || userCredits;
-          const updatedCreds = curCreds + 7.0;
+          const curCreds = parseFloat(localStorage.getItem('lunao_user_credits') || '0') || userCredits;
+          const updatedCreds = Math.round((curCreds + 7.0) * 10) / 10;
           localStorage.setItem('lunao_user_credits', updatedCreds.toString());
           localStorage.setItem(`lunao_u_${resolvedOwnerKey}_credits`, updatedCreds.toString());
           onCreditsChange?.(updatedCreds);
+          syncUserCredits(resolvedOwnerKey, updatedCreds).catch(() => {});
 
           if (i < totalLeads - 1) {
             addLog(`[Queue] Transitioning immediately to target ${i + 2}/${totalLeads}...`, 'info');
@@ -991,11 +996,12 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
           siteItem.siteRefundAmount = initialSiteRef;
           siteItem.totalRefundAmount = initialTotRef;
 
-          const curCreds = parseInt(localStorage.getItem('lunao_user_credits') || '0', 10) || userCredits;
-          const updatedCreds = curCreds + initialTotRef;
+          const curCreds = parseFloat(localStorage.getItem('lunao_user_credits') || '0') || userCredits;
+          const updatedCreds = Math.round((curCreds + initialTotRef) * 10) / 10;
           localStorage.setItem('lunao_user_credits', updatedCreds.toString());
           localStorage.setItem(`lunao_u_${resolvedOwnerKey}_credits`, updatedCreds.toString());
           onCreditsChange?.(updatedCreds);
+          syncUserCredits(resolvedOwnerKey, updatedCreds).catch(() => {});
         }
 
         setCompletedSitesList([...completedAccumulator]);
@@ -1131,10 +1137,12 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                     siteItem.segments = smsSegs;
 
                     // Refund credits directly to user balance
-                    const curCreds = parseInt(localStorage.getItem('lunao_user_credits') || '0', 10) || userCredits;
-                    const updatedCreds = curCreds + totRef;
+                    const curCreds = parseFloat(localStorage.getItem('lunao_user_credits') || '0') || userCredits;
+                    const updatedCreds = Math.round((curCreds + totRef) * 10) / 10;
                     localStorage.setItem('lunao_user_credits', updatedCreds.toString());
+                    localStorage.setItem(`lunao_u_${resolvedOwnerKey}_credits`, updatedCreds.toString());
                     onCreditsChange?.(updatedCreds);
+                    syncUserCredits(resolvedOwnerKey, updatedCreds).catch(() => {});
 
                     setCompletedSitesList([...completedAccumulator]);
                     setDispatchedSmsList([...completedAccumulator as any]);
@@ -1260,6 +1268,15 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
       // non-fatal
     }
 
+    // Ensure final post-campaign credit balance is permanently locked in Supabase
+    try {
+      const finalCredits = parseFloat(localStorage.getItem('lunao_user_credits') || String(nextCredits));
+      if (!Number.isNaN(finalCredits)) {
+        onCreditsChange?.(finalCredits);
+        await syncUserCredits(resolvedOwnerKey, finalCredits).catch(() => {});
+      }
+    } catch {}
+
     onCampaignCreated?.(completeCampRecord);
 
     setIsLaunching(false);
@@ -1303,8 +1320,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
         .replace(/-+/g, '-')
         .replace(/^-|-$/g, '')
         .slice(0, 28) || `site-${idx + 1}`;
-      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://lunao.app';
-      const siteUrl = `${origin}/sites/${cleanSlug}/`;
+      const siteUrl = `https://${cleanSlug}.lunao.org`;
 
       const rawWebsite = lead.website || (lead as any).site || '';
       const hasWebsite = Boolean(
@@ -1381,9 +1397,10 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
   const isByoTelnyx = canUseOwnTelnyx(userPlan);
 
   // Pre-launch credit calculations:
-  // - Starter and above plans (BYO Telnyx): 0 credits for SMS outreach (users bring their own Telnyx account and pay carrier directly). Only 1 credit charged per site deploy.
-  // - Free Plan: 3 credits per site deploy + carrier credits (4 credits per 1-segment, 8 credits per 2-segment).
-  const siteCostPerLead = isByoTelnyx ? 1 : 3;
+  // - All plans: 3 credits charged per deployed & rebranded site.
+  // - Starter and above plans (BYO Telnyx): 0 credits for SMS outreach.
+  // - Free Plan: 4 credits per 1-segment, 8 credits per 2-segment SMS.
+  const siteCostPerLead = 3;
   const siteCostTotal = (csvLeads.length || totalEvaluatedCount) * siteCostPerLead;
 
   // 4 credits per 1-segment SMS, 8 credits per 2 or 3-segment SMS (Free Plan only; 0 credits for BYO Telnyx)
@@ -1402,7 +1419,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
   const activePreview = evaluatedLeads[Math.min(previewLeadIndex, Math.max(0, evaluatedLeads.length - 1))] || evaluatedLeads[0];
   const sampleBusinessName = activePreview?.lead.name || (selectedNiche ? `${selectedNiche} Pro` : 'Vintage Cuts');
   const sampleCity = activePreview?.lead.city || 'Vancouver, BC';
-  const sampleSiteUrl = activePreview?.siteUrl || `${typeof window !== 'undefined' ? window.location.origin : 'https://lunao.app'}/sites/preview/`;
+  const sampleSiteUrl = activePreview?.siteUrl || 'https://preview.lunao.org';
   const interpolatedSms = activePreview?.resolvedText || smsMessage;
   const interpolatedCharCount = activePreview?.finalChars || interpolatedSms.length;
   const segmentsCount = activePreview?.finalSegments || (interpolatedCharCount <= 160 ? 1 : Math.ceil(interpolatedCharCount / 153));
@@ -1432,11 +1449,8 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                 Lunao SMS Outreach Campaign Active
               </div>
               <h3 className="text-xl sm:text-2xl font-bold font-serif text-ink">
-                Autonomous SMS Outreach in Progress
+                SMS Campaign in Progress
               </h3>
-              <p className="text-xs text-ink-secondary">
-                Autonomous pipeline rebranding custom landing pages, verifying live edge status, and dispatching personalized SMS proposals.
-              </p>
             </div>
 
             <div className="grid grid-cols-2 sm:flex items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
@@ -1710,9 +1724,6 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                 <h2 className="text-2xl sm:text-3xl md:text-4xl font-serif font-bold text-ink">
                   Campaign Successfully Completed!
                 </h2>
-                <p className="text-sm md:text-base text-ink-secondary">
-                  "{celebratedCampaign.name}" finished dispatching SMS proposals to {celebratedCampaign.totalLeads} prospects.
-                </p>
               </div>
 
               {/* Stats Counters Grid */}
@@ -3434,7 +3445,7 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                   <p className="text-xs text-ink-secondary">
                     {isByoTelnyx ? (
                       <span>
-                        <strong className="text-emerald-700 font-bold">Telnyx Active:</strong> <strong>0 Lunao credits charged for SMS</strong> (carrier outreach billed direct to your connected Telnyx balance). Only <strong>1 credit per site deployment</strong>.
+                        <strong className="text-emerald-700 font-bold">Telnyx Active:</strong> <strong>0 Lunao credits charged for SMS</strong> (carrier outreach billed direct to your connected Telnyx balance). <strong>3 credits per site deployment</strong>.
                       </span>
                     ) : (
                       <span>

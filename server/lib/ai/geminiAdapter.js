@@ -90,10 +90,16 @@ function resolveRealGeminiModel(requestedModel) {
   if (norm.includes('3.1') || norm.includes('pro')) {
     return process.env.GEMINI_PRO_MODEL || 'gemini-3.1-pro-preview';
   }
+  if (norm.includes('3.8')) {
+    return process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+  }
   if (norm.includes('3.5')) {
     return 'gemini-3.5-flash';
   }
-  return process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+  if (norm.includes('lite') || norm.includes('3.1')) {
+    return 'gemini-3.1-flash-lite';
+  }
+  return process.env.GEMINI_MODEL || 'gemini-3.5-flash';
 }
 
 /**
@@ -113,31 +119,50 @@ export async function streamGeminiEdit(
     throw new Error('AI servers busy, try later.');
   }
 
-  const actualModel = resolveRealGeminiModel(model);
+  const primaryModel = resolveRealGeminiModel(model);
+  const candidates = [primaryModel, 'gemini-3.5-flash', 'gemini-3.1-flash-lite'].filter((v, i, a) => a.indexOf(v) === i);
   const prompt = buildGeminiPrompt(html, instruction, history);
   const isProReasoning = String(model).includes('pro') || String(model).includes('fable');
 
-  try {
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('AI servers busy, try later.')), 150000)
-    );
+  let stream = null;
+  let activeModelUsed = primaryModel;
+  let lastErr = null;
 
-    const stream = await Promise.race([
-      client.models.generateContentStream({
-        model: actualModel,
-        contents: prompt,
-        config: {
-          systemInstruction: SYSTEM_PROMPT,
-          temperature: 0.3,
-          maxOutputTokens: Math.max(maxOutputTokens || 65536, 32768),
-          thinkingConfig: {
-            thinkingBudget: isProReasoning ? 256 : 0,
+  for (const candidate of candidates) {
+    try {
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('AI servers busy, try later.')), 150000)
+      );
+
+      stream = await Promise.race([
+        client.models.generateContentStream({
+          model: candidate,
+          contents: prompt,
+          config: {
+            systemInstruction: SYSTEM_PROMPT,
+            temperature: 0.3,
+            maxOutputTokens: Math.max(maxOutputTokens || 65536, 32768),
+            thinkingConfig: {
+              thinkingBudget: isProReasoning ? 256 : 0,
+            },
           },
-        },
-      }),
-      timeoutPromise,
-    ]);
+        }),
+        timeoutPromise,
+      ]);
+      activeModelUsed = candidate;
+      break;
+    } catch (candErr) {
+      lastErr = candErr;
+      console.warn(`[geminiAdapter] candidate ${candidate} failed (${candErr.message?.slice(0, 80)}), trying next candidate...`);
+    }
+  }
 
+  if (!stream) {
+    console.warn(`[geminiAdapter] All candidates failed. Last error: ${lastErr?.message}`);
+    throw lastErr || new Error('AI servers busy, try later.');
+  }
+
+  try {
     let fullHtml = '';
     let lastUsageMetadata = null;
 

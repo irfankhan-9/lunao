@@ -40,14 +40,14 @@ export function tierLevel(plan) {
 
 // --- PWA Activation Allowances per plan tier --------------------------
 export const PWA_ALLOWANCE = Object.freeze({
-  'Free Plan': 3,
-  'Starter Plan': 5,
-  'Pro Plan': 15,
-  'Agency Plan': 50,
+  'Free Plan': 1,
+  'Starter Plan': 8,
+  'Pro Plan': 25,
+  'Agency Plan': 100,
 });
 
 export function pwaAllowanceForPlan(plan) {
-  return PWA_ALLOWANCE[normalisePlan(plan)] ?? 3;
+  return PWA_ALLOWANCE[normalisePlan(plan)] ?? 1;
 }
 
 

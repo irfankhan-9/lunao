@@ -232,37 +232,50 @@ export async function createAndSyncNiche(name: string, emoji?: string, color = '
   return newNiche;
 }
 
-export const PLACEHOLDER_MAP: Record<string, string> = {
-  BUSINESS_NAME: 'Vintage Cuts Barber Lounge',
-  BUSINESS_NAME_SHORT: 'Vintage Cuts',
-  CITY: 'Austin, TX',
-  CITY_NAME: 'Austin, TX',
-  STATE: 'TX',
-  PHONE_DISPLAY: '(512) 555-0199',
-  PHONE_NUMBER: '(512) 555-0199',
-  PHONE_RAW: '5125550199',
-  EMAIL: 'contact@vintagecuts.com',
-  ADDRESS: '3801 Capital of Texas Hwy, Austin, TX 78746',
-  GOOGLE_RATING: '4.9',
-  GOOGLE_REVIEW_COUNT: '342',
-  INSTAGRAM_HANDLE: 'vintagecuts_atx',
-  FACEBOOK_URL: 'https://facebook.com/vintagecuts',
-  WEBSITE: 'https://vintagecuts.com',
-  SITE_URL: 'https://vintagecuts.com',
-  YEARS_IN_BUSINESS: '2015',
-  BOOKING_URL: '#booking',
-  BUSINESS_DESCRIPTION: 'Premier luxury services tailored for modern local clientele with automated bookings and verified reviews.',
-  HERO_IMAGE: 'https://images.unsplash.com/photo-1581094288338-2314dddb7ece?auto=format&fit=crop&w=1920&q=85',
-  LOGO: 'Vintage Cuts',
-  GOOGLE_MAPS_URL: 'https://maps.google.com',
-};
+export function getPlaceholderMap(businessName = 'Custom Business Website', city = 'Austin, TX'): Record<string, string> {
+  const cleanName = (businessName && businessName !== 'Custom Business Website' && !businessName.includes('Vintage Cuts')) ? businessName.trim() : 'Local Business';
+  const shortName = cleanName.split(/\s+/).slice(0, 2).join(' ');
+  const domainSlug = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'business';
 
-export function compilePreview(rawHtml: string): string {
+  return {
+    BUSINESS_NAME: cleanName,
+    BUSINESS_NAME_SHORT: shortName,
+    CITY: city,
+    CITY_NAME: city,
+    STATE: city.includes(',') ? city.split(',')[1].trim() : 'TX',
+    PHONE_DISPLAY: '(512) 555-0199',
+    PHONE_NUMBER: '(512) 555-0199',
+    PHONE_RAW: '5125550199',
+    EMAIL: `contact@${domainSlug}.com`,
+    ADDRESS: `3801 Capital of Texas Hwy, ${city}`,
+    GOOGLE_RATING: '4.9',
+    GOOGLE_REVIEW_COUNT: '342',
+    INSTAGRAM_HANDLE: `${domainSlug}_official`,
+    FACEBOOK_URL: `https://facebook.com/${domainSlug}`,
+    WEBSITE: `https://${domainSlug}.com`,
+    SITE_URL: `https://${domainSlug}.com`,
+    YEARS_IN_BUSINESS: '2015',
+    BOOKING_URL: '#booking',
+    BUSINESS_DESCRIPTION: `Premier luxury ${cleanName.toLowerCase()} services tailored for modern local clientele.`,
+    HERO_IMAGE: 'https://images.unsplash.com/photo-1581094288338-2314dddb7ece?auto=format&fit=crop&w=1920&q=85',
+    LOGO: cleanName,
+    GOOGLE_MAPS_URL: 'https://maps.google.com',
+  };
+}
+
+export const PLACEHOLDER_MAP: Record<string, string> = getPlaceholderMap();
+
+export function compilePreview(rawHtml: string, businessName?: string): string {
   if (!rawHtml || typeof rawHtml !== 'string') return rawHtml || '';
+  const activeMap = businessName ? getPlaceholderMap(businessName) : PLACEHOLDER_MAP;
   let compiled = rawHtml.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, rawKey) => {
     const key = rawKey.toUpperCase();
-    return key in PLACEHOLDER_MAP ? PLACEHOLDER_MAP[key] : `{{${rawKey}}}`;
+    return key in activeMap ? activeMap[key] : `{{${rawKey}}}`;
   });
+  if (businessName && !businessName.toLowerCase().includes('barber')) {
+    compiled = compiled.replace(/Vintage Cuts Barber Lounge/gi, businessName);
+    compiled = compiled.replace(/Vintage Cuts/gi, businessName.split(' ')[0] || businessName);
+  }
   if (!compiled.includes('lunao-booking-bridge.js')) {
     if (compiled.includes('</body>')) {
       compiled = compiled.replace('</body>', '<script src="/lunao-booking-bridge.js"></script>\n</body>');

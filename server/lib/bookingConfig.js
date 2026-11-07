@@ -107,6 +107,10 @@ export function validateTimeString(timeStr, allowFlexible = true, allowedChoices
     return allowFlexible;
   }
 
+  if (/^(morning|afternoon|late\s*afternoon|evening)$/i.test(clean)) {
+    return true;
+  }
+
   // If specific allowed choices are enforced, check exact or case-insensitive match
   if (Array.isArray(allowedChoices) && allowedChoices.length > 0) {
     const isChoice = allowedChoices.some(

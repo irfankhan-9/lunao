@@ -13,7 +13,7 @@ import { compileSite } from './compile.js';
 import { stageSite, publishBatch } from './cloudflare.js';
 import { registerUserRebrandedSite } from './sites.js';
 import { slugify } from './slug.js';
-import { cloudflare, siteBaseUrl } from './config.js';
+import { cloudflare, siteBaseUrl, siteUrlForSlug } from './config.js';
 import { decryptToken } from './emailCrypto.js';
 import {
   getEmailCampaign,
@@ -305,7 +305,7 @@ const phase1Workers = Array.from(
           };
           const { html, resolved } = await compileSite(business, requestedKey, campaignOwnerKey);
           const siteUrl = await stageSite(slug, html);
-          const expectedDeployUrl = `${siteBaseUrl()}/${slug}/`;
+          const expectedDeployUrl = siteUrlForSlug(slug);
           if (campaignOwnerKey) {
             try {
               await registerUserRebrandedSite({

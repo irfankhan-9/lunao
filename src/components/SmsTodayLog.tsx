@@ -74,7 +74,21 @@ export const SmsTodayLog: React.FC<SmsTodayLogProps> = ({ campaigns, ownerKey })
   // Extract successful SMS across all campaigns in state + server logs
   const allSmsEntries = useMemo<SmsTodayLogEntry[]>(() => {
     const entries: SmsTodayLogEntry[] = [];
-    const seenKeys = new Set<string>();
+    const seenPhoneDigits = new Set<string>();
+    const seenCleanNames = new Set<string>();
+    const seenUrls = new Set<string>();
+    const seenSlugs = new Set<string>();
+
+    const digits = (p: string) => (p || '').replace(/\D/g, '').slice(-10);
+    const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanUrl = (u: string) => (u || '').toLowerCase().trim().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
+    const extractSlug = (u: string, s?: string) => {
+      if (s) return s.toLowerCase().trim();
+      const c = cleanUrl(u);
+      if (c.includes('.lunao.org')) return c.split('.lunao.org')[0];
+      const parts = c.split('/').filter(Boolean);
+      return parts[parts.length - 1] || '';
+    };
 
     const todayStr = new Date().toDateString();
 
@@ -92,6 +106,22 @@ export const SmsTodayLog: React.FC<SmsTodayLogProps> = ({ campaigns, ownerKey })
           // Exclude failed or queued — only sent or delivered!
           if (l.status !== 'delivered' && l.status !== 'sent') continue;
 
+          const phoneDigits = digits(l.phone);
+          const bName = norm(l.businessName || l.name);
+          const rawUrl = l.siteUrl || (c.deployedSites && c.deployedSites[0]?.url) || '';
+          const cUrl = cleanUrl(rawUrl);
+          const slug = extractSlug(rawUrl, (l as any).slug);
+
+          if (phoneDigits && seenPhoneDigits.has(phoneDigits)) continue;
+          if (bName && seenCleanNames.has(bName)) continue;
+          if (cUrl && seenUrls.has(cUrl)) continue;
+          if (slug && seenSlugs.has(slug)) continue;
+
+          if (phoneDigits) seenPhoneDigits.add(phoneDigits);
+          if (bName) seenCleanNames.add(bName);
+          if (cUrl) seenUrls.add(cUrl);
+          if (slug) seenSlugs.add(slug);
+
           let ts = Date.now();
           if (c.createdAt) {
             const parsed = Date.parse(c.createdAt);
@@ -101,9 +131,7 @@ export const SmsTodayLog: React.FC<SmsTodayLogProps> = ({ campaigns, ownerKey })
           const entryDateStr = new Date(ts).toDateString();
           const isToday = entryDateStr === todayStr;
 
-          const key = `${c.id}-${l.leadId || l.phone}`;
-          if (seenKeys.has(key)) continue;
-          seenKeys.add(key);
+          const key = `${c.id}-${l.leadId || l.phone || bName}`;
 
           entries.push({
             id: key,
@@ -112,7 +140,7 @@ export const SmsTodayLog: React.FC<SmsTodayLogProps> = ({ campaigns, ownerKey })
             businessName: l.businessName || l.name || 'Local Business',
             phone: l.phone || '+1 604-555-0199',
             city: l.city || c.niche || '',
-            siteUrl: l.siteUrl || (c.deployedSites && c.deployedSites[0]?.url) || '',
+            siteUrl: rawUrl,
             smsText: l.smsText || c.smsMessage || '',
             sentAtTs: ts,
             status: (l.status === 'delivered' ? 'delivered' : 'sent'),
@@ -126,6 +154,22 @@ export const SmsTodayLog: React.FC<SmsTodayLogProps> = ({ campaigns, ownerKey })
           const smsStat = s.smsStatus || 'delivered';
           if (smsStat !== 'delivered' && smsStat !== 'sent') continue;
 
+          const phoneDigits = digits(s.phone);
+          const bName = norm(s.name);
+          const rawUrl = s.url || '';
+          const cUrl = cleanUrl(rawUrl);
+          const slug = extractSlug(rawUrl, s.slug);
+
+          if (phoneDigits && seenPhoneDigits.has(phoneDigits)) continue;
+          if (bName && seenCleanNames.has(bName)) continue;
+          if (cUrl && seenUrls.has(cUrl)) continue;
+          if (slug && seenSlugs.has(slug)) continue;
+
+          if (phoneDigits) seenPhoneDigits.add(phoneDigits);
+          if (bName) seenCleanNames.add(bName);
+          if (cUrl) seenUrls.add(cUrl);
+          if (slug) seenSlugs.add(slug);
+
           let ts = Date.now();
           if (c.createdAt) {
             const parsed = Date.parse(c.createdAt);
@@ -136,8 +180,6 @@ export const SmsTodayLog: React.FC<SmsTodayLogProps> = ({ campaigns, ownerKey })
           const isToday = entryDateStr === todayStr;
 
           const key = `${c.id}-${s.slug || s.name}`;
-          if (seenKeys.has(key)) continue;
-          seenKeys.add(key);
 
           entries.push({
             id: key,
@@ -146,7 +188,7 @@ export const SmsTodayLog: React.FC<SmsTodayLogProps> = ({ campaigns, ownerKey })
             businessName: s.name || 'Local Business',
             phone: s.phone || '+1 604-555-0199',
             city: s.city || '',
-            siteUrl: s.url || '',
+            siteUrl: rawUrl,
             smsText: s.smsText || c.smsMessage || '',
             sentAtTs: ts,
             status: smsStat === 'delivered' ? 'delivered' : 'sent',
@@ -159,12 +201,48 @@ export const SmsTodayLog: React.FC<SmsTodayLogProps> = ({ campaigns, ownerKey })
 
     // 2. Merge the authoritative server ledger (sms_logs) so every delivered
     // SMS shows up even when the local campaign record is missing/out of date.
-    const digits = (p: string) => (p || '').replace(/\D/g, '');
-    const have = new Set(entries.map((e) => `${e.campaignId || ''}|${digits(e.phone)}`));
     for (const r of serverLogs) {
-      const k = `${r.campaign_id || ''}|${digits(r.to_number)}`;
-      if (have.has(k)) continue;
-      have.add(k);
+      // Discard legacy synthetic rows
+      if (r.id && String(r.id).startsWith('site_sms_')) continue;
+
+      const phoneDigits = digits(r.to_number);
+      const bName = norm(r.business_name);
+      const rawUrl = r.site_url || '';
+      const cUrl = cleanUrl(rawUrl);
+      const slug = extractSlug(rawUrl);
+
+      // Check if already in entries from campaign state
+      let existing: SmsTodayLogEntry | undefined;
+      if (phoneDigits && seenPhoneDigits.has(phoneDigits)) {
+        existing = entries.find((e) => digits(e.phone) === phoneDigits);
+      } else if (bName && seenCleanNames.has(bName)) {
+        existing = entries.find((e) => norm(e.businessName) === bName);
+      } else if (cUrl && seenUrls.has(cUrl)) {
+        existing = entries.find((e) => cleanUrl(e.siteUrl) === cUrl);
+      } else if (slug && seenSlugs.has(slug)) {
+        existing = entries.find((e) => extractSlug(e.siteUrl).toLowerCase() === slug);
+      }
+
+      if (existing) {
+        // Enrich existing entry if server log has more info
+        if (!existing.siteUrl && r.site_url) existing.siteUrl = r.site_url;
+        if (!existing.smsText && r.body) existing.smsText = r.body;
+        if ((!existing.businessName || existing.businessName === 'Local Business') && r.business_name) {
+          existing.businessName = r.business_name;
+        }
+        continue; // Never push duplicate
+      }
+
+      // If synthetic fallback phone (+1 512 555-0199) and we already have entries, ignore
+      if (phoneDigits === '5125550199' && (seenCleanNames.has(bName) || seenUrls.has(cUrl) || entries.length > 0)) {
+        continue;
+      }
+
+      if (phoneDigits) seenPhoneDigits.add(phoneDigits);
+      if (bName) seenCleanNames.add(bName);
+      if (cUrl) seenUrls.add(cUrl);
+      if (slug) seenSlugs.add(slug);
+
       const ts = Number(r.created_at) || Date.now();
       const isToday = new Date(ts).toDateString() === todayStr;
       entries.push({
@@ -174,7 +252,7 @@ export const SmsTodayLog: React.FC<SmsTodayLogProps> = ({ campaigns, ownerKey })
         businessName: r.business_name || r.to_number,
         phone: r.to_number,
         city: r.city || '',
-        siteUrl: r.site_url || '',
+        siteUrl: rawUrl,
         smsText: r.body || '',
         sentAtTs: ts,
         status: r.status === 'delivered' ? 'delivered' : 'sent',

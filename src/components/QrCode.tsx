@@ -1,7 +1,6 @@
 // Renders a scannable QR code as inline SVG using the `qrcode` library.
-// The library handles all the spec compliance (Reed-Solomon EC, masking,
-// format info) so we don't reinvent any wheels. We render as SVG (not
-// canvas) so it scales crisply at any size and can be styled with CSS.
+// Builds the vector path directly from QRCode.create().modules so it renders
+// synchronously with zero flicker and scales crisply at any size.
 
 import React, { useMemo } from 'react';
 import QRCode from 'qrcode';
@@ -16,29 +15,33 @@ interface QrCodeProps {
 
 export const QrCode: React.FC<QrCodeProps> = ({
   value,
-  size = 220,
+  size = 200,
   fg = '#1A1916',
   bg = '#FFFFFF',
   className = '',
 }) => {
-  // Build the SVG once per value/color change. We pick the smallest QR
-  // version that fits the string (error correction M is plenty for a
-  // short invite code).
-  const svg = useMemo(() => {
+  const matrix = useMemo(() => {
     try {
-      return QRCode.create(value, {
-        errorCorrectionLevel: 'M',
-        margin: 1, // 1-module quiet zone (4 modules equivalent at high zoom)
-        width: size,
-        color: { dark: fg, light: bg },
-        type: 'svg',
-      });
-    } catch (err) {
+      if (!value) return null;
+      const qr = QRCode.create(value, { errorCorrectionLevel: 'M' });
+      const count = qr.modules.size;
+      const data = qr.modules.data;
+      let path = '';
+      const margin = 2;
+      for (let r = 0; r < count; r++) {
+        for (let c = 0; c < count; c++) {
+          if (data[r * count + c]) {
+            path += `M${c + margin},${r + margin}h1v1h-1z`;
+          }
+        }
+      }
+      return { count, margin, total: count + margin * 2, path };
+    } catch {
       return null;
     }
-  }, [value, size, fg, bg]);
+  }, [value]);
 
-  if (!svg) {
+  if (!matrix) {
     return (
       <div
         className={`flex items-center justify-center text-[10px] text-ink-secondary ${className}`}
@@ -49,18 +52,25 @@ export const QrCode: React.FC<QrCodeProps> = ({
     );
   }
 
-  // The library returns an object with `.svg()` returning a string. We
-  // embed it directly so styling matches the rest of the drawer.
-  const svgString = (svg as any).svg ? (svg as any).svg() : '';
-
   return (
     <div
       className={className}
       style={{ width: size, height: size, lineHeight: 0 }}
       role="img"
       aria-label={`QR code: ${value}`}
-      dangerouslySetInnerHTML={{ __html: svgString }}
-    />
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox={`0 0 ${matrix.total} ${matrix.total}`}
+        width={size}
+        height={size}
+        shapeRendering="crispEdges"
+        className="w-full h-full rounded-lg"
+      >
+        <rect width={matrix.total} height={matrix.total} fill={bg} />
+        <path d={matrix.path} fill={fg} />
+      </svg>
+    </div>
   );
 };
 

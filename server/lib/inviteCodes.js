@@ -80,6 +80,48 @@ export function listCodes(slug) {
   return rows.map(rowToRecord);
 }
 
+export async function listCodesAsync(slug) {
+  if (!slug) return [];
+  const cleanSlug = String(slug).trim().toLowerCase();
+  try {
+    const { getSupabase } = await import('./supabase.js');
+    const sb = getSupabase();
+    if (sb) {
+      const { data } = await sb
+        .from('invite_codes')
+        .select('*')
+        .eq('slug', cleanSlug)
+        .order('created_at', { ascending: false });
+      if (Array.isArray(data) && data.length > 0) {
+        for (const d of data) {
+          try {
+            db.prepare(
+              `INSERT INTO invite_codes (code, slug, label, created_at, used_at, last_active_at, redeemed_count, revoked_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(code) DO UPDATE SET
+                 slug=excluded.slug,
+                 used_at=COALESCE(excluded.used_at, invite_codes.used_at),
+                 last_active_at=COALESCE(excluded.last_active_at, invite_codes.last_active_at),
+                 redeemed_count=COALESCE(excluded.redeemed_count, invite_codes.redeemed_count),
+                 revoked_at=excluded.revoked_at`
+            ).run(
+              d.code,
+              d.slug,
+              d.label || null,
+              d.created_at || Date.now(),
+              d.used_at || null,
+              d.last_active_at || null,
+              d.redeemed_count || 0,
+              d.revoked_at || null
+            );
+          } catch {}
+        }
+      }
+    }
+  } catch {}
+  return listCodes(cleanSlug);
+}
+
 export async function persistInviteCodeToSupabase(rec) {
   if (!rec || !rec.code || !rec.slug) return;
   const payload = {
@@ -211,7 +253,11 @@ export function revokeCode(id) {
     )
     .run(now, id);
   if (!info.changes) return null;
-  return findById(id);
+  const updated = findById(id);
+  if (updated) {
+    persistInviteCodeToSupabase(updated).catch(() => {});
+  }
+  return updated;
 }
 
 export function renameCode(id, label) {
@@ -266,10 +312,16 @@ export function touchCode(code, _deviceLabel) {
 export function isPwaActiveForSlug(slug) {
   if (!slug) return false;
   try {
-    const row = db.prepare(
-      'SELECT 1 FROM invite_codes WHERE slug = ? AND used_at IS NOT NULL AND revoked_at IS NULL LIMIT 1'
-    ).get(slug);
-    return Boolean(row);
+    const cleanSlug = String(slug).trim().toLowerCase().replace(/^\/+|\/+$/g, '');
+    // Strictly verify if any non-revoked invite code has been generated for this exact slug
+    const rows = db.prepare('SELECT slug, revoked_at FROM invite_codes WHERE revoked_at IS NULL').all();
+    if (!Array.isArray(rows)) return false;
+    return rows.some(
+      (r) =>
+        r &&
+        String(r.slug || '').trim().toLowerCase().replace(/^\/+|\/+$/g, '') === cleanSlug &&
+        (r.revoked_at === null || r.revoked_at === undefined)
+    );
   } catch {
     return false;
   }
@@ -278,38 +330,60 @@ export function isPwaActiveForSlug(slug) {
 // Authoritative async check across local DB, Postgres pool, and Supabase client
 export async function isPwaActiveForSlugAsync(slug) {
   if (!slug) return false;
+  const cleanSlug = String(slug).trim().toLowerCase().replace(/^\/+|\/+$/g, '');
 
-  // 1. Check local DB
-  if (isPwaActiveForSlug(slug)) {
+  // 1. Check local DB (instant)
+  if (isPwaActiveForSlug(cleanSlug)) {
     return true;
   }
 
-  // 2. Check Postgres pool
+  // 2. Check Postgres pool (direct connection to Supabase DB)
   try {
     const { getPgPool } = await import('./supabase.js');
     const pool = getPgPool();
     if (pool) {
-      const { rows } = await pool.query(
-        'SELECT 1 FROM invite_codes WHERE slug = $1 AND used_at IS NOT NULL AND revoked_at IS NULL LIMIT 1',
-        [slug]
+      // Check if any non-revoked invite code has been generated for this slug
+      const { rows: codeRows } = await pool.query(
+        'SELECT 1 FROM invite_codes WHERE LOWER(slug) = $1 AND revoked_at IS NULL LIMIT 1',
+        [cleanSlug]
       );
-      if (rows && rows.length > 0) return true;
+      if (codeRows && codeRows.length > 0) {
+        try {
+          db.prepare('INSERT OR IGNORE INTO invite_codes (code, slug, created_at) VALUES (?, ?, ?)').run(
+            `SYNC-${cleanSlug.slice(0, 8)}`,
+            cleanSlug,
+            Date.now()
+          );
+        } catch (_) {}
+        return true;
+      }
+      return false;
     }
   } catch (_) {}
 
-  // 3. Check Supabase client
+  // 3. Check Supabase REST / SDK client
   try {
     const { getSupabase } = await import('./supabase.js');
     const sb = getSupabase();
     if (sb) {
-      const { data } = await sb
+      // Check if any non-revoked invite code has been generated for this slug
+      const { data: codeData } = await sb
         .from('invite_codes')
-        .select('id')
-        .eq('slug', slug)
-        .not('used_at', 'is', null)
+        .select('code, revoked_at')
+        .eq('slug', cleanSlug)
         .is('revoked_at', null)
         .limit(1);
-      if (data && data.length > 0) return true;
+      if (codeData && codeData.length > 0) {
+        try {
+          db.prepare('INSERT OR IGNORE INTO invite_codes (code, slug, created_at) VALUES (?, ?, ?)').run(
+            `SYNC-${cleanSlug.slice(0, 8)}`,
+            cleanSlug,
+            Date.now()
+          );
+        } catch (_) {}
+        return true;
+      }
+      return false;
     }
   } catch (_) {}
 
@@ -396,4 +470,160 @@ export async function getOrCreateCodeForSlugAsync(slug, preferredCode = null, la
   const codeToUse = (preferredCode && isValidCodeFormat(preferredCode)) ? preferredCode : null;
   return createCode(cleanSlug, label, codeToUse);
 }
+
+// Resolve the ownerKey (agency user ID) who owns a given website slug
+export async function getOwnerKeyForSlugAsync(slug) {
+  if (!slug) return null;
+  const cleanSlug = String(slug).trim().toLowerCase();
+
+  try {
+    const siteRow = db.prepare('SELECT owner_id FROM user_sites WHERE LOWER(slug) = ?').get(cleanSlug);
+    if (siteRow && siteRow.owner_id) return String(siteRow.owner_id);
+  } catch {}
+
+  try {
+    const bpRow = db.prepare('SELECT owner_key FROM business_profiles WHERE LOWER(slug) = ?').get(cleanSlug);
+    if (bpRow && bpRow.owner_key && bpRow.owner_key !== 'default_owner') return String(bpRow.owner_key);
+  } catch {}
+
+  try {
+    const obRow = db.prepare('SELECT owner_key FROM owner_businesses WHERE LOWER(slug) = ?').get(cleanSlug);
+    if (obRow && obRow.owner_key) return String(obRow.owner_key);
+  } catch {}
+
+  try {
+    const { getSupabase } = await import('./supabase.js');
+    const sb = getSupabase();
+    if (sb) {
+      const { data } = await sb
+        .from('user_sites')
+        .select('owner_id')
+        .eq('slug', cleanSlug)
+        .maybeSingle();
+      if (data && data.owner_id) return String(data.owner_id);
+    }
+  } catch {}
+
+  return null;
+}
+
+// Calculate authoritative PWA activation quota & active count for an ownerKey across SQLite + Supabase
+export async function getOwnerPwaQuotaStatusAsync(ownerKey, fallbackPlan = null) {
+  const { normalisePlan, pwaAllowanceForPlan } = await import('./planGates.js');
+  const cleanOwner = String(ownerKey || '').trim();
+
+  // 1. Resolve user's plan from credit_accounts (local or Supabase) or fallbackPlan
+  let resolvedPlan = fallbackPlan ? normalisePlan(fallbackPlan) : null;
+  if (cleanOwner) {
+    try {
+      const acct = db.prepare('SELECT plan FROM credit_accounts WHERE owner_key = ?').get(cleanOwner);
+      if (acct && acct.plan) {
+        resolvedPlan = normalisePlan(acct.plan);
+      }
+    } catch {}
+    if (!resolvedPlan) {
+      try {
+        const { getSupabase } = await import('./supabase.js');
+        const sb = getSupabase();
+        if (sb) {
+          const { data } = await sb
+            .from('credit_accounts')
+            .select('plan')
+            .eq('owner_key', cleanOwner)
+            .maybeSingle();
+          if (data && data.plan) resolvedPlan = normalisePlan(data.plan);
+        }
+      } catch {}
+    }
+  }
+  const finalPlan = normalisePlan(resolvedPlan || fallbackPlan || 'Free Plan');
+  const maxAllowed = pwaAllowanceForPlan(finalPlan);
+
+  // 2. Collect all website slugs belonging to this ownerKey
+  const ownerSlugs = new Set();
+  if (cleanOwner) {
+    try {
+      const rows = db.prepare('SELECT slug FROM user_sites WHERE owner_id = ?').all(cleanOwner);
+      for (const r of rows || []) {
+        if (r && r.slug) ownerSlugs.add(String(r.slug).toLowerCase());
+      }
+    } catch {}
+    try {
+      const rows = db.prepare('SELECT slug FROM owner_businesses WHERE owner_key = ?').all(cleanOwner);
+      for (const r of rows || []) {
+        if (r && r.slug) ownerSlugs.add(String(r.slug).toLowerCase());
+      }
+    } catch {}
+    try {
+      const { getSupabase } = await import('./supabase.js');
+      const sb = getSupabase();
+      if (sb) {
+        const { data: siteRows } = await sb
+          .from('user_sites')
+          .select('slug')
+          .eq('owner_id', cleanOwner);
+        for (const r of siteRows || []) {
+          if (r && r.slug) ownerSlugs.add(String(r.slug).toLowerCase());
+        }
+        const { data: obRows } = await sb
+          .from('owner_businesses')
+          .select('slug')
+          .eq('owner_key', cleanOwner);
+        for (const r of obRows || []) {
+          if (r && r.slug) ownerSlugs.add(String(r.slug).toLowerCase());
+        }
+      }
+    } catch {}
+  }
+
+  // 3. Find all generated (non-revoked) PWA slugs for this owner across SQLite & Supabase
+  const activeSlugsSet = new Set();
+  try {
+    const localCodes = db
+      .prepare('SELECT slug, label, used_at, revoked_at FROM invite_codes WHERE revoked_at IS NULL')
+      .all();
+    for (const c of localCodes || []) {
+      if (!c || !c.slug) continue;
+      if (c.revoked_at !== null && c.revoked_at !== undefined) continue;
+      const s = String(c.slug).toLowerCase();
+      const labelMatch = cleanOwner && typeof c.label === 'string' && c.label.includes(`[owner:${cleanOwner}]`);
+      if (ownerSlugs.has(s) || labelMatch || !cleanOwner) {
+        activeSlugsSet.add(s);
+      }
+    }
+  } catch {}
+
+  try {
+    const { getSupabase } = await import('./supabase.js');
+    const sb = getSupabase();
+    if (sb) {
+      const { data: remoteCodes } = await sb
+        .from('invite_codes')
+        .select('slug, label, used_at, revoked_at')
+        .is('revoked_at', null);
+      for (const c of remoteCodes || []) {
+        if (!c || !c.slug) continue;
+        const s = String(c.slug).toLowerCase();
+        const labelMatch = cleanOwner && typeof c.label === 'string' && c.label.includes(`[owner:${cleanOwner}]`);
+        if (ownerSlugs.has(s) || labelMatch || !cleanOwner) {
+          activeSlugsSet.add(s);
+        }
+      }
+    }
+  } catch {}
+
+  const activeSlugs = Array.from(activeSlugsSet);
+  const activeCount = activeSlugs.length;
+
+  return {
+    ownerKey: cleanOwner || null,
+    plan: finalPlan,
+    maxAllowed,
+    activeCount,
+    activeSlugs,
+    remaining: Math.max(0, maxAllowed - activeCount),
+    quotaExceeded: activeCount >= maxAllowed,
+  };
+}
+
 

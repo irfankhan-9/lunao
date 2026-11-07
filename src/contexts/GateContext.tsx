@@ -51,15 +51,6 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
     ) => {
       const ownerKey = authUser.ownerKey;
       try {
-        const updatedAuthUser: AuthUser = {
-          ...authUser,
-          credits: resolvedCredits,
-        };
-        localStorage.setItem('lunao_auth_user', JSON.stringify(updatedAuthUser));
-        localStorage.setItem('lunao_owner_key', ownerKey);
-        localStorage.setItem('lunao_auth_token', ownerKey);
-        localStorage.setItem('lunao_unlocked', 'true');
-
         const resolvedPlan =
           planInput ||
           localStorage.getItem(`lunao_u_${ownerKey}_plan`) ||
@@ -70,14 +61,22 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
         const resolvedCredits =
           typeof userCreditsInput === 'number'
             ? userCreditsInput
-            : parseInt(
+            : parseFloat(
                 localStorage.getItem(`lunao_u_${ownerKey}_credits`) ||
                 localStorage.getItem('lunao_user_credits') ||
-                '30',
-                10
+                '15'
               );
         localStorage.setItem(`lunao_u_${ownerKey}_credits`, String(resolvedCredits));
         localStorage.setItem('lunao_user_credits', String(resolvedCredits));
+
+        const updatedAuthUser: AuthUser = {
+          ...authUser,
+          credits: resolvedCredits,
+        };
+        localStorage.setItem('lunao_auth_user', JSON.stringify(updatedAuthUser));
+        localStorage.setItem('lunao_owner_key', ownerKey);
+        localStorage.setItem('lunao_auth_token', ownerKey);
+        localStorage.setItem('lunao_unlocked', 'true');
 
         const isFree = resolvedPlan.toLowerCase().includes('free');
         const resolvedVibe = isFree

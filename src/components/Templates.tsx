@@ -396,7 +396,7 @@ export const Templates: React.FC<TemplatesProps> = ({
                         </div>
                         {/* Stats Strip */}
                         <div className="flex justify-between items-center border-y border-[#D9CDBC] py-1 px-1">
-                          <span className="text-[3.5px] font-bold">⭐ 200+ Reviews</span>
+                          <span className="text-[3.5px] font-bold">200+ Verified Reviews</span>
                           <span className="text-[3.5px] font-bold">📅 7 Days A Week</span>
                         </div>
                         {/* Services row */}
@@ -668,7 +668,7 @@ export const Templates: React.FC<TemplatesProps> = ({
                         </div>
                         {/* Tiny Stats */}
                         <div className="border-y border-[#D9CDBC] py-0.5 my-0.5 text-center">
-                           <span className="text-[3px] font-bold">⭐ 200+ Reviews · 📅 7 Days</span>
+                           <span className="text-[3px] font-bold">200+ Reviews · 📅 7 Days</span>
                         </div>
                         {/* Services row */}
                         <div className="flex flex-col gap-0.5 mt-0.5">
@@ -864,7 +864,7 @@ export const Templates: React.FC<TemplatesProps> = ({
                 {/* Elegant Badge for specific tags */}
                 {temp.isMostUsed ? (
                   <div className="absolute top-2.5 left-2.5 px-2 py-0.5 bg-warning text-white text-[8px] uppercase font-bold tracking-widest rounded-full z-[4] shadow-md scale-90">
-                    ★ MOST POPULAR
+                    MOST POPULAR
                   </div>
                 ) : (
                   <div className="absolute top-2.5 left-2.5 px-2 py-0.5 bg-ink/65 backdrop-blur-xs text-white text-[8px] uppercase font-semibold tracking-wider rounded-full z-[4] shadow-md scale-90 border border-white/10">
@@ -885,12 +885,6 @@ export const Templates: React.FC<TemplatesProps> = ({
                     </div>
                     <p className="text-xs text-ink-secondary font-mono leading-none">Used in {temp.usedCount} campaigns previously</p>
                   </div>
-                  
-                  {/* Rating */}
-                  <span className="flex items-center gap-1 text-xs text-warning font-semibold font-mono bg-warning-soft px-1.5 py-0.5 rounded-md shrink-0 border border-warning/10">
-                    <Star className="w-3 h-3 fill-warning text-warning" />
-                    <span>{temp.rating}</span>
-                  </span>
                 </div>
 
                 {/* Action buttons list */}

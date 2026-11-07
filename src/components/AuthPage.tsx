@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, AlertCircle } from 'lucide-react';
 import { useGate } from '../contexts/GateContext';
 import { playSoftTap } from '../utils/audio';
+import { Logo } from '../landing/components/Logo';
 
 interface AuthPageProps {
   onBackToLanding: () => void;
@@ -12,6 +13,13 @@ export default function AuthPage({ onBackToLanding, onAuthSuccess }: AuthPagePro
   const { signInWithGoogle } = useGate();
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Automatically scroll to the top of the auth page when mounted
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, []);
 
   const handleGoogleSignIn = async () => {
     playSoftTap();
@@ -54,11 +62,8 @@ export default function AuthPage({ onBackToLanding, onAuthSuccess }: AuthPagePro
             <span className="hidden sm:inline">Back to Lunao</span>
           </button>
 
-          <div className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-md bg-[#2563EB] text-white font-bold flex items-center justify-center text-xs shadow-xs">
-              L
-            </span>
-            <span className="font-bold tracking-tight text-base text-[#1A1916]">Lunao</span>
+          <div className="flex items-center">
+            <Logo size={28} showWordmark />
           </div>
         </div>
       </header>
@@ -74,7 +79,7 @@ export default function AuthPage({ onBackToLanding, onAuthSuccess }: AuthPagePro
                 Log in or sign up
               </h1>
               <p className="text-sm text-[#6B6960]">
-                14-day free trial on every plan.
+                7 days free trial on every plan.
               </p>
             </div>
 
@@ -121,6 +126,31 @@ export default function AuthPage({ onBackToLanding, onAuthSuccess }: AuthPagePro
                   {signingIn ? 'Connecting with Google…' : 'Continue with Google'}
                 </span>
               </button>
+            </div>
+
+            {/* Legal Agreement Card */}
+            <div className="w-full p-3.5 sm:p-4 rounded-xl bg-white border border-[#E4E2DC] shadow-2xs text-center">
+              <p className="text-xs sm:text-[13px] text-[#6B6960] leading-relaxed">
+                By continuing you agree to the{' '}
+                <a
+                  href="https://lunao.org/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-[#1A1916] hover:text-[#2563EB] underline underline-offset-2 transition-colors"
+                >
+                  Terms of Service
+                </a>{' '}
+                and{' '}
+                <a
+                  href="https://lunao.org/privacy/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-[#1A1916] hover:text-[#2563EB] underline underline-offset-2 transition-colors"
+                >
+                  Privacy Policy
+                </a>
+                .
+              </p>
             </div>
           </div>
         </div>

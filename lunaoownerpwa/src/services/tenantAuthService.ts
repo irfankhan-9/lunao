@@ -321,10 +321,27 @@ export const tenantAuthService = {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
 
+      const ownerKey = (() => {
+        try { return localStorage.getItem('lunao_owner_key') || ''; } catch { return ''; }
+      })();
+      const userPlan = (() => {
+        try { return localStorage.getItem('lunao_user_plan') || ''; } catch { return ''; }
+      })();
+
       const resp = await fetch('/api/owner/redeem', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: codeToSend, deviceLabel: 'pwa', platform: 'web' }),
+        headers: {
+          'Content-Type': 'application/json',
+          ...(ownerKey ? { 'X-Owner-Key': ownerKey } : {}),
+          ...(userPlan ? { 'X-User-Plan': userPlan } : {}),
+        },
+        body: JSON.stringify({
+          code: codeToSend,
+          deviceLabel: 'pwa',
+          platform: 'web',
+          ownerKey: ownerKey || undefined,
+          plan: userPlan || undefined,
+        }),
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -363,17 +380,54 @@ export const tenantAuthService = {
   async getStoredSession(): Promise<OwnerSession | null> {
     const stored = readSession();
     if (!stored?.token || !stored?.slug) return null;
-    // Return stored immediately for instant 0ms mount. Best-effort refresh in background.
-    fetchFullBusiness(stored.token, stored.slug, stored.business?.name)
-      .then((fresh) => {
-        fresh.lunaoCode = stored.code;
-        fresh.authToken = stored.token;
-        fresh.slug = stored.slug;
-        persistSession({ ...stored, business: fresh });
-      })
-      .catch(() => {
-        /* Keep existing stored session */
+    if (
+      String(stored.token).startsWith('lunao.preview.') ||
+      String(stored.token).startsWith('lunao.mock.')
+    ) {
+      persistSession(null);
+      return null;
+    }
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlCode = (params.get('code') || '').trim().toUpperCase();
+      const urlSlug = (params.get('slug') || '').trim().toLowerCase();
+      if (urlCode && String(stored.code || '').toUpperCase() !== urlCode) {
+        return null;
+      }
+      if (urlSlug && String(stored.slug || '').toLowerCase() !== urlSlug) {
+        return null;
+      }
+    } catch {
+      /* ignore URL parsing */
+    }
+    // Verify with backend that the token/PWA is still valid and active
+    try {
+      const res = await fetch('/api/pwa/me', {
+        headers: {
+          Authorization: `Bearer ${stored.token}`,
+          'X-Tenant-Slug': stored.slug,
+        },
       });
+      if (res.status === 401 || res.status === 403) {
+        persistSession(null);
+        return null;
+      }
+      if (res.ok) {
+        const data = await res.json();
+        const b = data.business || {};
+        if (b.slug) {
+          const fresh = await fetchFullBusiness(stored.token, stored.slug, stored.business?.name);
+          fresh.lunaoCode = stored.code;
+          fresh.authToken = stored.token;
+          fresh.slug = stored.slug;
+          const updated = { ...stored, business: fresh };
+          persistSession(updated);
+          return updated;
+        }
+      }
+    } catch {
+      /* Keep existing stored session if offline */
+    }
     return stored;
   },
 

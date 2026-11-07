@@ -33,10 +33,6 @@ export const SocialProof: React.FC = () => {
             </div>
           ))}
         </div>
-
-        <p className="mt-14 text-center font-mono text-[11px] text-ink-tertiary max-w-[60ch] mx-auto">
-          {socialProofCopy.caption}
-        </p>
       </div>
     </section>
   );

@@ -9,7 +9,7 @@ import { EDMONTON_230_CONTRACTORS } from './edmonton230Data.js';
 import { compileSite } from './compile.js';
 import { db } from './db.js';
 import { getPgPool, getSupabase } from './supabase.js';
-import { cloudflare, siteBaseUrl } from './config.js';
+import { cloudflare, siteBaseUrl, siteUrlForSlug } from './config.js';
 import { publishBatch } from './cloudflare.js';
 
 export const UGC_SECRET_CODE = 'LNO-UGC-9X4K-77VQ';
@@ -210,7 +210,7 @@ export function getSpecialModeContractorSite(slug) {
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
         .join(' ') || 'Apex Climate Care';
   const city = contractor ? contractor.city : 'Edmonton, AB';
-  const url = `${siteBaseUrl()}/${cleanSlug}/`;
+  const url = siteUrlForSlug(cleanSlug);
   return {
     slug: cleanSlug,
     title: `${businessName} — ${city}`,
@@ -295,7 +295,7 @@ function setExactServerCredits(ownerKey, plan, balance) {
   }
 }
 
-export async function seedAndDeployAll230EdmontonSites(SITES_DIR) {
+export async function seedAndDeployAll230EdmontonSites(SITES_DIR, deployToEdge = false) {
   const pool = getPgPool();
   const sb = getSupabase();
   const projName = cloudflare.project || 'lunao-web-designn';
@@ -313,7 +313,7 @@ export async function seedAndDeployAll230EdmontonSites(SITES_DIR) {
           slug,
           name: c.name,
           city: c.city,
-          deployUrl: `https://${projName}.pages.dev/${slug}/`,
+          deployUrl: siteUrlForSlug(slug),
           html,
         });
       }
@@ -440,9 +440,9 @@ export async function seedAndDeployAll230EdmontonSites(SITES_DIR) {
     }
   }
 
-  // 4. Deploy batch to Cloudflare Pages
+  // 4. Deploy batch to Cloudflare Pages only when explicitly requested
   let cloudflareResult = null;
-  if (cloudflare.live) {
+  if (deployToEdge && cloudflare.live) {
     try {
       console.log(`[SpecialMode] Deploying ${compiledSites.length} sites to Cloudflare Pages (${projName})...`);
       cloudflareResult = await publishBatch();
@@ -479,8 +479,9 @@ export function mountSpecialModeRoutes(app, SITES_DIR) {
       const isReset = code === RESET_SECRET_CODE || code === 'NORMALSITE99XX73' || code === 'NORMALSITE' || code === 'LNO-RST-0000-CLEAN' || code === 'NORMAL';
 
       if (isUgc || isSales || isAffiliate) {
-        // Trigger background seeding of all 230 sites so they are guaranteed in DB and staged
-        seedAndDeployAll230EdmontonSites(SITES_DIR).catch((err) => {
+        // Trigger background DB seeding of all 230 sites without running a full Cloudflare Pages CLI deploy
+        // (Cloudflare _worker.js already serves all sites from Supabase user_sites at the edge).
+        seedAndDeployAll230EdmontonSites(SITES_DIR, false).catch((err) => {
           console.warn('[SpecialMode] Async 230 site seeding notice:', err.message);
         });
       }
@@ -557,6 +558,163 @@ export function mountSpecialModeRoutes(app, SITES_DIR) {
     }
   });
 
+  function transformServedSiteHtml(rawHtml, slug) {
+    if (!rawHtml || typeof rawHtml !== 'string') return rawHtml;
+    let html = rawHtml;
+    html = html.replace(/https:\/\/wqlbuadknltsjfzrltpe\.supabase\.co\/functions\/v1\/public-bookings/g, '/api/bookings');
+    html = html.replace(/https:\/\/wqlbuadknltsjfzrltpe\.supabase\.co\/functions\/v1\/public-leads/g, '/api/leads');
+    html = html.replace(/https:\/\/ais-dev-[^\/]+\.run\.app\/api\/bookings/g, '/api/bookings');
+    html = html.replace(/\/functions\/v1\/public-bookings/g, '/api/bookings');
+    html = html.replace(/\/functions\/v1\/public-leads/g, '/api/leads');
+
+    html = html.replace('class="page-transition-veil active"', 'class="page-transition-veil"');
+    html = html.replace('.page-transition-veil {', '.page-transition-veil { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important;');
+    html = html.replace(/navigator\.serviceWorker\.register\('\/sw\.js'\)[\s\S]*?\.catch\(error => \{[\s\S]*?\}\);/g, '/* sw disabled */');
+
+    const slugScript = `<script id="lunao-edge-slug">window.LUNAO_SLUG = ${JSON.stringify(slug)};</script>`;
+    if (!html.includes('id="sw-killswitch"')) {
+      const swKillScript = `<script id="sw-killswitch">
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function(regs) {
+            for (var i = 0; i < regs.length; i++) regs[i].unregister();
+          });
+        }
+      </script>`;
+      if (html.includes('<head>')) {
+        html = html.replace('<head>', `<head>\n  ${slugScript}\n  ${swKillScript}`);
+      } else {
+        html = `${slugScript}\n${swKillScript}\n` + html;
+      }
+    } else if (!html.includes('id="lunao-edge-slug"')) {
+      if (html.includes('<head>')) {
+        html = html.replace('<head>', `<head>\n  ${slugScript}`);
+      } else {
+        html = `${slugScript}\n` + html;
+      }
+    }
+
+    if (!html.includes('rel="icon"') && !html.includes("rel='icon'")) {
+      const faviconHtml = `  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=2" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=2" />
+  <link rel="shortcut icon" href="/favicon.ico?v=2" />
+  <link rel="alternate icon" href="/favicon.ico?v=2" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />`;
+      if (html.includes('</head>')) {
+        html = html.replace('</head>', `${faviconHtml}\n</head>`);
+      }
+    }
+
+    if (!html.includes('lunao-booking-bridge.js')) {
+      if (html.includes('</body>')) {
+        html = html.replace('</body>', '<script src="/lunao-booking-bridge.js"></script>\n</body>');
+      } else {
+        html += '\n<script src="/lunao-booking-bridge.js"></script>';
+      }
+    }
+    return html;
+  }
+
+  async function resolveAndServeSiteBySlug(cleanSlug, res) {
+    // 1. If physical file exists on disk in SITES_DIR, let disk win
+    const indexPath = path.join(SITES_DIR, cleanSlug, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      try {
+        const diskHtml = fs.readFileSync(indexPath, 'utf8');
+        if (diskHtml && diskHtml.trim()) {
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+          res.send(transformServedSiteHtml(diskHtml, cleanSlug));
+          return true;
+        }
+      } catch {}
+    }
+
+    // 2. Dynamic Supabase Lookup: fetch compiled_html from public.user_sites
+    let dbHtml = null;
+    const pool = getPgPool();
+    if (pool) {
+      try {
+        const { rows } = await pool.query(
+          'SELECT compiled_html FROM public.user_sites WHERE slug = $1 LIMIT 1',
+          [cleanSlug]
+        );
+        if (rows && rows.length > 0 && rows[0].compiled_html) {
+          dbHtml = rows[0].compiled_html;
+        }
+      } catch {}
+    }
+
+    if (!dbHtml) {
+      const sb = getSupabase();
+      if (sb) {
+        try {
+          const { data } = await sb
+            .from('user_sites')
+            .select('compiled_html')
+            .eq('slug', cleanSlug)
+            .maybeSingle();
+          if (data?.compiled_html) dbHtml = data.compiled_html;
+        } catch {}
+      }
+    }
+
+    if (!dbHtml) {
+      try {
+        const localRow = db.prepare('SELECT compiled_html FROM user_sites WHERE slug = ?').get(cleanSlug);
+        if (localRow?.compiled_html) dbHtml = localRow.compiled_html;
+      } catch {}
+    }
+
+    if (dbHtml) {
+      try {
+        const dirPath = path.join(SITES_DIR, cleanSlug);
+        fs.mkdirSync(dirPath, { recursive: true });
+        fs.writeFileSync(path.join(dirPath, 'index.html'), dbHtml, 'utf8');
+      } catch {}
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+      res.send(transformServedSiteHtml(dbHtml, cleanSlug));
+      return true;
+    }
+
+    // 3. Otherwise compile Apex Climate Care (hvac-bespoke) on the fly for 230 Edmonton contractors
+    const html = await getCompiledContractorHtml(cleanSlug);
+    if (html) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.send(transformServedSiteHtml(html, cleanSlug));
+      return true;
+    }
+    return false;
+  }
+
+  // Subdomain Tenant Site Renderer: https://<business-slug>.lunao.org
+  app.get(['/', '/index.html'], async (req, res, next) => {
+    try {
+      const rawHost = String(req.headers['x-forwarded-host'] || req.headers.host || '')
+        .split(',')[0]
+        .split(':')[0]
+        .trim()
+        .toLowerCase();
+      if (!rawHost.endsWith('.lunao.org')) return next();
+
+      const subSlug = rawHost.slice(0, -'.lunao.org'.length);
+      const reservedSubs = ['www', 'api', 'app', 'admin', 'mail', 'smtp', 'ftp', 'staging', 'dev', 'owner'];
+      if (!subSlug || reservedSubs.includes(subSlug) || subSlug.includes('.')) {
+        return next();
+      }
+
+      const served = await resolveAndServeSiteBySlug(subSlug, res);
+      if (served) return;
+      return next();
+    } catch (err) {
+      console.error('[SubdomainSite] Render error:', err?.message);
+      return next();
+    }
+  });
+
   // Self-Healing Dynamic Renderer:
   // 1. Disk check (fastest)
   // 2. Supabase / SQLite user_sites lookup (persisted user deploys) + auto-write to disk
@@ -567,68 +725,8 @@ export function mountSpecialModeRoutes(app, SITES_DIR) {
       if (!rawSlug || rawSlug.includes('.')) return next();
       const cleanSlug = rawSlug.toLowerCase().replace(/^\/+|\/+$/g, '');
 
-      // 1. If physical file exists on disk in SITES_DIR, let disk win
-      const indexPath = path.join(SITES_DIR, cleanSlug, 'index.html');
-      if (fs.existsSync(indexPath)) {
-        return res.sendFile(indexPath);
-      }
-
-      // 2. Dynamic Supabase Lookup: fetch compiled_html from public.user_sites
-      let dbHtml = null;
-      const pool = getPgPool();
-      if (pool) {
-        try {
-          const { rows } = await pool.query(
-            'SELECT compiled_html FROM public.user_sites WHERE slug = $1 LIMIT 1',
-            [cleanSlug]
-          );
-          if (rows && rows.length > 0 && rows[0].compiled_html) {
-            dbHtml = rows[0].compiled_html;
-          }
-        } catch {}
-      }
-
-      if (!dbHtml) {
-        const sb = getSupabase();
-        if (sb) {
-          try {
-            const { data } = await sb
-              .from('user_sites')
-              .select('compiled_html')
-              .eq('slug', cleanSlug)
-              .maybeSingle();
-            if (data?.compiled_html) dbHtml = data.compiled_html;
-          } catch {}
-        }
-      }
-
-      if (!dbHtml) {
-        try {
-          const localRow = db.prepare('SELECT compiled_html FROM user_sites WHERE slug = ?').get(cleanSlug);
-          if (localRow?.compiled_html) dbHtml = localRow.compiled_html;
-        } catch {}
-      }
-
-      if (dbHtml) {
-        // Auto-hydrate disk cache for future rapid serves
-        try {
-          const dirPath = path.join(SITES_DIR, cleanSlug);
-          fs.mkdirSync(dirPath, { recursive: true });
-          fs.writeFileSync(path.join(dirPath, 'index.html'), dbHtml, 'utf8');
-        } catch {}
-
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800');
-        return res.send(dbHtml);
-      }
-
-      // 3. Otherwise compile Apex Climate Care (hvac-bespoke) on the fly for 230 Edmonton contractors
-      const html = await getCompiledContractorHtml(cleanSlug);
-      if (html) {
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.setHeader('Cache-Control', 'no-cache');
-        return res.send(html);
-      }
+      const served = await resolveAndServeSiteBySlug(cleanSlug, res);
+      if (served) return;
       return next();
     } catch (err) {
       console.error('[SpecialModeSites] Render error:', err?.message);

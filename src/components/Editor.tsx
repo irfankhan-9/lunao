@@ -16,7 +16,7 @@ import {
   EditorSite, AiChatMessage,
   listInviteCodes, InviteCode,
   listSiteHistory, createSiteHistory, convertHistoryToTemplate,
-  SiteHistoryEntry, processUploadedHtml,
+  SiteHistoryEntry, processUploadedHtml, isOfficialBuiltinTemplate,
 } from '../lib/pipelineClient';
 import {
   playSoftTap, playTiktokLike, playSlideTick, playDialogPop, playSoftBubble,
@@ -24,7 +24,6 @@ import {
   playElegantError, playCancelTone, playMagicWhoosh,
 } from '../utils/audio';
 import { OwnerPWADrawer } from './OwnerPWADrawer';
-import { OwnerPWAModal } from './OwnerPWAModal';
 import { TemplateLabPage } from './TemplateLabPage';
 import { useSyncNiches } from '../lib/nichesSync';
 import { validateBookingContract, CONTRACT_REJECTION_MESSAGE } from '../lib/bookingContractValidator';
@@ -143,7 +142,20 @@ class StudioErrorBoundary extends Component<StudioErrorBoundaryProps, StudioErro
 }
 
 export const Editor: React.FC<EditorProps> = ({ active }) => {
-  const [view, setView] = useState<'list' | 'edit' | 'lab'>('list');
+  const [view, setViewRaw] = useState<'list' | 'edit' | 'lab'>(() => {
+    try {
+      const saved = sessionStorage.getItem('lunao_editor_view');
+      if (saved === 'lab' || saved === 'edit' || saved === 'list') return saved;
+    } catch {}
+    return 'list';
+  });
+
+  const setView = (v: 'list' | 'edit' | 'lab') => {
+    try {
+      sessionStorage.setItem('lunao_editor_view', v);
+    } catch {}
+    setViewRaw(v);
+  };
   const [sites, setSites] = useState<EditorSite[]>([]);
   const [aiEnabled, setAiEnabled] = useState(true);
   const [listLoading, setListLoading] = useState(false);
@@ -183,7 +195,6 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   const [inviteCodes, setInviteCodes] = useState<InviteCode[]>([]);
   const [inviteRefreshKey, setInviteRefreshKey] = useState(0);
   const [quickPwaSite, setQuickPwaSite] = useState<EditorSite | null>(null);
-  const [pwaSimulatorOpen, setPwaSimulatorOpen] = useState(false);
 
   // Real HTML source code viewer/editor (strictly for UGC & Sales plans)
   const [showCodeView, setShowCodeView] = useState(false);
@@ -264,6 +275,14 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
 
   // ---- open / load a single site ------------------------------------------
   const openSite = async (site: EditorSite) => {
+    if (!isOfficialBuiltinTemplate(site.templateKey) || site.templateSource === 'custom' || site.isPwaConnected === false) {
+      flashToast({
+        title: 'Built-in Templates Only',
+        message: 'Owner PWA and the Site Editor are strictly reserved for Lunao official built-in templates.',
+        type: 'info',
+      });
+      return;
+    }
     sfx.open();
     // Reset scroll on every "Open Editor" click so the user lands at the
     // top of the edit view instead of inheriting whatever scroll position
@@ -559,11 +578,11 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   // ===========================================================================
 
   if (view === 'lab') {
-    if (!active) return null;
     const labContent = (
       <div
         key="editor-lab"
         className="fixed inset-0 md:left-[260px] z-40 bg-white flex flex-col overflow-hidden animate-editor-rise"
+        style={{ display: active ? 'flex' : 'none' }}
       >
         {toast && <ToastBanner toast={toast} onClose={() => setToast(null)} />}
         <StudioErrorBoundary onClose={() => { sfx.close(); setView('list'); }}>
@@ -596,7 +615,18 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   if (view === 'list') {
     const niches = ['All', 'Barber', 'Salon', 'Dentist', 'HVAC', 'Gym', 'Roofing', 'Real Estate'];
     const q = search.trim().toLowerCase();
-    const filteredSites = sites.filter(
+    const officialSites = sites.filter(
+      (s) =>
+        s &&
+        s.slug &&
+        s.templateSource !== 'custom' &&
+        s.isPwaConnected !== false &&
+        !String(s.templateKey || '').toLowerCase().startsWith('tmpl_') &&
+        !String(s.templateKey || '').toLowerCase().startsWith('custom_') &&
+        !String(s.templateKey || '').toLowerCase().startsWith('hist_') &&
+        isOfficialBuiltinTemplate(s.templateKey),
+    );
+    const filteredSites = officialSites.filter(
       (s) =>
         (filterNiche === 'All' || s.niche === filterNiche) &&
         (q === '' || s.title.toLowerCase().includes(q) || s.slug.toLowerCase().includes(q)),
@@ -691,7 +721,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
                 {niches.map((n) => {
                   const isActive = filterNiche === n;
-                  const count = n === 'All' ? sites.length : sites.filter((s) => s.niche === n).length;
+                  const count = n === 'All' ? officialSites.length : officialSites.filter((s) => s.niche === n).length;
                   return (
                     <button
                       key={n}
@@ -723,14 +753,14 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
                   <Search className="w-6 h-6 text-ink-tertiary" />
                 </div>
                 <h3 className="text-base font-bold font-sans text-ink mb-1">
-                  {sites.length === 0 ? 'No deployed sites yet' : 'No matching sites'}
+                  {officialSites.length === 0 ? 'No deployed sites yet' : 'No matching sites'}
                 </h3>
                 <p className="text-sm text-ink-secondary font-sans mb-4">
-                  {sites.length === 0
+                  {officialSites.length === 0
                     ? 'Deploy a site from any Email, SMS, or Site Deploy campaign to view and edit it here.'
                     : 'Try a different filter or search term.'}
                 </p>
-                {sites.length > 0 && (
+                {officialSites.length > 0 && (
                   <button
                     onClick={() => { sfx.tap(); setSearch(''); setFilterNiche('All'); }}
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent-soft text-accent text-sm font-semibold font-sans hover:bg-accent hover:text-white transition-all"
@@ -770,21 +800,21 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
                         >
                           <Pencil className="w-4 h-4" /> Open Editor
                         </button>
-                        {isUgcOrSalesMode() && (
+                        {isOfficialBuiltinTemplate(site.templateKey) && (
                           <button
                             onClick={() => {
                               sfx.open();
                               setQuickPwaSite(site);
                             }}
                             className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 text-xs font-bold font-sans transition-all active:scale-[0.96] cursor-pointer shrink-0"
-                            title="Generate Owner PWA Access Code"
+                            title="Generate Owner PWA QR & Access Code"
                           >
                             <Key className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>PWA Code</span>
+                            <span>PWA QR</span>
                           </button>
                         )}
                         <a
-                          href={isUgcOrSalesMode() ? `/sites/${site.slug}/` : (site.deployUrl || site.url || '#')}
+                          href={site.deployUrl || site.url || (site.slug ? `https://${site.slug}.lunao.org` : '#')}
                           target="_blank"
                           rel="noreferrer"
                           onClick={() => sfx.tap()}
@@ -801,32 +831,18 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
             )}
           </div>
 
-        {isUgcOrSalesMode() && quickPwaSite && (
-          <>
-            <OwnerPWADrawer
-              slug={quickPwaSite.slug}
-              businessName={quickPwaSite.title}
-              siteUrl={quickPwaSite.url}
-              open={!pwaSimulatorOpen}
-              onClose={() => {
-                setQuickPwaSite(null);
-                setInviteRefreshKey((k) => k + 1);
-              }}
-              refreshKey={inviteRefreshKey}
-              onOpenMobileSimulator={() => setPwaSimulatorOpen(true)}
-            />
-            <OwnerPWAModal
-              open={pwaSimulatorOpen}
-              onClose={() => {
-                setPwaSimulatorOpen(false);
-                setQuickPwaSite(null);
-              }}
-              slug={quickPwaSite.slug}
-              businessName={quickPwaSite.title}
-              niche={quickPwaSite.niche}
-              siteUrl={quickPwaSite.url}
-            />
-          </>
+        {quickPwaSite && isOfficialBuiltinTemplate(quickPwaSite.templateKey) && (
+          <OwnerPWADrawer
+            slug={quickPwaSite.slug}
+            businessName={quickPwaSite.title}
+            siteUrl={quickPwaSite.url}
+            open={true}
+            onClose={() => {
+              setQuickPwaSite(null);
+              setInviteRefreshKey((k) => k + 1);
+            }}
+            refreshKey={inviteRefreshKey}
+          />
         )}
       </div>
     );
@@ -916,8 +932,8 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
           </button>
         )}
 
-        {/* PWA Code Generator button - rendered only for templates with real bookings */}
-        {selected && (isUgcOrSalesMode() || addons.booking || ['barber', 'salon', 'dentist', 'hvac', 'gym', 'roofing', 'real estate', 'clinic', 'spa', 'beauty', 'medspa', 'plumbing'].some(n => (selected.niche || '').toLowerCase().includes(n)) || (previewHtml || htmlRef.current || '').toLowerCase().includes('booking') || (previewHtml || htmlRef.current || '').toLowerCase().includes('appointment')) && (
+        {/* PWA Code Generator button - strictly reserved for Lunao official built-in templates */}
+        {selected && isOfficialBuiltinTemplate(selected.templateKey) && (
           <button
             onClick={() => {
               sfx.open();
@@ -1180,32 +1196,18 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
         </div>
       </div>
 
-      {/* Invite Client drawer — full-screen overlay, mounted at the editor
-          root so its backdrop covers the entire workspace. */}
-      <OwnerPWADrawer
-        slug={selected.slug}
-        businessName={selected.title}
-        siteUrl={selected.url}
-        open={inviteOpen}
-        onClose={() => {
-          setInviteOpen(false);
-          setInviteRefreshKey((k) => k + 1); // re-pull active count for the badge
-        }}
-        refreshKey={inviteRefreshKey}
-        onOpenMobileSimulator={isUgcOrSalesMode() ? () => {
-          setInviteOpen(false);
-          setPwaSimulatorOpen(true);
-        } : undefined}
-      />
-
-      {isUgcOrSalesMode() && selected && (
-        <OwnerPWAModal
-          open={pwaSimulatorOpen}
-          onClose={() => setPwaSimulatorOpen(false)}
+      {/* Invite Client drawer — strictly mounted for official built-in templates */}
+      {selected && isOfficialBuiltinTemplate(selected.templateKey) && (
+        <OwnerPWADrawer
           slug={selected.slug}
           businessName={selected.title}
-          niche={selected.niche}
           siteUrl={selected.url}
+          open={inviteOpen}
+          onClose={() => {
+            setInviteOpen(false);
+            setInviteRefreshKey((k) => k + 1); // re-pull active count for the badge
+          }}
+          refreshKey={inviteRefreshKey}
         />
       )}
     </div>

@@ -17,17 +17,25 @@ export const CONTRACT_REJECTION_MESSAGE =
 // Core approved fields for the booking template (Name, Email, Phone Number, Service, plus standard slots Date/Time/Notes)
 export const APPROVED_FIELD_IDENTIFIERS = new Set([
   // Name
-  'name', 'client-name', 'client_name', 'customer-name', 'customer_name', 'customername', 'fullname', 'full_name',
+  'name', 'client-name', 'client_name', 'customer-name', 'customer_name', 'customername', 'fullname', 'full_name', 'full-name',
+  'frm_fullname', 'frm_name', 'form-name', 'form_name', 'contactname', 'feasibilityname', 'workshopcontactname', 'specimenname', 'warrantyclientname',
   // Phone
   'phone', 'client-phone', 'client_phone', 'mobile', 'tel', 'telephone', 'phone_number', 'phonenumber',
+  'frm_phone', 'form-phone', 'form_phone', 'phonenum', 'phone-num', 'contactphone', 'feasibilityphone', 'workshopcontactphone', 'specimenphone', 'warrantyphone',
   // Email
   'email', 'client-email', 'client_email', 'email_address', 'mail',
-  // Service
-  'service', 'booking-service', 'booking_service', 'service-select', 'services', 'treatment',
+  'frm_email', 'form-email', 'form_email', 'contactemail', 'feasibilityemail', 'specimenemail', 'dispatchemail',
+  // Service & Niche Selectors
+  'service', 'booking-service', 'booking_service', 'service-select', 'serviceselect', 'services', 'treatment',
+  'service-needed', 'service_needed', 'serviceneeded', 'frm_service', 'form-goal', 'form_goal', 'goal',
+  'service_stylist', 'stylist', 'frm_stylist', 'service_provider', 'provider', 'frm_provider',
+  'service_referral', 'referral', 'frm_source', 'frm_hear', 'propertytype', 'property_type', 'timeline', 'workshoptype', 'warrantyyear',
   // Standard scheduling slots (presentation only, not custom fields)
-  'date', 'booking-date', 'booking_date', 'service-date',
-  'time', 'booking-time', 'booking_time', 'time-slot', 'timeslot',
-  'notes', 'booking-notes', 'booking_notes', 'comments', 'special-requests'
+  'date', 'booking-date', 'booking_date', 'service-date', 'frm_date', 'date-input', 'date_input', 'frm_dob', 'dob',
+  'time', 'booking-time', 'booking_time', 'time-slot', 'timeslot', 'frm_time', 'time-input', 'time_input',
+  'notes', 'booking-notes', 'booking_notes', 'comments', 'special-requests', 'frm_notes', 'form-desc', 'form_desc', 'desc',
+  'description', 'message', 'address', 'addressincity', 'details', 'contactscope', 'feasibilitynotes', 'feasibilityaddress',
+  'specimennotes', 'specimenaddress', 'warrantyadjustment', 'warrantyaddress', 'workshopsqft'
 ]);
 
 // Canonical Approved Booking Component Template (v1.0.0-beta)
@@ -307,7 +315,7 @@ export function validateBookingPayloadContract(payload = {}) {
     'slug', 'businessName', 'business_name', 'customerName', 'customer_name', 'name',
     'phone', 'email', 'service', 'date', 'time', 'notes', 'source', 'status',
     'idempotencyKey', 'idempotency_key', 'createdAt', 'created_at', 'customFields', 'custom_fields',
-    'rawSubmission'
+    'rawSubmission', 'leadType', 'lead_type', 'details', 'goal'
   ]);
 
   for (const key of Object.keys(payload)) {
@@ -338,8 +346,8 @@ export function validateBookingPayloadContract(payload = {}) {
     return { valid: false, error: 'A valid telephone number (minimum 7 digits) is required.' };
   }
 
-  // Required: service
-  const service = String(payload.service || '').trim();
+  // Required: service (or goal/leadType fallback)
+  const service = String(payload.service || payload.goal || payload.leadType || '').trim();
   if (!service) {
     return { valid: false, error: 'An approved service option must be selected.' };
   }
@@ -372,7 +380,7 @@ export function validateBookingPayloadContract(payload = {}) {
   // Validate preferred time format if provided
   const timeStr = String(payload.time || '').trim();
   if (timeStr) {
-    const isFlexible = /^flexible$/i.test(timeStr);
+    const isFlexible = /^(flexible|morning|afternoon|late\s*afternoon|evening)$/i.test(timeStr);
     const isTime12 = /^(0?[1-9]|1[0-2]):[0-5][0-9]\s*(AM|PM|am|pm)$/i.test(timeStr);
     const isTime24 = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(timeStr);
     if (!isFlexible && !isTime12 && !isTime24) {

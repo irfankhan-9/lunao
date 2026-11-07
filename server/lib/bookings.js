@@ -76,8 +76,30 @@ const str = (v) => (v == null ? '' : String(v)).trim();
 // In-memory backing store for local/dev and deterministic tests
 const localBookingsMemory = [];
 
+function normalizeBookingInput(rawInput = {}) {
+  const input = { ...rawInput };
+  if (!input.service || !String(input.service).trim()) {
+    const fallbackSvc =
+      input.goal ||
+      (input.details && (input.details.goal || input.details.service)) ||
+      input.leadType ||
+      input.lead_type ||
+      'General Consultation';
+    input.service = String(fallbackSvc).trim() || 'General Consultation';
+  }
+  if (input.time && typeof input.time === 'string') {
+    const t = input.time.trim();
+    if (/^morning$/i.test(t)) input.time = '09:00 AM';
+    else if (/^afternoon$/i.test(t)) input.time = '01:00 PM';
+    else if (/^late\s*afternoon$/i.test(t)) input.time = '04:00 PM';
+    else if (/^evening$/i.test(t)) input.time = '05:00 PM';
+  }
+  return input;
+}
+
 // Insert a booking into local storage (with SQLite statement attempt).
-export function createBooking(input = {}) {
+export function createBooking(rawInput = {}) {
+  const input = normalizeBookingInput(rawInput);
   const validation = validateBookingPayloadContract(input);
   if (!validation.valid) {
     const err = new Error(validation.error);
@@ -144,7 +166,8 @@ export function createBooking(input = {}) {
 }
 
 // Authoritative booking creation: requires durable persistence in Supabase when live.
-export async function createBookingAsync(input = {}) {
+export async function createBookingAsync(rawInput = {}) {
+  const input = normalizeBookingInput(rawInput);
   const validation = validateBookingPayloadContract(input);
   if (!validation.valid) {
     const err = new Error(validation.error);

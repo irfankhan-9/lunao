@@ -937,34 +937,39 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
               </p>
             </div>
             <div className="flex flex-col gap-1">
-              {camp.emailAccountsUsed.map((acc, i) => (
-                <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-off-white border border-border-light">
-                  <div className="w-5 h-5 rounded-full bg-accent-soft text-accent flex items-center justify-center shrink-0">
-                    <Mail className="w-2.5 h-2.5" />
+              {camp.emailAccountsUsed.map((acc: any, i: number) => {
+                const emailStr = typeof acc === 'object' && acc !== null ? (acc.accountEmail || acc.accountId || '') : String(acc || '');
+                const sentCount = typeof acc === 'object' && acc !== null ? Number(acc.sent) || 0 : 0;
+                const failedCount = typeof acc === 'object' && acc !== null ? Number(acc.failed) || 0 : 0;
+                return (
+                  <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-off-white border border-border-light">
+                    <div className="w-5 h-5 rounded-full bg-accent-soft text-accent flex items-center justify-center shrink-0">
+                      <Mail className="w-2.5 h-2.5" />
+                    </div>
+                    <span className="flex-1 min-w-0 text-[10px] font-mono text-ink truncate">{emailStr}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {sentCount > 0 && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-success-soft text-success border border-success/25 text-[9px] font-bold">
+                          <CheckCircle className="w-2.5 h-2.5" />
+                          {sentCount}
+                        </span>
+                      )}
+                      {failedCount > 0 && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-danger/10 text-danger border border-danger/25 text-[9px] font-bold">
+                          <X className="w-2.5 h-2.5" />
+                          {failedCount}
+                        </span>
+                      )}
+                      {sentCount === 0 && failedCount === 0 && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-accent-soft text-accent border border-accent/25 text-[9px] font-bold">
+                          <Loader2 className="w-2.5 h-2.5 animate-campaign-spin" />
+                          {isRunning ? 'Running' : 'Queued'}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <span className="flex-1 min-w-0 text-[10px] font-mono text-ink truncate">{acc.accountEmail}</span>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {acc.sent > 0 && (
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-success-soft text-success border border-success/25 text-[9px] font-bold">
-                        <CheckCircle className="w-2.5 h-2.5" />
-                        {acc.sent}
-                      </span>
-                    )}
-                    {acc.failed > 0 && (
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-danger/10 text-danger border border-danger/25 text-[9px] font-bold">
-                        <X className="w-2.5 h-2.5" />
-                        {acc.failed}
-                      </span>
-                    )}
-                    {acc.sent === 0 && acc.failed === 0 && (
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-accent-soft text-accent border border-accent/25 text-[9px] font-bold">
-                        <Loader2 className="w-2.5 h-2.5 animate-campaign-spin" />
-                        {isRunning ? 'Running' : 'Queued'}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

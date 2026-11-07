@@ -20,7 +20,7 @@ import {
 } from '../utils/audio';
 import {
   validateCsvFile, CsvValidation, PipelineLead,
-  runSiteDeployCampaign, PipelineResultRow, executeUnifiedLeadRebrandClient, sanitizeToLunaoServers
+  runSiteDeployCampaign, PipelineResultRow, executeUnifiedLeadRebrandClient, sanitizeToLunaoServers, syncUserCredits
 } from '../lib/pipelineClient';
 import { Template } from '../types';
 import { useSyncNiches, getLocalTemplates } from '../lib/nichesSync';
@@ -376,11 +376,15 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
 
     const ownerKey = localStorage.getItem('lunao_owner_key') || `dash-${userPlan.replace(/\s+/g, '-')}`;
 
-    // Deduct credits optimistically
-    const nextCredits = Math.max(0, userCredits - totalCost);
+    // Deduct credits immediately and write permanently to Supabase
+    const baseCredits = typeof userCredits === 'number' && !Number.isNaN(userCredits)
+      ? userCredits
+      : parseFloat(localStorage.getItem('lunao_user_credits') || '15');
+    const nextCredits = Math.max(0, Math.round((baseCredits - totalCost) * 10) / 10);
     onCreditsChange?.(nextCredits);
     localStorage.setItem('lunao_user_credits', nextCredits.toString());
     localStorage.setItem(`lunao_u_${ownerKey}_credits`, nextCredits.toString());
+    syncUserCredits(ownerKey, nextCredits).catch(() => {});
 
     const newCampId = 'sd_' + Date.now();
     const finalName = campaignName || `${selectedNiche} Site Deploy Campaign`;
@@ -544,11 +548,8 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
                 Lunao Rebranding Campaign Active
               </div>
               <h3 className="text-xl sm:text-2xl font-bold font-serif text-ink">
-                Autonomous AI Rebranding in Progress
+                AI Rebranding in Progress
               </h3>
-              <p className="text-xs text-ink-secondary">
-                Multi-agent AI pipeline analyzing business parameters, generating bespoke copy, and verifying 100% live status on Lunao Servers.
-              </p>
             </div>
 
             <div className="flex items-center gap-3">
@@ -685,9 +686,6 @@ export const SiteDeployCampaignWizard: React.FC<SiteDeployCampaignWizardProps> =
                 <h2 className="text-2xl sm:text-3xl md:text-4xl font-serif font-bold text-ink">
                   Websites Live on Lunao Servers!
                 </h2>
-                <p className="text-sm md:text-base text-ink-secondary">
-                  "{celebratedCampaign.name}" has been synthesized and distributed across global edge caches.
-                </p>
               </div>
 
               {/* Stats Counters Grid */}

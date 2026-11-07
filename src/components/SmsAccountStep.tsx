@@ -1,12 +1,19 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Phone, CheckCircle2, AlertCircle, RefreshCw, Key,
-  ExternalLink, Mail, ShieldCheck, Check, Trash2
+  ExternalLink, Mail, ShieldCheck, Check, Trash2, ShieldAlert
 } from 'lucide-react';
 import { playSoftTap, playElegantError, playGentleChime, playConfirmSuccess } from '../utils/audio';
 import { PipelineLead, canUseOwnTelnyx } from '../lib/pipelineClient';
 import { inspectLeadsForTelnyx } from '../lib/phoneRouteValidator';
 import { CarrierRouteInspectionCard } from './CarrierRouteInspectionCard';
+import {
+  getCachedTelnyxData,
+  syncTelnyxAccountLive,
+  saveCachedTelnyxData,
+  clearTelnyxAuth,
+  CachedTelnyxData,
+} from '../lib/telnyxClient';
 
 interface SmsAccountStepProps {
   ownerKey: string;
@@ -43,121 +50,110 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
   leads = [],
   onExcludeIncompatibleLeads,
 }) => {
-  const [apiKey, setApiKey] = useState<string>(() => {
-    return localStorage.getItem(STORAGE_KEY) || '';
-  });
-  const [inputKey, setInputKey] = useState<string>(apiKey);
-  const [isConnected, setIsConnected] = useState<boolean>(false);
-  const [connectedAccountLabel, setConnectedAccountLabel] = useState<string>('');
+  // Synchronously hydrate from browser cache & cookies (0ms instant loading)
+  const [initialCached] = useState<CachedTelnyxData>(() => getCachedTelnyxData());
+  const [apiKey, setApiKey] = useState<string>(initialCached.apiKey || '');
+  const [inputKey, setInputKey] = useState<string>(initialCached.apiKey || '');
+  const [isConnected, setIsConnected] = useState<boolean>(initialCached.connected);
+  const [tokenExpired, setTokenExpired] = useState<boolean>(initialCached.tokenExpired);
+  const [connectedAccountLabel, setConnectedAccountLabel] = useState<string>(
+    initialCached.account?.label || initialCached.account?.email || (initialCached.apiKey ? 'Telnyx Authenticated Carrier' : '')
+  );
   const [isChangingKey, setIsChangingKey] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isOAuthConnecting, setIsOAuthConnecting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [numbers, setNumbers] = useState<TelnyxNumberItem[]>([]);
+  const [numbers, setNumbers] = useState<TelnyxNumberItem[]>(initialCached.numbers || []);
 
   const isStarterOrAbove = canUseOwnTelnyx(userPlan);
 
-  // Fetch real numbers from Telnyx using stored API key or OAuth connection
+  const onSelectPhoneRef = useRef(onSelectPhone);
+  useEffect(() => {
+    onSelectPhoneRef.current = onSelectPhone;
+  }, [onSelectPhone]);
+
+  const selectedPhoneNumberRef = useRef(selectedPhoneNumber);
+  useEffect(() => {
+    selectedPhoneNumberRef.current = selectedPhoneNumber;
+  }, [selectedPhoneNumber]);
+
+  // Auto-select ready number immediately from cache on initial mount
+  useEffect(() => {
+    if (numbers.length > 0 && !selectedPhoneNumberRef.current) {
+      const firstReady = numbers.find((n) => n.canSend);
+      if (firstReady) {
+        onSelectPhoneRef.current(firstReady.phoneNumber, 'telnyx-account', firstReady.profileId);
+      } else {
+        onSelectPhoneRef.current(numbers[0].phoneNumber, 'telnyx-account', numbers[0].profileId);
+      }
+    }
+  }, []);
+
+  const isFetchingRef = useRef(false);
+
+  // Fetch / Sync real numbers from Telnyx using stored API key or OAuth connection
   const fetchNumbers = useCallback(async (explicitKey?: string) => {
-    setIsLoading(true);
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    if (numbers.length === 0) setIsLoading(true);
     setError(null);
 
     try {
-      const storedKey = localStorage.getItem(STORAGE_KEY) || '';
-      const keyToTest = (explicitKey !== undefined ? explicitKey : (apiKey || storedKey)).trim();
-
-      // 1. If we have an API key, query Telnyx numbers directly using that key
-      if (keyToTest) {
-        const res = await fetch('/api/telnyx/query-numbers', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ apiKey: keyToTest, ownerKey }),
-        });
-        const data = await res.json().catch(() => ({}));
-
-        if (!res.ok || !data.ok) {
-          throw new Error(data.error || 'Failed to authenticate with Telnyx. Please check your API key.');
-        }
-
-        const realNumbers: TelnyxNumberItem[] = Array.isArray(data.numbers) ? data.numbers : [];
-        setNumbers(realNumbers);
-        setIsConnected(true);
-        setConnectedAccountLabel('Telnyx API Key Authenticated');
-        setIsChangingKey(false);
-        localStorage.setItem(STORAGE_KEY, keyToTest);
-        setApiKey(keyToTest);
-
-        const firstReady = realNumbers.find((n: TelnyxNumberItem) => n.canSend);
-        if (firstReady && !selectedPhoneNumber) {
-          onSelectPhone(firstReady.phoneNumber, 'telnyx-account', firstReady.profileId);
-        } else if (realNumbers.length > 0 && !selectedPhoneNumber) {
-          onSelectPhone(realNumbers[0].phoneNumber, 'telnyx-account', realNumbers[0].profileId);
-        }
-        return;
+      if (explicitKey) {
+        saveCachedTelnyxData({ apiKey: explicitKey, connected: true });
+        setApiKey(explicitKey);
       }
 
-      // 2. Otherwise check if there is an OAuth-connected Telnyx account on the server
-      const accRes = await fetch(`/api/telnyx/accounts?ownerKey=${encodeURIComponent(ownerKey)}`, {
-        credentials: 'include',
-      });
-      if (accRes.ok) {
-        const accData = await accRes.json().catch(() => ({}));
-        const accounts = Array.isArray(accData.accounts) ? accData.accounts : [];
-        if (accounts.length > 0) {
-          const firstAcc = accounts[0];
-          setConnectedAccountLabel(firstAcc.account_label || firstAcc.account_email || 'Telnyx OAuth Account');
+      const live = await syncTelnyxAccountLive(ownerKey);
 
-          const numRes = await fetch(
-            `/api/telnyx/accounts/${encodeURIComponent(firstAcc.id)}/numbers-with-status?ownerKey=${encodeURIComponent(ownerKey)}`,
-            { credentials: 'include' }
-          );
-          if (numRes.ok) {
-            const numData = await numRes.json().catch(() => ({}));
-            const list = Array.isArray(numData) ? numData : (Array.isArray(numData.numbers) ? numData.numbers : []);
-            const mapped: TelnyxNumberItem[] = list.map((n: any) => ({
-              id: String(n.id || n.phoneNumber || n.number),
-              phoneNumber: String(n.phoneNumber || n.number),
-              status: n.status || 'active',
-              smsCapable: n.smsCapable !== false,
-              profileId: n.profileId || null,
-              profileName: n.profileName || null,
-              canSend: Boolean(n.canSend),
-              needsMessagingProfile: Boolean(n.needsMessagingProfile),
-            }));
-
-            setNumbers(mapped);
-            setIsConnected(true);
-            setIsChangingKey(false);
-
-            const firstReady = mapped.find((n) => n.canSend);
-            if (firstReady && !selectedPhoneNumber) {
-              onSelectPhone(firstReady.phoneNumber, firstAcc.id, firstReady.profileId);
-            } else if (mapped.length > 0 && !selectedPhoneNumber) {
-              onSelectPhone(mapped[0].phoneNumber, firstAcc.id, mapped[0].profileId);
-            }
-            return;
-          }
-        }
+      setNumbers(live.numbers);
+      setIsConnected(live.connected);
+      setTokenExpired(live.tokenExpired);
+      if (live.account) {
+        setConnectedAccountLabel(live.account.label || live.account.email || 'Telnyx Account');
+      } else if (live.apiKey) {
+        setConnectedAccountLabel('Telnyx API Key Line');
       }
 
-      // If no valid key and no OAuth account, user is not connected
-      setIsConnected(false);
-      setConnectedAccountLabel('');
-      setNumbers([]);
+      if (live.tokenExpired) {
+        setError('Telnyx session or cookie expired. Please reconnect to resume carrier sending.');
+      } else {
+        setError(null);
+      }
+
+      const currentSel = selectedPhoneNumberRef.current;
+      const firstReady = live.numbers.find((n: TelnyxNumberItem) => n.canSend);
+      if (firstReady && !currentSel) {
+        onSelectPhoneRef.current(firstReady.phoneNumber, 'telnyx-account', firstReady.profileId);
+      } else if (live.numbers.length > 0 && !currentSel) {
+        onSelectPhoneRef.current(live.numbers[0].phoneNumber, 'telnyx-account', live.numbers[0].profileId);
+      }
     } catch (err: any) {
       console.warn('[Telnyx Query Error]', err.message);
       setError(err.message || 'Unable to connect to Telnyx. Please verify your credentials.');
-      setIsConnected(false);
-      setConnectedAccountLabel('');
-      setNumbers([]);
     } finally {
       setIsLoading(false);
+      isFetchingRef.current = false;
     }
-  }, [ownerKey, onSelectPhone, selectedPhoneNumber, apiKey]);
+  }, [ownerKey, numbers.length]);
 
-  // Check connection state on mount
+  // Sync on mount and subscribe to cross-tab / cross-section sync events
   useEffect(() => {
     fetchNumbers();
+
+    const onSync = (e: any) => {
+      const detail: CachedTelnyxData = e.detail;
+      if (!detail) return;
+      setIsConnected(detail.connected);
+      setTokenExpired(detail.tokenExpired);
+      setNumbers(detail.numbers || []);
+      if (detail.apiKey) setApiKey(detail.apiKey);
+      if (detail.account) {
+        setConnectedAccountLabel(detail.account.label || detail.account.email || 'Telnyx Account');
+      }
+    };
+    window.addEventListener('lunao:telnyx_sync', onSync);
+    return () => window.removeEventListener('lunao:telnyx_sync', onSync);
   }, [fetchNumbers]);
 
   // Handle OAuth popup connection
@@ -230,7 +226,7 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
   // Disconnect / switch account
   const handleDisconnect = async () => {
     playSoftTap();
-    localStorage.removeItem(STORAGE_KEY);
+    await clearTelnyxAuth(ownerKey);
     setApiKey('');
     setInputKey('');
     setIsConnected(false);
@@ -424,13 +420,20 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
             <p className="text-xs text-ink-secondary">Select an active sender number configured for carrier messaging.</p>
           </div>
           {numbers.length > 0 && (
-            <span className="text-xs font-mono text-ink-secondary">
-              {numbers.filter((n) => n.canSend).length} ready of {numbers.length} total
-            </span>
+            <div className="flex items-center gap-2">
+              {isLoading && (
+                <span className="inline-flex items-center gap-1 text-[10px] text-blue-600 font-medium">
+                  <RefreshCw className="w-2.5 h-2.5 animate-spin" /> Syncing...
+                </span>
+              )}
+              <span className="text-xs font-mono text-ink-secondary">
+                {numbers.filter((n) => n.canSend).length} ready of {numbers.length} total
+              </span>
+            </div>
           )}
         </div>
 
-        {isLoading ? (
+        {isLoading && numbers.length === 0 ? (
           <div className="p-8 rounded-2xl bg-white border border-border-main text-center space-y-3">
             <RefreshCw className="w-6 h-6 text-blue-600 animate-spin mx-auto" />
             <p className="text-xs text-ink-secondary">Querying Telnyx carrier numbers and checking messaging profile status...</p>

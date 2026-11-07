@@ -30,7 +30,7 @@ export function isAiEnabled() {
 
 // Preferred primary models per Gemini API skill guidelines.
 const MODEL_PRIORITY = [
-  process.env.GEMINI_MODEL || 'gemini-flash-latest',
+  process.env.GEMINI_MODEL || 'gemini-3.5-flash',
   'gemini-3.8-flash',
   'gemini-3.1-flash-lite',
 ];
@@ -39,17 +39,19 @@ let _verifiedModel = null;
 
 function resolveModelCandidates(requestedModel) {
   const norm = String(requestedModel || '').toLowerCase();
-  let preferred = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+  let preferred = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
   if (norm.includes('3.8')) {
     preferred = 'gemini-3.8-flash';
   } else if (norm.includes('3.1') && norm.includes('pro')) {
-    preferred = 'gemini-3.8-flash';
-  } else if (norm.includes('2.5') || norm.includes('flash')) {
-    preferred = 'gemini-flash-latest';
+    preferred = 'gemini-3.1-pro-preview';
+  } else if (norm.includes('3.5')) {
+    preferred = 'gemini-3.5-flash';
+  } else if (norm.includes('lite') || norm.includes('3.1')) {
+    preferred = 'gemini-3.1-flash-lite';
   }
   const base = _verifiedModel
-    ? [preferred, _verifiedModel, ...MODEL_PRIORITY]
-    : [preferred, ...MODEL_PRIORITY];
+    ? [preferred, _verifiedModel, 'gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-3.1-flash-lite']
+    : [preferred, 'gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-3.1-flash-lite'];
   return Array.from(new Set(base.filter(Boolean)));
 }
 
@@ -99,20 +101,31 @@ Every website must be one complete HTML file with embedded CSS and JavaScript.
 - Do NOT use external CSS stylesheets.
 - NO markdown fences (\`\`\`html or \`\`\`). NO explanations or commentary outside the HTML document.
 
-2. STRICT APPROVED PLACEHOLDERS:
-Use ONLY these 4 placeholders:
-- {{BUSINESS_NAME}} : Full business name. Use this everywhere the business name appears, including in <title>, header logo/text, hero headline, about section, footer copyright, and alt text.
-- {{PHONE}} : Primary contact telephone number. Use in visible contact text and strictly in dial links: <a href="tel:{{PHONE}}">{{PHONE}}</a>.
+2. BUSINESS IDENTITY & CREATIVE FREEDOM:
+You have complete creative freedom to give the business an authentic, prestigious, high-converting brand name tailored directly to the requested industry (e.g. "Aura Cosmetic Dentistry", "Radiant Smile Lounge", "Summit General Hospital", "Apex Performance Gym", "Everest Climate Systems").
+- You may use an authentic industry brand name OR {{BUSINESS_NAME}} in <title>, header logo/text, hero headline, about section, and footer copyright.
+- STRICT PROHIBITION: NEVER use or default to "Vintage Cuts Barber Lounge", "Vintage Cuts", or any barber branding unless the user explicitly asked for a barber shop.
+
+APPROVED LOCATION & CONTACT PLACEHOLDERS:
+- {{PHONE}} / {{PHONE_RAW}} / {{PHONE_DISPLAY}} : Primary contact telephone number (<a href="tel:{{PHONE_RAW}}">{{PHONE_DISPLAY}}</a>).
 - {{CITY}} : Target city and location (e.g., "Austin, TX" or "Chicago, IL").
 - {{ADDRESS}} : Local street or downtown address.
 
-3. EMAIL & SOCIAL MEDIA IDENTITY CONVENTION:
-Use {{BUSINESS_NAME}} everywhere the business name appears, including email and social media identity text (e.g., contact@{{BUSINESS_NAME}}, https://instagram.com/{{BUSINESS_NAME}}).
-NEVER create separate email or social media placeholders.
-Do NOT invent email addresses, fake social handles, or links.
+3. MANDATORY EMAIL & SOCIAL MEDIA PLACEHOLDERS:
+Because target business social media profiles and private email inboxes are not known prior to rebranding, you MUST ALWAYS use the {{BUSINESS_NAME}} placeholder for ALL emails and social media links:
+- Email: ALWAYS use {{BUSINESS_NAME}} in the email address (e.g., <a href="mailto:contact@{{BUSINESS_NAME}}.com">contact@{{BUSINESS_NAME}}.com</a> or info@{{BUSINESS_NAME}}.com).
+- Social Media Links & Handles: Whenever inserting social media links or icons (Instagram, Facebook, TikTok, Twitter/X, LinkedIn, YouTube), you MUST ALWAYS format the URL using {{BUSINESS_NAME}}:
+  * Instagram: <a href="https://instagram.com/{{BUSINESS_NAME}}">
+  * Facebook: <a href="https://facebook.com/{{BUSINESS_NAME}}">
+  * TikTok: <a href="https://tiktok.com/@{{BUSINESS_NAME}}">
+  * Twitter / X: <a href="https://twitter.com/{{BUSINESS_NAME}}">
+  * LinkedIn: <a href="https://linkedin.com/company/{{BUSINESS_NAME}}">
+  * YouTube: <a href="https://youtube.com/@{{BUSINESS_NAME}}">
+- STRICT PROHIBITION: NEVER invent fake email addresses (e.g., info@example.com, mybiz@gmail.com) and NEVER invent fake social handles (e.g., @coolbusiness, @citybarber). Every single email and social link must dynamically anchor to {{BUSINESS_NAME}} so the automated rebranding engine can swap it for any client seamlessly.
 
 4. REMOVE HARDCODED DEMO DATA & UNSUPPORTED CLAIMS:
 Replace all hardcoded business names, phone numbers, cities, addresses, fake reviews, ratings, and unsupported business claims with the standard placeholders or generic truthful statements.
+- STRICT STAR RATING RESTRICTION: Do NOT generate fake star rating badges, fake review count badges, or star score badges (e.g. '4.9 ★', '4.8 Stars', '5.0 Rating', '★★★★★ 4.9', or '⭐ 4.9/5'). Every new template or edited template must NOT have any badges of stars. Focus on clean professional service layouts, trust guarantees, and direct contact buttons.
 
 5. PRESERVE ORIGINAL DESIGN & QUALITY:
 Preserve the original design, styling, layout, typography, responsiveness, and interactivity while ensuring strict template-readiness.`;
@@ -247,8 +260,8 @@ Canonical placeholders:
   {{INSTAGRAM_HANDLE}}    — handle without @ (<a href="https://instagram.com/{{INSTAGRAM_HANDLE}}">)
   {{FACEBOOK_URL}}        — complete URL (<a href="{{FACEBOOK_URL}}">)
 
-SOCIAL MEDIA CONVENTION:
-When specific social media handles are unknown for a business, use the business name formatted as a clean lowercase identifier for social handles.
+SOCIAL MEDIA & EMAIL PLACEHOLDER CONVENTION:
+When adding social media links or emails, ALWAYS anchor to {{BUSINESS_NAME}} (e.g. <a href="https://instagram.com/{{BUSINESS_NAME}}">, <a href="https://facebook.com/{{BUSINESS_NAME}}">, <a href="mailto:contact@{{BUSINESS_NAME}}.com">). NEVER invent fake random usernames or external personal emails.
 
 FILE STRUCTURE & DESIGN:
 1. Output a COMPLETE single-file HTML document (<!DOCTYPE html> ... </html>).

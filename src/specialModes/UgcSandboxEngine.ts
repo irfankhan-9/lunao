@@ -622,105 +622,14 @@ export function getAustinTxUgcLeads(
 }
 
 // =============================================================================
-// UGC Creator & Sales Guy Pre-Connected Email Accounts
+// UGC Creator & Sales Guy Pre-Connected Email Accounts (Removed - Only Real Accounts Used)
 // =============================================================================
 export function getUgcOrSalesMockEmailAccounts(): ConnectedEmailAccountInfo[] {
-  const nowSec = Math.floor(Date.now() / 1000);
-  return [
-    {
-      id: 'ugc_acc_josh40zx',
-      provider: 'gmail',
-      email: 'josh40zx@gmail.com',
-      displayName: 'Josh — Primary Outreach',
-      dailyCap: 200,
-      connectedAt: nowSec - 18 * 86400,
-      status: 'healthy',
-      warmupStage: 'steady',
-      sendsToday: 14,
-      sendsThisWeek: 92,
-      remainingToday: 186,
-      bounceRate7d: 0.4,
-      lastSuccessfulSend: nowSec - 900,
-      tokenStatus: 'active',
-      paused: 0,
-      batteryCapacity: 300,
-      batteryPercent: 95,
-      batteryLabel: 'good',
-      healthPercent: 99,
-      healthLabel: 'healthy',
-      health: {
-        status: 'healthy',
-        warmupStage: 'steady',
-        daysConnected: 18,
-        sendsToday: 14,
-        dailyCap: 200,
-        remainingToday: 186,
-        batteryCapacity: 300,
-        batteryPercent: 95,
-        batteryLabel: 'good',
-        paused: 0,
-        bounceRate7d: 0.4,
-        lastSuccessfulSend: nowSec - 900,
-        recommendation: 'Healthy sender reputation — ready for full campaign volume.',
-      },
-    },
-    {
-      id: 'ugc_acc_webdesign3x3',
-      provider: 'gmail',
-      email: 'webdesginagency3x3@gmail.com',
-      displayName: 'Web Design Agency 3x3',
-      dailyCap: 200,
-      connectedAt: nowSec - 24 * 86400,
-      status: 'healthy',
-      warmupStage: 'steady',
-      sendsToday: 8,
-      sendsThisWeek: 76,
-      remainingToday: 192,
-      bounceRate7d: 0.2,
-      lastSuccessfulSend: nowSec - 1400,
-      tokenStatus: 'active',
-      paused: 0,
-      batteryCapacity: 300,
-      batteryPercent: 97,
-      batteryLabel: 'good',
-      healthPercent: 99,
-      healthLabel: 'healthy',
-      health: {
-        status: 'healthy',
-        warmupStage: 'steady',
-        daysConnected: 24,
-        sendsToday: 8,
-        dailyCap: 200,
-        remainingToday: 192,
-        batteryCapacity: 300,
-        batteryPercent: 97,
-        batteryLabel: 'good',
-        paused: 0,
-        bounceRate7d: 0.2,
-        lastSuccessfulSend: nowSec - 1400,
-        recommendation: 'Healthy sender reputation — ready for full campaign volume.',
-      },
-    },
-  ];
+  return [];
 }
 
 export function getUgcOrSalesEmailProbeResults(): EmailAccountProbeResult[] {
-  return [
-    {
-      id: 'ugc_acc_josh40zx',
-      email: 'josh40zx@gmail.com',
-      provider: 'gmail',
-      status: 'active',
-      ok: true,
-    },
-    {
-      id: 'ugc_acc_webdesign3x3',
-      email: 'webdesginagency3x3@gmail.com',
-      provider: 'gmail',
-      status: 'active',
-      ok: true,
-    },
-  ];
+  return [];
 }
 
 // =============================================================================

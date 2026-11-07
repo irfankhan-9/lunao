@@ -7,7 +7,7 @@ import {
 import { playTiktokLike, playSoftTap } from '../utils/audio';
 import { RunningBadge, SiteUrlRow, DeployedUrlChips } from './RecentCampaignsBits';
 import { UnifiedRecentCampaigns } from './UnifiedRecentCampaigns';
-import { EmailsTodayLog } from './EmailsTodayLog';
+import { EmailsTodayLog, parseEmailTimestamp } from './EmailsTodayLog';
 import { SmsTodayLog } from './SmsTodayLog';
 import { SitesSection } from './SitesSection';
 import { fetchDashboardStats, DashboardStats } from '../lib/pipelineClient';
@@ -329,6 +329,64 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return Math.max(count, Number(stats?.smsSentToday) || 0);
   }, [campaigns, stats]);
 
+  // Calculate Emails sent today (only sent or delivered)
+  const emailsSentToday = React.useMemo(() => {
+    const todayStr = new Date().toDateString();
+    let count = 0;
+    const seen = new Set<string>();
+
+    for (const c of campaigns) {
+      if (!c) continue;
+      const isEmail = c.type === 'email' || (c.emailLeads && c.emailLeads.length > 0) || (c.emailsSent && c.emailsSent > 0);
+      if (!isEmail) continue;
+
+      if (c.emailLeads && Array.isArray(c.emailLeads)) {
+        for (const l of c.emailLeads) {
+          if (l.status !== 'sent' && l.status !== 'delivered') continue;
+          const ts = parseEmailTimestamp(l.sentAt || l.sent_at, c.createdAt);
+          if (ts <= 0 || new Date(ts * 1000).toDateString() !== todayStr) continue;
+          const k = `${c.id}-${l.leadId || l.email || l.name}`;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          count += 1;
+        }
+      } else if (c.deployedSites && Array.isArray(c.deployedSites) && isEmail) {
+        const campTs = parseEmailTimestamp(undefined, c.createdAt);
+        if (campTs > 0 && new Date(campTs * 1000).toDateString() === todayStr) {
+          for (const s of c.deployedSites) {
+            if (s.emailStatus && s.emailStatus !== 'delivered' && s.emailStatus !== 'sent') continue;
+            const k = `${c.id}-${s.slug || s.name || s.email}`;
+            if (seen.has(k)) continue;
+            seen.add(k);
+            count += 1;
+          }
+        }
+      } else if (typeof c.emailsSent === 'number' && c.emailsSent > 0) {
+        const campTs = parseEmailTimestamp(undefined, c.createdAt);
+        if (campTs > 0 && new Date(campTs * 1000).toDateString() === todayStr) {
+          count += c.emailsSent;
+        }
+      }
+    }
+
+    return Math.max(count, Number(stats?.emailsSentToday) || 0);
+  }, [campaigns, stats]);
+
+  const emailsSentTotal = React.useMemo(() => {
+    let total = 0;
+    for (const c of campaigns) {
+      if (!c) continue;
+      const isEmail = c.type === 'email' || (c.emailLeads && c.emailLeads.length > 0) || (c.emailsSent && c.emailsSent > 0);
+      if (!isEmail) continue;
+      if (c.emailLeads && Array.isArray(c.emailLeads)) {
+        total += c.emailLeads.filter((l: any) => l.status === 'sent' || l.status === 'delivered').length;
+      } else if (typeof c.emailsSent === 'number' && c.emailsSent > 0) {
+        total += c.emailsSent;
+      }
+    }
+    return Math.max(total, Number(stats?.emailsSentTotal) || 0);
+  }, [campaigns, stats]);
+
   return (
     <div
       id="dashboard-tab-content-root"
@@ -387,6 +445,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 playSoftTap();
                 const el = document.getElementById('dashboard-emails-today-log');
                 if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                window.dispatchEvent(new CustomEvent('lunao_filter_emails', { detail: { mode: 'today' } }));
               }}
               className={`group relative bg-white rounded-[16px] p-6 text-left border shadow-[0_4px_16px_rgba(37,99,235,0.02)] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent overflow-hidden isolate hover:-translate-y-1.5 hover:shadow-[0_16px_32px_rgba(37,99,235,0.06)] border-border-light hover:border-accent/30 active:scale-[0.96] active:translate-y-[2px] active:shadow-[0_4px_12px_rgba(37,99,235,0.1),0_0_0_5px_rgba(37,99,235,0.08)] active:border-accent active:duration-[100ms]`}
             >
@@ -398,23 +457,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <ChevronRight className="w-4 h-4 text-ink-tertiary group-hover:text-accent group-hover:translate-x-0.5 transition-all" />
               </div>
               <div className="text-4xl sm:text-5xl font-serif text-success tracking-tight leading-none mt-3 animate-counter-pop">
-                {(stats?.emailsSentToday ?? 0).toLocaleString()}
+                {(emailsSentToday > 0 ? emailsSentToday : (stats?.emailsSentToday ?? 0)).toLocaleString()}
               </div>
               <div className="flex items-center justify-between mt-4 pt-3 border-t border-border-light gap-2">
-                <span className="text-[11px] text-ink-secondary">Since midnight</span>
-                {statsPulse.emails > 0 ? (
-                  <span
-                    key={`emails-pulse-${statsPulse.emails}-${stats?.emailsSentToday ?? 0}`}
-                    className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-success-soft text-success border border-success/25 animate-ribbon-stamp"
-                  >
-                    <span aria-hidden>▲</span>
-                    +{statsPulse.emails} just now
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-ink-tertiary">
-                    {(stats?.emailsSentTotal ?? 0).toLocaleString()} lifetime
-                  </span>
-                )}
+                <span className="text-[11px] text-ink-secondary">
+                  {emailsSentToday > 0 ? 'Since midnight' : 'All campaigns'}
+                </span>
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    playSoftTap();
+                    const el = document.getElementById('dashboard-emails-today-log');
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    window.dispatchEvent(new CustomEvent('lunao_filter_emails', { detail: { mode: 'all' } }));
+                  }}
+                  className="text-[10px] font-bold uppercase tracking-wider text-success bg-success-soft px-2 py-0.5 rounded-full border border-success/25 hover:bg-success/20 transition-colors cursor-pointer"
+                >
+                  {(emailsSentTotal > 0 ? emailsSentTotal : (stats?.emailsSentTotal ?? 0)).toLocaleString()} lifetime
+                </span>
               </div>
             </button>
 
@@ -484,7 +544,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
           {/* Live email send log */}
           <div id="dashboard-emails-today-log" className="scroll-mt-24">
-            <EmailsTodayLog ownerKey={ownerKey} />
+            <EmailsTodayLog campaigns={campaigns} ownerKey={ownerKey} />
           </div>
 
           {/* Live SMS send log */}

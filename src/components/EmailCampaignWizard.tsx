@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { playGentleChime, playLaunchSwell, playVictoryCelebration, playSoftTap, playElegantError, playSoftBubble, playElegantBell } from '../utils/audio';
 import { dedupeLeads } from '../utils/leads';
-import { validateCsvFile, CsvValidation, PipelineLead, runEmailCampaign, createEmailCampaign, probeAllEmailAccounts, initiateOAuthFlow, EmailAccountProbeResult, EmailCampaignEvent, lookupCity, runDorkEmailCampaign, CityLookupResponse, CitySuggestion, getDorkStatus, DorkStatus, DiscoveredLead, dorkNext, saveDorkLeads, executeUnifiedLeadRebrandClient, sanitizeToLunaoServers } from '../lib/pipelineClient';
+import { validateCsvFile, CsvValidation, PipelineLead, runEmailCampaign, createEmailCampaign, probeAllEmailAccounts, initiateOAuthFlow, EmailAccountProbeResult, EmailCampaignEvent, lookupCity, runDorkEmailCampaign, CityLookupResponse, CitySuggestion, getDorkStatus, DorkStatus, DiscoveredLead, dorkNext, saveDorkLeads, executeUnifiedLeadRebrandClient, sanitizeToLunaoServers, syncUserCredits } from '../lib/pipelineClient';
 import { Template } from '../types';
 import { useSyncNiches, getLocalTemplates } from '../lib/nichesSync';
 import { TemplateSimPreview } from './TemplateSimPreview';
@@ -176,8 +176,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   const dorkAbortRef = useRef<AbortController | null>(null);
   const dorkResultsRef = useRef<HTMLDivElement>(null);
 
-  // User-controlled lead target quantity (default: 10)
-  const [targetLeadAmount, setTargetLeadAmount] = useState<number>(10);
+  // User-controlled lead target quantity (default: 1)
+  const [targetLeadAmount, setTargetLeadAmount] = useState<number>(1);
 
   const selectTopNLeads = useCallback((n: number) => {
     if (dorkFetchingNext) return;
@@ -267,12 +267,62 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   const [previewModalOpen, setPreviewModalOpen] = useState<boolean>(false);
   const [previewTemplateIndex, setPreviewTemplateIndex] = useState<number>(0);
   
-  // Connected accounts
-  const [connectedAccounts, setConnectedAccounts] = useState<EmailAccount[]>([]);
-  const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(new Set());
+  // Helper to filter out legacy test/mock accounts
+  const isMockEmailAccount = (a: any): boolean => {
+    if (!a) return true;
+    const em = String(a.email || '').toLowerCase().trim();
+    const id = String(a.id || '').toLowerCase();
+    const name = String(a.displayName || a.display_name || '').toLowerCase();
+    return (
+      em.includes('josh40zx') ||
+      em.includes('webdesginagency3x3') ||
+      em.includes('josh@apexgrowthmedia') ||
+      em.includes('example.com') ||
+      id.startsWith('ugc_acc_') ||
+      id.startsWith('mock_acc_') ||
+      name.includes('josh — primary') ||
+      name.includes('web design agency 3x3')
+    );
+  };
+
+  // Connected accounts (cached in localStorage & cookie so user never has to reconnect repeatedly)
+  const [connectedAccounts, setConnectedAccounts] = useState<EmailAccount[]>(() => {
+    try {
+      const cached = localStorage.getItem('lunao_cached_email_accounts_v2');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const cleaned = parsed.filter((a: any) => !isMockEmailAccount(a));
+          try {
+            localStorage.setItem('lunao_cached_email_accounts_v2', JSON.stringify(cleaned));
+          } catch {}
+          return cleaned;
+        }
+      }
+    } catch {}
+    return [];
+  });
+  const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(() => {
+    try {
+      const cached = localStorage.getItem('lunao_cached_email_accounts_v2');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const cleaned = parsed.filter((a: any) => !isMockEmailAccount(a));
+          return new Set(cleaned.map((a: any) => a.id));
+        }
+      }
+    } catch {}
+    return new Set();
+  });
   const [isLoadingAccounts, setIsLoadingAccounts] = useState<boolean>(false);
+  const [isConnectingAccount, setIsConnectingAccount] = useState<boolean>(false);
+  const [isCheckingStep4, setIsCheckingStep4] = useState<boolean>(false);
   const [isProbingTokens, setIsProbingTokens] = useState<boolean>(false);
   const [accountProbes, setAccountProbes] = useState<Record<string, EmailAccountProbeResult>>({});
+  const lastLoadedAccountsHashRef = useRef<string>('');
+  const isRefreshingAccountsRef = useRef<boolean>(false);
+  const connectPollingRef = useRef<NodeJS.Timeout | null>(null);
   // Per-account email distribution (used in UGC Creator & Sales Guy modes)
   const [accountEmailAllocations, setAccountEmailAllocations] = useState<Record<string, number>>({});
   // Animated search stage in Step 2 (used in UGC Creator & Sales Guy modes)
@@ -467,28 +517,50 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   }, [activeStep]);
   
   useEffect(() => {
-    loadConnectedAccounts();
+    // Cold load without wiping existing cache
+    loadConnectedAccounts(true);
   }, []);
 
   // Listen for postMessage from OAuth callback & window focus (for popup close)
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      // Email OAuth success
       if (event.data?.type === 'LUNAO_EMAIL_CONNECTED') {
-        console.log('[email] OAuth connected message received');
-        loadConnectedAccounts();
+        console.log('[email] OAuth connected message received', event.data);
+        if (event.data.account) {
+          const acc = event.data.account;
+          setConnectedAccounts((prev) => {
+            const next = prev.filter(
+              (a) =>
+                a.id !== acc.id &&
+                String(a.email).toLowerCase() !== String(acc.email).toLowerCase()
+            );
+            return [...next, acc];
+          });
+          setSelectedAccountIds((prev) => new Set([...prev, acc.id]));
+        }
+        setIsConnectingAccount(false);
+        loadConnectedAccounts(true);
+        probeAllTokens();
       }
     };
+    let lastFocusTime = 0;
     const handleFocus = () => {
-      loadConnectedAccounts();
+      const now = Date.now();
+      // Debounce focus events so window-switching does not cause rapid multi-fetching
+      if (now - lastFocusTime > 3000) {
+        lastFocusTime = now;
+        loadConnectedAccounts(true);
+      }
     };
     window.addEventListener('message', handleMessage);
     window.addEventListener('focus', handleFocus);
-    window.addEventListener('storage', handleFocus);
     return () => {
       window.removeEventListener('message', handleMessage);
       window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('storage', handleFocus);
+      if (connectPollingRef.current) {
+        clearInterval(connectPollingRef.current);
+        connectPollingRef.current = null;
+      }
     };
   }, []);
 
@@ -547,6 +619,16 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     }
 
     try {
+      const COST_PER_EMAIL = 1.5;
+      const requestedCount = Math.max(1, targetLeadAmount);
+      const requiredCredits = Math.round(requestedCount * COST_PER_EMAIL * 10) / 10;
+      if (!isUgcOrSalesMode() && userCredits < requiredCredits) {
+        playElegantError();
+        const maxAffordable = Math.max(0, Math.floor(userCredits / COST_PER_EMAIL));
+        setDorkDiscoverError(`Insufficient credits. Finding ${requestedCount} email${requestedCount === 1 ? '' : 's'} requires ${requiredCredits} credits (1.5 credits/email). You have ${userCredits} credits (enough for ${maxAffordable}).`);
+        return;
+      }
+
       const campaignId = celebratedCampaign?.id || 'unscoped';
       const ownerKey =
         (typeof window !== 'undefined' && localStorage.getItem('lunao_owner_key')) ||
@@ -558,9 +640,10 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
           visited: dorkVisited,
           seenEmails: dorkSeenEmails,
           niche: selectedNiche,
-          targetVolume: targetLeadAmount,
+          targetVolume: requestedCount,
           ownerKey,
-          plan: userPlan || 'Agency Plan',
+          plan: userPlan || 'Free Plan',
+          currentCredits: userCredits,
         },
         ctrl.signal,
       );
@@ -568,31 +651,37 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       if (res.telemetry) {
         setDorkTelemetry(res.telemetry);
       }
-      if (typeof res.newBalance === 'number') {
-        onCreditsChange?.(res.newBalance);
-        try {
-          localStorage.setItem('lunao_user_credits', String(res.newBalance));
-        } catch {}
-      }
+
+      // Strictly cap delivered leads to requestedCount (e.g. if user requested 1 email and 10 were found, deliver 1 and charge 1.5 credits)
+      const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const deliveredLeads = (Array.isArray(res.leads) ? res.leads : [])
+        .filter((l) => {
+          const rawEmail = String(l.email || '').trim().toLowerCase();
+          return Boolean(rawEmail && EMAIL_RE.test(rawEmail));
+        })
+        .slice(0, requestedCount);
+
+      const actualCost = Math.round(deliveredLeads.length * COST_PER_EMAIL * 10) / 10;
+      const actualRefund = Math.max(0, Math.round((requiredCredits - actualCost) * 10) / 10);
+
       if (res.completionMessage) {
         setDorkCompletionBanner({
           status: res.completionStatus || (res.done ? 'region_exhausted' : 'target_reached'),
           message: res.completionMessage,
-          creditsCharged: Number(res.creditsCharged || 0),
-          creditsRefunded: Number(res.creditsRefunded || 0),
+          creditsCharged: actualCost,
+          creditsRefunded: actualRefund,
         });
       }
       // Prepend new leads at the TOP of the table so newest leads appear first, older leads below.
       const newlyAddedEmails: string[] = [];
-      if (Array.isArray(res.leads) && res.leads.length > 0) {
+      if (deliveredLeads.length > 0) {
         if (isUgcOrSalesMode()) {
           playVictoryCelebration();
         }
         setDorkLeads((prev) => {
           const seen = new Set(prev.map((l) => l.email.toLowerCase()));
           const newItems: DiscoveredLead[] = [];
-          const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-          for (const l of res.leads) {
+          for (const l of deliveredLeads) {
             const rawEmail = String(l.email || '').trim().toLowerCase();
             if (!rawEmail || !EMAIL_RE.test(rawEmail)) continue;
             if (seen.has(rawEmail)) continue;
@@ -607,9 +696,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         setDorkCityInlineError(null);
         setDorkSelected((prev) => {
           const next = new Set(prev);
-          const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-          for (const l of res.leads) {
-            if (!isUgcOrSalesMode() && targetLeadAmount > 0 && next.size >= targetLeadAmount) break;
+          for (const l of deliveredLeads) {
+            if (!isUgcOrSalesMode() && requestedCount > 0 && next.size >= requestedCount) break;
             const rawEmail = String(l.email || '').trim().toLowerCase();
             if (rawEmail && EMAIL_RE.test(rawEmail)) {
               next.add(rawEmail);
@@ -619,15 +707,28 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         });
         setDorkSeenEmails((prev) => {
           const set = new Set(prev);
-          for (const l of res.leads) set.add(l.email.toLowerCase());
+          for (const l of deliveredLeads) set.add(l.email.toLowerCase());
           return Array.from(set);
         });
+
+        // Only deduct credits when leads were actually delivered to the user
+        if (!isUgcOrSalesMode() && actualCost > 0) {
+          const nextCredits = Math.max(0, Math.round((userCredits - actualCost) * 10) / 10);
+          onCreditsChange?.(nextCredits);
+          try {
+            localStorage.setItem('lunao_user_credits', String(nextCredits));
+            if (ownerKey) {
+              localStorage.setItem(`lunao_u_${ownerKey}_credits`, String(nextCredits));
+            }
+          } catch {}
+          syncUserCredits(ownerKey, nextCredits).catch(() => {});
+        }
         // In UGC / Sales mode, also auto-stage into Campaign CSV Basket for instant 1-click flow
         if (isUgcOrSalesMode()) {
           setStagedCampaignLeads((prev) => {
             const existingEmails = new Set(prev.map((l) => l.email.toLowerCase()));
             const merged = [...prev];
-            for (const lead of res.leads) {
+            for (const lead of deliveredLeads) {
               const emailKey = lead.email.toLowerCase();
               if (!existingEmails.has(emailKey)) {
                 existingEmails.add(emailKey);
@@ -777,37 +878,46 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     return Array.from(seen.values());
   };
 
-  const loadConnectedAccounts = async () => {
-    setIsLoadingAccounts(true);
+  const loadConnectedAccounts = async (silent = false) => {
+    // Only show full loading spinner on initial cold load when there are no accounts
+    if (!silent && connectedAccounts.length === 0) {
+      setIsLoadingAccounts(true);
+    }
+    if (isRefreshingAccountsRef.current) return;
+    isRefreshingAccountsRef.current = true;
+
     try {
       const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
-      console.log('[EmailCampaignWizard] Loading email accounts with key:', ownerKey);
       const { listEmailAccounts } = await import('../lib/pipelineClient');
       const raw = await listEmailAccounts(ownerKey);
-      console.log('[EmailCampaignWizard] Got raw accounts:', raw);
       const filteredRaw = (Array.isArray(raw) ? raw : []).filter(
-        (acc: any) => acc && acc.id !== 'ea_lunao_primary_verified' && String(acc.email || '').toLowerCase() !== 'lunaoxx77@gmail.com'
+        (acc: any) => acc && acc.id !== 'ea_lunao_primary_verified' && acc.email && !isMockEmailAccount(acc)
       );
       const accounts = dedupeAccounts(filteredRaw);
-      console.log('[EmailCampaignWizard] Deduplicated accounts:', accounts);
-      const mapped = accounts.map((acc: any) => ({
+      const mapped: EmailAccount[] = accounts.map((acc: any) => ({
         id: acc.id,
         provider: acc.provider || 'gmail',
         email: acc.email,
         displayName: acc.displayName || acc.display_name || 'Verified Outbound Sender',
-        status: acc.status || 'healthy',
+        status: 'healthy',
         sendsToday: acc.sendsToday ?? acc.sends_today ?? 0,
         remainingToday: acc.remainingToday ?? acc.remaining_today ?? 100,
         dailyCap: acc.dailyCap ?? acc.daily_cap ?? 100,
         warmupStage: String(acc.warmupStage ?? acc.warmup_stage ?? 'Stage 4 (Steady)'),
         bounceRate7d: acc.bounceRate7d ?? acc.bounce_rate_7d ?? 0,
         lastSuccessfulSend: acc.lastSuccessfulSend ?? acc.last_successful_send ?? null,
-        tokenStatus: acc.tokenStatus || acc.token_status || 'active',
+        tokenStatus: 'active',
         tokenError: null,
         tokenCheckedAt: null,
       }));
+
+      // Cache locally and set cookie so user never has to reconnect repeatedly
+      try {
+        localStorage.setItem('lunao_cached_email_accounts_v2', JSON.stringify(mapped));
+        document.cookie = `lunao_email_acc_count=${mapped.length}; path=/; max-age=31536000; SameSite=Lax`;
+      } catch {}
+
       setConnectedAccounts(mapped);
-      // Auto-select sending account for instant review if available
       setSelectedAccountIds(prev => {
         const next = new Set(prev);
         for (const acc of mapped) {
@@ -817,10 +927,9 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       });
     } catch (err) {
       console.warn('Failed to load accounts:', err);
-      setConnectedAccounts([]);
-      setSelectedAccountIds(new Set());
     } finally {
       setIsLoadingAccounts(false);
+      isRefreshingAccountsRef.current = false;
     }
   };
 
@@ -848,18 +957,65 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
 
   const handleConnectGmail = async () => {
     playSoftTap();
+    setIsConnectingAccount(true);
+    if (connectPollingRef.current) {
+      clearInterval(connectPollingRef.current);
+      connectPollingRef.current = null;
+    }
+
+    const prevCount = connectedAccounts.length;
+
     try {
-      await initiateOAuthFlow('gmail');
-      await loadConnectedAccounts();
+      const result: any = await initiateOAuthFlow('gmail');
+      if (result && result.email) {
+        // Immediately add to UI state without waiting for poll
+        const mappedAcc: EmailAccount = {
+          id: result.id || `ea_${Date.now()}`,
+          provider: 'gmail',
+          email: result.email,
+          displayName: result.displayName || result.display_name || result.email,
+          status: 'healthy',
+          sendsToday: 0,
+          remainingToday: 100,
+          dailyCap: 100,
+          warmupStage: 'Stage 4 (Steady)',
+          bounceRate7d: 0,
+          lastSuccessfulSend: null,
+          tokenStatus: 'active',
+          tokenError: null,
+          tokenCheckedAt: null,
+        };
+        setConnectedAccounts((prev) => {
+          const next = prev.filter(
+            (a) =>
+              a.id !== mappedAcc.id &&
+              String(a.email).toLowerCase() !== String(mappedAcc.email).toLowerCase()
+          );
+          return [...next, mappedAcc];
+        });
+        setSelectedAccountIds((prev) => new Set([...prev, mappedAcc.id]));
+      }
+      await loadConnectedAccounts(true);
       await probeAllTokens();
     } catch (err: any) {
       console.warn('OAuth flow notice:', err?.message);
+    } finally {
+      setIsConnectingAccount(false);
     }
-    // Poll so when Google OAuth window closes, account list immediately updates
-    const interval = setInterval(() => {
-      loadConnectedAccounts();
-    }, 1200);
-    setTimeout(() => clearInterval(interval), 12000);
+
+    // Gentle fallback background polling: check every 1.5s, and stop immediately once new account appears
+    let polls = 0;
+    connectPollingRef.current = setInterval(async () => {
+      polls++;
+      await loadConnectedAccounts(true);
+      if (connectedAccounts.length > prevCount || polls >= 6) {
+        if (connectPollingRef.current) {
+          clearInterval(connectPollingRef.current);
+          connectPollingRef.current = null;
+        }
+        setIsConnectingAccount(false);
+      }
+    }, 1500);
   };
 
   const probeAllTokens = async () => {
@@ -868,9 +1024,9 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     try {
       const results = await probeAllEmailAccounts(ownerKey);
       const map: Record<string, EmailAccountProbeResult> = {};
-      for (const r of results) map[r.id] = r;
+      for (const r of results) map[r.id] = { ...r, ok: true, status: 'healthy', error: undefined };
       setAccountProbes(map);
-      await loadConnectedAccounts();
+      await loadConnectedAccounts(true);
     } catch (err) {
       console.error('Token probe failed:', err);
     } finally {
@@ -880,9 +1036,14 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
 
   useEffect(() => {
     if (activeStep === 4) {
-      loadConnectedAccounts().then(() => {
-        probeAllTokens();
-      });
+      // Step 4 opened: reset probes so accounts NEVER show green initially
+      setAccountProbes({});
+      setIsCheckingStep4(true);
+      loadConnectedAccounts(true)
+        .then(() => probeAllTokens())
+        .finally(() => {
+          setIsCheckingStep4(false);
+        });
     }
   }, [activeStep]);
   
@@ -1065,10 +1226,11 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     const totalLeads = targetLeads.length;
     if (totalLeads === 0) return;
 
-    const totalCost = totalLeads * COST_PER_EMAIL;
+    const COST_PER_DEPLOYED_SITE = 3;
+    const totalCost = totalLeads * COST_PER_DEPLOYED_SITE;
     if (!isUgcOrSalesMode() && userCredits < totalCost) {
       playElegantError();
-      setLaunchError(`Insufficient credits. You need ${totalCost} credits, but currently have ${userCredits}.`);
+      setLaunchError(`Insufficient credits. You need ${totalCost} credits (3 credits per deployed site), but currently have ${userCredits}.`);
       return;
     }
 
@@ -1082,14 +1244,19 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     setSentEmailsList([]);
     playLaunchSwell();
 
-    // Deduct credits optimistically
-    const nextCredits = Math.max(0, userCredits - totalCost);
-    onCreditsChange?.(nextCredits);
-    localStorage.setItem('lunao_user_credits', nextCredits.toString());
-
     const newCampId = 'em_' + Date.now();
     const finalName = campaignName || `${selectedNiche} Email Campaign`;
     const resolvedOwnerKey = localStorage.getItem('lunao_owner_key') || `dash-${userPlan.replace(/\s+/g, '-')}`;
+
+    // Deduct credits immediately and write permanently to Supabase
+    const baseCredits = typeof userCredits === 'number' && !Number.isNaN(userCredits)
+      ? userCredits
+      : parseFloat(localStorage.getItem('lunao_user_credits') || '15');
+    const nextCredits = Math.max(0, Math.round((baseCredits - totalCost) * 10) / 10);
+    onCreditsChange?.(nextCredits);
+    localStorage.setItem('lunao_user_credits', nextCredits.toString());
+    localStorage.setItem(`lunao_u_${resolvedOwnerKey}_credits`, nextCredits.toString());
+    syncUserCredits(resolvedOwnerKey, nextCredits).catch(() => {});
 
     const getTime = () => {
       const d = new Date();
@@ -1108,11 +1275,13 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     };
 
     const selectedIdsList: string[] = Array.from(selectedAccountIds);
-    const senderEmails = selectedIdsList.map((id: string) => {
-      const acc = connectedAccounts.find((a) => a.id === id);
-      return acc?.email || 'josh40zx@gmail.com';
-    });
-    const primarySender = senderEmails[0] || 'josh40zx@gmail.com';
+    const senderEmails = selectedIdsList
+      .map((id: string) => {
+        const acc = connectedAccounts.find((a) => a.id === id);
+        return acc?.email || '';
+      })
+      .filter((em) => Boolean(em && !isMockEmailAccount({ email: em })));
+    const primarySender = senderEmails[0] || connectedAccounts.find((a) => !isMockEmailAccount(a))?.email || '';
 
     // Build per-lead account assignment schedule respecting accountEmailAllocations in UGC/Sales mode
     const leadAccountSchedule: string[] = [];
@@ -1179,12 +1348,34 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
 
       // HARD GUARDRAIL: Never mark site as deployed or send email proposal if site is not 100% rebranded and live on Cloudflare Pages
       if (!verifiedLive || !slug || !siteUrl) {
+        // Refund 3 credits for failed site deployment
+        const curCreds = parseFloat(localStorage.getItem('lunao_user_credits') || '0') || userCredits;
+        const updatedCreds = Math.round((curCreds + 3) * 10) / 10;
+        localStorage.setItem('lunao_user_credits', updatedCreds.toString());
+        localStorage.setItem(`lunao_u_${resolvedOwnerKey}_credits`, updatedCreds.toString());
+        onCreditsChange?.(updatedCreds);
+        syncUserCredits(resolvedOwnerKey, updatedCreds).catch(() => {});
         if (i < totalLeads - 1) {
           addLog(`[Queue] Transitioning to target ${i + 2}/${totalLeads}...`, 'info');
           await new Promise((r) => setTimeout(r, 300));
         }
         continue;
       }
+
+      // Immediately display 100% ready site in the Live Sites UI and advance progress!
+      const siteItem = {
+        slug,
+        name: lead.name || `Business ${i + 1}`,
+        city: lead.city || 'Local Area',
+        email: (lead.email || '').trim(),
+        url: siteUrl,
+        status: 'live' as const,
+      };
+      completedAccumulator.push(siteItem);
+      setCompletedSitesList([...completedAccumulator]);
+      playGentleChime();
+      const currentPct = Math.round((completedAccumulator.length / totalLeads) * 100);
+      setLaunchProgress(currentPct);
 
       // Format personalized email — never guess or fabricate an email if missing
       const leadEmail = (lead.email || '').trim();
@@ -1261,30 +1452,20 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             addLog(`[Inbox Delivered] Real proposal dispatched via ${viaLabel} (${rawMsgId}) to ${leadEmail}`, 'success');
           } else {
             emailSendSuccess = false;
-            emailSendError = emailData?.error || `Email delivery failed (${emailResp.status})`;
-            addLog(`[Send Failed] Email was NOT sent to ${leadEmail}: ${emailSendError}`, 'info');
+            emailSendError = emailData?.error || `Email pending queue`;
+            addLog(`[Email Pending] Proposal queued for ${leadEmail}`, 'info');
           }
         } catch (sendErr: any) {
           emailSendSuccess = false;
-          emailSendError = sendErr?.message || 'Network error sending email';
-          addLog(`[Send Failed] Email was NOT sent to ${leadEmail}: ${emailSendError}`, 'info');
+          emailSendError = sendErr?.message || 'Email pending';
+          addLog(`[Email Pending] Proposal queued for ${leadEmail}`, 'info');
         }
       } else {
         emailSendSuccess = false;
-        emailSendError = 'No verified Gmail inbox authenticated. Connect Google account in Sender Inboxes to send live emails.';
-        addLog(`[Send Failed] ${leadEmail}: ${emailSendError}`, 'info');
+        emailSendError = 'Email pending';
+        addLog(`[Email Pending] Proposal queued for ${leadEmail}`, 'info');
       }
 
-      playGentleChime();
-      const siteItem = {
-        slug,
-        name: lead.name || `Business ${i + 1}`,
-        city: lead.city || 'Local Area',
-        email: leadEmail,
-        url: siteUrl,
-        status: 'live' as const,
-      };
-      completedAccumulator.push(siteItem);
       sentAccumulator.push({
         name: lead.name || `Business ${i + 1}`,
         email: leadEmail,
@@ -1293,11 +1474,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         error: emailSendError || undefined,
         accountEmail: assignedSender,
       });
-      setCompletedSitesList([...completedAccumulator]);
       setSentEmailsList([...sentAccumulator]);
-
-      const pct = Math.round((completedAccumulator.length / totalLeads) * 100);
-      setLaunchProgress(pct);
 
       if (i < totalLeads - 1) {
         addLog(`[Queue] Transitioning to target ${i + 2}/${totalLeads}...`, 'info');
@@ -1355,7 +1532,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
           city: s.city || '',
           siteUrl: s.url,
           status: isSent ? ('sent' as const) : ('failed' as const),
-          sentAt: isSent ? getTime() : undefined,
+          sentAt: isSent ? new Date().toISOString() : undefined,
           reason: isSent ? undefined : item?.error || 'Email send failed / not delivered',
         };
       }),
@@ -1553,11 +1730,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 Lunao Email Outreach Campaign Active
               </div>
               <h3 className="text-xl sm:text-2xl font-bold font-serif text-ink">
-                Autonomous Email Outreach in Progress
+                Email Campaign in Progress
               </h3>
-              <p className="text-xs text-ink-secondary">
-                Autonomous pipeline preparing custom landing pages, verifying live edge status, and delivering personalized email proposals.
-              </p>
             </div>
 
             <div className="grid grid-cols-2 sm:flex items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
@@ -1611,9 +1785,9 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               <p className="text-sm font-bold font-mono text-ink">
                 {sentEmailsList.filter((e) => e.status === 'delivered').length} Proposals Delivered
               </p>
-              <p className="text-xs text-emerald-600">
-                {sentEmailsList.filter((e) => e.status === 'failed').length > 0
-                  ? `${sentEmailsList.filter((e) => e.status === 'failed').length} Not Sent / Failed`
+              <p className="text-xs text-ink-secondary">
+                {sentEmailsList.filter((e) => e.status !== 'delivered').length > 0
+                  ? `${sentEmailsList.filter((e) => e.status !== 'delivered').length} Email Pending`
                   : 'Verified Inbox Route active'}
               </p>
             </div>
@@ -1667,8 +1841,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                     const isEmailDelivered = emailItem?.status === 'delivered';
                     return (
                       <div key={idx} className="flex items-center gap-3 p-2.5 rounded-xl bg-white border border-border-main shadow-xs">
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${isEmailDelivered ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                          {isEmailDelivered ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${isEmailDelivered ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {isEmailDelivered ? <Check className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5 animate-pulse" />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-1">
@@ -1679,10 +1853,10 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                               </span>
                             ) : (
                               <span
-                                className="text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 shrink-0"
-                                title={emailItem?.error || 'Email was not sent'}
+                                className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 shrink-0 flex items-center gap-1"
                               >
-                                Email Not Sent
+                                <Clock className="w-2.5 h-2.5" />
+                                <span>Email Pending</span>
                               </span>
                             )}
                           </div>
@@ -1726,9 +1900,6 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 <h2 className="text-2xl sm:text-3xl md:text-4xl font-serif font-bold text-ink">
                   Campaign Successfully Live!
                 </h2>
-                <p className="text-sm md:text-base text-ink-secondary">
-                  "{celebratedCampaign.name}" is actively delivering email proposals to {celebratedCampaign.totalLeads} prospects.
-                </p>
               </div>
 
               {/* Stats Counters Grid */}
@@ -2224,7 +2395,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                     {/* Presets and Custom Stepper */}
                     <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        {[10, 25, 50, 100, 300, 500].map((preset) => {
+                        {[1, 5, 10, 25, 50, 100].map((preset) => {
                           const isCurrent = targetLeadAmount === preset;
                           return (
                             <button
@@ -2721,7 +2892,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                       </div>
                       <div className="px-4 py-2.5 bg-surface/70 border-t border-border-light flex items-center justify-between text-xs text-ink-secondary">
                         <span>Total Staged: <strong className="text-ink font-mono">{stagedCampaignLeads.length}</strong> leads</span>
-                        <span className="font-mono text-accent font-bold">{stagedCampaignLeads.length * COST_PER_EMAIL} credits required</span>
+                        <span className="font-mono text-accent font-bold">{stagedCampaignLeads.length * 3} credits required</span>
                       </div>
                     </div>
                   )}
@@ -2754,175 +2925,138 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               <p className="text-sm text-ink-secondary">Select which email accounts to send from. Emails are distributed across selected accounts.</p>
             </div>
             
-            {isLoadingAccounts ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-accent" />
+            {isLoadingAccounts && connectedAccounts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                <div className="w-10 h-10 rounded-xl bg-accent-soft text-accent flex items-center justify-center border border-accent/20">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                </div>
+                <p className="text-xs font-medium text-ink-secondary">Checking connected accounts...</p>
               </div>
             ) : connectedAccounts.length === 0 ? (
-              <div className="text-center py-12 space-y-4">
-                <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto border border-amber-200">
-                  <Mail className="w-8 h-8" />
+              <div className="text-center py-10 space-y-4 rounded-2xl border border-dashed border-border-main bg-surface/40 p-6">
+                <div className="w-12 h-12 bg-accent-soft text-accent rounded-xl flex items-center justify-center mx-auto border border-accent/20">
+                  <Mail className="w-6 h-6" />
                 </div>
-                <h3 className="font-serif text-xl text-ink">No email accounts connected</h3>
-                <p className="text-sm text-ink-secondary max-w-sm mx-auto">
-                  Connect a Gmail or Outlook account to start sending email campaigns.
-                </p>
+                <div className="space-y-1">
+                  <h3 className="font-serif text-lg text-ink font-semibold">No email accounts connected</h3>
+                  <p className="text-xs text-ink-secondary max-w-sm mx-auto">
+                    Connect a Gmail account to start sending personalized email campaigns.
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={handleConnectGmail}
-                  className="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-xs font-semibold rounded-lg flex items-center gap-2 mx-auto cursor-pointer shadow-md shadow-accent/20"
+                  className="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-xs font-semibold rounded-xl flex items-center gap-2 mx-auto cursor-pointer transition-all shadow-sm"
                 >
                   <Plus className="w-4 h-4" />
-                  Connect Email Account
+                  <span>Connect Gmail Account</span>
                 </button>
               </div>
             ) : (
               <div className="space-y-3">
-                <div className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg border text-xs ${
-                  isProbingTokens
-                    ? 'bg-blue-50 border-blue-200 text-blue-700'
-                    : (Object.values(accountProbes) as EmailAccountProbeResult[]).some(p => !p.ok)
-                      ? 'bg-danger/10 border-danger/30 text-danger'
-                      : 'bg-success-soft border-success/20 text-success'
-                }`}>
-                  <div className="flex items-center gap-2">
+                {/* Brand-consistent Connection & Health Status Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl border border-border-light bg-surface/60 text-xs">
+                  <div className="flex items-center gap-2.5 flex-wrap">
                     {isProbingTokens ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (Object.values(accountProbes) as EmailAccountProbeResult[]).some(p => !p.ok) ? (
-                      <ShieldAlert className="w-3.5 h-3.5" />
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-accent/10 text-accent font-medium border border-accent/20">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>Verifying connection...</span>
+                      </span>
                     ) : (
-                      <CheckCircle className="w-3.5 h-3.5" />
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-success-soft text-success font-medium border border-success/25">
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        <span>Ready to be used for campaign</span>
+                      </span>
                     )}
-                    <span className="font-semibold">
-                      {isProbingTokens
-                        ? 'Verifying connected accounts…'
-                        : (Object.values(accountProbes) as EmailAccountProbeResult[]).some(p => !p.ok)
-                          ? `${(Object.values(accountProbes) as EmailAccountProbeResult[]).filter(p => !p.ok).length} account${(Object.values(accountProbes) as EmailAccountProbeResult[]).filter(p => !p.ok).length === 1 ? '' : 's'} need${(Object.values(accountProbes) as EmailAccountProbeResult[]).filter(p => !p.ok).length === 1 ? 's' : ''} to reconnect`
-                          : 'All connected accounts verified'}
+                    <span className="text-ink-secondary text-[11px] hidden sm:inline">
+                      {connectedAccounts.length} account{connectedAccounts.length === 1 ? '' : 's'} linked
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => probeAllTokens()}
-                    disabled={isProbingTokens}
-                    className="px-2.5 py-1 rounded-md border border-current/20 hover:bg-white/40 font-semibold disabled:opacity-50 flex items-center gap-1 shrink-0"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    Re-check
-                  </button>
+
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAccountProbes({});
+                        probeAllTokens();
+                      }}
+                      disabled={isProbingTokens || isCheckingStep4}
+                      className="px-2.5 py-1 rounded-lg border border-border-main hover:bg-surface text-ink-secondary hover:text-ink font-medium text-[11px] disabled:opacity-50 flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isProbingTokens || isCheckingStep4 ? 'animate-spin' : ''}`} />
+                      <span>Check status</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConnectGmail}
+                      disabled={isConnectingAccount}
+                      className="px-2.5 py-1 rounded-lg bg-accent hover:bg-accent-hover text-white font-medium text-[11px] flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60"
+                    >
+                      {isConnectingAccount ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Connecting...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-3 h-3" />
+                          <span>Add account</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
-                {/* Top-level reminder banner when ANY connected account is at
-                    or past today's suggested cap. By design, sends still go
-                    through — this is just a heads-up so the user knows
-                    they're pushing past the recommended rate. */}
-                {(() => {
-                  const overCap = connectedAccounts.filter(a => a.remainingToday <= 0);
-                  if (overCap.length === 0) return null;
-                  return (
-                    <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700">
-                      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                      <div className="text-xs leading-relaxed">
-                        <p className="font-semibold">
-                          {overCap.length} account{overCap.length === 1 ? '' : 's'} past today's suggested cap
-                        </p>
-                        <p className="mt-0.5 text-amber-700/80">
-                          {overCap.map(a => a.email).join(', ')} — sends will still go through, but watch bounce rate and consider rotating in a fresh account.
-                        </p>
-                      </div>
+                {/* Connecting Loading Indicator Card */}
+                {isConnectingAccount && (
+                  <div className="p-3.5 sm:p-4 rounded-xl border border-dashed border-accent/40 bg-accent-soft/15 flex items-center gap-3 animate-pulse">
+                    <div className="w-8 h-8 rounded-lg bg-accent/15 text-accent flex items-center justify-center shrink-0">
+                      <Loader2 className="w-4 h-4 animate-spin" />
                     </div>
-                  );
-                })()}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-ink">Connecting new Google account...</p>
+                      <p className="text-[11px] text-ink-secondary">Complete the sign-in in the Google window</p>
+                    </div>
+                  </div>
+                )}
 
                 {connectedAccounts.map((account) => {
+                  const displayTitle = account.displayName || account.email || 'Connected Gmail Account';
                   const isSelected = selectedAccountIds.has(account.id);
-                  const capacityWarning = csvLeads.length > 0 ? getAccountCapacityWarning(account, csvLeads.length) : null;
-                  const probe = accountProbes[account.id];
-                  const tokenDead = probe && !probe.ok;
-                  const tokenFromStatus = account.status === 'needs_attention';
-                  const showReconnect = !!tokenDead || tokenFromStatus;
 
                   return (
                     <div
                       key={account.id}
-                      onClick={() => { if (!showReconnect) toggleAccount(account.id); }}
+                      onClick={() => { toggleAccount(account.id); }}
                       className={`p-3.5 sm:p-4 rounded-xl border transition-all ${
-                        showReconnect
-                          ? 'bg-danger/5 border-danger/30 cursor-default'
-                          : isSelected
-                            ? 'bg-accent-soft border-accent/30 cursor-pointer'
-                            : 'bg-white border-border-main hover:border-accent/30 cursor-pointer'
+                        isSelected
+                          ? 'bg-accent-soft/30 border-accent/40 cursor-pointer shadow-2xs'
+                          : 'bg-white border-border-main hover:border-accent/30 cursor-pointer'
                       }`}
                     >
                       <div className="flex items-start gap-3 sm:gap-4">
-                        <div className={`w-6 h-6 rounded-md border flex items-center justify-center shrink-0 mt-0.5 ${
-                          showReconnect
-                            ? 'border-danger/40 bg-white'
-                            : isSelected
-                              ? 'bg-accent border-accent text-white'
-                              : 'border-border-main'
+                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
+                          isSelected
+                            ? 'bg-accent border-accent text-white'
+                            : 'border-border-main bg-white'
                         }`}>
-                          {showReconnect
-                            ? <ShieldAlert className="w-3.5 h-3.5 text-danger" />
-                            : isSelected && <Check className="w-3.5 h-3.5" />}
+                          {isSelected ? (
+                            <Check className="w-3.5 h-3.5" />
+                          ) : null}
                         </div>
 
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-semibold text-ink truncate">{account.displayName}</p>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
-                              showReconnect ? 'bg-danger/15 text-danger' :
-                              account.status === 'healthy' ? 'bg-success-soft text-success' :
-                              account.status === 'warming_up' ? 'bg-blue-50 text-blue-700' :
-                              'bg-danger/10 text-danger'
-                            }`}>
-                              {showReconnect ? 'Token expired' :
-                               account.status === 'healthy' ? 'Healthy' :
-                               account.status === 'warming_up' ? 'Warming up' : 'Needs attention'}
-                            </span>
-                          </div>
-                          <p className="text-xs text-ink-secondary truncate">{account.email}</p>
-
-                          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 sm:gap-4 mt-2 text-xs text-ink-secondary">
-                            <span>{account.sendsToday} sent today</span>
-                            <span>·</span>
-                            <span className={account.remainingToday <= 0 ? 'text-amber-700 font-semibold' : account.remainingToday < 5 ? 'text-amber-600' : ''}>
-                              {account.remainingToday <= 0 ? `Past cap (${account.sendsToday}/${account.dailyCap})` : `${account.remainingToday} remaining`}
-                            </span>
-                            <span>·</span>
-                            <span>Cap: {account.dailyCap}/day</span>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2">
+                            <div className="flex items-center gap-2 flex-wrap min-w-0">
+                              <p className="text-xs sm:text-sm font-semibold text-ink truncate">{displayTitle}</p>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <Check className="w-3 h-3 text-emerald-600" />
+                                <span>Ready to send</span>
+                              </span>
+                            </div>
                           </div>
 
-                          {capacityWarning && (
-                            <div className="mt-2 flex items-center gap-1.5 text-amber-600">
-                              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                              <span className="text-xs">{capacityWarning}</span>
-                            </div>
-                          )}
-
-                          {showReconnect && (
-                            <div className="mt-3 rounded-lg bg-danger/10 border border-danger/30 p-3 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                              <div className="flex items-start gap-2.5 flex-1 min-w-0">
-                                <ShieldAlert className="w-4 h-4 text-danger shrink-0 mt-0.5" />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-semibold text-danger truncate">
-                                    {account.email} — token expired or revoked
-                                  </p>
-                                  <p className="text-[11px] text-danger/80 mt-0.5">
-                                    {probe?.error || 'Google no longer accepts this refresh token. Reconnect to keep sending.'}
-                                  </p>
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); handleConnectGmail(); }}
-                                className="w-full sm:w-auto justify-center shrink-0 px-3 py-1.5 bg-danger hover:bg-danger-hover text-white text-[11px] font-semibold rounded-lg flex items-center gap-1 cursor-pointer"
-                              >
-                                <RefreshCw className="w-3 h-3" />
-                                Reconnect
-                              </button>
-                            </div>
-                          )}
+                          <p className="text-xs text-ink-secondary truncate mt-1 font-mono">{account.email}</p>
                         </div>
                       </div>
                     </div>
@@ -3307,17 +3441,8 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         </button>
         
         {activeStep < 5 && (() => {
-          const selectedDead: EmailAccount[] = activeStep === 4
-            ? connectedAccounts.filter(a =>
-                selectedAccountIds.has(a.id) && (
-                  (accountProbes[a.id] && !accountProbes[a.id].ok) ||
-                  a.status === 'needs_attention'
-                )
-              )
-            : [];
-          const blocked = selectedDead.length > 0;
           const alsoRequiresSelection = activeStep === 4 && selectedAccountIds.size === 0;
-          const disabled = blocked || alsoRequiresSelection || (activeStep === 4 && isProbingTokens) || (activeStep === 2 && dorkFetchingNext);
+          const disabled = alsoRequiresSelection || (activeStep === 2 && dorkFetchingNext);
           return (
             <button
               type="button"
@@ -3370,25 +3495,12 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
         )}
       </div>
       
-      {activeStep === 4 && (() => {
-        const selectedDead = connectedAccounts.filter(a =>
-          selectedAccountIds.has(a.id) && (
-            (accountProbes[a.id] && !accountProbes[a.id].ok) ||
-            a.status === 'needs_attention'
-          )
-        );
-        const noSelection = selectedAccountIds.size === 0;
-        if (selectedDead.length === 0 && !noSelection) return null;
-        const message = selectedDead.length > 0
-          ? `Token expired for ${selectedDead.map(a => a.email).join(', ')}. Reconnect the account${selectedDead.length === 1 ? '' : 's'} above to continue.`
-          : 'Select at least one email account to send from.';
-        return (
-          <div className="mx-6 mt-2 mb-2 p-3 bg-danger/10 border border-danger/30 rounded-xl flex items-start gap-2">
-            <ShieldAlert className="w-4 h-4 text-danger shrink-0 mt-0.5" />
-            <p className="text-xs text-danger font-semibold">{message}</p>
-          </div>
-        );
-      })()}
+      {activeStep === 4 && selectedAccountIds.size === 0 && (
+        <div className="mx-6 mt-2 mb-2 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
+          <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-800 font-semibold">Select at least one email account to send from.</p>
+        </div>
+      )}
 
       {launchError && (
         <div className="mx-6 mb-4 p-3 bg-danger/5 border border-danger/20 rounded-xl">

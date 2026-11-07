@@ -12,7 +12,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SITES_DIR, siteBaseUrl, cloudflare } from './config.js';
+import { SITES_DIR, siteBaseUrl, siteUrlForSlug, normalizeSiteDeployUrl, cloudflare } from './config.js';
 import { db } from './db.js';
 import { getPgPool, getSupabase } from './supabase.js';
 import { isOfficialBuiltinPwaTemplate, normalizeOfficialNiche, BUILTIN_TEMPLATES } from './templates.js';
@@ -118,7 +118,23 @@ export async function ensureUserSitesTable() {
         await pool.query(`
           ALTER TABLE public.user_sites DROP CONSTRAINT IF EXISTS user_sites_template_source_check;
           ALTER TABLE public.user_sites DROP CONSTRAINT IF EXISTS user_sites_is_pwa_connected_check;
+          UPDATE public.user_sites
+             SET template_source = 'custom', is_pwa_connected = false
+           WHERE template_key LIKE 'tmpl_%'
+              OR template_key LIKE 'custom_%'
+              OR template_key LIKE 'hist_%'
+              OR template_source = 'custom';
         `);
+      } catch (_) {}
+      try {
+        db.prepare(`
+          UPDATE user_sites
+             SET template_source = 'custom', is_pwa_connected = 0
+           WHERE template_key LIKE 'tmpl_%'
+              OR template_key LIKE 'custom_%'
+              OR template_key LIKE 'hist_%'
+              OR template_source = 'custom';
+        `).run();
       } catch (_) {}
     } catch (err) {
       console.warn('[sites] Postgres user_sites ensure notice:', err.message);
@@ -223,51 +239,89 @@ function normalizeCampaignSource(source) {
   return 'site-deploy';
 }
 
-// A site belongs in the Site Editor when it was rebranded from an official built-in
-// Lunao template or deployed from any campaign (SMS, Email, Site Deploy).
-function isEditorEligibleRow(r) {
+// A site belongs in the Site Editor for PWA code generation ONLY when it was rebranded
+// from an official built-in Lunao template originally offered by Lunao.
+// Any site that was vibe-coded in AI Web Studio or uses a custom template is strictly excluded.
+export function isEditorEligibleRow(r) {
   if (!r || !r.slug) return false;
-  return true;
+  if (r.template_source === 'custom') return false;
+  if (r.is_pwa_connected === false || r.is_pwa_connected === 0) return false;
+  const key = String(r.template_key || '').trim().toLowerCase();
+  if (!key) return false;
+  if (key.startsWith('tmpl_') || key.startsWith('custom_') || key.startsWith('hist_')) return false;
+  return isOfficialBuiltinPwaTemplate(key);
 }
 
-// Self-heal legacy rows that were misclassified as custom so every store agrees.
+// Self-heal rows so official built-in templates are correctly marked as builtin,
+// and custom vibe-coded templates are correctly marked as custom.
 async function healMisclassifiedRows(rows) {
-  const slugs = (rows || [])
+  const builtinSlugs = (rows || [])
     .filter((r) => isEditorEligibleRow(r) && (r.template_source !== 'builtin' || !r.is_pwa_connected))
     .map((r) => String(r.slug).toLowerCase());
-  if (!slugs.length) return;
-  try {
-    db.prepare(
-      `UPDATE user_sites SET template_source = 'builtin', is_pwa_connected = 1
-        WHERE slug IN (${slugs.map(() => '?').join(',')})`,
-    ).run(...slugs);
-  } catch {}
-  const pool = getPgPool();
-  if (pool) {
+
+  if (builtinSlugs.length) {
     try {
-      await pool.query(
-        `UPDATE public.user_sites SET template_source = 'builtin', is_pwa_connected = true
-          WHERE slug = ANY($1::text[])`,
-        [slugs],
-      );
-      return;
-    } catch (err) {
-      console.warn('[sites] Postgres heal notice:', err.message);
+      db.prepare(
+        `UPDATE user_sites SET template_source = 'builtin', is_pwa_connected = 1
+          WHERE slug IN (${builtinSlugs.map(() => '?').join(',')})`,
+      ).run(...builtinSlugs);
+    } catch {}
+    const pool = getPgPool();
+    if (pool) {
+      try {
+        await pool.query(
+          `UPDATE public.user_sites SET template_source = 'builtin', is_pwa_connected = true
+            WHERE slug = ANY($1::text[])`,
+          [builtinSlugs],
+        );
+      } catch (err) {
+        console.warn('[sites] Postgres heal notice:', err.message);
+      }
+    }
+    const sb = getSupabase();
+    if (sb) {
+      try {
+        await sb.from('user_sites').update({ template_source: 'builtin', is_pwa_connected: true }).in('slug', builtinSlugs);
+      } catch {}
     }
   }
-  const sb = getSupabase();
-  if (sb) {
+
+  const customSlugs = (rows || [])
+    .filter((r) => !isEditorEligibleRow(r) && (r.template_source !== 'custom' || r.is_pwa_connected))
+    .map((r) => String(r.slug).toLowerCase());
+
+  if (customSlugs.length) {
     try {
-      await sb.from('user_sites').update({ template_source: 'builtin', is_pwa_connected: true }).in('slug', slugs);
+      db.prepare(
+        `UPDATE user_sites SET template_source = 'custom', is_pwa_connected = 0
+          WHERE slug IN (${customSlugs.map(() => '?').join(',')})`,
+      ).run(...customSlugs);
     } catch {}
+    const pool = getPgPool();
+    if (pool) {
+      try {
+        await pool.query(
+          `UPDATE public.user_sites SET template_source = 'custom', is_pwa_connected = false
+            WHERE slug = ANY($1::text[])`,
+          [customSlugs],
+        );
+      } catch (err) {
+        console.warn('[sites] Postgres custom heal notice:', err.message);
+      }
+    }
+    const sb = getSupabase();
+    if (sb) {
+      try {
+        await sb.from('user_sites').update({ template_source: 'custom', is_pwa_connected: false }).in('slug', customSlugs);
+      } catch {}
+    }
   }
 }
 
 function formatEditorSiteRow(r) {
   if (!r) return null;
   const slug = r.slug;
-  const defaultDeployUrl = `${siteBaseUrl()}/${slug}/`;
-  const deployUrl = r.deploy_url || r.deployUrl || defaultDeployUrl;
+  const deployUrl = normalizeSiteDeployUrl(r.deploy_url || r.deployUrl, slug);
   const htmlTitle = r.compiled_html ? titleFromHtml(r.compiled_html) : '';
   const businessTitle = r.business_name
     ? (r.city ? `${r.business_name} — ${r.city}` : r.business_name)
@@ -279,8 +333,8 @@ function formatEditorSiteRow(r) {
     city: r.city || '',
     niche: normalizeOfficialNiche(r.niche),
     templateKey: r.template_key || 'barber-dark-luxury',
-    templateSource: isEditorEligibleRow(r) ? 'builtin' : (r.template_source || 'builtin'),
-    isPwaConnected: isEditorEligibleRow(r) ? true : Boolean(r.is_pwa_connected),
+    templateSource: isEditorEligibleRow(r) ? 'builtin' : 'custom',
+    isPwaConnected: isEditorEligibleRow(r),
     campaignSource: r.campaign_source || 'site-deploy',
     campaignId: r.campaign_id || null,
     url: deployUrl,
@@ -318,22 +372,37 @@ export async function registerUserRebrandedSite({
     return { registered: false, savedToSupabase: false, reason: 'invalid_slug' };
   }
 
-  // All rebranded and deployed sites belong in the Site Editor
-  const builtinEligible = true;
-  const effectiveTemplateSource = 'builtin';
-  const effectivePwaConnected = true;
+  // Only official Lunao built-in templates are eligible for Owner PWA & Site Editor.
+  // Vibe-coded templates and custom user templates are marked as 'custom' with is_pwa_connected = false.
+  const rawKey = String(resolvedTemplate?.key || templateKey || '').trim().toLowerCase();
+  const isCustomKey = rawKey.startsWith('tmpl_') || rawKey.startsWith('custom_') || rawKey.startsWith('hist_');
+  const isBuiltin =
+    !isCustomKey &&
+    !hasRawHtmlOverride &&
+    templateSource !== 'custom' &&
+    isOfficialBuiltinPwaTemplate(rawKey, resolvedTemplate, hasRawHtmlOverride);
 
-  const canonicalBuiltin =
-    BUILTIN_TEMPLATES.find(
+  const effectiveTemplateSource = isBuiltin ? 'builtin' : 'custom';
+  const effectivePwaConnected = Boolean(isBuiltin);
+  const builtinEligible = isBuiltin;
+
+  let finalTemplateKey = rawKey || 'barber-dark-luxury';
+  if (isBuiltin) {
+    const canonical = BUILTIN_TEMPLATES.find(
       (t) =>
-        String(t.id || t.key || '').trim().toLowerCase() === String(resolvedTemplate?.key || templateKey || '').trim().toLowerCase() ||
-        String(t.niche || '').trim().toLowerCase() === String(niche || '').trim().toLowerCase(),
-    ) || BUILTIN_TEMPLATES[0];
+        t.id.toLowerCase() === rawKey ||
+        (t.aliases && t.aliases.some((a) => a.toLowerCase() === rawKey)) ||
+        t.templateFile.toLowerCase() === rawKey ||
+        t.templateFile.replace('.html', '').toLowerCase() === rawKey,
+    );
+    if (canonical) {
+      finalTemplateKey = canonical.id;
+    }
+  }
 
-  const finalTemplateKey = resolvedTemplate?.key || templateKey || canonicalBuiltin.id || canonicalBuiltin.key || 'barber-dark-luxury';
-  const finalNiche = normalizeOfficialNiche(resolvedTemplate?.niche || niche || canonicalBuiltin.niche);
+  const finalNiche = normalizeOfficialNiche(resolvedTemplate?.niche || niche);
   const finalCampaignSource = normalizeCampaignSource(campaignSource);
-  const finalDeployUrl = deployUrl || `${siteBaseUrl()}/${cleanSlug}/`;
+  const finalDeployUrl = normalizeSiteDeployUrl(deployUrl, cleanSlug);
   const now = Date.now();
 
   if (html && typeof html === 'string' && html.trim()) {
@@ -467,7 +536,8 @@ export async function registerUserRebrandedSite({
   }
 
   return {
-    registered: builtinEligible,
+    registered: true,
+    builtinEligible,
     savedToSupabase,
     templateSource: effectiveTemplateSource,
     slug: cleanSlug,
@@ -786,7 +856,7 @@ export async function saveUserEditorSiteHtml(ownerKey, slug, html, deployUrl = n
   const now = Date.now();
 
   const localUrl = await writeSite(cleanSlug, html);
-  const finalUrl = deployUrl || access.site?.deployUrl || localUrl;
+  const finalUrl = normalizeSiteDeployUrl(deployUrl || access.site?.deployUrl || localUrl, cleanSlug);
 
   // 1. Update local SQLite mirror
   try {
@@ -884,7 +954,7 @@ export async function writeSite(slug, html) {
   const dir = siteDir(slug);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(siteFile(slug), html, 'utf8');
-  return `${siteBaseUrl()}/${slug}/`;
+  return siteUrlForSlug(slug);
 }
 
 export async function siteExists(slug) {

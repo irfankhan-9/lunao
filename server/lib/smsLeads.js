@@ -649,7 +649,7 @@ function getCity(components) {
  *     the entire session stops immediately and marks all leads found in that city.
  */
 export async function discoverSmsLeadsFromPlaces(opts) {
-  var apiKey = opts.apiKey;
+  var apiKey = opts.apiKey || process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_PLACES_API_KEY;
   var niche = opts.niche || 'Barber';
   var city = opts.city;
   var province = opts.province;

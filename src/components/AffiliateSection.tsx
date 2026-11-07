@@ -95,9 +95,18 @@ export const AffiliateSection: React.FC<AffiliateSectionProps> = ({ onBack, user
     return () => { isMounted = false; };
   }, [userEmail]);
 
+  const getReferralUrl = () => {
+    if (!profile?.referralCode) return profile?.referralLink || '';
+    const origin = typeof window !== 'undefined' && window.location.origin
+      ? window.location.origin
+      : 'https://lunao.org';
+    return `${origin}/?ref=${profile.referralCode}`;
+  };
+
   const handleCopyLink = () => {
-    if (!profile?.referralLink) return;
-    navigator.clipboard.writeText(profile.referralLink);
+    const url = getReferralUrl();
+    if (!url) return;
+    navigator.clipboard.writeText(url);
     playConfirmSuccess();
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
@@ -310,7 +319,7 @@ export const AffiliateSection: React.FC<AffiliateSectionProps> = ({ onBack, user
                 <input
                   type="text"
                   readOnly
-                  value={profile?.referralLink || ''}
+                  value={getReferralUrl()}
                   className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-white border border-border-main rounded-lg text-xs font-mono text-ink font-semibold focus:outline-none shadow-2xs pr-4 sm:pr-10 truncate"
                 />
               </div>

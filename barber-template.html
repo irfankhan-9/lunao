@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="alternate icon" href="/favicon.ico" />
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vintage Cuts Barber Lounge — Luxury Barbershop in Austin, TX</title>
@@ -2200,7 +2202,7 @@
               <i data-lucide="star"></i>
               <i data-lucide="star"></i>
             </div>
-            <span>4.9 / 5 from 200+ reviews</span>
+            <span>Verified by 200+ clients</span>
           </div>
         </div>
 
@@ -2756,58 +2758,39 @@
 
       // slot-badge tooltip disabled on live compiled pages
 
-      // Booking Form dynamic submit with animations and replacement
+      // Booking Form dynamic submit validation
       const apptForm = document.getElementById("appointment-form");
       const submitBtn = document.getElementById("submit-appointment-btn");
 
-      apptForm.addEventListener("submit", function(e) {
-        e.preventDefault();
-        
-        // Remove prior invalid markers
-        const fields = apptForm.querySelectorAll("input[required], select[required]");
-        let firstInvalid = null;
-        
-        fields.forEach(function(field) {
-          field.classList.remove("form-field-invalid");
-          if (!field.value.trim()) {
-            field.classList.add("form-field-invalid");
-            if (!firstInvalid) {
-              firstInvalid = field;
+      if (apptForm) {
+        apptForm.addEventListener("submit", function(e) {
+          // Field validation helper (real submission & PWA verification handled authoritatively by LunaoBookingBridge)
+          const fields = apptForm.querySelectorAll("input[required], select[required]");
+          let firstInvalid = null;
+          
+          fields.forEach(function(field) {
+            field.classList.remove("form-field-invalid");
+            if (!field.value.trim()) {
+              field.classList.add("form-field-invalid");
+              if (!firstInvalid) {
+                firstInvalid = field;
+              }
             }
+          });
+
+          if (firstInvalid) {
+            e.preventDefault();
+            const box = document.getElementById("booking-form-container");
+            if (box) {
+              box.classList.remove("shake-anim");
+              void box.offsetWidth;
+              box.classList.add("shake-anim");
+            }
+            firstInvalid.focus();
+            return;
           }
         });
-
-        if (firstInvalid) {
-          // Shake the layout box container
-          const box = document.getElementById("booking-form-container");
-          box.classList.remove("shake-anim");
-          void box.offsetWidth; // trigger reflow
-          box.classList.add("shake-anim");
-          firstInvalid.focus();
-          return;
-        }
-
-        // Render success state
-        const clientName = document.getElementById("client-name").value;
-        const clientPhone = document.getElementById("client-phone").value;
-        
-        const boxContainer = document.getElementById("booking-form-container");
-        boxContainer.classList.add("transition-all");
-        boxContainer.style.opacity = "0";
-
-        setTimeout(function() {
-          boxContainer.innerHTML = `
-            <div class="booking-success-layout">
-              <div class="success-checkmark-circle">
-                <svg class="success-icon" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </div>
-              <h3 class="success-title">Appointment Requested!</h3>
-              <p class="success-subtitle">Thank you, <strong>${clientName}</strong>. We have sent a validation receipt request. We'll call you at <strong>${clientPhone}</strong> within 1 hour to finalize your chair slot times!</p>
-            </div>
-          `;
-          boxContainer.style.opacity = "1";
-        }, 300);
-      });
+      }
 
     const soundElements = [
         '#menu-toggle-btn', 

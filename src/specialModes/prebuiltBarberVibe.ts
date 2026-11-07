@@ -29,7 +29,10 @@ export function isSpecialBarberPrompt(promptText: string): boolean {
     clean.includes('grooming lounge') ||
     clean.includes('hot-towel') ||
     clean.includes('straight-razor') ||
-    clean.includes('sovereign blade')
+    clean.includes('sovereign blade') ||
+    clean.includes('sovereign') ||
+    clean.includes('obsidian') ||
+    clean.includes('luxury dark barber')
   ) {
     return true;
   }
@@ -669,8 +672,8 @@ export const SPECIAL_BARBER_RAW_HTML = `<!DOCTYPE html>
         </div>
         <div class="hero-metrics">
           <div>
-            <div class="metric-val">4.9 ★</div>
-            <div class="metric-label">Top-Rated Lounge in {{CITY}}</div>
+            <div class="metric-val">100%</div>
+            <div class="metric-label">Client Satisfaction in {{CITY}}</div>
           </div>
           <div>
             <div class="metric-val">45 Min</div>
@@ -914,7 +917,6 @@ export const SPECIAL_BARBER_RAW_HTML = `<!DOCTYPE html>
 
       <div class="reviews-grid">
         <div class="review-card reveal">
-          <div class="stars">★★★★★</div>
           <p style="font-size:14px;color:var(--text-cream);margin-bottom:18px;">
             "Hands down the finest grooming experience in {{CITY}}. The hot-towel straight-razor shave and skin fade at {{BUSINESS_NAME}} are unmatched."
           </p>
@@ -922,7 +924,6 @@ export const SPECIAL_BARBER_RAW_HTML = `<!DOCTYPE html>
         </div>
 
         <div class="review-card reveal">
-          <div class="stars">★★★★★</div>
           <p style="font-size:14px;color:var(--text-cream);margin-bottom:18px;">
             "From the espresso on arrival to the precision scissor work, {{BUSINESS_NAME}} feels like a private members club. Worth every dollar."
           </p>
@@ -930,7 +931,6 @@ export const SPECIAL_BARBER_RAW_HTML = `<!DOCTYPE html>
         </div>
 
         <div class="review-card reveal">
-          <div class="stars">★★★★★</div>
           <p style="font-size:14px;color:var(--text-cream);margin-bottom:18px;">
             "Finally found a master barber in {{CITY}} who understands beard architecture and natural tapers. I never go anywhere else."
           </p>

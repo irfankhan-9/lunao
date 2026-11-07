@@ -100,7 +100,25 @@ export async function registerTenantAsync(slug, name = '', isActive = true, nich
       throw err;
     }
 
-    if (pool) {
+    let synced = false;
+    if (sb) {
+      try {
+        const { error } = await sb.from('tenants').upsert(
+          {
+            id: tenantId,
+            slug: cleanSlug,
+            name: cleanName,
+            niche: cleanNiche,
+            is_active: activeBool,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'slug' }
+        );
+        if (!error) synced = true;
+      } catch {}
+    }
+
+    if (!synced && pool) {
       try {
         await pool.query(
           `INSERT INTO public.tenants (id, slug, name, niche, is_active, created_at, updated_at)
@@ -112,27 +130,13 @@ export async function registerTenantAsync(slug, name = '', isActive = true, nich
              updated_at = NOW()`,
           [tenantId, cleanSlug, cleanName, cleanNiche, activeBool]
         );
+        synced = true;
       } catch (dbErr) {
-        const err = new Error(`Failed to synchronize tenant "${cleanSlug}" to public.tenants: ${dbErr.message}`);
-        err.status = 503;
-        throw err;
-      }
-    } else if (sb) {
-      const { error } = await sb.from('tenants').upsert(
-        {
-          id: tenantId,
-          slug: cleanSlug,
-          name: cleanName,
-          niche: cleanNiche,
-          is_active: activeBool,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'slug' }
-      );
-      if (error) {
-        const err = new Error(`Failed to synchronize tenant "${cleanSlug}" to public.tenants: ${error.message}`);
-        err.status = 503;
-        throw err;
+        if (!sb) {
+          const err = new Error(`Failed to synchronize tenant "${cleanSlug}" to public.tenants: ${dbErr.message}`);
+          err.status = 503;
+          throw err;
+        }
       }
     }
   }

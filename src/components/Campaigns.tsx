@@ -2107,9 +2107,7 @@ The Lunao Team`);
               userCredits={userCredits}
               ownerKey={localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan'}
               onCreditsChange={(credits) => setUserCredits(credits)}
-              onLaunch={() => {
-                setUserCredits(userCredits);
-              }}
+              onLaunch={() => {}}
               onCampaignCreated={(newCampaign) => {
                 setCampaigns(prev => [newCampaign, ...prev.filter(c => c.id !== newCampaign.id)]);
               }}

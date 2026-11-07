@@ -198,8 +198,9 @@ export async function runAiSmokeTests() {
       });
 
       const t0 = Date.now();
+      const modelName = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
       const call = ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: modelName,
         contents: 'reply 1 word: OK',
       });
       const response = await Promise.race([call, timeoutPromise(2000)]);

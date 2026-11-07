@@ -18,6 +18,7 @@ import {
   Phone, Plus, Trash2, RefreshCw, AlertCircle, CheckCircle, ExternalLink, ShieldCheck, X
 } from 'lucide-react';
 import { playSoftTap, playGentleChime, playElegantError } from '../utils/audio';
+import { saveCachedTelnyxData, syncTelnyxAccountLive, clearTelnyxAuth } from '../lib/telnyxClient';
 
 interface TelnyxConnection {
   id: string;
@@ -73,6 +74,20 @@ export const TelnyxConnectionManager: React.FC<TelnyxConnectionManagerProps> = (
         localStorage.setItem('lunao_telnyx_connections_cache', JSON.stringify(fresh));
       } catch {
         /* ignore quota errors */
+      }
+      if (fresh.length > 0) {
+        const liveAcc = fresh[0];
+        saveCachedTelnyxData({
+          connected: liveAcc.status !== 'needs_reconnect' && liveAcc.status !== 'revoked',
+          tokenExpired: liveAcc.status === 'needs_reconnect' || liveAcc.status === 'revoked',
+          account: {
+            id: liveAcc.id,
+            email: liveAcc.account_email || '',
+            label: liveAcc.account_label || liveAcc.account_email || 'Telnyx Account',
+            status: liveAcc.status || 'active',
+            totalNumbers: liveAcc.total_numbers || 0,
+          },
+        });
       }
     } catch (err) {
       console.error('[telnyx] failed to load connections:', err);
@@ -216,6 +231,7 @@ export const TelnyxConnectionManager: React.FC<TelnyxConnectionManagerProps> = (
 
   const handleDisconnect = async (id: string) => {
     try {
+      const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
       const res = await fetch(`/api/telnyx/accounts/${id}`, {
         method: 'DELETE',
         credentials: 'include',
@@ -223,8 +239,7 @@ export const TelnyxConnectionManager: React.FC<TelnyxConnectionManagerProps> = (
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       playGentleChime();
       setDeleteConfirm(null);
-      // Remove the disconnected account from local cache immediately so the
-      // UI doesn't keep showing stale data.
+      await clearTelnyxAuth(ownerKey);
       setConnections((prev) => {
         const next = prev.filter((c) => c.id !== id);
         try {
@@ -249,28 +264,44 @@ export const TelnyxConnectionManager: React.FC<TelnyxConnectionManagerProps> = (
     return `${Math.floor(seconds / 86400)}d`;
   };
 
+  const isAlreadyConnected = connections.some((c) => c.status === 'active') || connections.length > 0;
+
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-ink">Connected Telnyx Accounts</h3>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h3 className="text-base font-semibold text-ink">Connected Telnyx Accounts</h3>
+            {isAlreadyConnected && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-3xs">
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Telnyx Connected</span>
+              </span>
+            )}
+          </div>
           <p className="text-xs text-ink-secondary mt-0.5">
-            One-click OAuth access. No API keys to copy.
+            One-click OAuth carrier access. No API keys to copy.
           </p>
         </div>
         <button
           type="button"
           onClick={() => { playSoftTap(); handleConnect(); }}
           disabled={connecting}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-2 transition-all disabled:opacity-50"
+          className={`px-4 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer shadow-xs ${
+            isAlreadyConnected
+              ? 'bg-surface hover:bg-off-white text-ink border border-border-main hover:border-accent/40'
+              : 'bg-blue-600 hover:bg-blue-700 text-white'
+          }`}
         >
           {connecting ? (
             <RefreshCw className="w-4 h-4 animate-spin" />
+          ) : isAlreadyConnected ? (
+            <RefreshCw className="w-3.5 h-3.5 text-accent" />
           ) : (
             <Plus className="w-4 h-4" />
           )}
-          Connect with Telnyx
+          <span>{isAlreadyConnected ? 'Re-auth / Connect Different Account' : 'Connect with Telnyx'}</span>
         </button>
       </div>
 
@@ -309,21 +340,26 @@ export const TelnyxConnectionManager: React.FC<TelnyxConnectionManagerProps> = (
                     <Phone className="w-5 h-5 text-blue-600" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-ink">
                         {conn.account_label || conn.account_email || 'Telnyx account'}
                       </p>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium border flex items-center gap-1 ${
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-1 ${
                         conn.status === 'active'
-                          ? 'bg-success-soft text-success border-success/20'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                           : 'bg-amber-50 text-amber-700 border-amber-200'
                       }`}>
                         {conn.status === 'active' ? (
-                          <CheckCircle className="w-3.5 h-3.5" />
+                          <>
+                            <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Telnyx Connected</span>
+                          </>
                         ) : (
-                          <AlertCircle className="w-3.5 h-3.5" />
+                          <>
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            <span className="capitalize">{conn.status.replace('_', ' ')}</span>
+                          </>
                         )}
-                        <span className="capitalize">{conn.status.replace('_', ' ')}</span>
                       </span>
                     </div>
                     <p className="text-xs text-ink-secondary mt-0.5">
@@ -337,14 +373,26 @@ export const TelnyxConnectionManager: React.FC<TelnyxConnectionManagerProps> = (
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => { playSoftTap(); setDeleteConfirm(conn.id); }}
-                  className="p-2 hover:bg-danger-soft hover:text-danger rounded-lg transition-colors text-ink-tertiary"
-                  title="Disconnect account"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => { playSoftTap(); handleConnect(); }}
+                    disabled={connecting}
+                    className="px-2.5 py-1 text-[11px] font-semibold bg-surface hover:bg-off-white text-ink-secondary hover:text-ink border border-border-light rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                    title="Re-authenticate or connect different account"
+                  >
+                    <RefreshCw className="w-3 h-3 text-accent" />
+                    <span>Re-auth</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { playSoftTap(); setDeleteConfirm(conn.id); }}
+                    className="p-2 hover:bg-danger-soft hover:text-danger rounded-lg transition-colors text-ink-tertiary cursor-pointer"
+                    title="Disconnect account"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               {conn.status === 'needs_reconnect' && (

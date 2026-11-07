@@ -1,3 +1,7 @@
+import dns from 'node:dns';
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch {}
 import pkg from 'pg';
 const { Pool } = pkg;
 import { createClient } from '@supabase/supabase-js';

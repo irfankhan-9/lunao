@@ -50,6 +50,7 @@ export async function reserveBudget({
   modelId,
   promptText = '',
   maxOutputTokens = 8192,
+  planHint = null,
 }) {
   if (!userId) {
     throw Object.assign(new Error('userId is required for AI generation'), { status: 400 });
@@ -96,21 +97,31 @@ export async function reserveBudget({
     }
   }
 
-  // Local fallback
-  return reserveBudgetLocal({ userId, requestId, modelId: normModel, rates, estimatedCredits, promptPreview });
+  // Local fallback with plan-aware initialization
+  return reserveBudgetLocal({ userId, requestId, modelId: normModel, rates, estimatedCredits, promptPreview, planHint });
 }
 
-function reserveBudgetLocal({ userId, requestId, modelId, rates, estimatedCredits, promptPreview }) {
+function reserveBudgetLocal({ userId, requestId, modelId, rates, estimatedCredits, promptPreview, planHint }) {
   let user = _localAccounts.get(userId);
   if (!user) {
+    const config = getPlanConfig(planHint || 'Pro Plan');
+    const isFree = !planHint || planHint.toLowerCase().includes('free');
+    const balance = isFree ? 0 : config.monthlyCredits;
     user = {
       userId,
-      plan: 'Free Plan',
-      balance: 0,
-      monthlyCredits: 0,
+      plan: planHint || 'Pro Plan',
+      balance,
+      monthlyCredits: config.monthlyCredits,
       dollarsSpent: 0,
     };
     _localAccounts.set(userId, user);
+  } else if (planHint && user.plan !== planHint) {
+    const config = getPlanConfig(planHint);
+    user.plan = planHint;
+    user.monthlyCredits = config.monthlyCredits;
+    if (user.balance <= 0 && !planHint.toLowerCase().includes('free')) {
+      user.balance = config.monthlyCredits;
+    }
   }
 
   if (user.balance < estimatedCredits) {

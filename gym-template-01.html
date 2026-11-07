@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="alternate icon" href="/favicon.ico" />
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
   <title>Premium Luxury Fitness Facility | Iron & Grit Performance Club Austin, TX</title>
@@ -1728,11 +1730,11 @@
 
         <div class="hero-trust">
           <div class="trust-stat">
-            <span class="trust-val">⭐ 4.9 / 5.0</span>
-            <span class="trust-lbl">Trust Score (284 Reviews)</span>
+            <span class="trust-val">100%</span>
+            <span class="trust-lbl">Member Satisfaction</span>
           </div>
           <div class="trust-stat">
-            <span class="trust-val">1,250+ +</span>
+            <span class="trust-val">1,250+</span>
             <span class="trust-lbl">Active Local Members</span>
           </div>
           <div class="trust-stat">
@@ -1751,8 +1753,8 @@
   <div class="social-bar">
     <div class="social-bar-grid">
       <div class="social-item">
-        <div class="social-title">★ 4.9</div>
-        <div class="social-subtitle">Google Rating</div>
+        <div class="social-title">Top Rated</div>
+        <div class="social-subtitle">Local Fitness Club</div>
       </div>
       <div class="social-item">
         <div class="social-title">284</div>
@@ -2181,25 +2183,24 @@
             <form id="lead-form" onsubmit="handleFormSubmission(event)">
               <div class="form-group">
                 <label for="form-name">Your Full Name</label>
-                <input type="text" id="form-name" class="form-control" placeholder="Sarah Jenkins" required>
+                <input type="text" id="form-name" name="name" class="form-control" placeholder="Sarah Jenkins" required>
               </div>
 
               <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
                 <div class="form-group">
                   <label for="form-phone">Mobile Phone</label>
-                  <input type="tel" id="form-phone" class="form-control" placeholder="(512) 555-0198" required>
+                  <input type="tel" id="form-phone" name="phone" class="form-control" placeholder="(512) 555-0198" required>
                 </div>
                 <div class="form-group">
                   <label for="form-email">Email Address</label>
-                  <input type="email" id="form-email" class="form-control" placeholder="sarah@gmail.com" required>
+                  <input type="email" id="form-email" name="email" class="form-control" placeholder="sarah@gmail.com" required>
                 </div>
               </div>
 
               <div class="form-group">
                 <label for="form-goal">Your Core Fitness Goal</label>
-                <select id="form-goal" class="form-control" required style="appearance: none;">
-                  <button class="form-control" style="text-align: left;">Please Select One</button>
-                  <option value="Fat Loss">🔥 Extreme Fat Burning / Weight Loss</option>
+                <select id="form-goal" name="service" class="form-control" required style="appearance: none;">
+                  <option value="Fat Loss" selected>🔥 Extreme Fat Burning / Weight Loss</option>
                   <option value="Muscle Gain">💪 Strength Growth &amp; Muscle Density</option>
                   <option value="Athletic Speed">🏃 Sports Agility &amp; Cardiorespiratory</option>
                   <option value="Joint Mobility">🧘 Corrective Rehabilitation &amp; Mobility</option>
@@ -2208,7 +2209,7 @@
 
               <div class="form-group">
                 <label for="form-desc">Additional Workout Background (Optional)</label>
-                <textarea id="form-desc" class="form-control" rows="3" placeholder="Tell us if you have lifting history or injury markers..."></textarea>
+                <textarea id="form-desc" name="notes" class="form-control" rows="3" placeholder="Tell us if you have lifting history or injury markers..."></textarea>
               </div>
 
               <button type="submit" class="btn btn-primary" style="width: 100%;">Start My Transformation ⚡</button>
@@ -2552,7 +2553,7 @@
 
     <div class="footer-bottom">
       <span>&copy; 2026 Iron & Grit Performance Club. All Rights Reserved. Built securely in local Austin, TX.</span>
-      <span>⭐ Rated 4.9 locally with over 284 customer rating votes.</span>
+      <span>Trusted locally by members across the community.</span>
     </div>
   </footer>
 
@@ -2975,18 +2976,16 @@
 
     function getLeadSubmissionEndpoints() {
       const list = [];
-      if (window.LUNAO_LEADS_API_URL && typeof window.LUNAO_LEADS_API_URL === 'string') {
-        list.push(window.LUNAO_LEADS_API_URL.replace(/\/+$/, ''));
+      if (window.LUNAO_BOOKING_API_URL && typeof window.LUNAO_BOOKING_API_URL === 'string') {
+        list.push(window.LUNAO_BOOKING_API_URL.replace(/\/+$/, ''));
       }
-      const supabaseBase = window.LUNAO_SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
-      list.push(`${supabaseBase.replace(/\/+$/, '')}/functions/v1/public-leads`);
-      if (window.location && /^https?:$/i.test(window.location.protocol)) {
-        list.push('/api/leads');
-        list.push('/api/public/leads');
-        list.push('/functions/v1/public-leads');
+      var origin = (window.location && window.location.origin) ? window.location.origin : '';
+      if (origin && /^https?:/i.test(origin)) {
+        list.push(origin + '/api/bookings');
+        list.push(origin + '/api/leads');
       }
-      list.push('https://api.lunao.app/api/leads');
-      list.push('https://lunao.app/api/leads');
+      list.push('/api/bookings');
+      list.push('/api/leads');
       return [...new Set(list)];
     }
 
@@ -3006,7 +3005,7 @@
       const name = (nameInput ? nameInput.value : '').trim();
       const phone = (phoneInput ? phoneInput.value : '').trim();
       const email = (emailInput ? emailInput.value : '').trim();
-      const goal = (goalSelect ? goalSelect.value : '').trim();
+      const goal = (goalSelect ? goalSelect.value : '').trim() || 'VIP Class Pass';
       const desc = (descInput ? descInput.value : '').trim();
 
       if (!name || name.length < 2) {
@@ -3049,12 +3048,9 @@
         leadType: 'gym_vip_pass',
         customerName: name,
         phone: phone,
-        email: email || null,
+        email: email || '',
+        service: goal,
         notes: desc ? ('Goal: ' + goal + ' | Note: ' + desc) : ('Goal: ' + goal),
-        details: {
-          goal: goal,
-          description: desc
-        },
         source: 'form',
         status: 'new',
         idempotencyKey: idempotencyKey,
@@ -3083,7 +3079,7 @@
 
           const json = await res.json().catch(() => null);
 
-          if (res.ok && (res.status === 200 || res.status === 201) && json && (json.ok || json.lead || json.id)) {
+          if (res.ok && (res.status === 200 || res.status === 201) && json && json.ok !== false && json.pwaActive !== false && (json.ok || json.booking || json.lead || json.id)) {
             _gaq = window._gaq || [];
             _gaq.push(['_trackEvent', 'Form', 'Submit', 'Gym Lead Pass']);
 
@@ -3093,6 +3089,11 @@
             if (typeof Sound !== 'undefined' && Sound.successChime) Sound.successChime();
             form.dataset.submitting = 'false';
             return;
+          }
+
+          if (res.status === 400 || res.status === 422 || (json && json.code === 'PWA_ACTIVATION_REQUIRED')) {
+            lastError = (json && (json.error || json.message)) || 'Invalid booking details.';
+            break;
           }
 
           if (json && json.error) {

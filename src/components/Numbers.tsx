@@ -7,9 +7,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Phone, RefreshCw, ExternalLink, CheckCircle, XCircle, Loader2,
-  AlertCircle, Plus, Power,
+  AlertCircle, Plus, Power, ShieldAlert
 } from 'lucide-react';
 import { playSoftTap, playElegantError, playGentleChime } from '../utils/audio';
+import { getCachedTelnyxData, syncTelnyxAccountLive, CachedTelnyxData } from '../lib/telnyxClient';
 
 interface TelnyxAccountSummary {
   id: string;
@@ -30,9 +31,29 @@ interface TelnyxNumberRecord {
 }
 
 export function Numbers() {
-  const [accounts, setAccounts] = useState<TelnyxAccountSummary[]>([]);
-  const [numbers, setNumbers] = useState<TelnyxNumberRecord[]>([]);
-  const [loadingAccounts, setLoadingAccounts] = useState(true);
+  const [initialCached] = useState<CachedTelnyxData>(() => getCachedTelnyxData());
+  const [accounts, setAccounts] = useState<TelnyxAccountSummary[]>(() => {
+    if (initialCached.account) {
+      return [{
+        id: initialCached.account.id,
+        account_label: initialCached.account.label || initialCached.account.email || 'Telnyx Account',
+        status: initialCached.tokenExpired ? 'needs_reconnect' : 'active',
+      }];
+    }
+    return [];
+  });
+  const [numbers, setNumbers] = useState<TelnyxNumberRecord[]>(() => {
+    return (initialCached.numbers || []).map((n) => ({
+      id: n.id,
+      number: n.phoneNumber,
+      type: 'mobile',
+      country: 'United States',
+      voiceEnabled: true,
+      status: n.status || 'active',
+      sms: n.smsCapable !== false,
+    }));
+  });
+  const [loadingAccounts, setLoadingAccounts] = useState(initialCached.numbers.length === 0 && !initialCached.connected);
   const [loadingNumbers, setLoadingNumbers] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,7 +62,7 @@ export function Numbers() {
   // Pull the list of connected Telnyx accounts. We need at least one to
   // fetch its phone numbers, so this drives the empty-state messaging.
   const loadAccounts = useCallback(async () => {
-    setLoadingAccounts(true);
+    if (numbers.length === 0) setLoadingAccounts(true);
     try {
       const res = await fetch(`/api/telnyx/accounts?ownerKey=${encodeURIComponent(ownerKey)}`, {
         credentials: 'include',
@@ -67,7 +88,7 @@ export function Numbers() {
     } finally {
       setLoadingAccounts(false);
     }
-  }, [ownerKey]);
+  }, [ownerKey, numbers.length]);
 
   // Pull the phone numbers for the first ACTIVE connected account. If the
   // active account is in needs_reconnect, we surface that instead of

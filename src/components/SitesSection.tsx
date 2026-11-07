@@ -19,11 +19,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Globe, ExternalLink, Copy, Check, RefreshCw, Search,
-  Mail, MessageSquare, Rocket, Layers, Phone, MapPin, Inbox, Filter,
+  Mail, MessageSquare, Rocket, Layers, Phone, MapPin, Inbox, Filter, QrCode as QrIcon,
 } from 'lucide-react';
-import { fetchAllSites, SiteRow, SitesCounts, SiteSource } from '../lib/pipelineClient';
+import { fetchAllSites, SiteRow, SitesCounts, SiteSource, isOfficialBuiltinTemplate } from '../lib/pipelineClient';
 import { Campaign } from '../types';
 import { playSoftTap } from '../utils/audio';
+import { OwnerPWADrawer } from './OwnerPWADrawer';
 
 type SourceFilter = 'all' | SiteSource;
 
@@ -87,6 +88,37 @@ function countDistinctCampaigns(rows: SiteRow[]): number {
   return ids.size;
 }
 
+// Canonical site slug extractor for reliable deduplication across tables & states
+export function extractCanonicalSiteSlug(slug?: string | null, siteUrl?: string | null): string {
+  if (slug && typeof slug === 'string') {
+    let clean = slug.toLowerCase().trim().replace(/^https?:\/\//, '').split('?')[0].split('#')[0];
+    if (clean.includes('lunao.org')) {
+      if (clean.includes('.lunao.org')) {
+        const sub = clean.split('.lunao.org')[0];
+        if (sub && sub !== 'www' && sub !== 'api') return sub.replace(/^\/+|\/+$/g, '');
+      }
+      const parts = clean.split('/').filter(Boolean);
+      const last = parts[parts.length - 1];
+      if (last && !last.includes('lunao.org')) return last.replace(/\.html$/, '');
+    } else {
+      const parts = clean.split('/').filter(Boolean);
+      const last = parts[parts.length - 1] || clean;
+      return last.replace(/\.html$/, '').replace(/^\/+|\/+$/g, '');
+    }
+  }
+  if (siteUrl && typeof siteUrl === 'string') {
+    let clean = siteUrl.toLowerCase().trim().replace(/^https?:\/\//, '').split('?')[0].split('#')[0];
+    if (clean.includes('.lunao.org')) {
+      const sub = clean.split('.lunao.org')[0];
+      if (sub && sub !== 'www' && sub !== 'api') return sub.replace(/^\/+|\/+$/g, '');
+    }
+    const parts = clean.split('/').filter(Boolean);
+    const last = parts[parts.length - 1];
+    if (last) return last.replace(/\.html$/, '');
+  }
+  return '';
+}
+
 export const SitesSection: React.FC<{
   ownerKey: string;
   campaigns?: Campaign[];
@@ -100,6 +132,28 @@ export const SitesSection: React.FC<{
   const [filter, setFilter] = useState<SourceFilter>('all');
   const [search, setSearch] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [pwaDrawerSite, setPwaDrawerSite] = useState<{ slug: string; businessName: string; siteUrl: string } | null>(null);
+  const [pwaRefreshKey, setPwaRefreshKey] = useState(0);
+
+  const resolveRowSlug = (r: SiteRow): string => {
+    if (r.slug) return r.slug;
+    if (r.site_url) {
+      const parts = r.site_url.replace(/[?#].*$/, '').split('/').filter(Boolean);
+      const last = parts[parts.length - 1] || '';
+      if (last && !last.includes('.')) return last;
+    }
+    return (r.business_name || 'business').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  };
+
+  const isPwaEligible = (r: SiteRow): boolean => {
+    if ((r as any).template_source === 'custom' || (r as any).is_pwa_connected === false) return false;
+    if ((r as any).template_key) {
+      return isOfficialBuiltinTemplate((r as any).template_key);
+    }
+    const slug = resolveRowSlug(r).toLowerCase();
+    if (slug.startsWith('tmpl_') || slug.startsWith('custom_') || slug.startsWith('hist_')) return false;
+    return true;
+  };
 
   // Extract all deployed mockups directly from in-memory campaigns for instant 0ms reactivity
   const campaignSites = useMemo(() => {
@@ -110,9 +164,10 @@ export const SitesSection: React.FC<{
       const rawSource: SiteSource = c.type === 'email' ? 'email' : c.type === 'sms' ? 'sms' : 'site-deploy';
       const createdTs = c.createdAt ? Math.floor(Date.parse(c.createdAt) / 1000) || Math.floor(Date.now() / 1000) : Math.floor(Date.now() / 1000);
 
-      if (Array.isArray(c.deployedSites)) {
+      if (Array.isArray(c.deployedSites) && c.deployedSites.length > 0) {
         for (const s of c.deployedSites) {
           if (!s || !s.url) continue;
+          const canonical = extractCanonicalSiteSlug(s.slug, s.url);
           list.push({
             source: rawSource,
             lead_id: leadCounter++,
@@ -126,40 +181,15 @@ export const SitesSection: React.FC<{
             phone: null,
             lead_niche: c.niche || null,
             site_url: s.url,
-            slug: s.slug || null,
+            slug: canonical || s.slug || null,
             lead_status: 'live',
             created_at: createdTs,
           });
         }
-      }
-
-      if (rawSource === 'email' && Array.isArray(c.emailLeads)) {
-        for (const l of c.emailLeads) {
-          if (l.siteUrl) {
-            list.push({
-              source: 'email',
-              lead_id: leadCounter++,
-              campaign_id: c.id,
-              campaign_name: c.name || 'Email Outreach',
-              niche: c.niche || null,
-              campaign_status: c.status || 'Completed',
-              campaign_started_at: createdTs,
-              business_name: l.name || 'Local Business',
-              city: l.city || null,
-              phone: null,
-              lead_niche: c.niche || null,
-              site_url: l.siteUrl,
-              slug: l.slug || null,
-              lead_status: l.status || 'sent',
-              created_at: createdTs,
-            });
-          }
-        }
-      }
-
-      if (rawSource === 'sms' && Array.isArray(c.smsLeads)) {
+      } else if (rawSource === 'sms' && Array.isArray(c.smsLeads)) {
         for (const sl of c.smsLeads) {
           if (sl.siteUrl) {
+            const canonical = extractCanonicalSiteSlug((sl as any).slug, sl.siteUrl);
             list.push({
               source: 'sms',
               lead_id: leadCounter++,
@@ -173,8 +203,31 @@ export const SitesSection: React.FC<{
               phone: sl.phone || null,
               lead_niche: c.niche || null,
               site_url: sl.siteUrl,
-              slug: (sl as any).slug || (sl.siteUrl ? sl.siteUrl.split('/').filter(Boolean).pop() : null),
+              slug: canonical || (sl as any).slug || null,
               lead_status: sl.status || 'delivered',
+              created_at: createdTs,
+            });
+          }
+        }
+      } else if (rawSource === 'email' && Array.isArray(c.emailLeads)) {
+        for (const l of c.emailLeads) {
+          if (l.siteUrl) {
+            const canonical = extractCanonicalSiteSlug(l.slug, l.siteUrl);
+            list.push({
+              source: 'email',
+              lead_id: leadCounter++,
+              campaign_id: c.id,
+              campaign_name: c.name || 'Email Outreach',
+              niche: c.niche || null,
+              campaign_status: c.status || 'Completed',
+              campaign_started_at: createdTs,
+              business_name: l.name || 'Local Business',
+              city: l.city || null,
+              phone: null,
+              lead_niche: c.niche || null,
+              site_url: l.siteUrl,
+              slug: canonical || l.slug || null,
+              lead_status: l.status || 'sent',
               created_at: createdTs,
             });
           }
@@ -206,22 +259,47 @@ export const SitesSection: React.FC<{
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ownerKey, filter]);
 
-  // Merge server rows with live campaign prop sites (deduping by slug or URL)
+  // Merge server rows with live campaign prop sites (strictly 1 row per unique site/business)
   const combinedAllRows = useMemo(() => {
-    const map = new Map<string, SiteRow>();
+    const list: SiteRow[] = [];
+    const seenSlugs = new Set<string>();
+    const seenNames = new Set<string>();
+    const seenUrls = new Set<string>();
+
+    const tryAdd = (item: SiteRow) => {
+      if (!item) return false;
+      const slug = extractCanonicalSiteSlug(item.slug, item.site_url);
+      const name = (item.business_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const rawUrl = (item.site_url || '')
+        .toLowerCase()
+        .trim()
+        .replace(/^https?:\/\//, '')
+        .replace(/^www\./, '')
+        .replace(/\/+$/, '');
+
+      if (slug && seenSlugs.has(slug)) return false;
+      if (name && seenNames.has(name)) return false;
+      if (rawUrl && seenUrls.has(rawUrl)) return false;
+
+      if (slug) seenSlugs.add(slug);
+      if (name) seenNames.add(name);
+      if (rawUrl) seenUrls.add(rawUrl);
+      list.push(item);
+      return true;
+    };
+
+    // First: Add from authoritative server rows
     for (const r of rows) {
-      const key = (r.slug || r.site_url || '').toLowerCase().trim();
-      if (key) map.set(key, r);
+      tryAdd(r);
     }
+
+    // Second: Add from live local campaign state only if not already in server rows
     for (const cr of campaignSites) {
-      const key = (cr.slug || cr.site_url || '').toLowerCase().trim();
-      if (key && !map.has(key)) {
-        map.set(key, cr);
-      }
+      tryAdd(cr);
     }
-    const merged = Array.from(map.values());
-    merged.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
-    return merged;
+
+    list.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+    return list;
   }, [rows, campaignSites]);
 
   // Live dynamic counts across all sources
@@ -495,15 +573,35 @@ export const SitesSection: React.FC<{
                           <div className="text-[9px] uppercase tracking-wider text-ink-tertiary">{formatDate(r.created_at)}</div>
                         </td>
                         <td className="py-3 px-3 align-top text-right">
-                          <a
-                            href={r.site_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2 py-1 bg-off-white hover:bg-surface border border-border-main text-[10px] font-bold text-ink rounded cursor-pointer"
-                          >
-                            <span>Visit</span>
-                            <ExternalLink className="w-3 h-3 text-ink-secondary" />
-                          </a>
+                          <div className="inline-flex items-center gap-1.5">
+                            {isPwaEligible(r) && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  playSoftTap();
+                                  setPwaDrawerSite({
+                                    slug: resolveRowSlug(r),
+                                    businessName: r.business_name || 'Local Business',
+                                    siteUrl: r.site_url,
+                                  });
+                                }}
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-[10px] font-bold text-emerald-700 rounded cursor-pointer transition-colors"
+                                title="Generate QR Code & Activate Owner PWA Bookings"
+                              >
+                                <QrIcon className="w-3 h-3 text-emerald-600" />
+                                <span>PWA QR</span>
+                              </button>
+                            )}
+                            <a
+                              href={r.site_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-off-white hover:bg-surface border border-border-main text-[10px] font-bold text-ink rounded cursor-pointer"
+                            >
+                              <span>Visit</span>
+                              <ExternalLink className="w-3 h-3 text-ink-secondary" />
+                            </a>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -571,24 +669,43 @@ export const SitesSection: React.FC<{
                     <div className="text-[10px] text-ink-tertiary font-mono shrink-0">
                       {formatTime(r.created_at)} · {formatDate(r.created_at)}
                     </div>
-                    <button
-                      type="button"
-                      onClick={(e) => copyUrl(e, id, r.site_url)}
-                      title="Copy URL"
-                      className="inline-flex items-center gap-1 px-2 py-1 bg-off-white hover:bg-surface border border-border-main rounded text-[10px] cursor-pointer shrink-0"
-                    >
-                      {copiedId === id ? (
-                        <>
-                          <Check className="w-3 h-3 text-success" />
-                          <span className="text-success font-semibold">Copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3 h-3 text-ink-secondary" />
-                          <span>Copy</span>
-                        </>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {isPwaEligible(r) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            playSoftTap();
+                            setPwaDrawerSite({
+                              slug: resolveRowSlug(r),
+                              businessName: r.business_name || 'Local Business',
+                              siteUrl: r.site_url,
+                            });
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded text-[10px] font-bold text-emerald-700 cursor-pointer"
+                        >
+                          <QrIcon className="w-3 h-3 text-emerald-600" />
+                          <span>PWA QR</span>
+                        </button>
                       )}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={(e) => copyUrl(e, id, r.site_url)}
+                        title="Copy URL"
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-off-white hover:bg-surface border border-border-main rounded text-[10px] cursor-pointer"
+                      >
+                        {copiedId === id ? (
+                          <>
+                            <Check className="w-3 h-3 text-success" />
+                            <span className="text-success font-semibold">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3 text-ink-secondary" />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </li>
               );
@@ -601,6 +718,20 @@ export const SitesSection: React.FC<{
             </p>
           )}
         </>
+      )}
+
+      {pwaDrawerSite && (
+        <OwnerPWADrawer
+          slug={pwaDrawerSite.slug}
+          businessName={pwaDrawerSite.businessName}
+          siteUrl={pwaDrawerSite.siteUrl}
+          open={true}
+          onClose={() => {
+            setPwaDrawerSite(null);
+            setPwaRefreshKey((k) => k + 1);
+          }}
+          refreshKey={pwaRefreshKey}
+        />
       )}
     </div>
   );

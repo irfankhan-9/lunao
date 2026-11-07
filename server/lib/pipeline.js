@@ -17,7 +17,7 @@ import { stageSite, publishBatch, validateCloudflareToken, verifyLiveCloudflareU
 import { registerUserRebrandedSite } from './sites.js';
 import { sendSms, renderSms, countSegments, toE164, fetchMessageStatus } from './telnyx.js';
 import { slugify } from './slug.js';
-import { cloudflare, telnyx, modeSummary, siteBaseUrl } from './config.js';
+import { cloudflare, telnyx, modeSummary, siteBaseUrl, siteUrlForSlug } from './config.js';
 import {
   recordLeadResult,
   logSmsAttempt,
@@ -45,7 +45,7 @@ const DEFAULT_SMS =
 export const COST_PER_LEAD = 3;
 export const SMS_COST_PER_LEAD = 1.5;
 export const SMS_COST_2_SEGMENTS = 3;
-export const SITE_COST_PER_LEAD = 1.5;
+export const SITE_COST_PER_LEAD = 3;
 
 // Per-SMS throttle: wait this many milliseconds between consecutive sends so
 // carriers don't flag the campaign as spam. Only applied between *real* sends
@@ -163,7 +163,7 @@ export async function runPipeline({
     try {
       const { html, resolved } = await compileSite(biz, effectiveKey, ownerKey, rowRawHtml);
       const siteUrl = await stageSite(slug, html);
-      const expectedDeployUrl = `${siteBaseUrl()}/${slug}/`;
+      const expectedDeployUrl = siteUrlForSlug(slug);
       if (ownerKey) {
         try {
           await registerUserRebrandedSite({
@@ -291,7 +291,7 @@ export async function runPipeline({
         if (publish?.deployed) {
           let verifiedCount = 0;
           for (const r of staged) {
-            const candidateUrl = `${siteBaseUrl()}/${r.slug}/`;
+            const candidateUrl = siteUrlForSlug(r.slug);
             const check = await verifyLiveCloudflareUrl(candidateUrl, r.name, 4);
             if (check.ok) {
               r.siteStatus = 'live';

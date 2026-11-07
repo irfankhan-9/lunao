@@ -13,7 +13,8 @@ const GMAIL_SEND_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/
 // OpenID userinfo endpoint — requires `openid email profile` in the scope.
 // Gmail's own /profile endpoint also requires the audience to include openid
 // before Google will accept the bearer token for an identity lookup.
-const GOOGLE_USERINFO_URL = 'https://openidconnect.googleapis.com/v2/userinfo';
+const GOOGLE_USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
+const GOOGLE_TOKENINFO_URL = 'https://oauth2.googleapis.com/tokeninfo';
 // Fallback: Gmail API's own profile endpoint.
 const GMAIL_PROFILE_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/profile';
 
@@ -46,7 +47,7 @@ export function buildGmailAuthUrl({ redirectUri, state }) {
     scope: googleOAuth.scopes,
     access_type: 'offline',
     include_granted_scopes: 'true',
-    prompt: 'consent', // force a fresh refresh_token each connect
+    prompt: 'select_account consent', // allow choosing another account and fresh refresh_token
     state,
   });
   return `${GOOGLE_AUTH_URL}?${params.toString()}`;
@@ -116,7 +117,33 @@ export async function refreshGmailAccessToken(refreshToken) {
 export async function getGmailUserProfile(accessToken) {
   if (!accessToken) throw new Error('getGmailUserProfile called without an access token');
   
-  // Primary: Gmail's own profile endpoint (uses our granted gmail.send scope).
+  // 1. Google TokenInfo endpoint — zero extra permissions required, directly validates token and extracts email
+  try {
+    const r0 = await fetchWithTimeout(`${GOOGLE_TOKENINFO_URL}?access_token=${encodeURIComponent(accessToken)}`);
+    if (r0.ok) {
+      const d = await r0.json();
+      if (d && d.email) {
+        return { email: d.email, displayName: d.email };
+      }
+    }
+  } catch (err) {
+    lastProfileErr = err;
+  }
+
+  // 2. OpenID userinfo v1 endpoint
+  try {
+    const r2 = await fetchWithTimeout(GOOGLE_USERINFO_URL, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (r2.ok) {
+      const d = await r2.json();
+      if (d && d.email) return { email: d.email, displayName: d.name || d.email };
+    }
+  } catch (err) {
+    lastProfileErr = err;
+  }
+
+  // 3. Gmail's own profile endpoint
   try {
     const r1 = await fetchWithTimeout(GMAIL_PROFILE_URL, {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -128,29 +155,11 @@ export async function getGmailUserProfile(accessToken) {
       }
     }
   } catch (err) {
-    // record so we can include in the final error if both fail
-    lastProfileErr = err;
-  }
-  
-  // Fallback: OpenID userinfo.
-  try {
-    const r2 = await fetchWithTimeout(GOOGLE_USERINFO_URL, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (r2.ok) {
-      const d = await r2.json();
-      if (d && d.email) return { email: d.email, displayName: d.name || d.email };
-    } else {
-      lastProfileErr = new Error(`OpenID userinfo rejected: ${r2.status}`);
-    }
-  } catch (err) {
     lastProfileErr = err;
   }
   
   throw new Error(
-    `Could not fetch Google profile. Make sure your Gmail API is enabled in Google Cloud Console ` +
-    `(APIs & Services → Library → "Gmail API" → Enable) and the OAuth consent screen has the ` +
-    `gmail.send scope listed. Last error: ${lastProfileErr?.message || 'unknown'}`
+    `Could not fetch Google profile: ${lastProfileErr?.message || 'unknown'}`
   );
 }
 

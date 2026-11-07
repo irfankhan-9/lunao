@@ -353,7 +353,7 @@ export const SmsLeadFinder: React.FC<SmsLeadFinderProps> = ({
     }
     if (!selectedCity) return;
     const count = leadAmount > 0 ? leadAmount : 1;
-    const COST_PER_LEAD = 1;
+    const COST_PER_LEAD = 1.5;
     const requiredCredits = count * COST_PER_LEAD;
     const currentCredits = userCredits ?? 1000;
     if (currentCredits < requiredCredits) {
@@ -374,7 +374,7 @@ export const SmsLeadFinder: React.FC<SmsLeadFinderProps> = ({
         country: 'CA',
         limit: count,
       });
-      const results = detailed.leads || [];
+      const results = (detailed.leads || []).slice(0, count);
       if (!results || results.length === 0) {
         playElegantError();
         setErrorMsg(
@@ -408,11 +408,17 @@ export const SmsLeadFinder: React.FC<SmsLeadFinderProps> = ({
       });
       setStage('results');
 
-      // Deduct credits strictly based on actual live leads returned
-      const actualCost = Math.min(requiredCredits, results.length * COST_PER_LEAD);
-      const nextCredits = Math.max(0, currentCredits - actualCost);
+      // Deduct credits strictly based on actual live leads returned (1.5 credits/lead, capped at requested count)
+      const actualCost = Math.round(Math.min(requiredCredits, results.length * COST_PER_LEAD) * 10) / 10;
+      const nextCredits = Math.max(0, Math.round((currentCredits - actualCost) * 10) / 10);
       localStorage.setItem('lunao_user_credits', nextCredits.toString());
+      if (ownerKey) {
+        localStorage.setItem(`lunao_u_${ownerKey}_credits`, nextCredits.toString());
+      }
       onCreditsChange?.(nextCredits);
+      import('../lib/pipelineClient').then(({ syncUserCredits }) => {
+        syncUserCredits(ownerKey, nextCredits).catch(() => {});
+      }).catch(() => {});
     } catch (err: any) {
       playElegantError();
       setErrorMsg(
@@ -476,7 +482,7 @@ export const SmsLeadFinder: React.FC<SmsLeadFinderProps> = ({
       return;
     }
 
-    const COST_PER_LEAD = 1;
+    const COST_PER_LEAD = 1.5;
     const requiredCredits = count * COST_PER_LEAD;
     const currentCredits = userCredits ?? 1000;
     if (currentCredits < requiredCredits) {
@@ -493,7 +499,7 @@ export const SmsLeadFinder: React.FC<SmsLeadFinderProps> = ({
         city: paidCityInput.trim(),
         limit: count,
       });
-      let results = detailed.leads || [];
+      let results = (detailed.leads || []).slice(0, count);
       if (!results || results.length === 0) {
         if (isUgcOrSalesMode()) {
           results = generateRealisticLeads(paidNiche, paidCityInput.trim(), count);
@@ -528,10 +534,17 @@ export const SmsLeadFinder: React.FC<SmsLeadFinderProps> = ({
       });
       setStage('results');
 
-      // Deduct credits instantly
-      const nextCredits = Math.max(0, currentCredits - requiredCredits);
+      // Deduct credits instantly (1.5 credits/lead, capped at requested count)
+      const actualCost = Math.round(Math.min(requiredCredits, results.length * COST_PER_LEAD) * 10) / 10;
+      const nextCredits = Math.max(0, Math.round((currentCredits - actualCost) * 10) / 10);
       localStorage.setItem('lunao_user_credits', nextCredits.toString());
+      if (ownerKey) {
+        localStorage.setItem(`lunao_u_${ownerKey}_credits`, nextCredits.toString());
+      }
       onCreditsChange?.(nextCredits);
+      import('../lib/pipelineClient').then(({ syncUserCredits }) => {
+        syncUserCredits(ownerKey, nextCredits).catch(() => {});
+      }).catch(() => {});
     } catch (err: any) {
       playElegantError();
       if (isUgcOrSalesMode()) {
@@ -941,7 +954,7 @@ export const SmsLeadFinder: React.FC<SmsLeadFinderProps> = ({
       <div>
         <h2 className="text-lg sm:text-xl font-serif text-ink">Find Leads in Canada (Free Plan)</h2>
         <p className="text-xs text-ink-secondary mt-0.5">
-          Select any Canadian province or territory, search or pick a city from the full municipal list, and discover live Google Places leads (1 credit per lead).
+          Select any Canadian province or territory, search or pick a city from the full municipal list, and discover live Google Places leads (1.5 credits per lead).
         </p>
       </div>
 
@@ -1176,7 +1189,7 @@ export const SmsLeadFinder: React.FC<SmsLeadFinderProps> = ({
           <label className="text-xs font-semibold text-ink flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5 text-accent" />
-              4. Lead Count ({leadAmount}) - 1 credit/lead
+              4. Lead Count ({leadAmount}) - 1.5 credits/lead
             </span>
             <span className="text-[10px] text-ink-secondary">Any amount</span>
           </label>

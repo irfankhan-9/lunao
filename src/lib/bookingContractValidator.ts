@@ -16,17 +16,25 @@ export const CONTRACT_REJECTION_MESSAGE =
 
 export const APPROVED_FIELD_IDENTIFIERS = new Set([
   // Name
-  'name', 'client-name', 'client_name', 'customer-name', 'customer_name', 'customername', 'fullname', 'full_name',
+  'name', 'client-name', 'client_name', 'customer-name', 'customer_name', 'customername', 'fullname', 'full_name', 'full-name',
+  'frm_fullname', 'frm_name', 'form-name', 'form_name', 'contactname', 'feasibilityname', 'workshopcontactname', 'specimenname', 'warrantyclientname',
   // Phone
   'phone', 'client-phone', 'client_phone', 'mobile', 'tel', 'telephone', 'phone_number', 'phonenumber',
+  'frm_phone', 'form-phone', 'form_phone', 'phonenum', 'phone-num', 'contactphone', 'feasibilityphone', 'workshopcontactphone', 'specimenphone', 'warrantyphone',
   // Email
   'email', 'client-email', 'client_email', 'email_address', 'mail',
-  // Service
-  'service', 'booking-service', 'booking_service', 'service-select', 'services', 'treatment',
+  'frm_email', 'form-email', 'form_email', 'contactemail', 'feasibilityemail', 'specimenemail', 'dispatchemail',
+  // Service & Niche Selectors
+  'service', 'booking-service', 'booking_service', 'service-select', 'serviceselect', 'services', 'treatment',
+  'service-needed', 'service_needed', 'serviceneeded', 'frm_service', 'form-goal', 'form_goal', 'goal',
+  'service_stylist', 'stylist', 'frm_stylist', 'service_provider', 'provider', 'frm_provider',
+  'service_referral', 'referral', 'frm_source', 'frm_hear', 'propertytype', 'property_type', 'timeline', 'workshoptype', 'warrantyyear',
   // Standard scheduling slots (presentation only)
-  'date', 'booking-date', 'booking_date', 'service-date',
-  'time', 'booking-time', 'booking_time', 'time-slot', 'timeslot',
-  'notes', 'booking-notes', 'booking_notes', 'comments', 'special-requests'
+  'date', 'booking-date', 'booking_date', 'service-date', 'frm_date', 'date-input', 'date_input', 'frm_dob', 'dob',
+  'time', 'booking-time', 'booking_time', 'time-slot', 'timeslot', 'frm_time', 'time-input', 'time_input',
+  'notes', 'booking-notes', 'booking_notes', 'comments', 'special-requests', 'frm_notes', 'form-desc', 'form_desc', 'desc',
+  'description', 'message', 'address', 'addressincity', 'details', 'contactscope', 'feasibilitynotes', 'feasibilityaddress',
+  'specimennotes', 'specimenaddress', 'warrantyadjustment', 'warrantyaddress', 'workshopsqft'
 ]);
 
 export const APPROVED_BOOKING_COMPONENT_HTML = `

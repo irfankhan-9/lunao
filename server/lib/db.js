@@ -255,6 +255,22 @@ export const db = {
               const conds = whereClause.split(/\s+AND\s+/i);
               let wIdx = paramIdx;
               for (const cond of conds) {
+                const fnMatch = cond.match(/(LOWER|UPPER)\s*\(\s*([a-zA-Z0-9_.]+)\s*\)\s*=\s*\?/i);
+                if (fnMatch) {
+                  const fn = fnMatch[1].toUpperCase();
+                  const col = fnMatch[2].split('.').pop();
+                  const expected = params[wIdx++];
+                  const actualStr = row[col] == null ? '' : String(row[col]);
+                  const expStr = expected == null ? '' : String(expected);
+                  const isEq = fn === 'LOWER'
+                    ? actualStr.toLowerCase() === expStr.toLowerCase()
+                    : actualStr.toUpperCase() === expStr.toUpperCase();
+                  if (!isEq) {
+                    match = false;
+                    break;
+                  }
+                  continue;
+                }
                 const m = cond.match(/([a-zA-Z0-9_.]+)\s*=\s*\?/i);
                 if (m) {
                   const col = m[1].split('.').pop();
@@ -299,6 +315,31 @@ export const db = {
         return table.filter((row) => {
           let pIdx = 0;
           for (const cond of conds) {
+            const nullMatch = cond.match(/([a-zA-Z0-9_.]+)\s+IS\s+(NOT\s+)?NULL/i);
+            if (nullMatch && !cond.includes('?')) {
+              const col = nullMatch[1].split('.').pop();
+              const isNot = Boolean(nullMatch[2]);
+              const val = row[col];
+              const isNullish = val === null || val === undefined;
+              if (isNot && isNullish) return false;
+              if (!isNot && !isNullish) return false;
+              continue;
+            }
+            const fnMatch = cond.match(/(LOWER|UPPER)\s*\(\s*([a-zA-Z0-9_.]+)\s*\)\s*(=|IS|!=)\s*\?/i);
+            if (fnMatch) {
+              const fn = fnMatch[1].toUpperCase();
+              const col = fnMatch[2].split('.').pop();
+              const op = fnMatch[3].toUpperCase();
+              const expected = params[pIdx++];
+              const actualStr = row[col] == null ? '' : String(row[col]);
+              const expStr = expected == null ? '' : String(expected);
+              const isEq = fn === 'LOWER'
+                ? actualStr.toLowerCase() === expStr.toLowerCase()
+                : actualStr.toUpperCase() === expStr.toUpperCase();
+              if (op === '!=' && isEq) return false;
+              if ((op === '=' || op === 'IS') && !isEq) return false;
+              continue;
+            }
             const m = cond.match(/([a-zA-Z0-9_.]+)\s*(=|IS|>|<|!=)\s*\?/i);
             if (m) {
               const col = m[1].split('.').pop();

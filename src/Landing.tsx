@@ -22,6 +22,11 @@ export const Landing: React.FC<LandingProps> = ({ onOpenAuth }) => {
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   const handleOpenAuth = () => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    if (typeof document !== 'undefined') {
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    }
     if (onOpenAuth) {
       onOpenAuth();
       return;

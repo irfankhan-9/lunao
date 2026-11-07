@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Smartphone, X, RefreshCw, ExternalLink, Copy, Check, Sparkles,
-  CalendarCheck, Shield, ChevronRight, Info, AlertCircle, Loader2
+  CalendarCheck, Shield, ChevronRight, Info, AlertCircle, Loader2, QrCode as QrIcon
 } from 'lucide-react';
-import { listInviteCodes, createInviteCode, createBooking, InviteCode } from '../lib/pipelineClient';
-import { isUgcOrSalesMode, getEdmontonContractorBySlug } from '../specialModes/modeManager';
+import { createInviteCode, createBooking, getSiteInviteCodesDetails, InviteCode, PwaQuotaInfo } from '../lib/pipelineClient';
+import { QrCode } from './QrCode';
 import {
   playDialogPop, playSoftTap, playElegantBell, playVictoryCelebration,
   playCancelTone, playConfirmSuccess, playGentleChime, playSoftBubble
@@ -27,15 +27,18 @@ export const OwnerPWAModal: React.FC<OwnerPWAModalProps> = ({
   niche = 'Local Business',
   siteUrl,
 }) => {
-  const [activeCode, setActiveCode] = useState<string>('');
+  const [activeCode, setActiveCode] = useState<InviteCode | null>(null);
+  const [pwaActive, setPwaActive] = useState<boolean>(false);
+  const [quota, setQuota] = useState<PwaQuotaInfo | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loadingCode, setLoadingCode] = useState(false);
+  const [generatingCode, setGeneratingCode] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedSlug, setCopiedSlug] = useState(false);
   const [iframeKey, setIframeKey] = useState(0);
   const [sendingBooking, setSendingBooking] = useState(false);
   const [bookingToast, setBookingToast] = useState<string | null>(null);
   const [iframeLoaded, setIframeLoaded] = useState(false);
-  const [deviceScale, setDeviceScale] = useState<'normal' | 'compact'>('normal');
 
   const [currentTime, setCurrentTime] = useState(() => {
     const d = new Date();
@@ -53,91 +56,72 @@ export const OwnerPWAModal: React.FC<OwnerPWAModalProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch or mint an active code for this site, and pre-seed localStorage for instant 0ms PWA mount
+  const refreshDetails = async (silent = false) => {
+    if (!slug) return;
+    if (!silent) setLoadingCode(true);
+    try {
+      const details = await getSiteInviteCodesDetails(slug);
+      const valid = (details.codes || []).find((c: InviteCode) => !c.revokedAt) || null;
+      setActiveCode(valid);
+      setPwaActive(Boolean(details.pwaActive || (valid && valid.usedAt)));
+      if (details.quota) setQuota(details.quota);
+    } catch (err: any) {
+      if (!silent) setErrorMsg(err?.message || 'Could not load PWA status');
+    } finally {
+      if (!silent) setLoadingCode(false);
+    }
+  };
+
+  // Load existing QR/code state without auto-generating or faking activation
   useEffect(() => {
     if (!open || !slug) return;
     playDialogPop();
     setIframeLoaded(false);
+    setErrorMsg(null);
 
-    // Pre-seed localStorage session so the iframe immediately renders the dashboard with zero delay!
+    // Clear any stale fake preview session or mismatched slug session so the PWA
+    // requires real code verification when not yet activated for this slug.
     try {
-      const initialCode = (activeCode || slug).toUpperCase();
-      const contractor = isUgcOrSalesMode() ? getEdmontonContractorBySlug(slug) : undefined;
-      const cleanName = contractor ? contractor.name : businessName.split('—')[0].trim() || businessName;
-      const seedSession = {
-        token: `lunao.preview.${Date.now()}`,
-        slug,
-        code: initialCode,
-        business: {
-          id: slug,
-          lunaoCode: initialCode,
-          slug,
-          name: cleanName,
-          niche: contractor ? 'HVAC' : (niche || 'Local Business'),
-          tagline: `Premier ${contractor ? 'HVAC & Climate Control' : (niche || 'Local Business')} Services`,
-          phone: contractor ? contractor.displayPhone : '(512) 555-0199',
-          email: `contact@${slug}.com`,
-          address: contractor ? contractor.address : '3801 Capital of Texas Hwy, Suite 200',
-          city: contractor ? contractor.city : 'Austin, TX',
-          timezone: contractor ? 'America/Edmonton' : 'America/Chicago',
-          websiteUrl: siteUrl || (typeof window !== 'undefined' && window.location?.origin ? `${window.location.origin}/${slug}/` : `https://lunao.org/${slug}/`),
-          socialLinks: { instagram: `${slug}_official` },
-          theme: {
-            accent: '#059669',
-            accentDark: '#047857',
-            accentSoft: '#ecfdf5',
-            accentBorder: '#a7f3d0',
-            surface: '#ffffff',
-            radius: 'lg',
-          },
-          features: { booking: true, chatbot: true, email: true, automations: true },
-          aiSettings: {
-            enabled: true,
-            greeting: `Welcome to ${businessName}! How can we assist you today?`,
-            tone: 'friendly',
-            businessHours: 'Mon-Sat: 8:00 AM - 7:00 PM',
-            bookingEnabled: true,
-          },
-          websiteConfig: {
-            url: siteUrl || `https://${slug}.lunao.app`,
-            status: 'deployed',
-            headline: `Exceptional ${niche} Experiences`,
-          },
-        },
-        authenticatedAt: new Date().toISOString(),
-      };
-      localStorage.setItem('lunao_owner_session', JSON.stringify(seedSession));
+      const raw = localStorage.getItem('lunao_owner_session');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (
+          !parsed?.token ||
+          String(parsed.token).startsWith('lunao.preview.') ||
+          String(parsed.token).startsWith('lunao.mock.') ||
+          parsed?.slug !== slug
+        ) {
+          localStorage.removeItem('lunao_owner_session');
+        }
+      }
     } catch {
       /* ignore storage access */
     }
 
-    let mounted = true;
-    const fetchCode = async () => {
-      setLoadingCode(true);
-      try {
-        const codes = await listInviteCodes(slug);
-        const valid = codes.find((c: InviteCode) => !c.revokedAt);
-        if (valid && mounted) {
-          setActiveCode(valid.code);
-        } else if (mounted) {
-          // Generate code on the fly for seamless preview
-          const created = await createInviteCode(slug);
-          if (mounted) setActiveCode(created.code);
-        }
-      } catch {
-        // Fallback to website slug which our upgraded backend now accepts!
-        if (mounted) setActiveCode(slug);
-      } finally {
-        if (mounted) setLoadingCode(false);
-      }
-    };
+    refreshDetails(false);
+    const poll = setInterval(() => refreshDetails(true), 3000);
+    return () => clearInterval(poll);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, slug]);
 
-    fetchCode();
-
-    return () => {
-      mounted = false;
-    };
-  }, [open, slug, businessName, niche, siteUrl]);
+  const handleGenerateQrCode = async () => {
+    if (!slug || generatingCode) return;
+    playSoftTap();
+    setGeneratingCode(true);
+    setErrorMsg(null);
+    try {
+      const created = await createInviteCode(slug);
+      setActiveCode(created);
+      setPwaActive(Boolean(created.usedAt));
+      if ((created as any).quota) setQuota((created as any).quota);
+      await refreshDetails(true);
+      playConfirmSuccess();
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to generate QR code (check plan PWA limit)');
+    } finally {
+      setGeneratingCode(false);
+    }
+  };
 
   // Close on Escape key
   useEffect(() => {
@@ -154,11 +138,16 @@ export const OwnerPWAModal: React.FC<OwnerPWAModalProps> = ({
 
   if (!open) return null;
 
-  const targetCode = activeCode || slug;
-  // Deep-link URL into the PWA with pre-filled code
-  const pwaSrc = `/owner/?code=${encodeURIComponent(targetCode)}`;
+  const targetCode = activeCode?.code || '';
+  const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'https://lunao.org';
+  const qrPayloadUrl = targetCode ? `${origin}/owner/?code=${encodeURIComponent(targetCode)}` : `${origin}/owner/?slug=${encodeURIComponent(slug)}`;
+  // Simulator opens on /owner/?slug=... so the user can enter the generated code (or if already activated, restores or auto-logs in)
+  const pwaSrc = pwaActive && targetCode
+    ? `/owner/?code=${encodeURIComponent(targetCode)}`
+    : `/owner/?slug=${encodeURIComponent(slug)}`;
 
   const handleCopyCode = () => {
+    if (!targetCode) return;
     playElegantBell();
     navigator.clipboard.writeText(targetCode);
     setCopiedCode(true);
@@ -180,7 +169,7 @@ export const OwnerPWAModal: React.FC<OwnerPWAModalProps> = ({
 
   const handleOpenExternal = () => {
     playSoftTap();
-    window.open(pwaSrc, '_blank', 'noopener,noreferrer');
+    window.open(targetCode ? `/owner/?code=${encodeURIComponent(targetCode)}` : `/owner/?slug=${encodeURIComponent(slug)}`, '_blank', 'noopener,noreferrer');
   };
 
   // Trigger a real booking into the pipeline so the user sees it in the PWA in real time!
@@ -384,58 +373,109 @@ export const OwnerPWAModal: React.FC<OwnerPWAModalProps> = ({
           </div>
 
           {/* SIDE INFORMATION & CONTROLS RAIL */}
-          <div className="w-full lg:w-80 p-5 bg-slate-900/95 border-t lg:border-t-0 lg:border-l border-slate-800 overflow-y-auto shrink-0 space-y-5 text-xs text-slate-300">
-            {/* ACCESS CREDENTIALS CARD */}
+          <div className="w-full lg:w-80 p-5 bg-slate-900/95 border-t lg:border-t-0 lg:border-l border-slate-800 overflow-y-auto shrink-0 space-y-4 text-xs text-slate-300">
+            {/* PLAN PWA QUOTA */}
+            {quota && (
+              <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/70 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                    {quota.plan} PWA Limit
+                  </span>
+                  <span className="text-xs font-bold text-white">
+                    {quota.activeCount} / {quota.maxAllowed} Active PWAs
+                  </span>
+                </div>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                  quota.quotaExceeded && !pwaActive
+                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                    : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                }`}>
+                  {quota.remaining} Left
+                </span>
+              </div>
+            )}
+
+            {errorMsg && (
+              <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-700/60 text-rose-200 flex items-start gap-2 text-[11px]">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            {/* ACCESS CREDENTIALS & QR CARD */}
             <div className="p-4 rounded-xl bg-slate-800/80 border border-slate-700/80 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-white flex items-center gap-1.5">
-                  <Shield className="w-3.5 h-3.5 text-emerald-400" /> Access Credentials
+                  <Shield className="w-3.5 h-3.5 text-emerald-400" /> Booking Gate Status
                 </span>
-                <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                  Ready
-                </span>
+                {pwaActive ? (
+                  <span className="text-[10px] text-emerald-300 font-bold bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                    🟢 Activated
+                  </span>
+                ) : targetCode ? (
+                  <span className="text-[10px] text-amber-300 font-bold bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">
+                    🟡 Enter Code
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-rose-300 font-bold bg-rose-500/20 px-2 py-0.5 rounded-full border border-rose-500/30">
+                    🔴 Bookings Locked
+                  </span>
+                )}
               </div>
 
-              {/* CODE DISPLAY */}
-              <div>
-                <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
-                  Owner Access Code
-                </label>
-                <div className="flex items-center gap-1.5">
-                  <code className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-emerald-300 font-mono font-bold text-xs truncate">
-                    {loadingCode ? 'Generating...' : targetCode}
-                  </code>
+              {!targetCode ? (
+                <div className="space-y-2.5 pt-1">
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    Website bookings show a <strong className="text-rose-400">Red Error</strong> by default until you generate a QR code and enter it inside the Owner PWA.
+                  </p>
                   <button
-                    onClick={handleCopyCode}
-                    className="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white transition-colors cursor-pointer"
-                    title="Copy code"
+                    onClick={handleGenerateQrCode}
+                    disabled={generatingCode || Boolean(quota?.quotaExceeded)}
+                    className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
                   >
-                    {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    {generatingCode ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <QrIcon className="w-4 h-4" />
+                    )}
+                    <span>Generate QR Code & Access Key</span>
                   </button>
                 </div>
-              </div>
+              ) : (
+                <>
+                  {/* QR CODE */}
+                  <div className="flex flex-col items-center justify-center p-3 rounded-xl bg-white text-slate-900">
+                    <QrCode value={qrPayloadUrl} size={136} />
+                    <span className="text-[10px] font-bold text-slate-500 mt-1.5 uppercase tracking-wider">
+                      Scan or Enter in Simulator
+                    </span>
+                  </div>
 
-              {/* WEBSITE SLUG DISPLAY */}
-              <div>
-                <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
-                  Website Code / Slug
-                </label>
-                <div className="flex items-center gap-1.5">
-                  <code className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-slate-300 font-mono text-xs truncate">
-                    {slug}
-                  </code>
-                  <button
-                    onClick={handleCopySlug}
-                    className="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white transition-colors cursor-pointer"
-                    title="Copy slug"
-                  >
-                    {copiedSlug ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-                <p className="text-[10px] text-slate-400 mt-1 leading-normal">
-                  You can input <strong>either</strong> code in the PWA sign-in modal. Both automatically bind to this business!
-                </p>
-              </div>
+                  {/* CODE DISPLAY */}
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
+                      Owner Access Code
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <code className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-emerald-300 font-mono font-bold text-xs truncate">
+                        {loadingCode ? 'Loading...' : targetCode}
+                      </code>
+                      <button
+                        onClick={handleCopyCode}
+                        className="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white transition-colors cursor-pointer"
+                        title="Copy code"
+                      >
+                        {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1.5 leading-normal">
+                      {pwaActive
+                        ? 'Owner PWA is verified! Live website bookings are unlocked.'
+                        : 'Copy and paste this code into the Owner PWA simulator on the left to unlock live website bookings.'}
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* LIVE PIPELINE CAPABILITIES */}

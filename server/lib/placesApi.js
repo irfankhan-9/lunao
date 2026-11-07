@@ -1026,6 +1026,7 @@ export async function discoverEmailsForTargetVolume({
         saveBatchToPlaceCache(cityKey, nicheKey, newUniqueCandidates, discoveredBatch);
 
         for (const d of discoveredBatch) {
+          if (foundLeads.length >= targetCount) break;
           const lowerEmail = String(d.email || '').trim().toLowerCase();
           if (!lowerEmail || seenEmailSet.has(lowerEmail)) continue;
           seenEmailSet.add(lowerEmail);

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="lunaoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563EB" />
+      <stop offset="100%" stop-color="#1D4ED8" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.18" />
+    </filter>
+  </defs>
+
+  <!-- Blue Squircle Background -->
+  <rect width="512" height="512" rx="124" fill="url(#lunaoGrad)" />
+  <rect width="510" height="510" x="1" y="1" rx="123" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2" />
+
+  <!-- Bold Modern White 'L' -->
+  <path d="M 164 126 C 164 118 170 114 178 114 L 226 114 C 234 114 240 118 240 126 L 240 324 L 340 324 C 348 324 354 330 354 338 L 354 384 C 354 392 348 396 340 396 L 178 396 C 170 396 164 392 164 384 Z" 
+        fill="#FFFFFF" 
+        filter="url(#shadow)" />
+</svg>

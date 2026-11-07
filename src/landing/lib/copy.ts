@@ -24,7 +24,7 @@ export const heroCopy = {
   eyebrow: 'LUNAO V2 AGENCY AUTOMATION SYSTEM',
   headline: 'The Automated System to Acquire, Keep, and Scale Your Web & AI Agency',
   sub:
-    'We built Lunao to automate every service agencies sell to local businesses—starting with pixel-perfect websites, and expanding to AI receptionists and upcoming services. No repetitive vibe-coding. No wasted AI credits.',
+    'We built Lunao to automate every service agencies sell to local businesses, starting with pixel-perfect websites, and expanding to AI and upcoming services. No repetitive vibe-coding. No wasted AI credits.',
   ctaPrimary: 'Start Free (15 Credits)',
   ctaSecondary: 'See How It Works',
   microTrust: '15 free Lunao credits included • No credit card required • Setup in 60 seconds',
@@ -48,8 +48,6 @@ export const socialProofCopy = {
     { value: '15', suffix: ' credits', label: 'Free on sign-up to test instantly' },
     { value: '700K+', label: 'Active websites deployed across niches' },
   ],
-  caption:
-    'Powered by Lunao Edge Deployment engine, Telnyx SMS gateway, and instant client PWA generator.',
 };
 
 export const useCasesCopy = {
@@ -252,7 +250,9 @@ export const pricingCopy = {
         '1 trial Owner PWA business',
         'Site rebrand & deploy (3 credits)',
         'Find SMS lead (1.5 credits)',
-        'Email discovery (1.5 credits/email)'
+        'SMS outreach: Canada only',
+        'Email discovery (1.5 credits/email)',
+        'Email sending: 0 credits (Free for all)'
       ],
       cta: 'Start Free (15 Credits)',
       recommended: false,
@@ -270,8 +270,9 @@ export const pricingCopy = {
         'Up to 8 Owner PWA businesses',
         'Site rebrand & deploy (3 credits)',
         'Find SMS lead (1.5 credits)',
-        'Send 1-seg SMS (4 cr) / 2-seg (8 cr)',
-        '0 credits w/ own Telnyx account'
+        'SMS sending: 0 credits (Worldwide to any country)',
+        'Email sending: 0 credits (Free for all)',
+        'Email discovery (1.5 credits/email)'
       ],
       cta: 'Select Starter',
       recommended: false,
@@ -289,8 +290,9 @@ export const pricingCopy = {
         'Up to 25 Owner PWA businesses',
         'Site rebrand & deploy (3 credits)',
         'Find SMS lead (1.5 credits)',
-        'Send 1-seg SMS (4 cr) / 2-seg (8 cr)',
-        '0 credits w/ own Telnyx account'
+        'SMS sending: 0 credits (Worldwide to any country)',
+        'Email sending: 0 credits (Free for all)',
+        'Email discovery (1.5 credits/email)'
       ],
       cta: 'Select Pro',
       recommended: true,
@@ -308,7 +310,9 @@ export const pricingCopy = {
         'Up to 100 Owner PWA businesses',
         'Full AI Vibe Coding Studio access',
         'Multi-client management & custom domain routing',
-        '0 credits w/ own Telnyx account'
+        'SMS sending: 0 credits (Worldwide to any country)',
+        'Email sending: 0 credits (Free for all)',
+        'Email discovery (1.5 credits/email)'
       ],
       cta: 'Select Agency',
       recommended: false,
@@ -395,6 +399,13 @@ export const footerCopy = {
         { label: 'Log in', href: '#', auth: 'login' as const },
         { label: 'Sign up', href: '#', auth: 'signup' as const },
         { label: 'Plans', href: '#pricing' },
+      ],
+    },
+    {
+      label: 'Legal',
+      links: [
+        { label: 'Privacy Policy', href: '/privacy' },
+        { label: 'Terms of Service', href: '/terms' },
       ],
     },
   ],

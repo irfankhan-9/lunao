@@ -15,6 +15,9 @@ export function slugify(name, city = '') {
         .replace(/^-+|-+$/g, '')
     : '';
 
-  const slug = `${base}${cityPart}`.replace(/-{2,}/g, '-').replace(/^-+|-+$/g, '');
+  let slug = `${base}${cityPart}`.replace(/-{2,}/g, '-').replace(/^-+|-+$/g, '');
+  if (slug.length > 60) {
+    slug = slug.slice(0, 60).replace(/-+$/g, '');
+  }
   return slug || `site-${Math.random().toString(36).slice(2, 8)}`;
 }

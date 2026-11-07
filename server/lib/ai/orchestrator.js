@@ -42,9 +42,10 @@ export async function orchestrateAiEditStream({
   html,
   instruction,
   history = [],
-  model = 'gemini-3.8-flash',
+  model = 'gemini-3.5-flash',
   userId = 'default_owner',
   requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+  planHint = null,
   anthropicApiKey,
   geminiApiKey,
   apiKey,
@@ -56,13 +57,14 @@ export async function orchestrateAiEditStream({
   const normModel = normalizeModelId(model);
   const rates = await getModelRates(normModel);
 
-  // 1. Preflight Atomic Reservation in Supabase
+  // 1. Preflight Atomic Reservation in Supabase / Local Account
   const reservation = await reserveBudget({
     userId,
     requestId,
     modelId: normModel,
     promptText: instruction,
     maxOutputTokens,
+    planHint,
   });
 
   if (onStart) onStart();

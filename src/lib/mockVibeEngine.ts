@@ -234,8 +234,8 @@ function generateBespokeTemplate(prompt: string): string {
     <section class="stats">
       <div class="container stats-grid">
         <div>
-          <div class="stat-number">4.9 ★</div>
-          <div class="stat-label">Google Rating (340+ Reviews)</div>
+          <div class="stat-number">100%</div>
+          <div class="stat-label">Client Satisfaction Guarantee</div>
         </div>
         <div>
           <div class="stat-number">12+</div>
@@ -283,7 +283,6 @@ function generateBespokeTemplate(prompt: string): string {
     <section class="reviews">
       <div class="container">
         <div class="review-card">
-          <div class="stars">★★★★★</div>
           <p class="review-quote">&ldquo;Easily the cleanest fade and sharpest beard line-up in ${city}. The atmosphere is unmatched and the attention to detail is world-class.&rdquo;</p>
           <div class="reviewer">— Marcus Vance · Verified Client</div>
         </div>
@@ -555,10 +554,9 @@ function applyHtmlRefinements(baseHtml: string, instruction: string): string {
   // 2. Sections: Reviews / Testimonials
   if (inst.includes('review') || inst.includes('testimonial') || inst.includes('stars')) {
     const reviewBlock = `
-    <section style="padding:60px 20px;background:rgba(255,255,255,0.03);border-top:1px solid rgba(255,255,255,0.1);text-align:center;">
+    <section style="padding:60px 20px;background:rgba(255,255,205,0.03);border-top:1px solid rgba(255,255,255,0.1);text-align:center;">
       <div style="max-width:800px;margin:0 auto;">
-        <div style="color:#F59E0B;font-size:22px;margin-bottom:12px;">★★★★★</div>
-        <h3 style="font-size:24px;font-weight:700;margin-bottom:12px;">Rated 4.9 / 5.0 from Over 300+ Local Clients</h3>
+        <h3 style="font-size:24px;font-weight:700;margin-bottom:12px;">Verified Feedback from Local Clients</h3>
         <p style="opacity:0.8;font-size:15px;line-height:1.6;">"Absolute top-tier service and professional experience. Exceeded all expectations!" — Verified Local Customer</p>
       </div>
     </section>`;

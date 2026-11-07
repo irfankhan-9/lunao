@@ -107,7 +107,9 @@ export function getContractorSiteUrl(slug: string): string {
     .trim()
     .toLowerCase()
     .replace(/^\/+|\/+$/g, '');
-  return `${CLOUDFLARE_PAGES_BASE_URL}/${cleanSlug}/`;
+  if (!cleanSlug) return 'https://lunao.org';
+  if (cleanSlug.length > 63) return `https://lunao.org/${cleanSlug}`;
+  return `https://${cleanSlug}.lunao.org`;
 }
 
 export function getOutboundSmsBody(contractor: EdmontonContractor): string {
@@ -420,6 +422,25 @@ export function getEdmontonContractorBySlug(slug: string): EdmontonContractor | 
   return CONTRACTOR_MAP_BY_SLUG.get(clean);
 }
 
+const OFFICIAL_BUILTIN_KEYS = new Set([
+  'barber-dark-luxury', 't1', 'barber-template', 'barber', 'barber-template.html',
+  'barber-editorial', 't2', 'barber-editorial-02', 'barber-template-02', 'barber-template-02.html',
+  'salon-maison', 't3', 'salon-atelier-01', 'salon-template-01', 'salon', 'salon-template-01.html',
+  'dentist-clarity', 't4', 'dentist-clinical-01', 'dentist-template-01', 'dentist', 'dentist-template-01.html',
+  'roofing-ironclad', 't5', 'roofing-shield-01', 'roofing-template-01', 'roofing', 'roofing-template-01.html',
+  'hvac-everest', 't6', 'hvac-everest-01', 'hvac-template-01', 'hvac', 'hvac-template-01.html',
+  'hvac-bespoke', 't9', 'hvac-bespoke-01', 'hvac-template-02', 'hvac-template', 'hvac-template-02.html',
+  'gym-iron-grit', 't7', 'gym-steel-01', 'gym-template-01', 'gym', 'gym-template-01.html',
+  'realestate-glass', 't8', 'realestate-apex-01', 'realestate-template-01', 'realestate', 'real estate', 'realestate-template-01.html',
+]);
+
+function isBuiltinKey(k?: string): boolean {
+  if (!k) return false;
+  const c = k.trim().toLowerCase();
+  if (c.startsWith('tmpl_') || c.startsWith('custom_') || c.startsWith('hist_')) return false;
+  return OFFICIAL_BUILTIN_KEYS.has(c) || OFFICIAL_BUILTIN_KEYS.has(`${c}.html`);
+}
+
 export function getSpecialModeEditorSites(): EditorSite[] {
   // Strictly isolated to UGC Creator Plan and Sales Guy Plan only
   if (!isUgcOrSalesMode()) return [];
@@ -428,6 +449,7 @@ export function getSpecialModeEditorSites(): EditorSite[] {
   const bySlug = new Map<string, EditorSite>();
 
   // 1. Include any sites newly deployed during the active UGC/Sales session
+  // ONLY if they were created from official Lunao built-in templates (never vibe-coded templates)
   if (typeof window !== 'undefined') {
     try {
       const raw = localStorage.getItem('lunao_campaigns');
@@ -441,6 +463,8 @@ export function getSpecialModeEditorSites(): EditorSite[] {
             for (const ds of (camp as any).deployedSites) {
               const slug = String(ds?.slug || '').trim().toLowerCase();
               if (!slug || bySlug.has(slug)) continue;
+              const tKey = ds?.templateKey || (camp as any).templateKey || 'hvac-bespoke';
+              if (!isBuiltinKey(tKey)) continue; // Exclude vibe-coded templates from Site Editor
               const bName = ds?.businessName || ds?.name || slug;
               bySlug.set(slug, {
                 slug,
@@ -450,7 +474,9 @@ export function getSpecialModeEditorSites(): EditorSite[] {
                 deployUrl: ds?.siteUrl || ds?.deployUrl || ds?.url || getContractorSiteUrl(slug),
                 updatedAt: campTs,
                 campaignSource: (camp as any).type || 'site-deploy',
-                templateKey: (camp as any).templateKey || 'hvac-bespoke',
+                templateKey: tKey,
+                templateSource: 'builtin',
+                isPwaConnected: true,
               });
             }
           }
@@ -458,6 +484,8 @@ export function getSpecialModeEditorSites(): EditorSite[] {
             for (const sl of (camp as any).smsLeads) {
               const slug = String(sl?.slug || '').trim().toLowerCase();
               if (!slug || bySlug.has(slug)) continue;
+              const tKey = sl?.templateKey || (camp as any).templateKey || 'hvac-bespoke';
+              if (!isBuiltinKey(tKey)) continue; // Exclude vibe-coded templates from Site Editor
               const bName = sl?.businessName || sl?.name || slug;
               bySlug.set(slug, {
                 slug,
@@ -467,7 +495,9 @@ export function getSpecialModeEditorSites(): EditorSite[] {
                 deployUrl: sl?.siteUrl || sl?.deployUrl || sl?.url || getContractorSiteUrl(slug),
                 updatedAt: campTs,
                 campaignSource: (camp as any).type || 'sms',
-                templateKey: (camp as any).templateKey || 'hvac-bespoke',
+                templateKey: tKey,
+                templateSource: 'builtin',
+                isPwaConnected: true,
               });
             }
           }

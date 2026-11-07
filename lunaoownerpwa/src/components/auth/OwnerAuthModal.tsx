@@ -211,7 +211,7 @@ export const OwnerAuthModal: React.FC = () => {
             Sign In to Workspace
           </h1>
           <p className="text-xs sm:text-sm text-emerald-700/80 mt-1.5 max-w-xs mx-auto">
-            Enter the access code provided by your Lunao agency to manage your business.
+            Enter or scan the QR access code generated in Lunao to activate your Owner PWA & unlock live website bookings.
           </p>
         </div>
 
@@ -276,7 +276,7 @@ export const OwnerAuthModal: React.FC = () => {
                     ref={inputRef}
                     id="owner-code"
                     type="text"
-                    placeholder="LUNAO-XXXX-XXXX or website-name"
+                    placeholder="LUNAO-XXXX-XXXX"
                     value={inputCode}
                     onChange={handleInputChange}
                     disabled={isVerifying}

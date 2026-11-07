@@ -21,7 +21,7 @@ import { registerOwnerBusinessAsync } from './tenantAuth.js';
 import { getPgPool } from './supabase.js';
 import { validateBookingContract, CONTRACT_REJECTION_MESSAGE } from './bookingContractValidator.js';
 import { slugify } from './slug.js';
-import { cloudflare, siteBaseUrl } from './config.js';
+import { cloudflare, siteBaseUrl, siteUrlForSlug } from './config.js';
 import { pgUpsertCustomTemplate } from './supabaseSync.js';
 import { isOfficialBuiltinPwaTemplate } from './templates.js';
 
@@ -193,7 +193,7 @@ export async function executeUnifiedLeadRebrandAndDeploy({
   // STAGE 2: PERMANENT SUPABASE CLOUD PERSISTENCE FIRST (+ STAGE ON DISK)
   // ============================================================================
   const supabaseStartMs = Date.now();
-  const liveUrl = `${siteBaseUrl()}/${slug}/`;
+  const liveUrl = siteUrlForSlug(slug);
 
   emitStage('supabase_saving', {
     slug,
@@ -296,70 +296,71 @@ export async function executeUnifiedLeadRebrandAndDeploy({
         };
       }
     } else {
+      const projName = cloudflare.project || 'lunao-web-designn';
       emitStage('cloudflare_deploying', {
         slug,
         businessName: business.name,
         liveUrl,
-        message: `Deploying "${business.name}" to Lunao Servers (${projName})...`,
+        message: `Verifying "${business.name}" live deployment on Lunao Servers (${projName})...`,
       });
 
-      let deployErrorReason = '';
-      const maxDeployAttempts = 3;
+      // 1. Fast Edge Verification: Because Stage 2 confirmed the site in Supabase
+      // and staged it on disk, Cloudflare Pages edge router (_worker.js) serves it immediately.
+      liveVerification = await verifyLiveCloudflareUrl(liveUrl, business.name, 3);
+      if (liveVerification.ok) {
+        deployed = true;
+      } else {
+        // 2. If not immediately warm at the edge, execute deployment
+        let deployErrorReason = '';
+        const maxDeployAttempts = 2;
 
-      for (let deployAttempt = 1; deployAttempt <= maxDeployAttempts; deployAttempt++) {
-        try {
-          const pubRes = await publishBatch();
-          if (pubRes?.deployed) {
-            deployed = true;
-            break;
+        for (let deployAttempt = 1; deployAttempt <= maxDeployAttempts; deployAttempt++) {
+          try {
+            const pubRes = await publishBatch();
+            if (pubRes?.deployed) {
+              deployed = true;
+              break;
+            }
+            deployErrorReason = pubRes?.reason || 'Lunao Servers deployment did not complete.';
+          } catch (err) {
+            deployErrorReason = err.message || 'Lunao Servers deployment failed.';
+            console.warn(`[unified-worker] Lunao Servers deploy attempt ${deployAttempt}/${maxDeployAttempts} error:`, deployErrorReason);
           }
-          deployErrorReason = pubRes?.reason || 'Lunao Servers deployment did not complete.';
-        } catch (err) {
-          deployErrorReason = err.message || 'Lunao Servers deployment failed.';
-          console.warn(`[unified-worker] Lunao Servers deploy attempt ${deployAttempt}/${maxDeployAttempts} error:`, deployErrorReason);
+          if (deployAttempt < maxDeployAttempts && Date.now() - cloudflareStartMs < MAX_CLOUDFLARE_RETRY_WINDOW_MS) {
+            await sleep(1000);
+          }
         }
-        if (deployAttempt < maxDeployAttempts && Date.now() - cloudflareStartMs < MAX_CLOUDFLARE_RETRY_WINDOW_MS) {
-          await sleep(2000);
+
+        if (!deployed) {
+          return {
+            ok: false,
+            statusCode: 502,
+            deployed: false,
+            verifiedLive: false,
+            verifiedOnCloudflare: false,
+            savedToSupabase: Boolean(siteRegistration?.savedToSupabase),
+            slug,
+            siteUrl: null,
+            stages,
+            error: `Lunao Servers deployment failed for "${business.name}": ${deployErrorReason}`.replace(/supabase(\s+cloud)?|cloudflare(\s+pages)?/gi, 'Lunao Servers'),
+          };
         }
-      }
 
-      if (!deployed) {
-        return {
-          ok: false,
-          statusCode: 502,
-          deployed: false,
-          verifiedLive: false,
-          verifiedOnCloudflare: false,
-          savedToSupabase: Boolean(siteRegistration?.savedToSupabase),
-          slug,
-          siteUrl: null,
-          stages,
-          error: `Lunao Servers deployment failed for "${business.name}": ${deployErrorReason}`.replace(/supabase(\s+cloud)?|cloudflare(\s+pages)?/gi, 'Lunao Servers'),
-        };
-      }
-
-      emitStage('cloudflare_verifying', {
-        slug,
-        businessName: business.name,
-        liveUrl,
-        message: `Uploaded to Lunao Servers. Verifying live HTTP 200 OK response at ${liveUrl}...`,
-      });
-
-      // Probe live URL over HTTPS with up to 15 attempts (~30s window)
-      liveVerification = await verifyLiveCloudflareUrl(liveUrl, business.name, 15);
-      if (!liveVerification.ok) {
-        return {
-          ok: false,
-          statusCode: 502,
-          deployed: false,
-          verifiedLive: false,
-          verifiedOnCloudflare: false,
-          savedToSupabase: Boolean(siteRegistration?.savedToSupabase),
-          slug,
-          siteUrl: null,
-          stages,
-          error: `Live Lunao Servers verification failed for "${business.name}" at ${liveUrl}: ${liveVerification.reason}`.replace(/supabase(\s+cloud)?|cloudflare(\s+pages)?/gi, 'Lunao Servers'),
-        };
+        liveVerification = await verifyLiveCloudflareUrl(liveUrl, business.name, 4);
+        if (!liveVerification.ok) {
+          return {
+            ok: false,
+            statusCode: 502,
+            deployed: false,
+            verifiedLive: false,
+            verifiedOnCloudflare: false,
+            savedToSupabase: Boolean(siteRegistration?.savedToSupabase),
+            slug,
+            siteUrl: null,
+            stages,
+            error: `Live Lunao Servers verification failed for "${business.name}" at ${liveUrl}: ${liveVerification.reason}`.replace(/supabase(\s+cloud)?|cloudflare(\s+pages)?/gi, 'Lunao Servers'),
+          };
+        }
       }
     }
   }
@@ -367,22 +368,27 @@ export async function executeUnifiedLeadRebrandAndDeploy({
   const cloudflareMs = Date.now() - cloudflareStartMs;
 
   // ============================================================================
-  // STAGE 4: STRICT MINIMUM 4-SECOND PACING GATE (>= 4,000ms PER LEAD)
+  // STAGE 4: PACING GATE (NO EXTRA WAIT IF >= 5s)
+  // If the lead took >= 5 seconds (Supabase confirmation + Cloudflare verify),
+  // DO NOT add any extra pacing wait! Proceed immediately to dispatch.
   // ============================================================================
   const elapsedBeforePacingMs = Date.now() - leadStartMs;
-  const targetMinMs = Math.max(MIN_LEAD_DURATION_MS, Number(minDurationMs) || MIN_LEAD_DURATION_MS);
   let pacingWaitMs = 0;
 
-  if (elapsedBeforePacingMs < targetMinMs) {
-    pacingWaitMs = targetMinMs - elapsedBeforePacingMs;
-    emitStage('pacing_gate', {
-      slug,
-      businessName: business.name,
-      elapsedBeforePacingMs,
-      pacingWaitMs,
-      message: `Completing final AI verification & synchronization on Lunao Servers (${(pacingWaitMs / 1000).toFixed(1)}s)...`,
-    });
-    await sleep(pacingWaitMs);
+  if (elapsedBeforePacingMs < 5000) {
+    // Only if it completed faster than 5s, gently pad up to ~4.2s - 5s
+    const targetMinMs = Math.min(5000, Math.floor(Math.random() * (5000 - 4200 + 1)) + 4200);
+    if (elapsedBeforePacingMs < targetMinMs) {
+      pacingWaitMs = targetMinMs - elapsedBeforePacingMs;
+      emitStage('pacing_gate', {
+        slug,
+        businessName: business.name,
+        elapsedBeforePacingMs,
+        pacingWaitMs,
+        message: `Finalizing cloud synchronization on Lunao Servers (${(pacingWaitMs / 1000).toFixed(1)}s)...`,
+      });
+      await sleep(pacingWaitMs);
+    }
   }
 
   const totalElapsedMs = Date.now() - leadStartMs;
