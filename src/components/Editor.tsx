@@ -9,6 +9,7 @@ import {
   Download, Trash2, Layout, Key, ChevronDown,
   History, FolderOpen, Eraser, Shuffle, FlaskConical, BookmarkPlus,
   FileCode, RotateCcw, Check, ChevronRight, PanelLeftOpen, PanelRightOpen,
+  Building2, Phone, Mail, MapPin, Type, PanelLeftClose, Sliders,
 } from 'lucide-react';
 import {
   listSites, getSiteHtml, saveSiteHtml, deploySite, streamAiEdit,
@@ -18,6 +19,9 @@ import {
   listSiteHistory, createSiteHistory, convertHistoryToTemplate,
   SiteHistoryEntry, processUploadedHtml, isOfficialBuiltinTemplate,
 } from '../lib/pipelineClient';
+import {
+  extractFieldsFromHtml, applyFieldsToHtml, uploadPhotoToServer, SiteCustomFields,
+} from '../lib/siteCustomizer';
 import {
   playSoftTap, playTiktokLike, playSlideTick, playDialogPop, playSoftBubble,
   playElegantBell, playConfirmSuccess, playVictoryCelebration, playGentleChime,
@@ -209,8 +213,26 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const htmlRef = useRef('');
+  const baseLoadedHtmlRef = useRef('');
   const lastPreviewPush = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const heroFileInputRef = useRef<HTMLInputElement>(null);
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Structured Customizer state
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState<string | null>(null);
+  const [customFields, setCustomFields] = useState<SiteCustomFields>({
+    businessName: '',
+    phone: '',
+    email: '',
+    address: '',
+    city: '',
+    heroImage: '',
+    logo: '',
+    headline: '',
+    description: '',
+  });
 
   const toastTimeoutRef = useRef<any>(null);
   const flashToast = (t: Toast, duration?: number) => {
@@ -310,8 +332,11 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
     try {
       const html = await getSiteHtml(site.slug);
       htmlRef.current = html;
+      baseLoadedHtmlRef.current = html;
       setPreviewHtml(html);
       setCodeBuffer(html);
+      const fields = extractFieldsFromHtml(html, { name: site.title, city: site.city });
+      setCustomFields(fields);
       // Re-scroll once the HTML is loaded — heavy sites can push the
       // scroll position down when the iframe mounts.
       scrollToTop();
@@ -323,6 +348,58 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
       setView('list');
     } finally {
       setLoadingSite(false);
+    }
+  };
+
+  const handleCustomFieldChange = (field: keyof SiteCustomFields, value: string) => {
+    setCustomFields((prev) => {
+      const next = { ...prev, [field]: value };
+      const updatedHtml = applyFieldsToHtml(baseLoadedHtmlRef.current || htmlRef.current, next);
+      htmlRef.current = updatedHtml;
+      setPreviewHtml(updatedHtml);
+      setCodeBuffer(updatedHtml);
+      setDirty(true);
+      return next;
+    });
+  };
+
+  const handleHeroUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingPhoto('hero');
+    try {
+      const res = await uploadPhotoToServer(file);
+      if (res.ok && res.url) {
+        handleCustomFieldChange('heroImage', res.url);
+        flashToast({ type: 'success', text: 'Hero banner photo updated.' });
+      } else {
+        flashToast({ type: 'error', text: res.error || 'Failed to upload photo.' });
+      }
+    } catch (err: any) {
+      flashToast({ type: 'error', text: err?.message || 'Failed to upload photo.' });
+    } finally {
+      setIsUploadingPhoto(null);
+      e.target.value = '';
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingPhoto('logo');
+    try {
+      const res = await uploadPhotoToServer(file);
+      if (res.ok && res.url) {
+        handleCustomFieldChange('logo', res.url);
+        flashToast({ type: 'success', text: 'Business logo updated.' });
+      } else {
+        flashToast({ type: 'error', text: res.error || 'Failed to upload logo.' });
+      }
+    } catch (err: any) {
+      flashToast({ type: 'error', text: err?.message || 'Failed to upload logo.' });
+    } finally {
+      setIsUploadingPhoto(null);
+      e.target.value = '';
     }
   };
 
@@ -489,9 +566,9 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   const handleSave = async () => {
     if (!selected) return;
     sfx.tap();
-    const html = syncFromIframe();
+    const html = showCodeView && codeBuffer.trim() ? codeBuffer : (htmlRef.current || baseLoadedHtmlRef.current);
 
-    // Priority 4: Enforce booking contract validation before saving
+    // Enforce booking contract validation before saving
     const check = validateBookingContract(html);
     if (!check.valid) {
       sfx.error();
@@ -502,11 +579,12 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
     setSaving(true);
     try {
       await saveSiteHtml(selected.slug, html);
+      baseLoadedHtmlRef.current = html;
       htmlRef.current = html;
       setPreviewHtml(html);
       setDirty(false);
       sfx.saved();
-      flashToast({ type: 'success', text: 'Changes saved.' });
+      flashToast({ type: 'success', text: 'Website changes saved successfully.' });
     } catch (err: any) {
       sfx.error();
       flashToast({ type: 'error', text: err?.message || 'Save failed.' });
@@ -518,9 +596,9 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   const handleDeploy = async () => {
     if (!selected) return;
     sfx.primary();
-    const html = syncFromIframe();
+    const html = showCodeView && codeBuffer.trim() ? codeBuffer : (htmlRef.current || baseLoadedHtmlRef.current);
 
-    // Priority 4: Enforce booking contract validation before deploying
+    // Enforce booking contract validation before deploying
     const check = validateBookingContract(html);
     if (!check.valid) {
       sfx.error();
@@ -531,15 +609,16 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
     setDeploying(true);
     try {
       const { url } = await deploySite(selected.slug, html);
+      baseLoadedHtmlRef.current = html;
       htmlRef.current = html;
       setPreviewHtml(html);
       setDirty(false);
       setDeployInfo({ url: selected.url, deployUrl: url, dryRun: !url });
       sfx.deployed();
-      flashToast({ type: 'success', text: 'Site 100% redeployed & live across edge servers!' });
+      flashToast({ type: 'success', text: 'Website published live successfully!' });
     } catch (err: any) {
       sfx.error();
-      flashToast({ type: 'error', text: err?.message || 'Deploy failed.' });
+      flashToast({ type: 'error', text: err?.message || 'Publishing updates failed.' });
     } finally {
       setDeploying(false);
     }
@@ -876,7 +955,36 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
           <span className="text-[11px] text-ink-secondary font-sans truncate">{'/' + selected?.slug + '/' + (dirty ? ' · unsaved' : '')}</span>
         </div>
 
-        <VibeCreditBadge size="sm" />
+        {/* Live on Edge badge */}
+        <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live on Edge
+        </span>
+
+        {selected?.url && (
+          <a
+            href={selected.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-border-main text-xs font-medium text-ink-secondary hover:text-ink transition-colors"
+            title="Open live website in new tab"
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>Visit Site</span>
+            <ExternalLink className="w-3 h-3 opacity-60" />
+          </a>
+        )}
+
+        {/* Toggle Details Sidebar */}
+        <button
+          onClick={() => { sfx.toggle(); setSidebarOpen((prev) => !prev); }}
+          className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium font-sans border transition-all ${
+            sidebarOpen ? 'bg-blue-50 text-blue-700 border-blue-200 font-semibold' : 'bg-white text-ink-secondary border-border-main hover:text-ink'
+          }`}
+          title={sidebarOpen ? 'Hide Website Details Sidebar' : 'Show Website Details Sidebar'}
+        >
+          <Sliders className="w-4 h-4 text-blue-600" />
+          <span className="hidden sm:inline">Details</span>
+        </button>
 
         {/* device toggle */}
         <div className="flex items-center bg-white border border-border-main rounded-lg p-0.5">
@@ -896,28 +1004,12 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
           </button>
         </div>
 
-        <button
-          onClick={() => {
-            if (showCodeView) {
-              setShowCodeView(false);
-              setPreviewHtml(codeBuffer || htmlRef.current);
-            }
-            toggleEditMode();
-          }}
-          className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium font-sans active:scale-[0.98] transition-all border ${
-            editMode && !showCodeView ? 'bg-accent text-white border-accent' : 'bg-white text-ink-secondary border-border-main hover:text-ink'
-          }`}
-          title="Click text to edit it, click images to replace them"
-        >
-          <Pencil className="w-4 h-4" /> <span className="hidden sm:inline">{editMode && !showCodeView ? 'Editing' : 'Edit'}</span>
-        </button>
-
         {isUgcOrSalesMode() && (
           <button
             onClick={() => {
               sfx.toggle();
               if (!showCodeView) {
-                const latestHtml = syncFromIframe();
+                const latestHtml = htmlRef.current || baseLoadedHtmlRef.current;
                 setCodeBuffer(latestHtml);
                 setEditMode(false);
                 setShowCodeView(true);
@@ -968,14 +1060,237 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
           disabled={deploying || saving}
           className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg bg-accent text-white text-xs sm:text-sm font-semibold font-sans shadow-sm hover:bg-accent/90 active:scale-[0.98] transition-all disabled:opacity-60"
         >
-          {deploying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />} Redeploy
+          {deploying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />} Publish Updates
         </button>
       </div>
 
-      {/* Workspace: full-width preview — AI chat moved to TemplateLabPage */}
-      <div className="flex flex-col gap-4 h-[calc(100dvh-250px)] min-h-[440px] lg:h-[calc(100vh-170px)] lg:min-h-[440px] lg:max-h-[760px]">
+      {/* Workspace: Side-by-Side Structured Details + Real-Time Preview */}
+      <div className="flex flex-col lg:flex-row gap-4 h-[calc(100dvh-220px)] min-h-[500px] lg:h-[calc(100vh-170px)] lg:min-h-[550px] lg:max-h-[820px]">
+        {/* Left: Structured Customization Sidebar */}
+        {sidebarOpen && !showCodeView && (
+          <div className="w-full lg:w-[380px] xl:w-[420px] shrink-0 bg-white rounded-xl border border-border-main flex flex-col overflow-hidden shadow-2xs animate-editor-fade">
+            {/* Sidebar header */}
+            <div className="px-4 py-3 border-b border-border-light flex items-center justify-between bg-slate-50/70 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center">
+                  <Building2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">Website Details</h3>
+                  <p className="text-[11px] text-slate-500">Live preview updates automatically</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-200/50 transition-colors"
+                title="Hide sidebar"
+              >
+                <PanelLeftClose className="w-4 h-4" />
+              </button>
+            </div>
 
-        {/* Preview panel — always full width, no chat sidebar */}
+            {/* Scrollable form sections */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-5 text-xs">
+              {/* Section 1: Business Details */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-1.5 text-slate-900 font-bold text-xs">
+                  <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Business Information</span>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Business Name</label>
+                  <input
+                    type="text"
+                    value={customFields.businessName}
+                    onChange={(e) => handleCustomFieldChange('businessName', e.target.value)}
+                    placeholder="e.g. Apex Mechanical Systems"
+                    className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-500 font-sans"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Phone Number</label>
+                    <input
+                      type="text"
+                      value={customFields.phone}
+                      onChange={(e) => handleCustomFieldChange('phone', e.target.value)}
+                      placeholder="(512) 555-0199"
+                      className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-500 font-sans"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">City</label>
+                    <input
+                      type="text"
+                      value={customFields.city}
+                      onChange={(e) => handleCustomFieldChange('city', e.target.value)}
+                      placeholder="Austin"
+                      className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-500 font-sans"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Email Address</label>
+                  <input
+                    type="email"
+                    value={customFields.email}
+                    onChange={(e) => handleCustomFieldChange('email', e.target.value)}
+                    placeholder="contact@business.com"
+                    className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-500 font-sans"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Street Address</label>
+                  <input
+                    type="text"
+                    value={customFields.address}
+                    onChange={(e) => handleCustomFieldChange('address', e.target.value)}
+                    placeholder="100 Congress Ave, Suite 200"
+                    className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-500 font-sans"
+                  />
+                </div>
+              </div>
+
+              {/* Section 2: Website Photos */}
+              <div className="pt-2 border-t border-slate-100 space-y-3">
+                <div className="flex items-center gap-1.5 text-slate-900 font-bold text-xs">
+                  <ImageIcon className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Website Photos</span>
+                </div>
+
+                {/* Hero Banner Photo */}
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+                  <span className="block text-[11px] font-semibold text-slate-700">Hero Banner Photo</span>
+                  {customFields.heroImage ? (
+                    <div className="h-24 w-full rounded-md overflow-hidden bg-slate-200 border border-slate-300 relative group">
+                      <img src={customFields.heroImage} alt="Hero Banner" className="w-full h-full object-cover" />
+                    </div>
+                  ) : (
+                    <div className="h-16 w-full rounded-md border border-dashed border-slate-300 flex items-center justify-center text-slate-400 text-[11px]">
+                      No hero photo set
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={heroFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleHeroUpload}
+                    />
+                    <button
+                      onClick={() => heroFileInputRef.current?.click()}
+                      disabled={isUploadingPhoto === 'hero'}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold text-[11px] transition-colors cursor-pointer shadow-2xs"
+                    >
+                      {isUploadingPhoto === 'hero' ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                      ) : (
+                        <UploadCloud className="w-3.5 h-3.5 text-blue-600" />
+                      )}
+                      <span>Change Photo</span>
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={customFields.heroImage}
+                    onChange={(e) => handleCustomFieldChange('heroImage', e.target.value)}
+                    placeholder="Or enter image URL: https://..."
+                    className="w-full px-2.5 py-1.5 bg-white rounded-md border border-slate-200 text-slate-700 text-[11px] focus:outline-none focus:border-blue-500 font-mono"
+                  />
+                </div>
+
+                {/* Business Logo */}
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+                  <span className="block text-[11px] font-semibold text-slate-700">Business Logo</span>
+                  {customFields.logo ? (
+                    <div className="h-14 w-32 rounded-md overflow-hidden bg-white border border-slate-300 p-1 flex items-center justify-center">
+                      <img src={customFields.logo} alt="Logo" className="max-h-full max-w-full object-contain" />
+                    </div>
+                  ) : null}
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={logoFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleLogoUpload}
+                    />
+                    <button
+                      onClick={() => logoFileInputRef.current?.click()}
+                      disabled={isUploadingPhoto === 'logo'}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold text-[11px] transition-colors cursor-pointer shadow-2xs"
+                    >
+                      {isUploadingPhoto === 'logo' ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                      ) : (
+                        <UploadCloud className="w-3.5 h-3.5 text-blue-600" />
+                      )}
+                      <span>Change Logo</span>
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={customFields.logo}
+                    onChange={(e) => handleCustomFieldChange('logo', e.target.value)}
+                    placeholder="Or enter logo URL: https://..."
+                    className="w-full px-2.5 py-1.5 bg-white rounded-md border border-slate-200 text-slate-700 text-[11px] focus:outline-none focus:border-blue-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Section 3: Headlines & Story */}
+              <div className="pt-2 border-t border-slate-100 space-y-3">
+                <div className="flex items-center gap-1.5 text-slate-900 font-bold text-xs">
+                  <Type className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Headline & Story</span>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Website Headline</label>
+                  <input
+                    type="text"
+                    value={customFields.headline}
+                    onChange={(e) => handleCustomFieldChange('headline', e.target.value)}
+                    placeholder="e.g. Expert HVAC and Mechanical Services"
+                    className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-500 font-sans"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">About & Description</label>
+                  <textarea
+                    rows={3}
+                    value={customFields.description}
+                    onChange={(e) => handleCustomFieldChange('description', e.target.value)}
+                    placeholder="Brief description of services and company history..."
+                    className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-500 font-sans leading-relaxed resize-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Sidebar Sticky Footer */}
+            <div className="p-3 border-t border-border-light bg-slate-50/90 flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleSave}
+                disabled={saving || deploying}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 font-semibold text-xs hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer disabled:opacity-60"
+              >
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                <span>Save</span>
+              </button>
+              <button
+                onClick={handleDeploy}
+                disabled={deploying || saving}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 text-white font-semibold text-xs hover:bg-blue-700 transition-colors shadow-sm cursor-pointer disabled:opacity-60"
+              >
+                {deploying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
+                <span>Publish</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Right: Preview Panel / Code View */}
         <div className="flex-1 bg-white rounded-xl border border-border-main overflow-hidden flex flex-col relative">
           {editMode && !showCodeView && (
             <div className="flex items-center gap-2 px-4 py-2 bg-accent-soft/60 border-b border-accent/15 text-[11px] font-sans text-accent font-medium">

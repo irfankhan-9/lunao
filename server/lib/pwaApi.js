@@ -859,6 +859,46 @@ export function mountPwaApi(app) {
       res.status(500).json({ ok: false, error: err.message });
     }
   });
+
+  // ---- Photo upload for website customizer & Owner PWA -----
+  const handlePwaImageUpload = async (req, res) => {
+    try {
+      const { image, data, filename } = req.body || {};
+      const rawImage = image || data;
+      if (!rawImage || typeof rawImage !== 'string') {
+        return res.status(400).json({ ok: false, error: 'Image data is required' });
+      }
+
+      const base64Data = rawImage.includes(';base64,') ? rawImage.split(';base64,')[1] : rawImage;
+      const buffer = Buffer.from(base64Data, 'base64');
+
+      if (buffer.length > 8 * 1024 * 1024) {
+        return res.status(400).json({ ok: false, error: 'Photo exceeds maximum 8MB file size limit.' });
+      }
+
+      const uploadsDir = path.join(ROOT_DIR, 'public', 'uploads');
+      await fs.mkdir(uploadsDir, { recursive: true }).catch(() => {});
+
+      const ext = filename?.toLowerCase().endsWith('.png')
+        ? 'png'
+        : filename?.toLowerCase().endsWith('.webp')
+          ? 'webp'
+          : 'jpg';
+      const safeName = `pwa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const targetPath = path.join(uploadsDir, safeName);
+
+      await fs.writeFile(targetPath, buffer);
+
+      const publicUrl = `/uploads/${safeName}`;
+      return res.json({ ok: true, url: publicUrl });
+    } catch (err) {
+      console.warn('[pwaApi] upload error:', err.message);
+      return res.status(500).json({ ok: false, error: 'Failed to upload photo.' });
+    }
+  };
+
+  app.post('/api/pwa/:slug/upload/image', pwaAuth, assertSameSlug, handlePwaImageUpload);
+  app.post('/api/pwa/upload/image', pwaAuth, handlePwaImageUpload);
   app.get('/api/pwa/me/integrations', pwaAuth, async (req, res) => {
     try {
       const slug = req.tenantSlug;

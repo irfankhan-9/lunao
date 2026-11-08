@@ -2726,6 +2726,46 @@ async function authenticate(req, res, next) {
 
 // Serve static public assets (favicons, brand icons, bridge scripts)
 app.use(express.static(path.join(ROOT_DIR, 'public')));
+app.use('/uploads', express.static(path.join(ROOT_DIR, 'public', 'uploads')));
+
+// Upload photo endpoint for website customizer & Owner PWA
+app.post('/api/upload/image', authenticate, async (req, res) => {
+  try {
+    const { image, data, filename } = req.body || {};
+    const rawImage = image || data;
+    if (!rawImage || typeof rawImage !== 'string') {
+      return res.status(400).json({ ok: false, error: 'Image data is required' });
+    }
+
+    const base64Data = rawImage.includes(';base64,') ? rawImage.split(';base64,')[1] : rawImage;
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    if (buffer.length > 8 * 1024 * 1024) {
+      return res.status(400).json({ ok: false, error: 'Photo exceeds maximum 8MB file size limit.' });
+    }
+
+    const uploadsDir = path.join(ROOT_DIR, 'public', 'uploads');
+    if (!fs.existsSync(uploadsDir)) {
+      await fs.promises.mkdir(uploadsDir, { recursive: true });
+    }
+
+    const ext = filename?.toLowerCase().endsWith('.png')
+      ? 'png'
+      : filename?.toLowerCase().endsWith('.webp')
+        ? 'webp'
+        : 'jpg';
+    const safeName = `img_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const targetPath = path.join(uploadsDir, safeName);
+
+    await fs.promises.writeFile(targetPath, buffer);
+
+    const publicUrl = `/uploads/${safeName}`;
+    return res.json({ ok: true, url: publicUrl });
+  } catch (err) {
+    console.warn('[upload/image] error:', err.message);
+    return res.status(500).json({ ok: false, error: 'Failed to upload photo.' });
+  }
+});
 
 // Serve the locally compiled sites (dry-run live preview) and 230 contractor sites.
 mountSpecialModeRoutes(app, SITES_DIR);

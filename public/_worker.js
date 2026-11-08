@@ -344,7 +344,7 @@ self.addEventListener('activate', (e) => {
     }
 
     // ─── 1. PROXY API & BACKEND SERVICES TO EC2 ─────────────────────────
-    if (path.startsWith('/api/') || path.startsWith('/owner') || path.startsWith('/sites/') || path.startsWith('/functions/')) {
+    if (path.startsWith('/api/') || path.startsWith('/owner') || path.startsWith('/sites/') || path.startsWith('/uploads/') || path.startsWith('/functions/')) {
       const origin = env.BACKEND_URL || env.LUNAO_API_ORIGIN || BACKEND_ORIGIN;
       const backendUrl = new URL(path + url.search, origin);
       const reqHeaders = new Headers(request.headers);
