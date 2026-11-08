@@ -265,22 +265,70 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Standard 1-tap Google / Supabase User sign-in (Strictly real account OAuth)
+  // Standard 1-tap Google User sign-in (Real Google OAuth popup + server sync)
   const signInWithGoogle = useCallback(async (): Promise<AuthUser> => {
-    const { data, error } = await supabaseClient.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-      },
-    });
-    if (error) {
-      throw new Error(error.message || 'Unable to connect to Google account. Please verify credentials and try again.');
+    try {
+      const { signInWithGooglePopup } = await import('../lib/firebaseAuth');
+      const googleUser = await signInWithGooglePopup();
+      if (!googleUser || !googleUser.email) {
+        throw new Error('Google sign-in was canceled.');
+      }
+
+      const res = await fetch('/api/auth/google-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid: googleUser.uid,
+          email: googleUser.email,
+          name: googleUser.name,
+          picture: googleUser.picture,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok || !data.user) {
+        throw new Error(data.error || 'Failed to authenticate Google session on server.');
+      }
+
+      const authUser: AuthUser = {
+        id: data.user.id || googleUser.uid,
+        ownerKey: data.user.ownerKey,
+        email: data.user.email || googleUser.email,
+        name: data.user.name || googleUser.name,
+        picture: data.user.picture || googleUser.picture,
+        plan: data.plan || 'Free Plan',
+        credits: data.userCredits,
+        vibeCredits: data.vibeCredits,
+      };
+
+      applyAuthenticatedSession(
+        authUser,
+        data.plan || 'Free Plan',
+        data.userCredits,
+        data.vibeCredits
+      );
+      return authUser;
+    } catch (fbErr: any) {
+      const msg = String(fbErr?.message || '');
+      if (msg.includes('popup-closed-by-user') || msg.includes('cancelled-popup-request')) {
+        throw fbErr;
+      }
+      console.warn('[auth] Firebase Google popup fallback to Supabase:', msg);
+      const { data, error } = await supabaseClient.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+        },
+      });
+      if (error) {
+        throw new Error(error.message || 'Unable to connect to Google account. Please verify credentials and try again.');
+      }
+      if (data?.url) {
+        window.location.href = data.url;
+      }
+      return new Promise(() => {});
     }
-    if (data?.url) {
-      window.location.href = data.url;
-    }
-    return new Promise(() => {});
-  }, []);
+  }, [applyAuthenticatedSession]);
 
   const logout = useCallback(async () => {
     try {
