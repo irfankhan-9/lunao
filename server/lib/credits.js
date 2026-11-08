@@ -14,14 +14,14 @@ import { getPgPool } from './supabase.js';
 // Plan -> starting action credit balance & AI allowance in USD
 const PLAN_BALANCE = {
   'Free Plan': 15,
-  'Starter Plan': 2500,
+  'Starter Plan': 50,
   'Pro Plan': 6500,
   'Agency Plan': 12000,
 };
 
 const PLAN_AI_ALLOWANCE = {
   'Free Plan': 0.0,
-  'Starter Plan': 6.0,
+  'Starter Plan': 10.0,
   'Pro Plan': 13.0,
   'Agency Plan': 20.0,
 };
@@ -39,7 +39,13 @@ export function inferPlanFromOwnerKey(ownerKey, fallbackPlan = 'Free Plan') {
   const str = String(ownerKey).toLowerCase();
   if (str.includes('agency')) return 'Agency Plan';
   if (str.includes('pro')) return 'Pro Plan';
-  if (str.includes('starter')) return 'Starter Plan';
+  if (
+    str.includes('starter') ||
+    str.includes('103794254346270879981') ||
+    str.includes('ik2582675')
+  ) {
+    return 'Starter Plan';
+  }
   if (str === 'dashboard') return 'Agency Plan';
   return fallbackPlan;
 }

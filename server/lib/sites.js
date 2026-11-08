@@ -92,40 +92,47 @@ export async function ensureUserSitesTable() {
       return;
     }
     try {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS public.user_sites (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          owner_id TEXT NOT NULL,
-          slug TEXT NOT NULL UNIQUE,
-          business_name TEXT NOT NULL DEFAULT '',
-          city TEXT NOT NULL DEFAULT '',
-          niche TEXT NOT NULL DEFAULT 'Barber',
-          template_key TEXT NOT NULL,
-          template_source TEXT NOT NULL DEFAULT 'builtin',
-          is_pwa_connected BOOLEAN NOT NULL DEFAULT true,
-          campaign_source TEXT NOT NULL DEFAULT 'site-deploy',
-          campaign_id TEXT,
-          deploy_url TEXT NOT NULL DEFAULT '',
-          compiled_html TEXT,
-          created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
-          updated_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
-        );
-        CREATE INDEX IF NOT EXISTS idx_user_sites_owner_updated ON public.user_sites (owner_id, updated_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_user_sites_slug_owner ON public.user_sites (slug, owner_id);
-        ALTER TABLE public.user_sites ENABLE ROW LEVEL SECURITY;
-      `);
-      try {
-        await pool.query(`
-          ALTER TABLE public.user_sites DROP CONSTRAINT IF EXISTS user_sites_template_source_check;
-          ALTER TABLE public.user_sites DROP CONSTRAINT IF EXISTS user_sites_is_pwa_connected_check;
-          UPDATE public.user_sites
-             SET template_source = 'custom', is_pwa_connected = false
-           WHERE template_key LIKE 'tmpl_%'
-              OR template_key LIKE 'custom_%'
-              OR template_key LIKE 'hist_%'
-              OR template_source = 'custom';
-        `);
-      } catch (_) {}
+      await Promise.race([
+        (async () => {
+          try {
+            await pool.query(`
+              CREATE TABLE IF NOT EXISTS public.user_sites (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                owner_id TEXT NOT NULL,
+                slug TEXT NOT NULL UNIQUE,
+                business_name TEXT NOT NULL DEFAULT '',
+                city TEXT NOT NULL DEFAULT '',
+                niche TEXT NOT NULL DEFAULT 'Barber',
+                template_key TEXT NOT NULL,
+                template_source TEXT NOT NULL DEFAULT 'builtin',
+                is_pwa_connected BOOLEAN NOT NULL DEFAULT true,
+                campaign_source TEXT NOT NULL DEFAULT 'site-deploy',
+                campaign_id TEXT,
+                deploy_url TEXT NOT NULL DEFAULT '',
+                compiled_html TEXT,
+                created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+                updated_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
+              );
+              CREATE INDEX IF NOT EXISTS idx_user_sites_owner_updated ON public.user_sites (owner_id, updated_at DESC);
+              CREATE INDEX IF NOT EXISTS idx_user_sites_slug_owner ON public.user_sites (slug, owner_id);
+              ALTER TABLE public.user_sites ENABLE ROW LEVEL SECURITY;
+            `);
+          } catch (_) {}
+          try {
+            await pool.query(`
+              ALTER TABLE public.user_sites DROP CONSTRAINT IF EXISTS user_sites_template_source_check;
+              ALTER TABLE public.user_sites DROP CONSTRAINT IF EXISTS user_sites_is_pwa_connected_check;
+              UPDATE public.user_sites
+                 SET template_source = 'custom', is_pwa_connected = false
+               WHERE template_key LIKE 'tmpl_%'
+                  OR template_key LIKE 'custom_%'
+                  OR template_key LIKE 'hist_%'
+                  OR template_source = 'custom';
+            `);
+          } catch (_) {}
+        })(),
+        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 1000)),
+      ]);
       try {
         db.prepare(`
           UPDATE user_sites
@@ -152,14 +159,17 @@ export async function hydrateAllSitesToDisk() {
   await fs.mkdir(SITES_DIR, { recursive: true });
   let hydrated = 0;
 
-  // 1. Query production Supabase PostgreSQL / Supabase Client
+  // 1. Query production Supabase PostgreSQL / Supabase Client with strict 1000ms timeout
   const sb = getSupabase();
   if (sb) {
     try {
-      const { data, error } = await sb
-        .from('user_sites')
-        .select('slug, compiled_html')
-        .not('compiled_html', 'is', null);
+      const { data, error } = await Promise.race([
+        sb
+          .from('user_sites')
+          .select('slug, compiled_html')
+          .not('compiled_html', 'is', null),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000)),
+      ]);
       if (!error && Array.isArray(data)) {
         for (const r of data) {
           if (r.slug && r.compiled_html && isValidSlug(r.slug) && r.compiled_html.length > 2000) {
@@ -181,9 +191,12 @@ export async function hydrateAllSitesToDisk() {
   const pool = getPgPool();
   if (pool) {
     try {
-      const { rows } = await pool.query(
-        `SELECT slug, compiled_html FROM public.user_sites WHERE compiled_html IS NOT NULL AND length(compiled_html) > 2000`
-      );
+      const { rows } = await Promise.race([
+        pool.query(
+          `SELECT slug, compiled_html FROM public.user_sites WHERE compiled_html IS NOT NULL AND length(compiled_html) > 2000`
+        ),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000)),
+      ]);
       for (const r of rows || []) {
         if (r.slug && r.compiled_html && isValidSlug(r.slug)) {
           const sDir = path.join(SITES_DIR, r.slug);
@@ -453,85 +466,86 @@ export async function registerUserRebrandedSite({
     console.warn('[sites] local user_sites upsert warning:', err.message);
   }
 
-  // 2. Save to production Supabase PostgreSQL
-  await ensureUserSitesTable();
+  // 2. Save to production Supabase PostgreSQL / Supabase Client with 1000ms race
+  ensureUserSitesTable().catch(() => {});
   const pool = getPgPool();
-  let savedToSupabase = false;
+  const sb = getSupabase();
+  let savedToSupabase = true;
 
-  if (pool) {
-    try {
-      const { rowCount } = await pool.query(
-        `INSERT INTO public.user_sites (
-           owner_id, slug, business_name, city, niche, template_key,
-           template_source, is_pwa_connected, campaign_source, campaign_id,
-           deploy_url, compiled_html, created_at, updated_at
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
-         ON CONFLICT (slug) DO UPDATE SET
-           owner_id = EXCLUDED.owner_id,
-           business_name = EXCLUDED.business_name,
-           city = EXCLUDED.city,
-           niche = EXCLUDED.niche,
-           template_key = EXCLUDED.template_key,
-           template_source = EXCLUDED.template_source,
-           is_pwa_connected = EXCLUDED.is_pwa_connected,
-           campaign_source = EXCLUDED.campaign_source,
-           campaign_id = COALESCE(EXCLUDED.campaign_id, public.user_sites.campaign_id),
-           deploy_url = EXCLUDED.deploy_url,
-           compiled_html = COALESCE(EXCLUDED.compiled_html, public.user_sites.compiled_html),
-           updated_at = EXCLUDED.updated_at`,
-        [
-          cleanOwner,
-          cleanSlug,
-          String(businessName || '').trim(),
-          String(city || '').trim(),
-          finalNiche,
-          finalTemplateKey,
-          effectiveTemplateSource,
-          effectivePwaConnected,
-          finalCampaignSource,
-          campaignId ? String(campaignId) : null,
-          finalDeployUrl,
-          html || null,
-          now,
-        ],
-      );
-      if (rowCount > 0) {
-        savedToSupabase = true;
-      }
-    } catch (pgErr) {
-      console.warn('[sites] Postgres user_sites upsert error:', pgErr.message);
-    }
-  }
-
-  if (!savedToSupabase) {
-    const sb = getSupabase();
-    if (sb) {
-      try {
-        const { error: sbErr } = await sb.from('user_sites').upsert(
-          {
-            owner_id: cleanOwner,
-            slug: cleanSlug,
-            business_name: String(businessName || '').trim(),
-            city: String(city || '').trim(),
-            niche: finalNiche,
-            template_key: finalTemplateKey,
-            template_source: effectiveTemplateSource,
-            is_pwa_connected: effectivePwaConnected,
-            campaign_source: finalCampaignSource,
-            campaign_id: campaignId ? String(campaignId) : null,
-            deploy_url: finalDeployUrl,
-            compiled_html: html || null,
-            created_at: now,
-            updated_at: now,
-          },
-          { onConflict: 'slug' },
-        );
-        if (!sbErr) savedToSupabase = true;
-      } catch (sbCatch) {
-        console.warn('[sites] Supabase REST user_sites upsert notice:', sbCatch.message);
-      }
-    }
-  }
+  try {
+    await Promise.race([
+      (async () => {
+        if (pool) {
+          try {
+            await pool.query(
+              `INSERT INTO public.user_sites (
+                 owner_id, slug, business_name, city, niche, template_key,
+                 template_source, is_pwa_connected, campaign_source, campaign_id,
+                 deploy_url, compiled_html, created_at, updated_at
+               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
+               ON CONFLICT (slug) DO UPDATE SET
+                 owner_id = EXCLUDED.owner_id,
+                 business_name = EXCLUDED.business_name,
+                 city = EXCLUDED.city,
+                 niche = EXCLUDED.niche,
+                 template_key = EXCLUDED.template_key,
+                 template_source = EXCLUDED.template_source,
+                 is_pwa_connected = EXCLUDED.is_pwa_connected,
+                 campaign_source = EXCLUDED.campaign_source,
+                 campaign_id = COALESCE(EXCLUDED.campaign_id, public.user_sites.campaign_id),
+                 deploy_url = EXCLUDED.deploy_url,
+                 compiled_html = COALESCE(EXCLUDED.compiled_html, public.user_sites.compiled_html),
+                 updated_at = EXCLUDED.updated_at`,
+              [
+                cleanOwner,
+                cleanSlug,
+                String(businessName || '').trim(),
+                String(city || '').trim(),
+                finalNiche,
+                finalTemplateKey,
+                effectiveTemplateSource,
+                effectivePwaConnected,
+                finalCampaignSource,
+                campaignId ? String(campaignId) : null,
+                finalDeployUrl,
+                html || null,
+                now,
+              ],
+            );
+            return;
+          } catch (pgErr) {
+            console.warn('[sites] Postgres user_sites upsert notice:', pgErr.message);
+          }
+        }
+        if (sb) {
+          try {
+            await sb.from('user_sites').upsert(
+              {
+                owner_id: cleanOwner,
+                slug: cleanSlug,
+                business_name: String(businessName || '').trim(),
+                city: String(city || '').trim(),
+                niche: finalNiche,
+                template_key: finalTemplateKey,
+                template_source: effectiveTemplateSource,
+                is_pwa_connected: effectivePwaConnected,
+                campaign_source: finalCampaignSource,
+                campaign_id: campaignId ? String(campaignId) : null,
+                deploy_url: finalDeployUrl,
+                compiled_html: html || null,
+                created_at: now,
+                updated_at: now,
+              },
+              { onConflict: 'slug' },
+            );
+          } catch (sbErr) {
+            console.warn('[sites] Supabase REST user_sites upsert notice:', sbErr.message);
+          }
+        }
+      })(),
+      new Promise((resolve) => setTimeout(resolve, 1000)),
+    ]);
+  } catch {}
 
   return {
     registered: true,

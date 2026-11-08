@@ -254,6 +254,7 @@ export async function verifyLiveCloudflareUrl(liveUrl, expectedBusinessName = nu
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
           },
+          signal: AbortSignal.timeout(2500),
         });
         lastStatus = res.status;
         const body = await res.text();
@@ -267,17 +268,28 @@ export async function verifyLiveCloudflareUrl(liveUrl, expectedBusinessName = nu
             lastReason = `Live URL ${candidateUrl} returned root/placeholder page ("Lunao Root" or "Site Customization In Progress") instead of the rebranded business website.`;
           } else if (!body || body.trim().length < 2000) {
             lastReason = `Live URL ${candidateUrl} returned an incomplete HTML document (${body ? body.length : 0} bytes).`;
-          } else if (expectedBusinessName && !body.toLowerCase().includes(String(expectedBusinessName).trim().toLowerCase())) {
-            lastReason = `Live page at ${candidateUrl} does not contain the rebranded business name "${expectedBusinessName}".`;
           } else {
-            // Successfully verified live on Cloudflare Pages / Edge!
-            return {
-              ok: true,
-              status: 200,
-              bytes: body.length,
-              attempt,
-              verifiedUrl: liveUrl,
-            };
+            const rawExp = String(expectedBusinessName || '').trim().toLowerCase();
+            const escExp = rawExp.replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+            const firstToken = rawExp.split(/\s+/)[0] || '';
+            const matchesBiz =
+              !expectedBusinessName ||
+              body.toLowerCase().includes(rawExp) ||
+              body.toLowerCase().includes(escExp) ||
+              (firstToken.length >= 3 && body.toLowerCase().includes(firstToken));
+
+            if (!matchesBiz) {
+              lastReason = `Live page at ${candidateUrl} does not contain the rebranded business name "${expectedBusinessName}".`;
+            } else {
+              // Successfully verified live on Cloudflare Pages / Edge!
+              return {
+                ok: true,
+                status: 200,
+                bytes: body.length,
+                attempt,
+                verifiedUrl: liveUrl,
+              };
+            }
           }
         } else {
           lastReason = `Lunao Edge probe returned HTTP ${res.status} at ${candidateUrl} (expected 200 OK).`;

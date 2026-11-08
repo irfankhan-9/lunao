@@ -219,33 +219,35 @@ export async function executeUnifiedLeadRebrandAndDeploy({
     };
   }
 
-  // 2B. Register business in public.owner_businesses & public.tenants
+  // 2B. Register business in public.owner_businesses & public.tenants with fast race
   try {
-    await registerOwnerBusinessAsync(verifiedOwnerKey, slug, {
-      name: business.name,
-      niche: effectiveNiche,
-    });
-  } catch (regBizErr) {
-    console.warn('[unified-worker] registerOwnerBusinessAsync notice:', regBizErr.message);
-  }
-
-  const pool = getPgPool();
-  if (pool) {
-    try {
-      await pool.query(
-        `INSERT INTO public.tenants (id, slug, name, niche, is_active, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, true, NOW(), NOW())
-         ON CONFLICT (slug) DO UPDATE SET
-           name = EXCLUDED.name,
-           niche = EXCLUDED.niche,
-           is_active = true,
-           updated_at = NOW()`,
-        [`t-${slug.slice(0, 48)}`, slug, business.name, effectiveNiche]
-      );
-    } catch (tenantErr) {
-      console.warn('[unified-worker] public.tenants upsert notice:', tenantErr.message);
-    }
-  }
+    await Promise.race([
+      (async () => {
+        try {
+          await registerOwnerBusinessAsync(verifiedOwnerKey, slug, {
+            name: business.name,
+            niche: effectiveNiche,
+          });
+        } catch {}
+        const pool = getPgPool();
+        if (pool) {
+          try {
+            await pool.query(
+              `INSERT INTO public.tenants (id, slug, name, niche, is_active, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, true, NOW(), NOW())
+               ON CONFLICT (slug) DO UPDATE SET
+                 name = EXCLUDED.name,
+                 niche = EXCLUDED.niche,
+                 is_active = true,
+                 updated_at = NOW()`,
+              [`t-${slug.slice(0, 48)}`, slug, business.name, effectiveNiche]
+            );
+          } catch {}
+        }
+      })(),
+      new Promise((resolve) => setTimeout(resolve, 1000)),
+    ]);
+  } catch {}
 
   // 2C. Write & confirm permanent site record in `public.user_sites` BEFORE edge deploy
   const siteRegistration = await registerUserRebrandedSite({

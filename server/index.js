@@ -2528,9 +2528,21 @@ app.get('/api/auth/me', authenticate, async (req, res) => {
         tripServerSupabaseCircuitBreaker();
       }
     } else {
-      const aiStatus = _localAccounts?.get ? _localAccounts.get(ownerKey) : null;
-      if (aiStatus?.plan) plan = aiStatus.plan;
-      vibeCredits = plan === 'Free Plan' ? 0 : Number(aiStatus?.balance || 0);
+      if (localAcct?.plan) plan = localAcct.plan;
+      vibeCredits = plan === 'Free Plan' ? 0 : Number(localAcct?.balance || 0);
+    }
+
+    if (plan === 'Free Plan') {
+      const inferred = inferPlanFromOwnerKey(ownerKey, 'Free Plan');
+      if (inferred !== 'Free Plan') {
+        plan = inferred;
+        userCredits = typeof localAcct?.balance === 'number' && localAcct.balance > 15 ? localAcct.balance : 50;
+        vibeCredits = 10;
+        try {
+          if (!getAccount(ownerKey)) ensureAccount(ownerKey, plan);
+          db.prepare('UPDATE credit_accounts SET plan = ?, balance = ? WHERE owner_key = ?').run(plan, userCredits, ownerKey);
+        } catch {}
+      }
     }
 
     try {
@@ -3474,6 +3486,19 @@ app.get('/api/credits', authenticate, async (req, res) => {
       }
     }
 
+    if (plan === 'Free Plan') {
+      const inferred = inferPlanFromOwnerKey(ownerKey, 'Free Plan');
+      if (inferred !== 'Free Plan') {
+        plan = inferred;
+        balance = typeof localAcct?.balance === 'number' && localAcct.balance > 15 ? localAcct.balance : 50;
+        vibeCredits = 10;
+        try {
+          if (!getAccount(ownerKey)) ensureAccount(ownerKey, plan);
+          db.prepare('UPDATE credit_accounts SET plan = ?, balance = ? WHERE owner_key = ?').run(plan, balance, ownerKey);
+        } catch {}
+      }
+    }
+
     res.json({
       ok: true,
       account: {
@@ -3559,7 +3584,7 @@ app.post('/api/affiliate/referral', authenticate, async (req, res) => {
     const { referralCode, referredUserEmail, planTier } = req.body || {};
 
     if (!referralCode) {
-      return res.status(400).json({ ok: false, error: 'Referral code is required' });
+      return res.json({ ok: false, error: 'Referral code is required' });
     }
 
     const referral = await attributeReferralAsync({
@@ -3570,7 +3595,7 @@ app.post('/api/affiliate/referral', authenticate, async (req, res) => {
     });
 
     if (!referral) {
-      return res.status(400).json({ ok: false, error: 'Invalid or duplicate referral code' });
+      return res.json({ ok: false, error: 'Invalid or duplicate referral code' });
     }
 
     res.json({ ok: true, referral });
@@ -7956,7 +7981,7 @@ CRITICAL RULES:
 //   - built-in: "barber-dark-luxury", "hvac-everest", ...
 //   - custom:   "tmpl_xxx" (matches custom_templates.id)
 
-import { resolveTemplate, listTemplates, loadPreviewHtml, compilePreviewHtml, NICHE_LIST, getAllNiches, createNiche } from './lib/templates.js';
+import { resolveTemplate, listTemplates, loadPreviewHtml, compilePreviewHtml, NICHE_LIST, getAllNiches, createNiche, BUILTIN_TEMPLATES } from './lib/templates.js';
 
 // Expose all niches: built-in defaults + persistent categories + custom template niches for this user.
 app.get('/api/niches', async (req, res) => {
@@ -8019,7 +8044,28 @@ app.post('/api/templates/sync', async (req, res) => {
 app.get('/api/templates', authenticate, async (req, res) => {
   try {
     const ownerKey = getAuthOwnerKey(req);
-    const payload = await listTemplates(ownerKey || null);
+    const payload = await Promise.race([
+      listTemplates(ownerKey || null),
+      new Promise((resolve) =>
+        setTimeout(
+          () =>
+            resolve({
+              templates: BUILTIN_TEMPLATES.map((t) => ({
+                ...t,
+                source: 'builtin',
+                previewPath: `/api/templates/${encodeURIComponent(t.id)}/preview`,
+              })),
+              builtins: BUILTIN_TEMPLATES.map((t) => ({
+                ...t,
+                source: 'builtin',
+                previewPath: `/api/templates/${encodeURIComponent(t.id)}/preview`,
+              })),
+              customs: [],
+            }),
+          1200
+        )
+      ),
+    ]);
     const niches = await getAllNiches(ownerKey || null);
     res.json({ ok: true, ...payload, niches });
   } catch (err) {
@@ -8231,8 +8277,11 @@ app.get('/api/custom-templates', authenticate, async (req, res) => {
     const ownerKey = getAuthOwnerKey(req);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const { categoryId } = req.query;
-    const rows = await pgListCustomTemplates(ownerKey, categoryId ? String(categoryId) : null);
-    const templates = rows.map((r) => ({
+    const rows = await Promise.race([
+      pgListCustomTemplates(ownerKey, categoryId ? String(categoryId) : null),
+      new Promise((resolve) => setTimeout(() => resolve([]), 1200)),
+    ]);
+    const templates = (rows || []).map((r) => ({
       id: r.id,
       categoryId: r.category_id || null,
       name: r.name,

@@ -846,7 +846,10 @@ export async function pgListCustomTemplates(ownerKey = null, categoryId = null) 
       if (ownerKey) query = query.eq('owner_key', ownerKey);
       if (categoryId) query = query.eq('category_id', categoryId);
       query = query.order('created_at', { ascending: false });
-      const { data, error } = await query;
+      const { data, error } = await Promise.race([
+        query,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000)),
+      ]);
       if (!error && Array.isArray(data)) return data;
     } catch (err) {
       console.warn('[Supabase REST] pgListCustomTemplates warning:', err.message);
@@ -862,7 +865,10 @@ export async function pgListCustomTemplates(ownerKey = null, categoryId = null) 
         sql += ` AND category_id = $2`;
       }
       sql += ` ORDER BY created_at DESC`;
-      const { rows } = await pool.query(sql, params);
+      const { rows } = await Promise.race([
+        pool.query(sql, params),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000)),
+      ]);
       return rows || [];
     } catch {}
   }
@@ -878,21 +884,27 @@ export async function pgGetCustomTemplate(keyOrId) {
 
   if (sb) {
     try {
-      const { data, error } = await sb
-        .from('custom_templates')
-        .select('*')
-        .or(`id.eq.${k},slug.eq.${k},name.ilike.${k}`)
-        .limit(1);
+      const { data, error } = await Promise.race([
+        sb
+          .from('custom_templates')
+          .select('*')
+          .or(`id.eq.${k},slug.eq.${k},name.ilike.${k}`)
+          .limit(1),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000)),
+      ]);
       if (!error && data && data[0]) return data[0];
     } catch {}
   }
 
   if (pool) {
     try {
-      const { rows } = await pool.query(
-        `SELECT * FROM public.custom_templates WHERE id = $1 OR slug = $1 OR lower(name) = lower($1) LIMIT 1`,
-        [k]
-      );
+      const { rows } = await Promise.race([
+        pool.query(
+          `SELECT * FROM public.custom_templates WHERE id = $1 OR slug = $1 OR lower(name) = lower($1) LIMIT 1`,
+          [k]
+        ),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000)),
+      ]);
       return rows?.[0] || null;
     } catch {}
   }
