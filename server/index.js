@@ -2324,7 +2324,19 @@ function decodeSupabaseBalance(row, fallback = 15) {
   return intPart;
 }
 
+let _sbServerCircuitBreakerUntil = 0;
+function isServerSupabaseDegraded() {
+  return Date.now() < _sbServerCircuitBreakerUntil;
+}
+function tripServerSupabaseCircuitBreaker(ttlMs = 45000) {
+  _sbServerCircuitBreakerUntil = Date.now() + ttlMs;
+}
+function resetServerSupabaseCircuitBreaker() {
+  _sbServerCircuitBreakerUntil = 0;
+}
+
 async function getSupabaseUserPlanAndAi(ownerKey) {
+  if (isServerSupabaseDegraded()) return null;
   const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
   const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
   if (!sbUrl || !sbKey || !ownerKey) return null;
@@ -2334,14 +2346,14 @@ async function getSupabaseUserPlanAndAi(ownerKey) {
         `${sbUrl}/rest/v1/user_plans?user_id=eq.${encodeURIComponent(ownerKey)}&select=plan_tier,monthly_action_credits,monthly_ai_credits,monthly_ai_allowance_usd,ai_credits_balance`,
         {
           headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
-          signal: AbortSignal.timeout(3000),
+          signal: AbortSignal.timeout(1000),
         }
       ),
       fetch(
         `${sbUrl}/rest/v1/user_credits?user_id=eq.${encodeURIComponent(ownerKey)}&select=action_credits_balance,ai_credits_balance,ai_dollars_spent,updated_at`,
         {
           headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
-          signal: AbortSignal.timeout(3000),
+          signal: AbortSignal.timeout(1000),
         }
       ),
     ]);
@@ -2350,6 +2362,7 @@ async function getSupabaseUserPlanAndAi(ownerKey) {
     const pRow = Array.isArray(planRows) && planRows.length > 0 ? planRows[0] : null;
     const cRow = Array.isArray(credRows) && credRows.length > 0 ? credRows[0] : null;
     if (!pRow && !cRow) return null;
+    resetServerSupabaseCircuitBreaker();
     const planTier = pRow?.plan_tier || 'Free Plan';
     const aiBalance =
       cRow && typeof cRow.ai_credits_balance === 'number'
@@ -2368,12 +2381,14 @@ async function getSupabaseUserPlanAndAi(ownerKey) {
       monthlyAiAllowanceUsd: Number(pRow?.monthly_ai_allowance_usd ?? (monthlyAiCredits * 0.01)),
       aiDollarsSpent: Number(cRow?.ai_dollars_spent || 0),
     };
-  } catch {
+  } catch (err) {
+    tripServerSupabaseCircuitBreaker();
     return null;
   }
 }
 
 async function getSupabaseUserCredits(ownerKey, defaultBalance = 15) {
+  if (isServerSupabaseDegraded()) return defaultBalance;
   const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
   const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
   if (!sbUrl || !sbKey || !ownerKey) return defaultBalance;
@@ -2382,12 +2397,13 @@ async function getSupabaseUserCredits(ownerKey, defaultBalance = 15) {
       `${sbUrl}/rest/v1/user_credits?user_id=eq.${encodeURIComponent(ownerKey)}&select=action_credits_balance,ai_credits_balance,updated_at`,
       {
         headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(1000),
       }
     );
     if (credRes.ok) {
       const rows = await credRes.json();
       if (Array.isArray(rows) && rows.length > 0 && typeof rows[0].action_credits_balance === 'number') {
+        resetServerSupabaseCircuitBreaker();
         const decoded = decodeSupabaseBalance(rows[0], defaultBalance);
         try {
           db.prepare('UPDATE credit_accounts SET balance = ?, updated_at = ? WHERE owner_key = ?').run(decoded, Math.floor(Date.now() / 1000), ownerKey);
@@ -2396,9 +2412,9 @@ async function getSupabaseUserCredits(ownerKey, defaultBalance = 15) {
       }
     }
 
-    // Provision new row if not exists
+    // Provision new row if not exists (non-blocking)
     const encoded = encodeSupabaseBalance(defaultBalance);
-    await fetch(`${sbUrl}/rest/v1/user_credits`, {
+    fetch(`${sbUrl}/rest/v1/user_credits`, {
       method: 'POST',
       headers: {
         apikey: sbKey,
@@ -2412,10 +2428,11 @@ async function getSupabaseUserCredits(ownerKey, defaultBalance = 15) {
         ai_credits_balance: 0,
         updated_at: encoded.updated_at,
       }),
-      signal: AbortSignal.timeout(3000),
-    });
+      signal: AbortSignal.timeout(1000),
+    }).catch(() => {});
     return encoded.exactBalance;
   } catch (err) {
+    tripServerSupabaseCircuitBreaker();
     console.warn('[credits] Supabase get error:', err.message);
     return defaultBalance;
   }
@@ -2476,31 +2493,45 @@ app.get('/api/auth/me', authenticate, async (req, res) => {
     if (!ownerKey || ownerKey === 'dash-Free-Plan' || ownerKey === 'user_default') {
       return res.status(401).json({ ok: false, error: 'Not authenticated' });
     }
-    const pool = getPgPool();
-    let userRow = null;
-    if (pool) {
+
+    // 1. Instant local read (< 0.2ms)
+    const localAcct = getAccount(ownerKey);
+    let plan = localAcct?.plan || 'Free Plan';
+    let userCredits = typeof localAcct?.balance === 'number' ? localAcct.balance : 15;
+    let vibeCredits = 0;
+
+    // 2. Fetch live data if Supabase is healthy (race max 1000ms)
+    if (!isServerSupabaseDegraded()) {
       try {
-        const { rows } = await pool.query(
-          'SELECT * FROM public.lunao_users WHERE owner_key = $1 LIMIT 1',
-          [ownerKey]
-        );
-        userRow = rows?.[0] || null;
-      } catch {}
+        const [acct, aiStatus, sbPlanAi, sbCredits] = await Promise.race([
+          Promise.all([
+            getAccountAsync(ownerKey).catch(() => null),
+            getUserAiStatus(ownerKey).catch(() => null),
+            getSupabaseUserPlanAndAi(ownerKey).catch(() => null),
+            getSupabaseUserCredits(ownerKey, userCredits).catch(() => userCredits),
+          ]),
+          new Promise((resolve) => setTimeout(() => resolve([null, null, null, userCredits]), 1000)),
+        ]);
+        if (sbPlanAi?.plan) plan = sbPlanAi.plan;
+        else if (acct?.plan) plan = acct.plan;
+        else if (aiStatus?.plan) plan = aiStatus.plan;
+
+        if (typeof sbCredits === 'number') userCredits = sbCredits;
+
+        vibeCredits =
+          plan === 'Free Plan'
+            ? 0
+            : typeof sbPlanAi?.aiCreditsBalance === 'number'
+              ? sbPlanAi.aiCreditsBalance
+              : Number(aiStatus?.balanceCredits ?? 0);
+      } catch {
+        tripServerSupabaseCircuitBreaker();
+      }
+    } else {
+      const aiStatus = _localAccounts?.get ? _localAccounts.get(ownerKey) : null;
+      if (aiStatus?.plan) plan = aiStatus.plan;
+      vibeCredits = plan === 'Free Plan' ? 0 : Number(aiStatus?.balance || 0);
     }
-    const [acct, aiStatus, sbPlanAi] = await Promise.all([
-      getAccountAsync(ownerKey),
-      getUserAiStatus(ownerKey),
-      getSupabaseUserPlanAndAi(ownerKey),
-    ]);
-    const plan = sbPlanAi?.plan || acct?.plan || aiStatus?.plan || 'Free Plan';
-    // Authoritative balance directly from Supabase user_credits ledger:
-    const userCredits = await getSupabaseUserCredits(ownerKey, acct?.balance ?? 15);
-    const vibeCredits =
-      plan === 'Free Plan'
-        ? 0
-        : typeof sbPlanAi?.aiCreditsBalance === 'number'
-          ? sbPlanAi.aiCreditsBalance
-          : Number(aiStatus?.balanceCredits ?? 0);
 
     try {
       if (plan && plan !== 'Free Plan') {
@@ -2512,11 +2543,11 @@ app.get('/api/auth/me', authenticate, async (req, res) => {
     return res.json({
       ok: true,
       user: {
-        id: userRow?.uid || ownerKey,
+        id: ownerKey,
         ownerKey,
-        email: userRow?.email || req.user?.email || '',
-        name: userRow?.name || 'Lunao User',
-        picture: userRow?.avatar_url || '',
+        email: req.user?.email || '',
+        name: 'Lunao User',
+        picture: '',
       },
       plan,
       userCredits,
@@ -3418,18 +3449,38 @@ app.get('/api/credits', authenticate, async (req, res) => {
   try {
     const ownerKey = getAuthOwnerKey(req);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
-    const [balance, sbPlanAi] = await Promise.all([
-      getSupabaseUserCredits(ownerKey, 15),
-      getSupabaseUserPlanAndAi(ownerKey),
-    ]);
-    const plan = sbPlanAi?.plan || (req.query.plan ? String(req.query.plan) : 'Free Plan');
+
+    // 1. Instant local read (< 0.2ms)
+    const localAcct = getAccount(ownerKey);
+    let plan = localAcct?.plan || (req.query.plan ? String(req.query.plan) : 'Free Plan');
+    let balance = typeof localAcct?.balance === 'number' ? localAcct.balance : 15;
+    let vibeCredits = 0;
+
+    // 2. Race with Supabase if healthy
+    if (!isServerSupabaseDegraded()) {
+      try {
+        const [sbBalance, sbPlanAi] = await Promise.race([
+          Promise.all([
+            getSupabaseUserCredits(ownerKey, balance).catch(() => balance),
+            getSupabaseUserPlanAndAi(ownerKey).catch(() => null),
+          ]),
+          new Promise((resolve) => setTimeout(() => resolve([balance, null]), 1000)),
+        ]);
+        if (typeof sbBalance === 'number') balance = sbBalance;
+        if (sbPlanAi?.plan) plan = sbPlanAi.plan;
+        vibeCredits = sbPlanAi?.aiCreditsBalance ?? 0;
+      } catch {
+        tripServerSupabaseCircuitBreaker();
+      }
+    }
+
     res.json({
       ok: true,
       account: {
         ownerKey,
         plan,
         balance,
-        vibeCredits: sbPlanAi?.aiCreditsBalance ?? 0,
+        vibeCredits,
       },
       balance,
       plans: PLAN_BALANCE,

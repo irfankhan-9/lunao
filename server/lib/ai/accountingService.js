@@ -9,6 +9,17 @@ import { calculateUsageCost, getModelRates, normalizeModelId } from './pricingRe
 const _localAccounts = new Map();
 const _localLedger = new Map();
 
+let _sbAiCircuitBreakerUntil = 0;
+function isSbAiDegraded() {
+  return Date.now() < _sbAiCircuitBreakerUntil;
+}
+function tripSbAiCircuitBreaker(ttlMs = 45000) {
+  _sbAiCircuitBreakerUntil = Date.now() + ttlMs;
+}
+function resetSbAiCircuitBreaker() {
+  _sbAiCircuitBreakerUntil = 0;
+}
+
 export const PLAN_ALLOWANCES = {
   'Free Plan': { monthlyUsd: 0.00, monthlyCredits: 0, priceUsd: 0 },
   'Starter Plan': { monthlyUsd: 6.00, monthlyCredits: 600, priceUsd: 97 },
@@ -34,6 +45,7 @@ function getSupabaseRestCredentials() {
  * Helper: Fetch user's current plan and AI credit row directly from Supabase REST API.
  */
 async function fetchSupabaseAiAccount(userId) {
+  if (isSbAiDegraded()) return null;
   const { sbUrl, sbKey } = getSupabaseRestCredentials();
   if (!sbUrl || !sbKey || !userId) return null;
   try {
@@ -42,14 +54,14 @@ async function fetchSupabaseAiAccount(userId) {
         `${sbUrl}/rest/v1/user_plans?user_id=eq.${encodeURIComponent(userId)}&select=*&limit=1`,
         {
           headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
-          signal: AbortSignal.timeout(4000),
+          signal: AbortSignal.timeout(1000),
         }
       ),
       fetch(
         `${sbUrl}/rest/v1/user_credits?user_id=eq.${encodeURIComponent(userId)}&select=*&limit=1`,
         {
           headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
-          signal: AbortSignal.timeout(4000),
+          signal: AbortSignal.timeout(1000),
         }
       ),
     ]);
@@ -58,8 +70,10 @@ async function fetchSupabaseAiAccount(userId) {
     const planRow = Array.isArray(planRows) && planRows.length > 0 ? planRows[0] : null;
     const credRow = Array.isArray(credRows) && credRows.length > 0 ? credRows[0] : null;
     if (!planRow && !credRow) return null;
+    resetSbAiCircuitBreaker();
     return { planRow, credRow };
   } catch (err) {
+    tripSbAiCircuitBreaker(45000);
     console.warn('[accountingService] Supabase REST fetch notice:', err.message);
     return null;
   }
@@ -550,7 +564,7 @@ export async function syncUserAiPlan(userId, planName = 'Starter Plan', forceRes
   }
 
   // Provision or upgrade in Supabase REST
-  if (sbUrl && sbKey) {
+  if (sbUrl && sbKey && !isSbAiDegraded()) {
     try {
       const nowMs = Date.now();
       await fetch(`${sbUrl}/rest/v1/user_plans`, {
@@ -569,10 +583,11 @@ export async function syncUserAiPlan(userId, planName = 'Starter Plan', forceRes
           ai_credits_balance: planConfig.monthlyCredits,
           updated_at: nowMs,
         }),
-        signal: AbortSignal.timeout(4000),
+        signal: AbortSignal.timeout(1000),
       });
       await persistSupabaseAiBalance(effectiveUserId, planConfig.monthlyCredits, 0, planName);
     } catch (err) {
+      tripSbAiCircuitBreaker(45000);
       console.warn('[accountingService] syncUserAiPlan REST error:', err.message);
     }
   }
@@ -664,7 +679,48 @@ export async function getUserAiStatus(userId, planHint = null) {
     };
   }
 
-  // 2. If user does not exist yet in Supabase, provision with Free Plan (or planHint if specified)
+  // 2. Check local in-memory cache first if remote fetch timed out or was degraded
+  if (_localAccounts.has(effectiveUserId)) {
+    const cached = _localAccounts.get(effectiveUserId);
+    return {
+      userId: effectiveUserId,
+      plan: cached.plan || planHint || 'Free Plan',
+      monthlyCredits: cached.monthlyCredits || 0,
+      monthlyAllowanceUsd: Number(((cached.monthlyCredits || 0) * 0.01).toFixed(2)),
+      balanceCredits: typeof cached.balance === 'number' ? cached.balance : 0,
+      dollarsSpent: cached.dollarsSpent || 0,
+      cycleStart: new Date().toISOString(),
+      cycleEnd: new Date(Date.now() + 30 * 86400000).toISOString(),
+      isFree: (cached.plan || 'Free Plan') === 'Free Plan',
+    };
+  }
+
+  // 3. If degraded, don't stall waiting on remote provisioning
+  if (isSbAiDegraded()) {
+    const fallbackPlan = planHint || 'Free Plan';
+    const planCfg = getPlanConfig(fallbackPlan);
+    const balanceCredits = fallbackPlan === 'Free Plan' ? 0 : planCfg.monthlyCredits;
+    _localAccounts.set(effectiveUserId, {
+      userId: effectiveUserId,
+      plan: fallbackPlan,
+      balance: balanceCredits,
+      monthlyCredits: planCfg.monthlyCredits,
+      dollarsSpent: 0,
+    });
+    return {
+      userId: effectiveUserId,
+      plan: fallbackPlan,
+      monthlyCredits: planCfg.monthlyCredits,
+      monthlyAllowanceUsd: planCfg.monthlyUsd,
+      balanceCredits,
+      dollarsSpent: 0,
+      cycleStart: new Date().toISOString(),
+      cycleEnd: new Date(Date.now() + 30 * 86400000).toISOString(),
+      isFree: fallbackPlan === 'Free Plan',
+    };
+  }
+
+  // 4. If user does not exist yet in Supabase, provision with Free Plan (or planHint if specified)
   const initialPlan = planHint || 'Free Plan';
   const synced = await syncUserAiPlan(effectiveUserId, initialPlan, true);
   return {

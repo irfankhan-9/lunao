@@ -162,8 +162,10 @@ function AppRouter() {
     }
   }, [loading, route, unlocked]);
 
-  // While checking the session, show a clean loading spinner.
-  if (loading) {
+  // Only show the loading spinner if explicitly on the protected /app route
+  // and we do not yet have a stored unlocked session.
+  // The landing page (/) and public routes render INSTANTLY with zero blocking spinner!
+  if (loading && route === '/app' && !unlocked) {
     return (
       <div className="flex items-center justify-center h-screen bg-off-white">
         <div className="flex flex-col items-center gap-3">

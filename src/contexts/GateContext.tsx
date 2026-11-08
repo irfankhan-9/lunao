@@ -43,7 +43,7 @@ function readStoredUser(): AuthUser | null {
 export function GateProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => readStoredUser());
   const [unlocked, setUnlocked] = useState<boolean>(() => Boolean(readStoredUser()));
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(() => !Boolean(readStoredUser()));
 
   const applyAuthenticatedSession = useCallback(
     (
@@ -133,6 +133,7 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
           'x-owner-key': stored.ownerKey,
           Authorization: `Bearer ${stored.ownerKey}`,
         },
+        signal: AbortSignal.timeout(1500),
       });
       if (res.ok) {
         const data = await res.json();
@@ -171,6 +172,7 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
             'x-owner-key': authUser.ownerKey,
             Authorization: `Bearer ${authUser.ownerKey}`,
           },
+          signal: AbortSignal.timeout(1500),
         });
         if (res.ok) {
           const data = await res.json();
@@ -191,7 +193,12 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
 
     (async () => {
       try {
-        const { data } = await supabaseClient.auth.getSession();
+        const sessionPromise = supabaseClient.auth.getSession();
+        const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) =>
+          setTimeout(() => resolve({ data: { session: null } }), 1200)
+        );
+        const { data } = await Promise.race([sessionPromise, timeoutPromise]).catch(() => ({ data: { session: null } }));
+
         if (data?.session?.user) {
           const sbUser = data.session.user;
           const email = sbUser.email || 'user@lunao.app';
