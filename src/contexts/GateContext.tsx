@@ -265,69 +265,71 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Standard 1-tap Google User sign-in (Real Google OAuth popup + server sync)
+  // Standard 1-tap Google User sign-in (Official GIS popup + server session minting)
   const signInWithGoogle = useCallback(async (): Promise<AuthUser> => {
+    let googleUser: { uid: string; email: string; name: string; picture: string } | null = null;
+
+    // 1. Primary: Google Identity Services (GIS)
     try {
-      const { signInWithGooglePopup } = await import('../lib/firebaseAuth');
-      const googleUser = await signInWithGooglePopup();
-      if (!googleUser || !googleUser.email) {
-        throw new Error('Google sign-in was canceled.');
+      const { signInWithGoogleGIS } = await import('../lib/gisAuth');
+      googleUser = await signInWithGoogleGIS();
+    } catch (gisErr: any) {
+      const msg = String(gisErr?.message || '');
+      if (msg.includes('popup-closed-by-user') || msg.includes('access_denied')) {
+        throw gisErr;
       }
-
-      const res = await fetch('/api/auth/google-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          uid: googleUser.uid,
-          email: googleUser.email,
-          name: googleUser.name,
-          picture: googleUser.picture,
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok || !data.user) {
-        throw new Error(data.error || 'Failed to authenticate Google session on server.');
+      console.warn('[auth] GIS sign-in notice, attempting Firebase Auth fallback:', msg);
+      // 2. Secondary fallback: Firebase Auth
+      try {
+        const { signInWithGooglePopup } = await import('../lib/firebaseAuth');
+        googleUser = await signInWithGooglePopup();
+      } catch (fbErr: any) {
+        if (String(fbErr?.message || '').includes('popup-closed-by-user')) {
+          throw fbErr;
+        }
+        throw new Error('Google sign-in could not be completed. Please allow popups and try again.');
       }
-
-      const authUser: AuthUser = {
-        id: data.user.id || googleUser.uid,
-        ownerKey: data.user.ownerKey,
-        email: data.user.email || googleUser.email,
-        name: data.user.name || googleUser.name,
-        picture: data.user.picture || googleUser.picture,
-        plan: data.plan || 'Free Plan',
-        credits: data.userCredits,
-        vibeCredits: data.vibeCredits,
-      };
-
-      applyAuthenticatedSession(
-        authUser,
-        data.plan || 'Free Plan',
-        data.userCredits,
-        data.vibeCredits
-      );
-      return authUser;
-    } catch (fbErr: any) {
-      const msg = String(fbErr?.message || '');
-      if (msg.includes('popup-closed-by-user') || msg.includes('cancelled-popup-request')) {
-        throw fbErr;
-      }
-      console.warn('[auth] Firebase Google popup fallback to Supabase:', msg);
-      const { data, error } = await supabaseClient.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin,
-        },
-      });
-      if (error) {
-        throw new Error(error.message || 'Unable to connect to Google account. Please verify credentials and try again.');
-      }
-      if (data?.url) {
-        window.location.href = data.url;
-      }
-      return new Promise(() => {});
     }
+
+    if (!googleUser || !googleUser.email) {
+      throw new Error('Google sign-in was canceled.');
+    }
+
+    // Exchange Google credentials with backend session
+    const res = await fetch('/api/auth/google-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        uid: googleUser.uid,
+        email: googleUser.email,
+        name: googleUser.name,
+        picture: googleUser.picture,
+      }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok || !data.user) {
+      throw new Error(data.error || 'Failed to authenticate Google session on server.');
+    }
+
+    const authUser: AuthUser = {
+      id: data.user.id || googleUser.uid,
+      ownerKey: data.user.ownerKey,
+      email: data.user.email || googleUser.email,
+      name: data.user.name || googleUser.name,
+      picture: data.user.picture || googleUser.picture,
+      plan: data.plan || 'Free Plan',
+      credits: data.userCredits,
+      vibeCredits: data.vibeCredits,
+    };
+
+    applyAuthenticatedSession(
+      authUser,
+      data.plan || 'Free Plan',
+      data.userCredits,
+      data.vibeCredits
+    );
+    return authUser;
   }, [applyAuthenticatedSession]);
 
   const logout = useCallback(async () => {
