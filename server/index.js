@@ -3297,10 +3297,17 @@ app.get('/api/sites/:slug/invite-codes', authenticate, async (req, res) => {
     } else if (!access.ok && access.status === 403) {
       return res.status(403).json({ ok: false, error: access.error || 'Access denied for this site' });
     }
-    const [codes, pwaActive, quota] = await Promise.all([
-      listCodesAsync(slug),
-      isPwaActiveForSlugAsync(slug),
-      getOwnerPwaQuotaStatusAsync(ownerKey, req.headers['x-user-plan'] || req.query?.plan),
+    const [codes, pwaActive, quota] = await Promise.race([
+      Promise.all([
+        listCodesAsync(slug),
+        isPwaActiveForSlugAsync(slug),
+        getOwnerPwaQuotaStatusAsync(ownerKey, req.headers['x-user-plan'] || req.query?.plan),
+      ]),
+      new Promise((resolve) => setTimeout(() => resolve([
+        listCodes(slug),
+        isPwaActiveForSlug(slug),
+        null
+      ]), 1200))
     ]);
     res.json({ ok: true, codes, pwaActive, quota });
   } catch (err) {

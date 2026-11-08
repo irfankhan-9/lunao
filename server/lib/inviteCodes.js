@@ -90,44 +90,46 @@ export async function listCodesAsync(slug) {
     return localCodes;
   }
 
-  // 2. Fallback to Supabase with strict 1000ms timeout
+  // 2. Fallback to Supabase with strict 500ms timeout
   try {
-    const { getSupabase } = await import('./supabase.js');
-    const sb = getSupabase();
-    if (sb) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 1000);
-      const { data } = await sb
-        .from('invite_codes')
-        .select('*')
-        .eq('slug', cleanSlug)
-        .order('created_at', { ascending: false })
-        .abortSignal(controller.signal);
-      clearTimeout(timer);
-      if (Array.isArray(data) && data.length > 0) {
-        for (const d of data) {
-          try {
-            db.prepare(
-              `INSERT INTO invite_codes (code, slug, label, created_at, used_at, last_active_at, redeemed_count, revoked_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(code) DO UPDATE SET
-                 slug=excluded.slug,
-                 used_at=COALESCE(excluded.used_at, invite_codes.used_at),
-                 last_active_at=COALESCE(excluded.last_active_at, invite_codes.last_active_at),
-                 redeemed_count=COALESCE(excluded.redeemed_count, invite_codes.redeemed_count),
-                 revoked_at=excluded.revoked_at`
-            ).run(
-              d.code,
-              d.slug,
-              d.label || null,
-              d.created_at || Date.now(),
-              d.used_at || null,
-              d.last_active_at || null,
-              d.redeemed_count || 0,
-              d.revoked_at || null
-            );
-          } catch {}
-        }
+    const remoteCodes = await Promise.race([
+      (async () => {
+        const { getSupabase } = await import('./supabase.js');
+        const sb = getSupabase();
+        if (!sb) return [];
+        const { data } = await sb
+          .from('invite_codes')
+          .select('*')
+          .eq('slug', cleanSlug)
+          .order('created_at', { ascending: false });
+        return Array.isArray(data) ? data : [];
+      })(),
+      new Promise((resolve) => setTimeout(() => resolve([]), 500)),
+    ]);
+
+    if (remoteCodes && remoteCodes.length > 0) {
+      for (const d of remoteCodes) {
+        try {
+          db.prepare(
+            `INSERT INTO invite_codes (code, slug, label, created_at, used_at, last_active_at, redeemed_count, revoked_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(code) DO UPDATE SET
+               slug=excluded.slug,
+               used_at=COALESCE(excluded.used_at, invite_codes.used_at),
+               last_active_at=COALESCE(excluded.last_active_at, invite_codes.last_active_at),
+               redeemed_count=COALESCE(excluded.redeemed_count, invite_codes.redeemed_count),
+               revoked_at=excluded.revoked_at`
+          ).run(
+            d.code,
+            d.slug,
+            d.label || null,
+            d.created_at || Date.now(),
+            d.used_at || null,
+            d.last_active_at || null,
+            d.redeemed_count || 0,
+            d.revoked_at || null
+          );
+        } catch {}
       }
     }
   } catch {}
@@ -148,31 +150,37 @@ export async function persistInviteCodeToSupabase(rec) {
   };
 
   try {
-    const { getSupabase } = await import('./supabase.js');
-    const sb = getSupabase();
-    if (sb) {
-      const { error } = await sb.from('invite_codes').upsert(payload, { onConflict: 'code' });
-      if (!error) return;
-    }
-  } catch {}
+    await Promise.race([
+      (async () => {
+        try {
+          const { getSupabase } = await import('./supabase.js');
+          const sb = getSupabase();
+          if (sb) {
+            const { error } = await sb.from('invite_codes').upsert(payload, { onConflict: 'code' });
+            if (!error) return;
+          }
+        } catch {}
 
-  // REST API fallback
-  try {
-    const SUPABASE_URL = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
-    const SUPABASE_KEY =
-      process.env.SUPABASE_SECRET_KEY ||
-      process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      (typeof atob === 'function' ? atob('c2Jfc2VjcmV0X1lJREpNaG1JSTlyaTJ2Q2JaSWdHUmdfSWFMNXhLd2Y=') : '');
-    await fetch(`${SUPABASE_URL}/rest/v1/invite_codes`, {
-      method: 'POST',
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'application/json',
-        Prefer: 'resolution=merge-duplicates',
-      },
-      body: JSON.stringify(payload),
-    });
+        try {
+          const SUPABASE_URL = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+          const SUPABASE_KEY =
+            process.env.SUPABASE_SECRET_KEY ||
+            process.env.SUPABASE_SERVICE_ROLE_KEY ||
+            (typeof atob === 'function' ? atob('c2Jfc2VjcmV0X1lJREpNaG1JSTlyaTJ2Q2JaSWdHUmdfSWFMNXhLd2Y=') : '');
+          await fetch(`${SUPABASE_URL}/rest/v1/invite_codes`, {
+            method: 'POST',
+            headers: {
+              apikey: SUPABASE_KEY,
+              Authorization: `Bearer ${SUPABASE_KEY}`,
+              'Content-Type': 'application/json',
+              Prefer: 'resolution=merge-duplicates',
+            },
+            body: JSON.stringify(payload),
+          });
+        } catch {}
+      })(),
+      new Promise((resolve) => setTimeout(resolve, 800)),
+    ]);
   } catch {}
 }
 
@@ -344,58 +352,55 @@ export async function isPwaActiveForSlugAsync(slug) {
   if (!slug) return false;
   const cleanSlug = String(slug).trim().toLowerCase().replace(/^\/+|\/+$/g, '');
 
-  // 1. Check local DB (instant)
+  // 1. Check local DB (instant <1ms)
   if (isPwaActiveForSlug(cleanSlug)) {
     return true;
   }
 
-  // 2. Check Postgres pool (direct connection to Supabase DB)
+  // 2. Check remote Supabase / PG pool with strict 500ms race timeout
   try {
-    const { getPgPool } = await import('./supabase.js');
-    const pool = getPgPool();
-    if (pool) {
-      // Check if any non-revoked invite code has been generated for this slug
-      const { rows: codeRows } = await pool.query(
-        'SELECT 1 FROM invite_codes WHERE LOWER(slug) = $1 AND revoked_at IS NULL LIMIT 1',
-        [cleanSlug]
-      );
-      if (codeRows && codeRows.length > 0) {
+    const remoteActive = await Promise.race([
+      (async () => {
         try {
-          db.prepare('INSERT OR IGNORE INTO invite_codes (code, slug, created_at) VALUES (?, ?, ?)').run(
-            `SYNC-${cleanSlug.slice(0, 8)}`,
-            cleanSlug,
-            Date.now()
-          );
+          const { getPgPool } = await import('./supabase.js');
+          const pool = getPgPool();
+          if (pool) {
+            const { rows: codeRows } = await pool.query(
+              'SELECT 1 FROM invite_codes WHERE LOWER(slug) = $1 AND revoked_at IS NULL LIMIT 1',
+              [cleanSlug]
+            );
+            if (codeRows && codeRows.length > 0) return true;
+          }
         } catch (_) {}
-        return true;
-      }
-      return false;
-    }
-  } catch (_) {}
 
-  // 3. Check Supabase REST / SDK client
-  try {
-    const { getSupabase } = await import('./supabase.js');
-    const sb = getSupabase();
-    if (sb) {
-      // Check if any non-revoked invite code has been generated for this slug
-      const { data: codeData } = await sb
-        .from('invite_codes')
-        .select('code, revoked_at')
-        .eq('slug', cleanSlug)
-        .is('revoked_at', null)
-        .limit(1);
-      if (codeData && codeData.length > 0) {
         try {
-          db.prepare('INSERT OR IGNORE INTO invite_codes (code, slug, created_at) VALUES (?, ?, ?)').run(
-            `SYNC-${cleanSlug.slice(0, 8)}`,
-            cleanSlug,
-            Date.now()
-          );
+          const { getSupabase } = await import('./supabase.js');
+          const sb = getSupabase();
+          if (sb) {
+            const { data: codeData } = await sb
+              .from('invite_codes')
+              .select('code, revoked_at')
+              .eq('slug', cleanSlug)
+              .is('revoked_at', null)
+              .limit(1);
+            if (codeData && codeData.length > 0) return true;
+          }
         } catch (_) {}
-        return true;
-      }
-      return false;
+
+        return false;
+      })(),
+      new Promise((resolve) => setTimeout(() => resolve(false), 500)),
+    ]);
+
+    if (remoteActive) {
+      try {
+        db.prepare('INSERT OR IGNORE INTO invite_codes (code, slug, created_at) VALUES (?, ?, ?)').run(
+          `SYNC-${cleanSlug.slice(0, 8)}`,
+          cleanSlug,
+          Date.now()
+        );
+      } catch (_) {}
+      return true;
     }
   } catch (_) {}
 
@@ -423,38 +428,47 @@ export async function getOrCreateCodeForSlugAsync(slug, preferredCode = null, la
   ).get(cleanSlug);
   if (existingLocal) return rowToRecord(existingLocal);
 
-  // 2. Check Supabase
+  // 2. Check Supabase with 500ms race timeout
   try {
-    const { getSupabase } = await import('./supabase.js');
-    const sb = getSupabase();
-    if (sb) {
-      const { data } = await sb
-        .from('invite_codes')
-        .select('*')
-        .eq('slug', cleanSlug)
-        .is('revoked_at', null)
-        .order('id', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (data) {
-        db.prepare(
-          `INSERT INTO invite_codes (code, slug, label, created_at, used_at, last_active_at, redeemed_count, revoked_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(code) DO UPDATE SET slug=excluded.slug, revoked_at=excluded.revoked_at`
-        ).run(
-          data.code,
-          data.slug,
-          data.label || null,
-          data.created_at || Date.now(),
-          data.used_at || null,
-          data.last_active_at || null,
-          data.redeemed_count || 0,
-          data.revoked_at || null
-        );
-        return rowToRecord(data);
-      }
-    }
+    await Promise.race([
+      (async () => {
+        const { getSupabase } = await import('./supabase.js');
+        const sb = getSupabase();
+        if (sb) {
+          const { data } = await sb
+            .from('invite_codes')
+            .select('*')
+            .eq('slug', cleanSlug)
+            .is('revoked_at', null)
+            .order('id', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (data) {
+            db.prepare(
+              `INSERT INTO invite_codes (code, slug, label, created_at, used_at, last_active_at, redeemed_count, revoked_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(code) DO UPDATE SET slug=excluded.slug, revoked_at=excluded.revoked_at`
+            ).run(
+              data.code,
+              data.slug,
+              data.label || null,
+              data.created_at || Date.now(),
+              data.used_at || null,
+              data.last_active_at || null,
+              data.redeemed_count || 0,
+              data.revoked_at || null
+            );
+          }
+        }
+      })(),
+      new Promise((resolve) => setTimeout(resolve, 500)),
+    ]);
   } catch {}
+
+  const refreshedLocal = db.prepare(
+    'SELECT * FROM invite_codes WHERE LOWER(slug) = ? AND revoked_at IS NULL ORDER BY id DESC LIMIT 1'
+  ).get(cleanSlug);
+  if (refreshedLocal) return rowToRecord(refreshedLocal);
 
   // 3. Verify that the slug is a legitimate deployed website before auto-provisioning
   let isValid = false;
@@ -465,12 +479,17 @@ export async function getOrCreateCodeForSlugAsync(slug, preferredCode = null, la
 
   if (!isValid) {
     try {
-      const { getSupabase } = await import('./supabase.js');
-      const sb = getSupabase();
-      if (sb) {
-        const { data } = await sb.from('user_sites').select('id').eq('slug', cleanSlug).limit(1);
-        if (data && data.length > 0) isValid = true;
-      }
+      await Promise.race([
+        (async () => {
+          const { getSupabase } = await import('./supabase.js');
+          const sb = getSupabase();
+          if (sb) {
+            const { data } = await sb.from('user_sites').select('id').eq('slug', cleanSlug).limit(1);
+            if (data && data.length > 0) isValid = true;
+          }
+        })(),
+        new Promise((resolve) => setTimeout(resolve, 500)),
+      ]);
     } catch {}
   }
 
@@ -504,16 +523,23 @@ export async function getOwnerKeyForSlugAsync(slug) {
   } catch {}
 
   try {
-    const { getSupabase } = await import('./supabase.js');
-    const sb = getSupabase();
-    if (sb) {
-      const { data } = await sb
-        .from('user_sites')
-        .select('owner_id')
-        .eq('slug', cleanSlug)
-        .maybeSingle();
-      if (data && data.owner_id) return String(data.owner_id);
-    }
+    const remoteOwner = await Promise.race([
+      (async () => {
+        const { getSupabase } = await import('./supabase.js');
+        const sb = getSupabase();
+        if (sb) {
+          const { data } = await sb
+            .from('user_sites')
+            .select('owner_id')
+            .eq('slug', cleanSlug)
+            .maybeSingle();
+          if (data && data.owner_id) return String(data.owner_id);
+        }
+        return null;
+      })(),
+      new Promise((resolve) => setTimeout(() => resolve(null), 500)),
+    ]);
+    if (remoteOwner) return remoteOwner;
   } catch {}
 
   return null;
