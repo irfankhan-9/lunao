@@ -352,7 +352,9 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
     }
     const doc = iframeRef.current?.contentDocument;
     if (!doc || !doc.documentElement) return htmlRef.current;
-    const html = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+    let html = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+    // Clean temporary visual editing outline and cursor styles from images
+    html = html.replace(/\s*style="outline:\s*2px\s*dashed\s*rgba\(37,\s*99,\s*235,\s*0\.6\);\s*cursor:\s*pointer;"/gi, '');
     htmlRef.current = html;
     return html;
   }, [showCodeView, codeBuffer]);

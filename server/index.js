@@ -101,6 +101,7 @@ import {
   renameCode,
   touchCode,
   isValidCodeFormat,
+  isPwaActiveForSlug,
   isPwaActiveForSlugAsync,
   getOrCreateCodeForSlug,
   getOwnerKeyForSlugAsync,
