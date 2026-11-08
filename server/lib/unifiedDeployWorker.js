@@ -307,49 +307,20 @@ export async function executeUnifiedLeadRebrandAndDeploy({
       });
 
       // 1. Fast Edge Verification: Because Stage 2 confirmed the site in Supabase
-      // and staged it on disk, Cloudflare Pages edge router (_worker.js) serves it immediately.
-      liveVerification = await verifyLiveCloudflareUrl(liveUrl, business.name, 3);
+      // and staged it on disk, Cloudflare Pages edge router (_worker.js) and EC2 backend serve it immediately.
+      liveVerification = await verifyLiveCloudflareUrl(liveUrl, business.name, 4);
       if (liveVerification.ok) {
         deployed = true;
+        // Background deployment to sync static edge bundle without blocking client response
+        publishBatch().catch((err) => console.warn('[unified-worker] background publishBatch notice:', err.message));
       } else {
-        // 2. If not immediately warm at the edge, execute deployment
-        let deployErrorReason = '';
-        const maxDeployAttempts = 2;
-
-        for (let deployAttempt = 1; deployAttempt <= maxDeployAttempts; deployAttempt++) {
-          try {
-            const pubRes = await publishBatch();
-            if (pubRes?.deployed) {
-              deployed = true;
-              break;
-            }
-            deployErrorReason = pubRes?.reason || 'Lunao Servers deployment did not complete.';
-          } catch (err) {
-            deployErrorReason = err.message || 'Lunao Servers deployment failed.';
-            console.warn(`[unified-worker] Lunao Servers deploy attempt ${deployAttempt}/${maxDeployAttempts} error:`, deployErrorReason);
-          }
-          if (deployAttempt < maxDeployAttempts && Date.now() - cloudflareStartMs < MAX_CLOUDFLARE_RETRY_WINDOW_MS) {
-            await sleep(1000);
-          }
-        }
-
-        if (!deployed) {
-          return {
-            ok: false,
-            statusCode: 502,
-            deployed: false,
-            verifiedLive: false,
-            verifiedOnCloudflare: false,
-            savedToSupabase: Boolean(siteRegistration?.savedToSupabase),
-            slug,
-            siteUrl: null,
-            stages,
-            error: `Lunao Servers deployment failed for "${business.name}": ${deployErrorReason}`.replace(/supabase(\s+cloud)?|cloudflare(\s+pages)?/gi, 'Lunao Servers'),
-          };
-        }
-
-        liveVerification = await verifyLiveCloudflareUrl(liveUrl, business.name, 4);
-        if (!liveVerification.ok) {
+        // Edge cache warming backoff: wait 1200ms and probe one more time
+        await sleep(1200);
+        liveVerification = await verifyLiveCloudflareUrl(liveUrl, business.name, 3);
+        if (liveVerification.ok) {
+          deployed = true;
+          publishBatch().catch((err) => console.warn('[unified-worker] background publishBatch notice:', err.message));
+        } else {
           return {
             ok: false,
             statusCode: 502,

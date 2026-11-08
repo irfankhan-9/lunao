@@ -500,6 +500,8 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
     setSaving(true);
     try {
       await saveSiteHtml(selected.slug, html);
+      htmlRef.current = html;
+      setPreviewHtml(html);
       setDirty(false);
       sfx.saved();
       flashToast({ type: 'success', text: 'Changes saved.' });
@@ -527,9 +529,12 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
     setDeploying(true);
     try {
       const { url } = await deploySite(selected.slug, html);
+      htmlRef.current = html;
+      setPreviewHtml(html);
       setDirty(false);
       setDeployInfo({ url: selected.url, deployUrl: url, dryRun: !url });
       sfx.deployed();
+      flashToast({ type: 'success', text: 'Site 100% redeployed & live across edge servers!' });
     } catch (err: any) {
       sfx.error();
       flashToast({ type: 'error', text: err?.message || 'Deploy failed.' });

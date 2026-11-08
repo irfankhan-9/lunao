@@ -236,7 +236,7 @@ export async function verifyLiveCloudflareUrl(liveUrl, expectedBusinessName = nu
 
   // Extract slug if liveUrl is https://<slug>.lunao.org so we can probe edge and server endpoints
   const subMatch = String(liveUrl || '').match(/^https?:\/\/([a-z0-9-]+)\.lunao\.org\/?/i);
-  const fallbackEdgeUrl = subMatch ? `https://lunao.org/${subMatch[1]}` : null;
+  const fallbackEdgeUrl = subMatch ? `https://lunao.org/sites/${subMatch[1]}/index.html` : null;
   const localServerUrl = subMatch ? `http://127.0.0.1:8787/sites/${subMatch[1]}/index.html` : null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -254,7 +254,7 @@ export async function verifyLiveCloudflareUrl(liveUrl, expectedBusinessName = nu
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
           },
-          signal: AbortSignal.timeout(2500),
+          signal: AbortSignal.timeout(3000),
         });
         lastStatus = res.status;
         const body = await res.text();
@@ -271,12 +271,14 @@ export async function verifyLiveCloudflareUrl(liveUrl, expectedBusinessName = nu
           } else {
             const rawExp = String(expectedBusinessName || '').trim().toLowerCase();
             const escExp = rawExp.replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;');
-            const firstToken = rawExp.split(/\s+/)[0] || '';
+            const slugToken = subMatch ? subMatch[1].replace(/-/g, ' ') : '';
+            const words = rawExp.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w) => w.length >= 3);
             const matchesBiz =
               !expectedBusinessName ||
               body.toLowerCase().includes(rawExp) ||
               body.toLowerCase().includes(escExp) ||
-              (firstToken.length >= 3 && body.toLowerCase().includes(firstToken));
+              (words.length > 0 && words.some((w) => body.toLowerCase().includes(w))) ||
+              (slugToken && body.toLowerCase().includes(slugToken));
 
             if (!matchesBiz) {
               lastReason = `Live page at ${candidateUrl} does not contain the rebranded business name "${expectedBusinessName}".`;

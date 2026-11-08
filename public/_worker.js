@@ -376,63 +376,80 @@ self.addEventListener('activate', (e) => {
       const subSlug = hostLower.slice(0, -'.lunao.org'.length);
       const reservedSubs = ['www', 'api', 'app', 'admin', 'mail', 'smtp', 'ftp', 'staging', 'dev'];
       if (subSlug && !reservedSubs.includes(subSlug) && !subSlug.includes('.')) {
-        try {
-          const sbKey = getSupabaseKey(env);
-          const sbRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/user_sites?slug=ilike.${subSlug}&select=compiled_html&_t=${Date.now()}`,
-            {
-              cf: { cacheTtl: 0, cacheEverything: false },
-              headers: {
-                apikey: sbKey,
-                Authorization: `Bearer ${sbKey}`,
-                Accept: 'application/json',
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-              },
-              signal: AbortSignal.timeout(1500),
+        // Fast dual-fetch: probe EC2 Origin (< 15ms) and Supabase concurrently.
+        // Return whichever succeeds first with valid HTML!
+        const fetchEc2 = async () => {
+          try {
+            const ec2Url = `${BACKEND_ORIGIN}/sites/${subSlug}/index.html?_t=${Date.now()}`;
+            const ec2Res = await fetch(ec2Url, {
+              headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+              signal: AbortSignal.timeout(2000),
+            });
+            if (ec2Res.ok) {
+              const ec2Html = await ec2Res.text();
+              if (ec2Html && ec2Html.length > 1500 && !ec2Html.includes('Site Customization In Progress')) {
+                return ec2Html;
+              }
             }
-          );
-          if (sbRes.ok) {
-            const data = await sbRes.json();
-            if (data && data.length > 0 && data[0].compiled_html) {
-              const html = transformUserSiteHtml(data[0].compiled_html, subSlug);
-              return new Response(html, {
-                status: 200,
-                headers: {
-                  'Content-Type': 'text/html; charset=utf-8',
-                  'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
-                  'Pragma': 'no-cache',
-                  'Expires': '0',
-                  ...SECURITY_HEADERS,
-                },
-              });
-            }
-          }
-        } catch {
-          // Fall through to EC2 fallback
-        }
+          } catch {}
+          return null;
+        };
 
-        // EC2 Backend Fallback (serves /sites/<subSlug>/index.html staged on server)
-        try {
-          const ec2Url = `${BACKEND_ORIGIN}/sites/${subSlug}/index.html`;
-          const ec2Res = await fetch(ec2Url, {
-            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
-            signal: AbortSignal.timeout(2500),
-          });
-          if (ec2Res.ok) {
-            const ec2Html = await ec2Res.text();
-            if (ec2Html && ec2Html.length > 2000 && !ec2Html.includes('Site Customization In Progress')) {
-              const html = transformUserSiteHtml(ec2Html, subSlug);
-              return new Response(html, {
-                status: 200,
+        const fetchSupabase = async () => {
+          try {
+            const sbKey = getSupabaseKey(env);
+            const sbRes = await fetch(
+              `${SUPABASE_URL}/rest/v1/user_sites?slug=ilike.${subSlug}&select=compiled_html&_t=${Date.now()}`,
+              {
+                cf: { cacheTtl: 0, cacheEverything: false },
                 headers: {
-                  'Content-Type': 'text/html; charset=utf-8',
-                  'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
-                  'Pragma': 'no-cache',
-                  'Expires': '0',
-                  ...SECURITY_HEADERS,
+                  apikey: sbKey,
+                  Authorization: `Bearer ${sbKey}`,
+                  Accept: 'application/json',
+                  'Cache-Control': 'no-cache, no-store, must-revalidate',
                 },
-              });
+                signal: AbortSignal.timeout(1500),
+              }
+            );
+            if (sbRes.ok) {
+              const data = await sbRes.json();
+              if (data && data.length > 0 && data[0].compiled_html && data[0].compiled_html.length > 1500) {
+                return data[0].compiled_html;
+              }
             }
+          } catch {}
+          return null;
+        };
+
+        try {
+          const rawHtml = await new Promise((resolve) => {
+            let settled = 0;
+            let resolved = false;
+            const tryResolve = (val) => {
+              settled++;
+              if (val && !resolved) {
+                resolved = true;
+                resolve(val);
+              } else if (settled >= 2 && !resolved) {
+                resolve(null);
+              }
+            };
+            fetchEc2().then(tryResolve);
+            fetchSupabase().then(tryResolve);
+          });
+
+          if (rawHtml) {
+            const html = transformUserSiteHtml(rawHtml, subSlug);
+            return new Response(html, {
+              status: 200,
+              headers: {
+                'Content-Type': 'text/html; charset=utf-8',
+                'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+                'Pragma': 'no-cache',
+                'Expires': '0',
+                ...SECURITY_HEADERS,
+              },
+            });
           }
         } catch {}
       }
