@@ -14,7 +14,10 @@ const BACKEND_ORIGIN = 'http://ec2-51-21-181-63.eu-north-1.compute.amazonaws.com
 const SUPABASE_URL = 'https://wqlbuadknltsjfzrltpe.supabase.co';
 
 function getSupabaseKey(env) {
-  return (env && (env.SUPABASE_KEY || env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY)) || '';
+  return (
+    (env && (env.SUPABASE_KEY || env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY)) ||
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndxbGJ1YWRrbmx0c2pmenJsdHBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxMzE3ODksImV4cCI6MjEwNzcwNzc4OX0.et1OsefPRtiP3OTodktsfhf3Bxbaq6_zY7XdMUZ53Bw'
+  );
 }
 
 // Standard security headers to inject on all responses
@@ -385,6 +388,7 @@ self.addEventListener('activate', (e) => {
                 Accept: 'application/json',
                 'Cache-Control': 'no-cache, no-store, must-revalidate',
               },
+              signal: AbortSignal.timeout(1500),
             }
           );
           if (sbRes.ok) {
@@ -404,8 +408,33 @@ self.addEventListener('activate', (e) => {
             }
           }
         } catch {
-          // Fall through to EC2 /sites/ fallback
+          // Fall through to EC2 fallback
         }
+
+        // EC2 Backend Fallback (serves /sites/<subSlug>/index.html staged on server)
+        try {
+          const ec2Url = `${BACKEND_ORIGIN}/sites/${subSlug}/index.html`;
+          const ec2Res = await fetch(ec2Url, {
+            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+            signal: AbortSignal.timeout(2500),
+          });
+          if (ec2Res.ok) {
+            const ec2Html = await ec2Res.text();
+            if (ec2Html && ec2Html.length > 2000 && !ec2Html.includes('Site Customization In Progress')) {
+              const html = transformUserSiteHtml(ec2Html, subSlug);
+              return new Response(html, {
+                status: 200,
+                headers: {
+                  'Content-Type': 'text/html; charset=utf-8',
+                  'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+                  'Pragma': 'no-cache',
+                  'Expires': '0',
+                  ...SECURITY_HEADERS,
+                },
+              });
+            }
+          }
+        } catch {}
       }
     }
 
@@ -432,6 +461,7 @@ self.addEventListener('activate', (e) => {
                 Accept: 'application/json',
                 'Cache-Control': 'no-cache, no-store, must-revalidate',
               },
+              signal: AbortSignal.timeout(1500),
             }
           );
           if (sbRes.ok) {
@@ -451,8 +481,33 @@ self.addEventListener('activate', (e) => {
             }
           }
         } catch {
-          // Fall through to static assets
+          // Fall through to EC2 fallback
         }
+
+        // EC2 Backend Fallback (serves /sites/<slug>/index.html staged on server)
+        try {
+          const ec2Url = `${BACKEND_ORIGIN}/sites/${slug}/index.html`;
+          const ec2Res = await fetch(ec2Url, {
+            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+            signal: AbortSignal.timeout(2500),
+          });
+          if (ec2Res.ok) {
+            const ec2Html = await ec2Res.text();
+            if (ec2Html && ec2Html.length > 2000 && !ec2Html.includes('Site Customization In Progress')) {
+              const html = transformUserSiteHtml(ec2Html, slug);
+              return new Response(html, {
+                status: 200,
+                headers: {
+                  'Content-Type': 'text/html; charset=utf-8',
+                  'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+                  'Pragma': 'no-cache',
+                  'Expires': '0',
+                  ...SECURITY_HEADERS,
+                },
+              });
+            }
+          }
+        } catch {}
       }
     }
 

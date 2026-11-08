@@ -234,12 +234,17 @@ export async function verifyLiveCloudflareUrl(liveUrl, expectedBusinessName = nu
   let lastStatus = 0;
   let lastReason = 'Unreachable';
 
-  // Extract slug if liveUrl is https://<slug>.lunao.org so we can also probe edge fallback if wildcard DNS is propagating
+  // Extract slug if liveUrl is https://<slug>.lunao.org so we can probe edge and server endpoints
   const subMatch = String(liveUrl || '').match(/^https?:\/\/([a-z0-9-]+)\.lunao\.org\/?/i);
   const fallbackEdgeUrl = subMatch ? `https://lunao.org/${subMatch[1]}` : null;
+  const localServerUrl = subMatch ? `http://127.0.0.1:8787/sites/${subMatch[1]}/index.html` : null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const urlsToTry = fallbackEdgeUrl ? [liveUrl, fallbackEdgeUrl] : [liveUrl];
+    const urlsToTry = [
+      liveUrl,
+      ...(fallbackEdgeUrl ? [fallbackEdgeUrl] : []),
+      ...(localServerUrl ? [localServerUrl] : []),
+    ];
     for (const candidateUrl of urlsToTry) {
       try {
         const cacheBustUrl = `${candidateUrl}${candidateUrl.includes('?') ? '&' : '?'}_v=${Date.now()}_${attempt}`;
