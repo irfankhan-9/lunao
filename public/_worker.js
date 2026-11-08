@@ -12,9 +12,10 @@
 // Primary EC2 backend DNS endpoint (Cloudflare requires valid DNS hostname, not raw IP)
 const BACKEND_ORIGIN = 'http://ec2-51-21-181-63.eu-north-1.compute.amazonaws.com';
 const SUPABASE_URL = 'https://wqlbuadknltsjfzrltpe.supabase.co';
-const SUPABASE_KEY =
-  (typeof env !== 'undefined' && (env.SUPABASE_SECRET_KEY || env.SUPABASE_KEY)) ||
-  (typeof atob === 'function' ? atob('c2Jfc2VjcmV0X1lJREpNaG1JSTlyaTJ2Q2JaSWdHUmdfSWFMNXhLd2Y=') : '');
+
+function getSupabaseKey(env) {
+  return (env && (env.SUPABASE_KEY || env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY)) || '';
+}
 
 // Standard security headers to inject on all responses
 const SECURITY_HEADERS = {
@@ -164,7 +165,7 @@ self.addEventListener('activate', (e) => {
       }
 
       try {
-        const sbKey = SUPABASE_KEY;
+        const sbKey = getSupabaseKey(env);
         const headers = { apikey: sbKey, Authorization: `Bearer ${sbKey}` };
         const [sitesRes, usersRes, campaignsRes, cacheRes] = await Promise.all([
           fetch(`${SUPABASE_URL}/rest/v1/user_sites?select=owner_id,slug,business_name,city,niche,deploy_url,campaign_source,campaign_id,created_at&order=created_at.desc`, { headers }),
@@ -373,13 +374,16 @@ self.addEventListener('activate', (e) => {
       const reservedSubs = ['www', 'api', 'app', 'admin', 'mail', 'smtp', 'ftp', 'staging', 'dev'];
       if (subSlug && !reservedSubs.includes(subSlug) && !subSlug.includes('.')) {
         try {
+          const sbKey = getSupabaseKey(env);
           const sbRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/user_sites?slug=eq.${subSlug}&select=compiled_html`,
+            `${SUPABASE_URL}/rest/v1/user_sites?slug=ilike.${subSlug}&select=compiled_html&_t=${Date.now()}`,
             {
+              cf: { cacheTtl: 0, cacheEverything: false },
               headers: {
-                apikey: SUPABASE_KEY,
-                Authorization: `Bearer ${SUPABASE_KEY}`,
+                apikey: sbKey,
+                Authorization: `Bearer ${sbKey}`,
                 Accept: 'application/json',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
               },
             }
           );
@@ -391,7 +395,9 @@ self.addEventListener('activate', (e) => {
                 status: 200,
                 headers: {
                   'Content-Type': 'text/html; charset=utf-8',
-                  'Cache-Control': 'public, max-age=0, must-revalidate',
+                  'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+                  'Pragma': 'no-cache',
+                  'Expires': '0',
                   ...SECURITY_HEADERS,
                 },
               });
@@ -415,13 +421,16 @@ self.addEventListener('activate', (e) => {
       ];
       if (!reserved.includes(slug) && !slug.includes('.')) {
         try {
+          const sbKey = getSupabaseKey(env);
           const sbRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/user_sites?slug=eq.${slug}&select=compiled_html`,
+            `${SUPABASE_URL}/rest/v1/user_sites?slug=ilike.${slug}&select=compiled_html&_t=${Date.now()}`,
             {
+              cf: { cacheTtl: 0, cacheEverything: false },
               headers: {
-                apikey: SUPABASE_KEY,
-                Authorization: `Bearer ${SUPABASE_KEY}`,
+                apikey: sbKey,
+                Authorization: `Bearer ${sbKey}`,
                 Accept: 'application/json',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
               },
             }
           );
@@ -433,7 +442,9 @@ self.addEventListener('activate', (e) => {
                 status: 200,
                 headers: {
                   'Content-Type': 'text/html; charset=utf-8',
-                  'Cache-Control': 'public, max-age=0, must-revalidate',
+                  'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+                  'Pragma': 'no-cache',
+                  'Expires': '0',
                   ...SECURITY_HEADERS,
                 },
               });

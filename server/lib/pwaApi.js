@@ -543,44 +543,103 @@ export function mountPwaApi(app) {
   async function persistPwaSiteHtmlToAllTiers(slug, html, liveUrl) {
     const now = Date.now();
 
-    // 1. Immediately update Supabase user_sites via Supabase JS client
+    // Resolve business info so user_sites can be cleanly upserted if the row was not present
+    let businessName = '';
+    let city = '';
+    let niche = '';
+    try {
+      const prof = await getProfile(slug);
+      if (prof) {
+        businessName = prof.name || '';
+        city = prof.city || '';
+        niche = prof.niche || '';
+      }
+    } catch {}
+    if (!businessName) {
+      try {
+        const inv = db.prepare('SELECT business_name FROM invite_codes WHERE slug = ?').get(slug);
+        if (inv?.business_name) businessName = inv.business_name;
+      } catch {}
+    }
+    if (!businessName) {
+      businessName = slug
+        .split('-')
+        .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+        .join(' ');
+    }
+
+    // Ensure owner_id and template_key are resolved to satisfy PostgreSQL NOT NULL constraints
+    let ownerId = '';
+    try {
+      const inv = db.prepare('SELECT label FROM invite_codes WHERE slug = ?').get(slug);
+      const m = inv?.label?.match(/\[owner:([^\]]+)\]/);
+      if (m && m[1]) ownerId = m[1];
+    } catch {}
+    if (!ownerId) {
+      try {
+        const row = db.prepare('SELECT owner_id FROM user_sites WHERE slug = ?').get(slug);
+        if (row?.owner_id) ownerId = row.owner_id;
+      } catch {}
+    }
+    if (!ownerId) {
+      ownerId = `user_${slug}`;
+    }
+
+    const upsertPayload = {
+      slug,
+      owner_id: ownerId,
+      template_key: 'custom',
+      business_name: businessName,
+      compiled_html: html,
+      deploy_url: liveUrl,
+      updated_at: now,
+    };
+    if (city) upsertPayload.city = city;
+    if (niche) upsertPayload.niche = niche;
+
+    // 1. Immediately UPSERT Supabase user_sites via Supabase JS client
     let supabaseUpdated = false;
     const sb = getSupabase();
     if (sb) {
       try {
-        const patch = { compiled_html: html, deploy_url: liveUrl, updated_at: now };
         const { data, error } = await sb
           .from('user_sites')
-          .update(patch)
-          .eq('slug', slug)
+          .upsert(upsertPayload, { onConflict: 'slug' })
           .select('slug, updated_at');
         if (!error && data && data.length > 0) {
           supabaseUpdated = true;
+          console.log(`[pwaApi] Supabase JS upsert succeeded for slug="${slug}"`);
+        } else if (error) {
+          console.warn('[pwaApi] Supabase JS upsert error:', error.message);
         }
       } catch (err) {
         console.warn('[pwaApi] Supabase JS site update warning:', err.message);
       }
     }
 
-    // 2. Also update Supabase user_sites via direct REST API PATCH for dual-path certainty
+    // 2. Also UPSERT via direct REST API for dual-path certainty
     const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
     const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
     if (sbUrl && sbKey) {
       try {
-        const patchUrl = new URL(`${sbUrl}/rest/v1/user_sites`);
-        patchUrl.searchParams.set('slug', `eq.${slug}`);
-        const res = await fetch(patchUrl.toString(), {
-          method: 'PATCH',
+        const res = await fetch(`${sbUrl}/rest/v1/user_sites`, {
+          method: 'POST',
           headers: {
             apikey: sbKey,
             Authorization: `Bearer ${sbKey}`,
             'Content-Type': 'application/json',
-            Prefer: 'return=minimal',
+            Prefer: 'resolution=merge-duplicates,return=representation',
           },
-          body: JSON.stringify({ compiled_html: html, deploy_url: liveUrl, updated_at: now }),
-          signal: AbortSignal.timeout(5000),
+          body: JSON.stringify(upsertPayload),
+          signal: AbortSignal.timeout(6000),
         });
-        if (res.ok) supabaseUpdated = true;
+        if (res.ok) {
+          supabaseUpdated = true;
+          console.log(`[pwaApi] Supabase REST upsert succeeded for slug="${slug}"`);
+        } else {
+          const errTxt = await res.text().catch(() => '');
+          console.warn('[pwaApi] Supabase REST upsert warning:', res.status, errTxt.slice(0, 200));
+        }
       } catch (err) {
         console.warn('[pwaApi] Supabase REST site save warning:', err.message);
       }
@@ -599,20 +658,26 @@ export function mountPwaApi(app) {
     // 5. Update local SQLite mirror
     try {
       db.prepare(
-        `UPDATE user_sites
-            SET compiled_html = ?,
-                deploy_url = COALESCE(?, deploy_url),
-                updated_at = ?
-          WHERE slug = ?`,
-      ).run(html, liveUrl, now, slug);
+        `INSERT INTO user_sites (slug, business_name, compiled_html, deploy_url, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(slug) DO UPDATE SET
+           compiled_html = excluded.compiled_html,
+           deploy_url = COALESCE(excluded.deploy_url, user_sites.deploy_url),
+           updated_at = excluded.updated_at`,
+      ).run(slug, businessName, html, liveUrl, now);
     } catch {}
 
     try {
+      const today = new Date().toISOString().slice(0, 10);
       db.prepare(
-        `UPDATE pwa_website_config
-            SET last_updated = ?, updated_at = ?
-          WHERE slug = ?`,
-      ).run(new Date().toISOString().slice(0, 10), now, slug);
+        `INSERT INTO pwa_website_config (slug, status, last_deployed, last_updated, updated_at)
+         VALUES (?, 'deployed', ?, ?, ?)
+         ON CONFLICT(slug) DO UPDATE SET
+           status = 'deployed',
+           last_deployed = excluded.last_deployed,
+           last_updated = excluded.last_updated,
+           updated_at = excluded.updated_at`,
+      ).run(slug, today, today, now);
     } catch {}
 
     return { ok: true, supabaseUpdated, liveUrl };

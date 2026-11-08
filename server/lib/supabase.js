@@ -19,8 +19,8 @@ try {
     connectionTimeoutMillis: 5000,
   };
 
-  if (dbUrl) {
-    if (dbPassword) {
+  if (dbUrl && !dbUrl.includes('YOUR_PASSWORD')) {
+    if (dbPassword && !dbPassword.includes('YOUR_PASSWORD')) {
       try {
         const parsed = new URL(dbUrl);
         poolConfig.host = parsed.hostname;
@@ -333,11 +333,13 @@ export async function supabaseInsertBooking(booking) {
   }
 }
 
+let lastSupabaseRestFailure = 0;
+
 export async function supabaseListBookings(slug) {
   // 1. Direct Supabase REST API (sub-100ms, zero pool hang)
   const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
   const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-  if (sbUrl && sbKey) {
+  if (sbUrl && sbKey && (Date.now() - lastSupabaseRestFailure > 30_000)) {
     try {
       const restUrl = new URL(`${sbUrl}/rest/v1/bookings`);
       restUrl.searchParams.set('select', '*');
@@ -349,9 +351,10 @@ export async function supabaseListBookings(slug) {
 
       const res = await fetch(restUrl.toString(), {
         headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
-        signal: AbortSignal.timeout(4000),
+        signal: AbortSignal.timeout(1000),
       });
       if (res.ok) {
+        lastSupabaseRestFailure = 0;
         const data = await res.json();
         if (Array.isArray(data)) {
           return data.map((r) => ({
@@ -372,6 +375,7 @@ export async function supabaseListBookings(slug) {
         }
       }
     } catch (err) {
+      lastSupabaseRestFailure = Date.now();
       console.warn('[Supabase REST] list bookings notice:', err.message);
     }
   }

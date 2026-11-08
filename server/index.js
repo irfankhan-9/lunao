@@ -65,7 +65,7 @@ import { slugify } from './lib/slug.js';
 import { streamEdit, isAiEnabled, cleanHtmlOutput, generateTemplateHtml } from './lib/geminiAi.js';
 import { orchestrateAiEditStream } from './lib/ai/orchestrator.js';
 import { listStudioModels } from './lib/ai/pricingRegistry.js';
-import { getUserAiStatus, listAiUsageLedger, syncUserAiPlan } from './lib/ai/accountingService.js';
+import { getUserAiStatus, listAiUsageLedger, syncUserAiPlan, persistSupabaseAiBalance } from './lib/ai/accountingService.js';
 import { createBooking, createBookingAsync, listBookings, listBookingsAsync, updateBookingStatus, updateBookingStatusAsync, getBooking, getBookingAsync } from './lib/bookings.js';
 import { validateBookingContract, rollbackToApprovedBooking, CONTRACT_REJECTION_MESSAGE } from './lib/bookingContractValidator.js';
 import {
@@ -345,7 +345,8 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.text({ type: 'text/csv', limit: '5mb' }));
 app.use(cookieParser());
 
@@ -1156,10 +1157,11 @@ app.post('/api/settings/cloudflare', authenticate, async (req, res) => {
 //
 // IMPORTANT: this MUST be registered BEFORE the `/api/sites/:slug` catch-all
 // below — otherwise Express matches "all" as a slug and returns 404.
+let lastSitesAllSupabaseFailure = 0;
+
 app.get('/api/sites/all', authenticate, async (req, res) => {
   try {
     const ownerKey = getAuthOwnerKey(req);
-    console.log(`[api/sites/all] Invoked ownerKey="${ownerKey}" source="${req.query.source}"`);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized: Authentication required' });
 
     const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
@@ -1169,77 +1171,7 @@ app.get('/api/sites/all', authenticate, async (req, res) => {
     const seenSlugs = new Set();
     let leadCounter = 1;
 
-    // 1. PRIMARY: Query Supabase public.user_sites via direct REST API (fastest, zero-hang)
-    const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
-    const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-    if (sbUrl && sbKey) {
-      try {
-        const restUrl = new URL(`${sbUrl}/rest/v1/user_sites`);
-        restUrl.searchParams.set('select', 'slug,business_name,city,niche,template_key,campaign_source,campaign_id,deploy_url,created_at,owner_id');
-        if (sourceFilter) {
-          restUrl.searchParams.set('campaign_source', `eq.${sourceFilter}`);
-        }
-        restUrl.searchParams.set('owner_id', `eq.${ownerKey}`);
-        restUrl.searchParams.set('order', 'created_at.desc');
-        restUrl.searchParams.set('limit', String(limit));
-
-        const sbRes = await fetch(restUrl.toString(), {
-          headers: {
-            apikey: sbKey,
-            Authorization: `Bearer ${sbKey}`,
-          },
-          signal: AbortSignal.timeout(4000),
-        });
-
-        if (sbRes.ok) {
-          const sbSites = await sbRes.json();
-          console.log(`[api/sites/all] Supabase REST status=${sbRes.status}, count=${Array.isArray(sbSites) ? sbSites.length : 'not array'}`);
-          if (Array.isArray(sbSites)) {
-            for (const s of sbSites) {
-              // Strict per-account isolation: only this owner's own sites.
-              const ownerMatches = s.owner_id === ownerKey;
-
-              const sKey = extractCanonicalSiteSlug(s.slug, s.deploy_url);
-              const bName = (s.business_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-              if (ownerMatches && sKey && !seenSlugs.has(sKey) && (!bName || !seenSlugs.has(bName))) {
-                seenSlugs.add(sKey);
-                if (bName) seenSlugs.add(bName);
-                const rawSrc = (s.campaign_source || 'site-deploy').toLowerCase();
-                const source = rawSrc === 'email' ? 'email' : rawSrc === 'sms' ? 'sms' : 'site-deploy';
-                const createdTs = Number(s.created_at)
-                  ? Math.floor(Number(s.created_at) > 1e11 ? Number(s.created_at) / 1000 : Number(s.created_at))
-                  : Math.floor(Date.now() / 1000);
-
-                rows.push({
-                  source,
-                  lead_id: leadCounter++,
-                  campaign_id: s.campaign_id || `camp_${sKey}`,
-                  campaign_name: s.campaign_name || (source === 'site-deploy' ? `${s.niche || 'Local'} Site Deploy` : source === 'sms' ? `${s.niche || 'Local'} SMS Campaign` : `${s.niche || 'Local'} Email Campaign`),
-                  niche: s.niche || null,
-                  campaign_status: 'Completed',
-                  campaign_started_at: createdTs,
-                  business_name: s.business_name || s.slug,
-                  city: s.city || null,
-                  phone: s.phone || null,
-                  lead_niche: s.niche || null,
-                  site_url: normalizeSiteDeployUrl(s.deploy_url, s.slug),
-                  slug: sKey,
-                  lead_status: 'live',
-                  created_at: createdTs,
-                });
-              }
-            }
-          }
-        } else {
-          const errBody = await sbRes.text();
-          console.warn(`[api/sites/all] Supabase REST error status=${sbRes.status} body=${errBody}`);
-        }
-      } catch (sbEx) {
-        console.warn('[sites/all] Supabase REST notice:', sbEx.message);
-      }
-    }
-
-    // 2. SECONDARY: Local SQLite user_sites
+    // 1. PRIMARY: Local mirror for instant (<1ms) response
     try {
       let localSitesQuery = 'SELECT * FROM user_sites WHERE owner_id = ?';
       const localParams = [ownerKey];
@@ -1281,6 +1213,72 @@ app.get('/api/sites/all', authenticate, async (req, res) => {
         }
       }
     } catch {}
+
+    // 2. SECONDARY: Query Supabase public.user_sites via direct REST with circuit breaker
+    const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+    const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    const shouldQuerySupabase = sbUrl && sbKey && (Date.now() - lastSitesAllSupabaseFailure > 30_000);
+
+    if (shouldQuerySupabase) {
+      try {
+        const restUrl = new URL(`${sbUrl}/rest/v1/user_sites`);
+        restUrl.searchParams.set('select', 'slug,business_name,city,niche,template_key,campaign_source,campaign_id,deploy_url,created_at,owner_id');
+        if (sourceFilter) {
+          restUrl.searchParams.set('campaign_source', `eq.${sourceFilter}`);
+        }
+        restUrl.searchParams.set('owner_id', `eq.${ownerKey}`);
+        restUrl.searchParams.set('order', 'created_at.desc');
+        restUrl.searchParams.set('limit', String(limit));
+
+        const sbRes = await fetch(restUrl.toString(), {
+          headers: {
+            apikey: sbKey,
+            Authorization: `Bearer ${sbKey}`,
+          },
+          signal: AbortSignal.timeout(1000),
+        });
+
+        if (sbRes.ok) {
+          const sbSites = await sbRes.json();
+          if (Array.isArray(sbSites)) {
+            for (const s of sbSites) {
+              const ownerMatches = s.owner_id === ownerKey;
+              const sKey = extractCanonicalSiteSlug(s.slug, s.deploy_url);
+              const bName = (s.business_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (ownerMatches && sKey && !seenSlugs.has(sKey) && (!bName || !seenSlugs.has(bName))) {
+                seenSlugs.add(sKey);
+                if (bName) seenSlugs.add(bName);
+                const rawSrc = (s.campaign_source || 'site-deploy').toLowerCase();
+                const source = rawSrc === 'email' ? 'email' : rawSrc === 'sms' ? 'sms' : 'site-deploy';
+                const createdTs = Number(s.created_at)
+                  ? Math.floor(Number(s.created_at) > 1e11 ? Number(s.created_at) / 1000 : Number(s.created_at))
+                  : Math.floor(Date.now() / 1000);
+
+                rows.push({
+                  source,
+                  lead_id: leadCounter++,
+                  campaign_id: s.campaign_id || `camp_${sKey}`,
+                  campaign_name: s.campaign_name || (source === 'site-deploy' ? `${s.niche || 'Local'} Site Deploy` : source === 'sms' ? `${s.niche || 'Local'} SMS Campaign` : `${s.niche || 'Local'} Email Campaign`),
+                  niche: s.niche || null,
+                  campaign_status: 'Completed',
+                  campaign_started_at: createdTs,
+                  business_name: s.business_name || s.slug,
+                  city: s.city || null,
+                  phone: s.phone || null,
+                  lead_niche: s.niche || null,
+                  site_url: normalizeSiteDeployUrl(s.deploy_url, s.slug),
+                  slug: sKey,
+                  lead_status: 'live',
+                  created_at: createdTs,
+                });
+              }
+            }
+          }
+        }
+      } catch (sbEx) {
+        lastSitesAllSupabaseFailure = Date.now();
+      }
+    }
 
     // 3. TERTIARY: campaign_leads (SMS campaigns)
     if (!sourceFilter || sourceFilter === 'sms') {
@@ -1602,7 +1600,17 @@ app.get('/api/ai/allowance', async (req, res) => {
   try {
     const userId = (req.query.userId && String(req.query.userId).trim()) || getAuthOwnerKey(req);
     const planHint = req.query.plan || req.headers['x-user-plan'] || null;
-    const status = await getUserAiStatus(userId, planHint ? String(planHint) : null);
+    const [status, sbPlanAi] = await Promise.all([
+      getUserAiStatus(userId, planHint ? String(planHint) : null),
+      getSupabaseUserPlanAndAi(userId),
+    ]);
+    if (sbPlanAi && sbPlanAi.plan) {
+      status.plan = sbPlanAi.plan;
+      status.isFree = sbPlanAi.plan === 'Free Plan';
+      status.balanceCredits = sbPlanAi.aiCreditsBalance;
+      status.monthlyCredits = sbPlanAi.monthlyAiCredits || sbPlanAi.aiCreditsBalance;
+      status.monthlyAllowanceUsd = sbPlanAi.monthlyAiAllowanceUsd;
+    }
     res.json({ ok: true, status });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -1621,63 +1629,93 @@ app.post('/api/ai/sync-plan', async (req, res) => {
   }
 });
 
-// Idempotent client sync / deduction verification against Supabase
+// Idempotent client sync / deduction verification against Supabase REST
 app.post('/api/ai/deduct', async (req, res) => {
   try {
     const userId = (req.body?.userId && String(req.body.userId).trim()) || getAuthOwnerKey(req);
     const { requestId, creditsDeducted, remainingCredits, costUsd, inputTokens, outputTokens, model } = req.body || {};
 
-    const pool = getPgPool();
-    if (pool) {
-      // If requestId was already settled by orchestrateAiEditStream, return authoritative Supabase balance (prevent double charge)
-      if (requestId) {
-        const existing = await pool.query(
-          'SELECT status, actual_credits, actual_cost_usd, balance_credits_after FROM ai_usage_ledger WHERE request_id = $1 LIMIT 1;',
-          [String(requestId)]
+    const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+    const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+    // 1. If requestId was already settled by orchestrateAiEditStream in ai_usage_ledger, return authoritative Supabase balance (never double-charge)
+    if (requestId && sbUrl && sbKey) {
+      try {
+        const ledgerRes = await fetch(
+          `${sbUrl}/rest/v1/ai_usage_ledger?request_id=eq.${encodeURIComponent(String(requestId))}&select=status,actual_credits,actual_cost_usd,balance_credits_after&limit=1`,
+          {
+            headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
+            signal: AbortSignal.timeout(3500),
+          }
         );
-        if (existing.rows.length > 0 && existing.rows[0].status === 'settled') {
-          const row = existing.rows[0];
-          return res.json({
-            ok: true,
-            idempotent: true,
-            creditsDeducted: Number(row.actual_credits),
-            remainingCredits: Number(row.balance_credits_after),
-            actualCostUsd: Number(row.actual_cost_usd),
-          });
+        if (ledgerRes.ok) {
+          const rows = await ledgerRes.json();
+          if (Array.isArray(rows) && rows.length > 0 && rows[0].status === 'settled') {
+            const row = rows[0];
+            return res.json({
+              ok: true,
+              idempotent: true,
+              creditsDeducted: Number(row.actual_credits),
+              remainingCredits: Number(row.balance_credits_after),
+              actualCostUsd: Number(row.actual_cost_usd),
+            });
+          }
         }
+      } catch (e) {
+        console.warn('[AI Deduct] Ledger check notice:', e.message);
+      }
+    }
+
+    // 2. Standalone deduction fallback (only when not already settled via orchestrator)
+    const safeDeduct = Math.max(0, Number(creditsDeducted) || 0);
+    const safeSpent = Math.max(0, Number(costUsd) || (safeDeduct * 0.01));
+
+    if (safeDeduct > 0 && userId) {
+      const currentStatus = await getUserAiStatus(userId);
+      const currentBal = Number(currentStatus?.balanceCredits ?? 0);
+      const currentSpent = Number(currentStatus?.dollarsSpent ?? 0);
+      const newBal = Math.max(0, Number((currentBal - safeDeduct).toFixed(4)));
+      const newSpent = Number((currentSpent + safeSpent).toFixed(6));
+
+      await persistSupabaseAiBalance(userId, newBal, newSpent);
+
+      if (requestId && sbUrl && sbKey) {
+        fetch(`${sbUrl}/rest/v1/ai_usage_ledger`, {
+          method: 'POST',
+          headers: {
+            apikey: sbKey,
+            Authorization: `Bearer ${sbKey}`,
+            'Content-Type': 'application/json',
+            Prefer: 'resolution=merge-duplicates',
+          },
+          body: JSON.stringify({
+            user_id: userId,
+            request_id: String(requestId),
+            reservation_id: String(requestId),
+            status: 'settled',
+            provider: String(model || '').toLowerCase().includes('claude') ? 'anthropic' : 'google',
+            model: String(model || 'gemini-3.8-flash'),
+            input_tokens: Number(inputTokens || 0),
+            output_tokens: Number(outputTokens || 0),
+            total_tokens: Number(inputTokens || 0) + Number(outputTokens || 0),
+            reserved_cost_usd: safeSpent,
+            reserved_credits: safeDeduct,
+            actual_cost_usd: safeSpent,
+            actual_credits: safeDeduct,
+            balance_credits_after: newBal,
+            settled_at: new Date().toISOString(),
+          }),
+          signal: AbortSignal.timeout(3500),
+        }).catch(() => {});
       }
 
-      // Standalone deduction fallback (only when not settled via orchestrator)
-      const safeDeduct = Math.max(0, Number(creditsDeducted) || 0);
-      const safeSpent = Math.max(0, Number(costUsd) || (safeDeduct * 0.01));
-      const nowMs = Date.now();
-
-      if (safeDeduct > 0) {
-        const upd = await pool.query(
-          `UPDATE user_credits
-           SET ai_credits_balance = GREATEST(0, ai_credits_balance - $2),
-               ai_dollars_spent = ai_dollars_spent + $3,
-               updated_at = $4
-           WHERE user_id = $1
-           RETURNING ai_credits_balance;`,
-          [userId, safeDeduct, safeSpent, nowMs]
-        );
-        const newBal = upd.rows[0]?.ai_credits_balance !== undefined
-          ? Number(upd.rows[0].ai_credits_balance)
-          : (Number(remainingCredits) >= 0 ? Number(remainingCredits) : 0);
-
-        await pool.query(
-          'UPDATE user_plans SET ai_credits_balance = $2, updated_at = $3 WHERE user_id = $1;',
-          [userId, newBal, nowMs]
-        );
-
-        return res.json({
-          ok: true,
-          creditsDeducted: safeDeduct,
-          remainingCredits: newBal,
-          actualCostUsd: safeSpent,
-        });
-      }
+      return res.json({
+        ok: true,
+        idempotent: false,
+        creditsDeducted: safeDeduct,
+        remainingCredits: newBal,
+        actualCostUsd: safeSpent,
+      });
     }
 
     const status = await getUserAiStatus(userId);
@@ -2286,6 +2324,55 @@ function decodeSupabaseBalance(row, fallback = 15) {
   return intPart;
 }
 
+async function getSupabaseUserPlanAndAi(ownerKey) {
+  const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+  const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (!sbUrl || !sbKey || !ownerKey) return null;
+  try {
+    const [planRes, credRes] = await Promise.all([
+      fetch(
+        `${sbUrl}/rest/v1/user_plans?user_id=eq.${encodeURIComponent(ownerKey)}&select=plan_tier,monthly_action_credits,monthly_ai_credits,monthly_ai_allowance_usd,ai_credits_balance`,
+        {
+          headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
+          signal: AbortSignal.timeout(3000),
+        }
+      ),
+      fetch(
+        `${sbUrl}/rest/v1/user_credits?user_id=eq.${encodeURIComponent(ownerKey)}&select=action_credits_balance,ai_credits_balance,ai_dollars_spent,updated_at`,
+        {
+          headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
+          signal: AbortSignal.timeout(3000),
+        }
+      ),
+    ]);
+    const planRows = planRes.ok ? await planRes.json() : [];
+    const credRows = credRes.ok ? await credRes.json() : [];
+    const pRow = Array.isArray(planRows) && planRows.length > 0 ? planRows[0] : null;
+    const cRow = Array.isArray(credRows) && credRows.length > 0 ? credRows[0] : null;
+    if (!pRow && !cRow) return null;
+    const planTier = pRow?.plan_tier || 'Free Plan';
+    const aiBalance =
+      cRow && typeof cRow.ai_credits_balance === 'number'
+        ? Number(cRow.ai_credits_balance)
+        : pRow && typeof pRow.ai_credits_balance === 'number'
+          ? Number(pRow.ai_credits_balance)
+          : 0;
+    const monthlyAiCredits =
+      pRow && typeof pRow.monthly_ai_credits === 'number' && pRow.monthly_ai_credits > 0
+        ? Number(pRow.monthly_ai_credits)
+        : aiBalance;
+    return {
+      plan: planTier,
+      aiCreditsBalance: planTier === 'Free Plan' ? 0 : aiBalance,
+      monthlyAiCredits: planTier === 'Free Plan' ? 0 : monthlyAiCredits,
+      monthlyAiAllowanceUsd: Number(pRow?.monthly_ai_allowance_usd ?? (monthlyAiCredits * 0.01)),
+      aiDollarsSpent: Number(cRow?.ai_dollars_spent || 0),
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function getSupabaseUserCredits(ownerKey, defaultBalance = 15) {
   const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
   const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -2340,7 +2427,9 @@ async function updateSupabaseUserCredits(ownerKey, newBalance) {
   if (!ownerKey) return;
   const encoded = encodeSupabaseBalance(newBalance);
   try {
-    ensureAccount(ownerKey, 'Free Plan');
+    if (!getAccount(ownerKey)) {
+      ensureAccount(ownerKey, 'Free Plan');
+    }
     db.prepare('UPDATE credit_accounts SET balance = ?, updated_at = ? WHERE owner_key = ?').run(encoded.exactBalance, Math.floor(Date.now() / 1000), ownerKey);
   } catch {}
   if (!sbUrl || !sbKey) return;
@@ -2398,12 +2487,27 @@ app.get('/api/auth/me', authenticate, async (req, res) => {
         userRow = rows?.[0] || null;
       } catch {}
     }
-    const acct = await getAccountAsync(ownerKey);
-    const aiStatus = await getUserAiStatus(ownerKey);
-    const plan = acct?.plan || aiStatus?.plan || 'Free Plan';
+    const [acct, aiStatus, sbPlanAi] = await Promise.all([
+      getAccountAsync(ownerKey),
+      getUserAiStatus(ownerKey),
+      getSupabaseUserPlanAndAi(ownerKey),
+    ]);
+    const plan = sbPlanAi?.plan || acct?.plan || aiStatus?.plan || 'Free Plan';
     // Authoritative balance directly from Supabase user_credits ledger:
     const userCredits = await getSupabaseUserCredits(ownerKey, acct?.balance ?? 15);
-    const vibeCredits = plan === 'Free Plan' ? 0 : Number(aiStatus?.balanceCredits ?? 0);
+    const vibeCredits =
+      plan === 'Free Plan'
+        ? 0
+        : typeof sbPlanAi?.aiCreditsBalance === 'number'
+          ? sbPlanAi.aiCreditsBalance
+          : Number(aiStatus?.balanceCredits ?? 0);
+
+    try {
+      if (plan && plan !== 'Free Plan') {
+        if (!getAccount(ownerKey)) ensureAccount(ownerKey, plan);
+        db.prepare('UPDATE credit_accounts SET plan = ?, balance = ? WHERE owner_key = ?').run(plan, userCredits, ownerKey);
+      }
+    } catch {}
 
     return res.json({
       ok: true,
@@ -2946,7 +3050,7 @@ app.post('/api/owner/redeem', async (req, res) => {
       req.headers['x-user-plan'] || req.query?.plan || req.body?.plan
     );
 
-    if (isNewActivation && !isSpecialRedeem) {
+    if (!isCodeFormat && isNewActivation && !isSpecialRedeem) {
       const alreadyCounted = quota.activeSlugs.includes(String(target.slug).toLowerCase());
       if (!alreadyCounted && quota.quotaExceeded) {
         return res.status(403).json({
@@ -3198,33 +3302,40 @@ app.post('/api/sites/:slug/invite-codes', authenticate, async (req, res) => {
     const labelWithOwner = ownerKey ? `${rawLabel} [owner:${ownerKey}]` : rawLabel;
     const code = createCode(slug, labelWithOwner);
 
-    // Instantly persist is_pwa_connected = true in Supabase under this slug
+    // Update local mirror immediately (<1ms)
     try {
-      const { getSupabase } = await import('./lib/supabase.js');
-      const sb = getSupabase();
-      if (sb) {
-        const cleanSlug = String(slug).toLowerCase();
-        const { data: updated } = await sb
-          .from('user_sites')
-          .update({ is_pwa_connected: true, updated_at: Date.now() })
-          .eq('slug', cleanSlug)
-          .select('id');
+      const cleanSlug = String(slug).toLowerCase();
+      db.prepare('UPDATE user_sites SET is_pwa_connected = 1, updated_at = ? WHERE slug = ?').run(Date.now(), cleanSlug);
+    } catch {}
 
-        // If row did not exist yet in Supabase user_sites, insert it so it is permanently tracked
-        if (!updated || updated.length === 0) {
-          await sb.from('user_sites').insert({
-            slug: cleanSlug,
-            owner_id: ownerKey || 'user_default',
-            business_name: rawLabel.replace(/^Owner PWA Access - /, ''),
-            is_pwa_connected: true,
-            created_at: Date.now(),
-            updated_at: Date.now(),
-          });
+    // Persist to Supabase in background without blocking API response
+    (async () => {
+      try {
+        const { getSupabase } = await import('./lib/supabase.js');
+        const sb = getSupabase();
+        if (sb) {
+          const cleanSlug = String(slug).toLowerCase();
+          const { data: updated } = await sb
+            .from('user_sites')
+            .update({ is_pwa_connected: true, updated_at: Date.now() })
+            .eq('slug', cleanSlug)
+            .select('id');
+
+          if (!updated || updated.length === 0) {
+            await sb.from('user_sites').insert({
+              slug: cleanSlug,
+              owner_id: ownerKey || 'user_default',
+              business_name: rawLabel.replace(/^Owner PWA Access - /, ''),
+              is_pwa_connected: true,
+              created_at: Date.now(),
+              updated_at: Date.now(),
+            });
+          }
         }
+      } catch (sbErr) {
+        console.warn('[PWA] Supabase background persistence note:', sbErr.message);
       }
-    } catch (sbErr) {
-      console.warn('[PWA] Supabase site persistence note:', sbErr.message);
-    }
+    })();
 
     // Re-fetch updated quota after instant Supabase write
     const updatedQuota = await getOwnerPwaQuotaStatusAsync(ownerKey, req.headers['x-user-plan'] || req.body?.plan);
@@ -3307,14 +3418,18 @@ app.get('/api/credits', authenticate, async (req, res) => {
   try {
     const ownerKey = getAuthOwnerKey(req);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
-    const plan = req.query.plan ? String(req.query.plan) : 'Free Plan';
-    const balance = await getSupabaseUserCredits(ownerKey, 15);
+    const [balance, sbPlanAi] = await Promise.all([
+      getSupabaseUserCredits(ownerKey, 15),
+      getSupabaseUserPlanAndAi(ownerKey),
+    ]);
+    const plan = sbPlanAi?.plan || (req.query.plan ? String(req.query.plan) : 'Free Plan');
     res.json({
       ok: true,
       account: {
         ownerKey,
         plan,
         balance,
+        vibeCredits: sbPlanAi?.aiCreditsBalance ?? 0,
       },
       balance,
       plans: PLAN_BALANCE,

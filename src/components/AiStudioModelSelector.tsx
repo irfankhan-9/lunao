@@ -100,12 +100,16 @@ export const AiStudioModelSelector: React.FC<AiStudioModelSelectorProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [balance, setBalance] = useState<number>(() => getVibeCreditBalance(userPlan));
+  const [monthlyMax, setMonthlyMax] = useState<number>(0);
   const planConfig = getPlanAiConfig(userPlan);
 
   useEffect(() => {
     syncAllowanceWithServer().then((res) => {
       if (res) {
         setBalance(res.balanceCredits);
+        if (res.monthlyCredits > 0) {
+          setMonthlyMax(res.monthlyCredits);
+        }
       }
     });
 
@@ -123,16 +127,11 @@ export const AiStudioModelSelector: React.FC<AiStudioModelSelectorProps> = ({
   }, [userPlan]);
 
   const activeModel = STUDIO_MODELS.find(m => m.id === selectedModel) || STUDIO_MODELS[0];
-  const hasUsedCredits = typeof localStorage !== 'undefined' ? localStorage.getItem('lunao_has_used_ai_credits') === 'true' : false;
-  const dollarsSpent = typeof localStorage !== 'undefined' ? parseFloat(localStorage.getItem('lunao_ai_dollars_spent') || '0') : 0;
-  const minPlanCredits = Math.max(15, planConfig.monthlyCredits || 15);
-  // Account is only truly exhausted if they have legitimately spent their credits down to 0
-  const hasLegitimatelyExhausted = balance <= 0 && dollarsSpent > 0 && hasUsedCredits;
-  const effectiveBalance = (balance <= 0 && !hasLegitimatelyExhausted) ? minPlanCredits : balance;
-  const isExhausted = hasLegitimatelyExhausted && !aiServerError;
-  const isLow = effectiveBalance > 0 && effectiveBalance < 50;
+  const effectiveBalance = Math.max(0, balance);
+  const isExhausted = effectiveBalance <= 0 && !aiServerError;
+  const isLow = effectiveBalance > 0 && effectiveBalance < 5;
 
-  const maxCredits = Math.max(1, planConfig.monthlyCredits || 15);
+  const maxCredits = Math.max(effectiveBalance, monthlyMax || planConfig.monthlyCredits || 10);
   const percentRemaining = Math.min(100, Math.max(0, (effectiveBalance / maxCredits) * 100));
 
   const handleUpgradeClick = (e?: React.MouseEvent) => {
@@ -145,7 +144,7 @@ export const AiStudioModelSelector: React.FC<AiStudioModelSelectorProps> = ({
 
   const formattedBalance = effectiveBalance.toLocaleString(undefined, {
     minimumFractionDigits: effectiveBalance % 1 !== 0 ? 1 : 0,
-    maximumFractionDigits: 1,
+    maximumFractionDigits: 2,
   });
 
   return (
@@ -191,7 +190,7 @@ export const AiStudioModelSelector: React.FC<AiStudioModelSelectorProps> = ({
 
           {typeof lastUsageCredits === 'number' && lastUsageCredits > 0 && (
             <span className="text-[10px] font-mono text-emerald-700 font-semibold bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200/60 animate-in fade-in">
-              -{lastUsageCredits.toFixed(1)}
+              -{lastUsageCredits < 0.1 ? lastUsageCredits.toFixed(2) : lastUsageCredits.toFixed(1)}
             </span>
           )}
         </button>

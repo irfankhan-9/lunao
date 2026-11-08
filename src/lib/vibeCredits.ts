@@ -128,28 +128,10 @@ export function getVibeCreditBalance(explicitPlan?: string | null): number {
       localStorage.getItem('lunao_vibe_credits');
     if (raw !== null) {
       const parsed = parseFloat(raw);
-      if (!Number.isNaN(parsed) && parsed > 0) {
+      if (!Number.isNaN(parsed) && parsed >= 0) {
         return parsed;
       }
-      const dollarsSpent = parseFloat(
-        localStorage.getItem(`lunao_u_${userId}_ai_dollars_spent`) ||
-          localStorage.getItem('lunao_ai_dollars_spent') ||
-          '0'
-      );
-      if (dollarsSpent <= 0 || Number.isNaN(dollarsSpent)) {
-        localStorage.setItem(`lunao_u_${userId}_vibe_credits`, String(defaultBalance));
-        localStorage.setItem('lunao_vibe_credits', String(defaultBalance));
-        return defaultBalance;
-      }
-      return 0;
     }
-  } catch {
-    /* fallback to plan default */
-  }
-
-  try {
-    localStorage.setItem(`lunao_u_${userId}_vibe_credits`, String(defaultBalance));
-    localStorage.setItem('lunao_vibe_credits', String(defaultBalance));
   } catch {
     /* ignore */
   }
@@ -444,8 +426,8 @@ export async function syncAllowanceWithServer(): Promise<{
       let balance = Number(data.status.balanceCredits);
       if (normalizePlanKey(activePlan) === 'free') {
         balance = 0;
-      } else if (balance <= 0 && dollarsSpent <= 0) {
-        balance = config.monthlyCredits ?? 0;
+      } else if (Number.isNaN(balance) || balance < 0) {
+        balance = 0;
       }
       if (dollarsSpent > 0) {
         localStorage.setItem(`lunao_u_${userId}_ai_dollars_spent`, dollarsSpent.toFixed(6));

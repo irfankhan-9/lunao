@@ -379,23 +379,15 @@ function DashboardApp() {
     return defaultMap[userPlan] ?? 15;
   });
 
+  const hasHydratedCreditsRef = useRef(false);
+  const lastServerCreditsRef = useRef<number | null>(null);
+
   // Sync user profile and credits when GateContext user updates
   useEffect(() => {
     if (!user || isSpecialModeActive()) return;
     if (user.name) setUserName(user.name);
     if (user.email) setUserEmail(user.email);
-    if (user.plan) {
-      setUserPlan(user.plan);
-      localStorage.setItem(userPlanKey, user.plan);
-      localStorage.setItem('lunao_user_plan', user.plan);
-    }
-    if (typeof user.credits === 'number') {
-      setUserCredits(user.credits);
-      localStorage.setItem(userCreditsKey, String(user.credits));
-      localStorage.setItem('lunao_user_credits', String(user.credits));
-      hasHydratedCreditsRef.current = true;
-    }
-  }, [user, userPlanKey, userCreditsKey]);
+  }, [user]);
 
   // Attribute referral to affiliate on signup / initial dashboard entry
   useEffect(() => {
@@ -404,17 +396,28 @@ function DashboardApp() {
     }
   }, [ownerKey, userEmail, user?.email, userPlan]);
 
-  const hasHydratedCreditsRef = useRef(false);
-
-  // Pull authoritative credits ledger directly from Supabase / server on mount
+  // Pull authoritative credits ledger & plan directly from Supabase / server on mount
   useEffect(() => {
     if (!ownerKey || ownerKey === 'dashboard') return;
     import('./lib/pipelineClient').then(({ getCredits }) => {
       getCredits(ownerKey, userPlan).then((status) => {
-        if (status.account && typeof status.account.balance === 'number') {
-          setUserCredits(status.account.balance);
-          localStorage.setItem(userCreditsKey, String(status.account.balance));
-          localStorage.setItem('lunao_user_credits', String(status.account.balance));
+        if (status.account) {
+          if (typeof status.account.balance === 'number') {
+            lastServerCreditsRef.current = status.account.balance;
+            setUserCredits(status.account.balance);
+            localStorage.setItem(userCreditsKey, String(status.account.balance));
+            localStorage.setItem('lunao_user_credits', String(status.account.balance));
+          }
+          if (status.account.plan && typeof status.account.plan === 'string') {
+            setUserPlan(status.account.plan);
+            localStorage.setItem(userPlanKey, status.account.plan);
+            localStorage.setItem('lunao_user_plan', status.account.plan);
+          }
+          if (typeof (status.account as any).vibeCredits === 'number') {
+            import('./lib/vibeCredits').then(({ setVibeCreditBalance }) => {
+              setVibeCreditBalance((status.account as any).vibeCredits);
+            }).catch(() => {});
+          }
         }
       }).catch(() => {}).finally(() => {
         hasHydratedCreditsRef.current = true;
@@ -422,17 +425,41 @@ function DashboardApp() {
     }).catch(() => {
       hasHydratedCreditsRef.current = true;
     });
-  }, [ownerKey, userPlan, userCreditsKey]);
+  }, [ownerKey, userCreditsKey, userPlanKey]);
 
-  // Persist userCredits to Supabase ONLY when explicitly updated (after hydration)
+  // Listen for lunao_auth_changed events when GateContext finishes /api/auth/me
+  useEffect(() => {
+    const handleAuthChanged = (e: any) => {
+      const nextPlan = e.detail?.plan;
+      const nextCredits = e.detail?.userCredits;
+      if (nextPlan && typeof nextPlan === 'string') {
+        setUserPlan(nextPlan);
+        localStorage.setItem(userPlanKey, nextPlan);
+        localStorage.setItem('lunao_user_plan', nextPlan);
+      }
+      if (typeof nextCredits === 'number' && !Number.isNaN(nextCredits)) {
+        lastServerCreditsRef.current = nextCredits;
+        setUserCredits(nextCredits);
+        localStorage.setItem(userCreditsKey, String(nextCredits));
+        localStorage.setItem('lunao_user_credits', String(nextCredits));
+      }
+    };
+    window.addEventListener('lunao_auth_changed', handleAuthChanged);
+    return () => window.removeEventListener('lunao_auth_changed', handleAuthChanged);
+  }, [userPlanKey, userCreditsKey]);
+
+  // Persist userCredits to Supabase ONLY when explicitly updated by user action (after server hydration)
   useEffect(() => {
     if (!hasHydratedCreditsRef.current) return;
     if (typeof userCredits === 'number' && !Number.isNaN(userCredits) && !isSpecialModeActive()) {
       localStorage.setItem(userCreditsKey, String(userCredits));
       localStorage.setItem('lunao_user_credits', String(userCredits));
-      import('./lib/pipelineClient').then(({ syncUserCredits }) => {
-        syncUserCredits(ownerKey, userCredits).catch(() => {});
-      }).catch(() => {});
+      if (lastServerCreditsRef.current !== userCredits) {
+        lastServerCreditsRef.current = userCredits;
+        import('./lib/pipelineClient').then(({ syncUserCredits }) => {
+          syncUserCredits(ownerKey, userCredits).catch(() => {});
+        }).catch(() => {});
+      }
     }
   }, [userCredits, userCreditsKey, ownerKey]);
 

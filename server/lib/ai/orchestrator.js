@@ -113,6 +113,7 @@ export async function orchestrateAiEditStream({
     const errorMsg = errorOccurred?.message || 'Generation failed to complete.';
     await settleUsage({
       requestId,
+      userId,
       modelId: normModel,
       latencyMs: streamResult?.latencyMs || 0,
       status: 'failed',
@@ -131,6 +132,7 @@ export async function orchestrateAiEditStream({
   } catch (cleanErr) {
     await settleUsage({
       requestId,
+      userId,
       modelId: normModel,
       latencyMs: streamResult.latencyMs,
       status: 'failed',
@@ -142,11 +144,13 @@ export async function orchestrateAiEditStream({
   // 4. Atomic Settlement with Real Token Usage & Model Rate Card (100 AI credits = $1.00 USD)
   const settlement = await settleUsage({
     requestId,
+    userId,
     modelId: normModel,
     tokenUsage: streamResult.tokenUsage,
     latencyMs: streamResult.latencyMs,
     status: 'settled',
     metadata: {
+      userId,
       modelDisplayName: rates.displayName,
       provider: rates.provider,
       inputCostPerMillion: rates.inputCostPerMillion,

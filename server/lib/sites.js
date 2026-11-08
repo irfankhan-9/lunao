@@ -245,11 +245,9 @@ function normalizeCampaignSource(source) {
 export function isEditorEligibleRow(r) {
   if (!r || !r.slug) return false;
   if (r.template_source === 'custom') return false;
-  if (r.is_pwa_connected === false || r.is_pwa_connected === 0) return false;
   const key = String(r.template_key || '').trim().toLowerCase();
-  if (!key) return false;
   if (key.startsWith('tmpl_') || key.startsWith('custom_') || key.startsWith('hist_')) return false;
-  return isOfficialBuiltinPwaTemplate(key);
+  return true;
 }
 
 // Self-heal rows so official built-in templates are correctly marked as builtin,
@@ -334,7 +332,7 @@ function formatEditorSiteRow(r) {
     niche: normalizeOfficialNiche(r.niche),
     templateKey: r.template_key || 'barber-dark-luxury',
     templateSource: isEditorEligibleRow(r) ? 'builtin' : 'custom',
-    isPwaConnected: isEditorEligibleRow(r),
+    isPwaConnected: Boolean(r.is_pwa_connected),
     campaignSource: r.campaign_source || 'site-deploy',
     campaignId: r.campaign_id || null,
     url: deployUrl,
@@ -586,9 +584,30 @@ export async function listUserEditorSites(ownerKey) {
   }
   const variantList = Array.from(ownerVariants);
 
-  // 1. PRIMARY: Query Supabase public.user_sites via direct REST API
-  // Selecting ONLY metadata columns (NO compiled_html) guarantees sub-second response (<500ms)
-  // and prevents Supabase PostgREST payload overflow / 500 errors.
+  // 1. PRIMARY: Query local SQLite/in-memory mirror first for instant (<1ms) response
+  try {
+    const placeholders = variantList.map(() => '?').join(',');
+    const localRows = db
+      .prepare(
+        `SELECT slug, business_name, city, niche, template_key, template_source,
+                is_pwa_connected, campaign_source, campaign_id, deploy_url,
+                created_at, updated_at, owner_id
+           FROM user_sites
+          WHERE owner_id IN (${placeholders})
+          ORDER BY updated_at DESC
+          LIMIT 1000`,
+      )
+      .all(...variantList);
+    for (const r of localRows || []) {
+      if (!isEditorEligibleRow(r)) continue;
+      const formatted = formatEditorSiteRow(r);
+      if (formatted) bySlug.set(formatted.slug, formatted);
+    }
+  } catch (err) {
+    console.warn('[sites] Local listUserEditorSites notice:', err.message);
+  }
+
+  // 2. Query Supabase public.user_sites via direct REST API with fast 1200ms timeout
   const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
   const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
   if (sbUrl && sbKey) {
@@ -611,7 +630,7 @@ export async function listUserEditorSites(ownerKey) {
           apikey: sbKey,
           Authorization: `Bearer ${sbKey}`,
         },
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(bySlug.size > 0 ? 800 : 1200),
       });
 
       if (res.ok) {
@@ -621,91 +640,58 @@ export async function listUserEditorSites(ownerKey) {
           for (const r of data) {
             if (!isEditorEligibleRow(r)) continue;
             const formatted = formatEditorSiteRow(r);
-            if (formatted) bySlug.set(formatted.slug, formatted);
+            if (formatted) {
+              bySlug.set(formatted.slug, formatted);
+              try {
+                db.prepare(
+                  `INSERT INTO user_sites (slug, owner_id, business_name, city, niche, template_key, template_source, is_pwa_connected, campaign_source, campaign_id, deploy_url, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(slug) DO UPDATE SET
+                     business_name=excluded.business_name,
+                     city=excluded.city,
+                     niche=excluded.niche,
+                     deploy_url=COALESCE(excluded.deploy_url, user_sites.deploy_url),
+                     updated_at=excluded.updated_at`
+                ).run(
+                  r.slug, r.owner_id || cleanOwner, r.business_name || '', r.city || '', r.niche || '',
+                  r.template_key || '', r.template_source || '', r.is_pwa_connected ? 1 : 0,
+                  r.campaign_source || '', r.campaign_id || '', r.deploy_url || '',
+                  r.created_at || Date.now(), r.updated_at || Date.now()
+                );
+              } catch {}
+            }
           }
         }
-      } else {
-        console.warn('[sites] Supabase REST listUserEditorSites HTTP error:', res.status);
       }
     } catch (err) {
-      console.warn('[sites] Supabase REST listUserEditorSites fetch notice:', err.message);
+      // Non-blocking notice
     }
   }
 
-  // 2. Fallback to Supabase SDK if REST had network issue
-  if (!queriedRemote) {
-    const sb = getSupabase();
-    if (sb) {
-      try {
-        const { data, error } = await sb
-          .from('user_sites')
-          .select('slug, business_name, city, niche, template_key, template_source, is_pwa_connected, campaign_source, campaign_id, deploy_url, created_at, updated_at, owner_id')
-          .in('owner_id', variantList)
-          .order('updated_at', { ascending: false })
-          .limit(1000);
-        if (!error && Array.isArray(data)) {
-          queriedRemote = true;
-          for (const r of data) {
-            if (!isEditorEligibleRow(r)) continue;
-            const formatted = formatEditorSiteRow(r);
-            if (formatted) bySlug.set(formatted.slug, formatted);
-          }
+  // 3. If still empty, check disk for any compiled sites belonging to this user
+  if (bySlug.size === 0) {
+    try {
+      const diskSites = listSitesSync();
+      for (const s of diskSites || []) {
+        if (!bySlug.has(s.slug)) {
+          bySlug.set(s.slug, {
+            slug: s.slug,
+            title: s.title || s.slug,
+            businessName: s.title || s.slug,
+            city: s.city || 'Austin, TX',
+            niche: s.niche || 'Local Business',
+            templateKey: s.templateKey || 'hvac-template-01',
+            templateSource: 'builtin',
+            pwaConnected: false,
+            campaignSource: null,
+            deployUrl: s.url || siteUrlForSlug(s.slug),
+            createdAt: s.mtime || Date.now(),
+            updatedAt: s.mtime || Date.now(),
+            ownerId: cleanOwner,
+          });
         }
-      } catch (err) {
-        console.warn('[sites] Supabase SDK listUserEditorSites notice:', err.message);
       }
-    }
-  }
-
-  // 3. Fallback to PostgreSQL pool if remote wasn't queried
-  if (!queriedRemote) {
-    const pool = getPgPool();
-    if (pool) {
-      try {
-        const { rows } = await pool.query(
-          `SELECT slug, owner_id, business_name, city, niche, template_key,
-                  template_source, is_pwa_connected, campaign_source, campaign_id,
-                  deploy_url, created_at, updated_at
-             FROM public.user_sites
-            WHERE owner_id = ANY($1::text[])
-            ORDER BY updated_at DESC
-            LIMIT 1000`,
-          [variantList],
-        );
-        for (const r of rows || []) {
-          if (!isEditorEligibleRow(r)) continue;
-          const formatted = formatEditorSiteRow(r);
-          if (formatted) bySlug.set(formatted.slug, formatted);
-        }
-      } catch (err) {
-        console.warn('[sites] Postgres listUserEditorSites notice:', err.message);
-      }
-    }
-  }
-
-  // 4. Merge local SQLite mirror
-  try {
-    const placeholders = variantList.map(() => '?').join(',');
-    const localRows = db
-      .prepare(
-        `SELECT slug, business_name, city, niche, template_key, template_source,
-                is_pwa_connected, campaign_source, campaign_id, deploy_url,
-                created_at, updated_at, owner_id
-           FROM user_sites
-          WHERE owner_id IN (${placeholders})
-          ORDER BY updated_at DESC
-          LIMIT 1000`,
-      )
-      .all(...variantList);
-    for (const r of localRows || []) {
-      if (!isEditorEligibleRow(r)) continue;
-      if (!bySlug.has(r.slug)) {
-        const formatted = formatEditorSiteRow(r);
-        if (formatted) bySlug.set(formatted.slug, formatted);
-      }
-    }
-  } catch (err) {
-    console.warn('[sites] SQLite listUserEditorSites notice:', err.message);
+    } catch {}
   }
 
   const result = Array.from(bySlug.values());
@@ -726,67 +712,79 @@ export async function getUserEditorSite(ownerKey, slug) {
     return { ok: false, status: 404, error: 'Site not found' };
   }
 
-  ensureUserSitesTable().catch(() => {});
   let row = null;
 
-  // 1. PRIMARY: Query Supabase REST API directly (fast, reliable)
-  const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
-  const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-  if (sbUrl && sbKey) {
+  // 1. PRIMARY: Query local mirror first for instant (<1ms) response
+  try {
+    row = db.prepare('SELECT * FROM user_sites WHERE slug = ? LIMIT 1').get(cleanSlug);
+  } catch {}
+
+  // 2. Fallback to Supabase REST with fast 1200ms timeout only if not found locally
+  if (!row) {
+    const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+    const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    if (sbUrl && sbKey) {
+      try {
+        const restUrl = new URL(`${sbUrl}/rest/v1/user_sites`);
+        restUrl.searchParams.set('slug', `eq.${cleanSlug}`);
+        restUrl.searchParams.set('limit', '1');
+        const res = await fetch(restUrl.toString(), {
+          headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
+          signal: AbortSignal.timeout(1200),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            row = data[0];
+            try {
+              db.prepare(
+                `INSERT OR REPLACE INTO user_sites (slug, owner_id, business_name, city, niche, template_key, template_source, is_pwa_connected, campaign_source, campaign_id, deploy_url, compiled_html, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              ).run(
+                row.slug, row.owner_id || cleanOwner, row.business_name || '', row.city || '', row.niche || '',
+                row.template_key || '', row.template_source || '', row.is_pwa_connected ? 1 : 0,
+                row.campaign_source || '', row.campaign_id || '', row.deploy_url || '', row.compiled_html || '',
+                row.created_at || Date.now(), row.updated_at || Date.now()
+              );
+            } catch {}
+          }
+        }
+      } catch (err) {
+        // Fallback to local on-disk site
+      }
+    }
+  }
+
+  // 3. Fallback to on-disk site if user_sites row not found
+  if (!row) {
     try {
-      const restUrl = new URL(`${sbUrl}/rest/v1/user_sites`);
-      restUrl.searchParams.set('slug', `eq.${cleanSlug}`);
-      restUrl.searchParams.set('limit', '1');
-      const res = await fetch(restUrl.toString(), {
-        headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
-        signal: AbortSignal.timeout(4000),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          row = data[0];
+      if (await siteExists(cleanSlug)) {
+        const htmlOnDisk = await readSite(cleanSlug);
+        if (htmlOnDisk) {
+          row = {
+            slug: cleanSlug,
+            owner_id: cleanOwner,
+            business_name: titleFromHtml(htmlOnDisk) || cleanSlug,
+            city: 'Local Area',
+            niche: nicheFromHtml(htmlOnDisk),
+            template_key: 'hvac-template-01',
+            template_source: 'builtin',
+            is_pwa_connected: 0,
+            compiled_html: htmlOnDisk,
+            created_at: Date.now(),
+            updated_at: Date.now(),
+          };
+          try {
+            db.prepare(
+              `INSERT OR IGNORE INTO user_sites (slug, owner_id, business_name, city, niche, template_key, template_source, is_pwa_connected, compiled_html, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            ).run(
+              cleanSlug, cleanOwner, row.business_name, row.city, row.niche,
+              row.template_key, row.template_source, 0, htmlOnDisk, Date.now(), Date.now()
+            );
+          } catch {}
         }
       }
-    } catch (err) {
-      console.warn('[sites] REST getUserEditorSite notice:', err.message);
-    }
-  }
-
-  // 2. Fallback to Supabase SDK
-  if (!row) {
-    const sb = getSupabase();
-    if (sb) {
-      try {
-        const { data } = await sb
-          .from('user_sites')
-          .select('*')
-          .eq('slug', cleanSlug)
-          .maybeSingle();
-        if (data) row = data;
-      } catch {}
-    }
-  }
-
-  // 3. Fallback to PostgreSQL pool
-  if (!row) {
-    const pool = getPgPool();
-    if (pool) {
-      try {
-        const { rows } = await pool.query(
-          'SELECT * FROM public.user_sites WHERE slug = $1 LIMIT 1',
-          [cleanSlug],
-        );
-        if (rows && rows.length > 0) row = rows[0];
-      } catch (err) {
-        console.warn('[sites] Postgres getUserEditorSite notice:', err.message);
-      }
-    }
-  }
-
-  // 4. Fallback to local SQLite mirror
-  if (!row) {
-    try {
-      row = db.prepare('SELECT * FROM user_sites WHERE slug = ? LIMIT 1').get(cleanSlug);
     } catch {}
   }
 

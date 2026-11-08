@@ -226,7 +226,9 @@ export const OwnerPWADrawer: React.FC<OwnerPWADrawerProps> = ({
   };
 
   const origin = typeof window !== 'undefined' && window.location?.origin
-    ? window.location.origin
+    ? (window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1')
+        ? 'https://lunao.org'
+        : window.location.origin)
     : 'https://lunao.org';
   const qrValue = displayCode
     ? `${origin}/owner/?code=${encodeURIComponent(displayCode)}&slug=${encodeURIComponent(slug)}`

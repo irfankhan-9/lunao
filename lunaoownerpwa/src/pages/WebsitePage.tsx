@@ -35,6 +35,7 @@ export const WebsitePage: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState<boolean>(false);
   const [editMode, setEditMode] = useState<boolean>(false);
+  const [previewVersion, setPreviewVersion] = useState<number>(0);
 
   // Image replacement ref
   const selectedImgRef = useRef<HTMLImageElement | null>(null);
@@ -219,6 +220,7 @@ export const WebsitePage: React.FC = () => {
       setSiteHtml(currentHtml);
       htmlBufferRef.current = currentHtml;
       setIsDirty(false);
+      setPreviewVersion((v) => v + 1);
       soundEffects.playSuccess();
       showToast('Website changes saved successfully');
     } catch (err: any) {
@@ -229,7 +231,7 @@ export const WebsitePage: React.FC = () => {
     }
   };
 
-  // 5. Deploy live to Cloudflare Pages
+  // 5. Deploy live to Cloudflare Pages & Supabase
   const handleDeploy = async () => {
     soundEffects.playButtonClick();
     const currentHtml = syncHtmlFromDoc();
@@ -239,6 +241,8 @@ export const WebsitePage: React.FC = () => {
       setSiteHtml(currentHtml);
       htmlBufferRef.current = currentHtml;
       setIsDirty(false);
+      setEditMode(false);
+      setPreviewVersion((v) => v + 1);
       updateWebsiteConfig({
         lastDeployed: result.lastDeployed || new Date().toISOString().slice(0, 10),
         status: 'deployed',
@@ -253,7 +257,7 @@ export const WebsitePage: React.FC = () => {
     }
   };
 
-  // 6. Direct Image Swapping (One-Click)
+  // 6. Direct Image Swapping (One-Click) with high-efficiency client-side compression
   const replaceWithImage = (url: string) => {
     if (!selectedImgRef.current || !url.trim()) return;
     selectedImgRef.current.src = url.trim();
@@ -266,16 +270,63 @@ export const WebsitePage: React.FC = () => {
     showToast('Photo replaced successfully');
   };
 
-  const handlePickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const compressImageFile = (file: File, maxDim = 1600, quality = 0.85): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = reject;
+      reader.onload = () => {
+        const raw = typeof reader.result === 'string' ? reader.result : '';
+        if (!raw) return resolve('');
+        const img = new Image();
+        img.onerror = () => resolve(raw);
+        img.onload = () => {
+          try {
+            let width = img.naturalWidth || img.width;
+            let height = img.naturalHeight || img.height;
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              } else {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return resolve(raw);
+            ctx.drawImage(img, 0, 0, width, height);
+            const mime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+            resolve(canvas.toDataURL(mime, quality));
+          } catch {
+            resolve(raw);
+          }
+        };
+        img.src = raw;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handlePickFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedImgRef.current) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        replaceWithImage(reader.result);
+    try {
+      const optimizedUrl = await compressImageFile(file);
+      if (optimizedUrl) {
+        replaceWithImage(optimizedUrl);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          replaceWithImage(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
     e.target.value = '';
   };
 
@@ -556,6 +607,7 @@ export const WebsitePage: React.FC = () => {
                 </div>
               ) : (
                 <iframe
+                  key={`preview-${previewVersion}`}
                   ref={iframeRef}
                   title="Business Website"
                   srcDoc={siteHtml}
@@ -677,6 +729,7 @@ export const WebsitePage: React.FC = () => {
               }`}
             >
               <iframe
+                key={`fullscreen-${previewVersion}`}
                 ref={fullscreenIframeRef}
                 title="Business Website Fullscreen"
                 srcDoc={siteHtml}

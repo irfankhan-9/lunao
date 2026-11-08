@@ -8,6 +8,9 @@ export interface AuthUser {
   email: string;
   name: string;
   picture?: string;
+  plan?: string;
+  credits?: number;
+  vibeCredits?: number;
 }
 
 interface GateContextValue {
@@ -69,15 +72,6 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem(`lunao_u_${ownerKey}_credits`, String(resolvedCredits));
         localStorage.setItem('lunao_user_credits', String(resolvedCredits));
 
-        const updatedAuthUser: AuthUser = {
-          ...authUser,
-          credits: resolvedCredits,
-        };
-        localStorage.setItem('lunao_auth_user', JSON.stringify(updatedAuthUser));
-        localStorage.setItem('lunao_owner_key', ownerKey);
-        localStorage.setItem('lunao_auth_token', ownerKey);
-        localStorage.setItem('lunao_unlocked', 'true');
-
         const isFree = resolvedPlan.toLowerCase().includes('free');
         const resolvedVibe = isFree
           ? 0
@@ -86,20 +80,31 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
             : parseFloat(localStorage.getItem(`lunao_u_${ownerKey}_vibe_credits`) || '0');
         setVibeCreditBalance(resolvedVibe);
 
+        const updatedAuthUser: AuthUser = {
+          ...authUser,
+          plan: resolvedPlan,
+          credits: resolvedCredits,
+          vibeCredits: resolvedVibe,
+        };
+        localStorage.setItem('lunao_auth_user', JSON.stringify(updatedAuthUser));
+        localStorage.setItem('lunao_owner_key', ownerKey);
+        localStorage.setItem('lunao_auth_token', ownerKey);
+        localStorage.setItem('lunao_unlocked', 'true');
+
         window.dispatchEvent(
           new CustomEvent('lunao_auth_changed', {
             detail: {
-              user: authUser,
+              user: updatedAuthUser,
               plan: resolvedPlan,
               userCredits: resolvedCredits,
               vibeCredits: resolvedVibe,
             },
           })
         );
+        setUser(updatedAuthUser);
       } catch {
-        /* ignore storage errors */
+        setUser(authUser);
       }
-      setUser(authUser);
       setUnlocked(true);
       setLoading(false);
     },

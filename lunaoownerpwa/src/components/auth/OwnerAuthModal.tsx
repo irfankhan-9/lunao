@@ -64,12 +64,16 @@ export const OwnerAuthModal: React.FC = () => {
   // Auto-fill and auto-submit from ?code= URL param on mount.
   useEffect(() => {
     scrollToTop();
-    const params = new URLSearchParams(window.location.search);
-    const prefill = params.get('code');
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+    const hashParams = new URLSearchParams(hashQuery);
+    const prefill = searchParams.get('code') || hashParams.get('code');
     if (prefill) {
       const normalized = prefill.trim().toUpperCase();
       setInputCode(normalized);
-      window.history.replaceState({}, '', window.location.pathname);
+      try {
+        window.history.replaceState({}, '', window.location.pathname);
+      } catch {}
       loginWithCode(normalized);
     }
     if (!lockoutUntil && inputRef.current) {

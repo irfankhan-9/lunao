@@ -2071,10 +2071,10 @@ export const TemplateLabPage: React.FC<{
                                 </div>
                                 <div className="inline-flex items-center gap-2 font-mono">
                                   <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200/70 font-semibold">
-                                    -{meta.creditsDeducted.toFixed(2)} Credits
+                                    -{meta.creditsDeducted < 0.01 ? meta.creditsDeducted.toFixed(4) : meta.creditsDeducted.toFixed(2)} Credits
                                   </span>
                                   <span className="text-slate-400">
-                                    ({meta.remainingCredits.toFixed(1)} left)
+                                    ({meta.remainingCredits.toFixed(2).replace(/\.?0+$/, '')} left)
                                   </span>
                                 </div>
                               </div>

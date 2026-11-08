@@ -83,15 +83,27 @@ export function listCodes(slug) {
 export async function listCodesAsync(slug) {
   if (!slug) return [];
   const cleanSlug = String(slug).trim().toLowerCase();
+  
+  // 1. Primary: return local codes immediately (<1ms)
+  const localCodes = listCodes(cleanSlug);
+  if (localCodes && localCodes.length > 0) {
+    return localCodes;
+  }
+
+  // 2. Fallback to Supabase with strict 1000ms timeout
   try {
     const { getSupabase } = await import('./supabase.js');
     const sb = getSupabase();
     if (sb) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 1000);
       const { data } = await sb
         .from('invite_codes')
         .select('*')
         .eq('slug', cleanSlug)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .abortSignal(controller.signal);
+      clearTimeout(timer);
       if (Array.isArray(data) && data.length > 0) {
         for (const d of data) {
           try {
@@ -512,7 +524,7 @@ export async function getOwnerPwaQuotaStatusAsync(ownerKey, fallbackPlan = null)
   const { normalisePlan, pwaAllowanceForPlan } = await import('./planGates.js');
   const cleanOwner = String(ownerKey || '').trim();
 
-  // 1. Resolve user's plan from credit_accounts (local or Supabase) or fallbackPlan
+  // 1. Resolve user's plan from credit_accounts (local first) or fallbackPlan
   let resolvedPlan = fallbackPlan ? normalisePlan(fallbackPlan) : null;
   if (cleanOwner) {
     try {
@@ -521,25 +533,11 @@ export async function getOwnerPwaQuotaStatusAsync(ownerKey, fallbackPlan = null)
         resolvedPlan = normalisePlan(acct.plan);
       }
     } catch {}
-    if (!resolvedPlan) {
-      try {
-        const { getSupabase } = await import('./supabase.js');
-        const sb = getSupabase();
-        if (sb) {
-          const { data } = await sb
-            .from('credit_accounts')
-            .select('plan')
-            .eq('owner_key', cleanOwner)
-            .maybeSingle();
-          if (data && data.plan) resolvedPlan = normalisePlan(data.plan);
-        }
-      } catch {}
-    }
   }
   const finalPlan = normalisePlan(resolvedPlan || fallbackPlan || 'Free Plan');
   const maxAllowed = pwaAllowanceForPlan(finalPlan);
 
-  // 2. Collect all website slugs belonging to this ownerKey
+  // 2. Collect all website slugs belonging to this ownerKey locally
   const ownerSlugs = new Set();
   if (cleanOwner) {
     try {
@@ -554,29 +552,9 @@ export async function getOwnerPwaQuotaStatusAsync(ownerKey, fallbackPlan = null)
         if (r && r.slug) ownerSlugs.add(String(r.slug).toLowerCase());
       }
     } catch {}
-    try {
-      const { getSupabase } = await import('./supabase.js');
-      const sb = getSupabase();
-      if (sb) {
-        const { data: siteRows } = await sb
-          .from('user_sites')
-          .select('slug')
-          .eq('owner_id', cleanOwner);
-        for (const r of siteRows || []) {
-          if (r && r.slug) ownerSlugs.add(String(r.slug).toLowerCase());
-        }
-        const { data: obRows } = await sb
-          .from('owner_businesses')
-          .select('slug')
-          .eq('owner_key', cleanOwner);
-        for (const r of obRows || []) {
-          if (r && r.slug) ownerSlugs.add(String(r.slug).toLowerCase());
-        }
-      }
-    } catch {}
   }
 
-  // 3. Find all generated (non-revoked) PWA slugs for this owner across SQLite & Supabase
+  // 3. Find all generated (non-revoked) PWA slugs for this owner across local invite_codes
   const activeSlugsSet = new Set();
   try {
     const localCodes = db
@@ -589,25 +567,6 @@ export async function getOwnerPwaQuotaStatusAsync(ownerKey, fallbackPlan = null)
       const labelMatch = cleanOwner && typeof c.label === 'string' && c.label.includes(`[owner:${cleanOwner}]`);
       if (ownerSlugs.has(s) || labelMatch || !cleanOwner) {
         activeSlugsSet.add(s);
-      }
-    }
-  } catch {}
-
-  try {
-    const { getSupabase } = await import('./supabase.js');
-    const sb = getSupabase();
-    if (sb) {
-      const { data: remoteCodes } = await sb
-        .from('invite_codes')
-        .select('slug, label, used_at, revoked_at')
-        .is('revoked_at', null);
-      for (const c of remoteCodes || []) {
-        if (!c || !c.slug) continue;
-        const s = String(c.slug).toLowerCase();
-        const labelMatch = cleanOwner && typeof c.label === 'string' && c.label.includes(`[owner:${cleanOwner}]`);
-        if (ownerSlugs.has(s) || labelMatch || !cleanOwner) {
-          activeSlugsSet.add(s);
-        }
       }
     }
   } catch {}
