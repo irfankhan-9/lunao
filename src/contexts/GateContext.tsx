@@ -64,11 +64,12 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
         const resolvedCredits =
           typeof userCreditsInput === 'number'
             ? userCreditsInput
-            : parseFloat(
-                localStorage.getItem(`lunao_u_${ownerKey}_credits`) ||
-                localStorage.getItem('lunao_user_credits') ||
-                '15'
-              );
+            : (() => {
+                const cached =
+                  localStorage.getItem(`lunao_u_${ownerKey}_credits`) ||
+                  localStorage.getItem('lunao_user_credits');
+                return cached !== null ? parseFloat(cached) : 0;
+              })();
         localStorage.setItem(`lunao_u_${ownerKey}_credits`, String(resolvedCredits));
         localStorage.setItem('lunao_user_credits', String(resolvedCredits));
 
@@ -172,7 +173,7 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
             'x-owner-key': authUser.ownerKey,
             Authorization: `Bearer ${authUser.ownerKey}`,
           },
-          signal: AbortSignal.timeout(1500),
+          signal: AbortSignal.timeout(4000),
         });
         if (res.ok) {
           const data = await res.json();

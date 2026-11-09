@@ -375,10 +375,7 @@ function DashboardApp() {
     if (typeof user?.credits === 'number') return user.credits;
     const cached = localStorage.getItem(userCreditsKey) ?? localStorage.getItem('lunao_user_credits');
     if (cached !== null) return parseFloat(cached);
-    const defaultMap: Record<string, number> = {
-      'Free Plan': 15, 'Starter Plan': 2500, 'Pro Plan': 6500, 'Agency Plan': 12000,
-    };
-    return defaultMap[userPlan] ?? 15;
+    return 0;
   });
 
   const hasHydratedCreditsRef = useRef(false);

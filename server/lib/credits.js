@@ -39,14 +39,7 @@ export function inferPlanFromOwnerKey(ownerKey, fallbackPlan = 'Free Plan') {
   const str = String(ownerKey).toLowerCase();
   if (str.includes('agency')) return 'Agency Plan';
   if (str.includes('pro')) return 'Pro Plan';
-  if (
-    str.includes('starter') ||
-    str.includes('103794254346270879981') ||
-    str.includes('ik2582675')
-  ) {
-    return 'Starter Plan';
-  }
-  if (str === 'dashboard') return 'Agency Plan';
+  if (str.includes('starter')) return 'Starter Plan';
   return fallbackPlan;
 }
 
@@ -55,6 +48,70 @@ function generateReferralCode(ownerKey) {
   const suffix = clean.slice(-6) || Math.random().toString(36).slice(2, 8).toUpperCase();
   const extra = Math.random().toString(36).slice(2, 6).toUpperCase();
   return `LUNAO-${suffix}-${extra}`;
+}
+
+// Check and apply 30-day plan expiration
+export async function checkAndApplyPlanExpiration(ownerKey) {
+  if (!ownerKey) return { expired: false };
+  const pool = getPgPool();
+  if (pool) {
+    try {
+      const planRes = await pool.query(
+        'SELECT plan_tier, plan_expires_at, plan_purchased_at FROM public.user_plans WHERE user_id = $1 LIMIT 1',
+        [ownerKey]
+      );
+      if (planRes.rows.length > 0) {
+        const row = planRes.rows[0];
+        const currentPlan = row.plan_tier || 'Free Plan';
+        const expiresAt = row.plan_expires_at ? Number(row.plan_expires_at) : null;
+        const now = Date.now();
+
+        if (currentPlan !== 'Free Plan' && expiresAt && now >= expiresAt) {
+          console.log(`[credits] Plan expired for ${ownerKey} (was ${currentPlan}, expired at ${new Date(expiresAt).toISOString()}). Resetting to Free Plan.`);
+
+          // Revert user_plans to Free Plan
+          await pool.query(
+            `UPDATE public.user_plans 
+             SET plan_tier = 'Free Plan',
+                 monthly_action_credits = 15,
+                 monthly_ai_allowance_usd = 0.0,
+                 plan_expires_at = NULL,
+                 updated_at = $1
+             WHERE user_id = $2`,
+            [now, ownerKey]
+          );
+
+          // Reset user_credits: cap action credits to 15, reset AI credits to 0
+          await pool.query(
+            `UPDATE public.user_credits 
+             SET action_credits_balance = LEAST(action_credits_balance, 15),
+                 ai_credits_balance = 0,
+                 updated_at = $1
+             WHERE user_id = $2`,
+            [now, ownerKey]
+          );
+
+          // Record ledger event
+          await pool.query(
+            `INSERT INTO public.credit_transactions (user_id, action_type, credits_charged, description, created_at)
+             VALUES ($1, 'plan_expired', 0, '30-day billing cycle completed, plan reset to Free Plan', $2)`,
+            [ownerKey, now]
+          );
+
+          // Sync SQLite mirror
+          try {
+            db.prepare('UPDATE credit_accounts SET plan = ?, balance = MIN(balance, 15), updated_at = ? WHERE owner_key = ?')
+              .run('Free Plan', now, ownerKey);
+          } catch {}
+
+          return { expired: true, previousPlan: currentPlan, currentPlan: 'Free Plan' };
+        }
+      }
+    } catch (err) {
+      console.warn('[credits] checkAndApplyPlanExpiration error:', err.message);
+    }
+  }
+  return { expired: false };
 }
 
 // Ensure account & user_plans / user_credits / affiliates rows exist in Supabase
@@ -68,73 +125,78 @@ export async function ensureAccountAsync(ownerKey, plan) {
   const pool = getPgPool();
   if (pool) {
     try {
-      // 1. Check existing plan & credits
-      const planRes = await pool.query('SELECT * FROM user_plans WHERE user_id = $1 LIMIT 1', [ownerKey]);
-      const credRes = await pool.query('SELECT * FROM user_credits WHERE user_id = $1 LIMIT 1', [ownerKey]);
+      // Run column migration once (idempotent)
+      await pool.query(`
+        ALTER TABLE public.user_plans ADD COLUMN IF NOT EXISTS plan_expires_at BIGINT;
+        ALTER TABLE public.user_plans ADD COLUMN IF NOT EXISTS plan_purchased_at BIGINT;
+      `).catch(() => {});
 
-      if (planRes.rows.length === 0 || credRes.rows.length === 0) {
-        // Insert user_plans
+      // 1. Check existing plan & credits
+      const planRes = await pool.query('SELECT * FROM public.user_plans WHERE user_id = $1 LIMIT 1', [ownerKey]);
+      const credRes = await pool.query('SELECT * FROM public.user_credits WHERE user_id = $1 LIMIT 1', [ownerKey]);
+
+      const initialAiCredits = safePlan.toLowerCase().includes('agency') ? 2000
+        : safePlan.toLowerCase().includes('pro') || safePlan.toLowerCase().includes('growth') ? 1300
+        : safePlan.toLowerCase().includes('starter') ? 600
+        : 0;
+
+      // New user registration / first appearance:
+      if (planRes.rows.length === 0) {
         await pool.query(
-          `INSERT INTO user_plans (user_id, plan_tier, monthly_action_credits, monthly_ai_allowance_usd, updated_at)
+          `INSERT INTO public.user_plans (user_id, plan_tier, monthly_action_credits, monthly_ai_allowance_usd, updated_at)
            VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (user_id) DO UPDATE SET plan_tier = $2, monthly_action_credits = $3, monthly_ai_allowance_usd = $4, updated_at = $5`,
+           ON CONFLICT (user_id) DO NOTHING`,
           [ownerKey, safePlan, startingCredits, aiAllowance, now]
         );
+      }
 
-        const initialAiCredits = safePlan.toLowerCase().includes('agency') ? 2000
-          : safePlan.toLowerCase().includes('pro') || safePlan.toLowerCase().includes('growth') ? 1300
-          : safePlan.toLowerCase().includes('starter') ? 600
-          : 0;
-
-        // Insert user_credits
+      if (credRes.rows.length === 0) {
         await pool.query(
-          `INSERT INTO user_credits (user_id, action_credits_balance, ai_credits_balance, ai_dollars_spent, updated_at)
+          `INSERT INTO public.user_credits (user_id, action_credits_balance, ai_credits_balance, ai_dollars_spent, updated_at)
            VALUES ($1, $2, $3, 0.0000, $4)
-           ON CONFLICT (user_id) DO UPDATE SET 
-             action_credits_balance = GREATEST(user_credits.action_credits_balance, $2),
-             ai_credits_balance = CASE 
-               WHEN user_credits.ai_credits_balance IS NULL OR user_credits.ai_credits_balance = 0 THEN $3 
-               ELSE user_credits.ai_credits_balance 
-             END,
-             updated_at = $4`,
+           ON CONFLICT (user_id) DO NOTHING`,
           [ownerKey, startingCredits, initialAiCredits, now]
         );
 
-        // Record initial seeding transaction
         await pool.query(
-          `INSERT INTO credit_transactions (user_id, action_type, credits_charged, description, created_at)
+          `INSERT INTO public.credit_transactions (user_id, action_type, credits_charged, description, created_at)
            VALUES ($1, 'plan_topup', $2, $3, $4)`,
           [ownerKey, startingCredits, `Initial ${safePlan} balance allocation`, now]
         );
 
-        // Ensure affiliate profile row exists
         const refCode = generateReferralCode(ownerKey);
         await pool.query(
-          `INSERT INTO affiliates (user_id, referral_code, total_referrals, total_earnings_usd, created_at)
+          `INSERT INTO public.affiliates (user_id, referral_code, total_referrals, total_earnings_usd, created_at)
            VALUES ($1, $2, 0, 0.00, $3)
            ON CONFLICT (user_id) DO NOTHING`,
           [ownerKey, refCode, now]
         );
-      } else if (planRes.rows[0].plan_tier !== safePlan) {
-        // Plan changed -> top up difference
+      } else if (planRes.rows.length > 0 && planRes.rows[0].plan_tier !== safePlan && safePlan !== 'Free Plan') {
+        // Legitimate paid plan upgrade
         const oldPlan = planRes.rows[0].plan_tier;
         const delta = startingCredits - (balanceFor(oldPlan) || 0);
+        const planExpiresAt = now + (30 * 24 * 60 * 60 * 1000); // 30 days validity
 
         await pool.query(
-          `UPDATE user_plans SET plan_tier = $1, monthly_action_credits = $2, monthly_ai_allowance_usd = $3, updated_at = $4
-           WHERE user_id = $5`,
-          [safePlan, startingCredits, aiAllowance, now, ownerKey]
+          `UPDATE public.user_plans 
+           SET plan_tier = $1, monthly_action_credits = $2, monthly_ai_allowance_usd = $3,
+               plan_purchased_at = $4, plan_expires_at = $5, updated_at = $6
+           WHERE user_id = $7`,
+          [safePlan, startingCredits, aiAllowance, now, planExpiresAt, now, ownerKey]
         );
 
-        if (delta !== 0) {
+        if (delta > 0) {
           await pool.query(
-            `UPDATE user_credits SET action_credits_balance = GREATEST(0, action_credits_balance + $1), updated_at = $2
-             WHERE user_id = $3`,
-            [delta, now, ownerKey]
+            `UPDATE public.user_credits 
+             SET action_credits_balance = action_credits_balance + $1,
+                 ai_credits_balance = GREATEST(ai_credits_balance, $2),
+                 updated_at = $3
+             WHERE user_id = $4`,
+            [delta, initialAiCredits, now, ownerKey]
           );
 
           await pool.query(
-            `INSERT INTO credit_transactions (user_id, action_type, credits_charged, description, created_at)
+            `INSERT INTO public.credit_transactions (user_id, action_type, credits_charged, description, created_at)
              VALUES ($1, 'plan_switch', $2, $3, $4)`,
             [ownerKey, delta, `Plan upgrade to ${safePlan}`, now]
           );
@@ -179,18 +241,18 @@ function ensureAccountLocal(ownerKey, safePlan) {
     return getAccountLocal(ownerKey);
   }
 
-  if (existing.plan !== safePlan) {
+  if (existing.plan !== safePlan && safePlan !== 'Free Plan') {
     const target = balanceFor(safePlan);
-    const delta = target - existing.balance;
+    const delta = Math.max(0, target - existing.balance);
     db.transaction(() => {
       db.prepare(
-        `UPDATE credit_accounts SET plan = ?, balance = ?, updated_at = ? WHERE owner_key = ?`
-      ).run(safePlan, target, now, ownerKey);
-      if (delta !== 0) {
+        `UPDATE credit_accounts SET plan = ?, balance = balance + ?, updated_at = ? WHERE owner_key = ?`
+      ).run(safePlan, delta, now, ownerKey);
+      if (delta > 0) {
         db.prepare(
           `INSERT INTO credit_ledger (owner_key, delta, reason, ref_type, ref_id, balance_after, created_at)
            VALUES (?, ?, 'plan_topup', 'plan', ?, ?, ?)`
-        ).run(ownerKey, delta, safePlan, target, now);
+        ).run(ownerKey, delta, safePlan, existing.balance + delta, now);
       }
     })();
   }
@@ -261,38 +323,39 @@ export async function chargeAsync(ownerKey, n, actionType = 'action_charge', des
   const pool = getPgPool();
   if (pool) {
     try {
-      await ensureAccountAsync(ownerKey, 'Free Plan');
-      const credRes = await pool.query('SELECT action_credits_balance FROM user_credits WHERE user_id = $1 LIMIT 1', [ownerKey]);
+      await checkAndApplyPlanExpiration(ownerKey);
 
-      if (credRes.rows.length === 0) {
-        throw Object.assign(new Error('No credit account found.'), { status: 400 });
-      }
+      const now = Date.now();
+      // One-way atomic deduction: guarantees balance cannot drop below 0 or suffer race conditions
+      const updateRes = await pool.query(
+        `UPDATE public.user_credits 
+         SET action_credits_balance = ROUND((action_credits_balance - $1)::numeric, 1), 
+             updated_at = $2 
+         WHERE user_id = $3 AND action_credits_balance >= $1
+         RETURNING action_credits_balance`,
+        [amount, now, ownerKey]
+      );
 
-      const currentBalance = Number(credRes.rows[0].action_credits_balance || 0);
-      if (currentBalance < amount) {
-        const err = new Error(`Insufficient credits: need ${amount}, have ${currentBalance}. Upgrade your plan to continue.`);
+      if (updateRes.rows.length === 0) {
+        const curRes = await pool.query('SELECT action_credits_balance FROM public.user_credits WHERE user_id = $1 LIMIT 1', [ownerKey]);
+        const curBal = curRes.rows.length > 0 ? Number(curRes.rows[0].action_credits_balance || 0) : 0;
+        const err = new Error(`Insufficient credits: need ${amount}, have ${curBal}. Upgrade your plan to continue.`);
         err.status = 402;
         err.needed = amount;
-        err.available = currentBalance;
+        err.available = curBal;
         throw err;
       }
 
-      const newBalance = Math.round((currentBalance - amount) * 10) / 10;
-      const now = Date.now();
+      const newBalance = Number(updateRes.rows[0].action_credits_balance);
 
       await pool.query(
-        `UPDATE user_credits SET action_credits_balance = $1, updated_at = $2 WHERE user_id = $3`,
-        [newBalance, now, ownerKey]
-      );
-
-      await pool.query(
-        `INSERT INTO credit_transactions (user_id, action_type, credits_charged, description, created_at)
+        `INSERT INTO public.credit_transactions (user_id, action_type, credits_charged, description, created_at)
          VALUES ($1, $2, $3, $4, $5)`,
         [ownerKey, actionType, amount, description || actionType, now]
       );
 
       try {
-        db.prepare('UPDATE credit_accounts SET balance = ? WHERE owner_key = ?').run(newBalance, ownerKey);
+        db.prepare('UPDATE credit_accounts SET balance = ?, updated_at = ? WHERE owner_key = ?').run(newBalance, now, ownerKey);
       } catch {}
 
       return newBalance;
@@ -326,12 +389,8 @@ function chargeLocal(ownerKey, n, reason, ref = {}) {
   const now = Date.now();
   const txn = db.transaction(() => {
     let row = db.prepare('SELECT * FROM credit_accounts WHERE owner_key = ?').get(ownerKey);
-    const inferredPlan = inferPlanFromOwnerKey(ownerKey, 'Free Plan');
     if (!row) {
-      ensureAccountLocal(ownerKey, inferredPlan);
-      row = db.prepare('SELECT * FROM credit_accounts WHERE owner_key = ?').get(ownerKey);
-    } else if (row.plan === 'Free Plan' && inferredPlan !== 'Free Plan') {
-      ensureAccountLocal(ownerKey, inferredPlan);
+      ensureAccountLocal(ownerKey, 'Free Plan');
       row = db.prepare('SELECT * FROM credit_accounts WHERE owner_key = ?').get(ownerKey);
     }
     if (!row || row.balance < amount) {
@@ -360,9 +419,8 @@ export async function checkBalanceAsync(ownerKey, n = 1) {
   const pool = getPgPool();
   if (pool) {
     try {
-      const inferredPlan = inferPlanFromOwnerKey(ownerKey, 'Free Plan');
-      await ensureAccountAsync(ownerKey, inferredPlan);
-      const credRes = await pool.query('SELECT action_credits_balance FROM user_credits WHERE user_id = $1 LIMIT 1', [ownerKey]);
+      await checkAndApplyPlanExpiration(ownerKey);
+      const credRes = await pool.query('SELECT action_credits_balance FROM public.user_credits WHERE user_id = $1 LIMIT 1', [ownerKey]);
       if (credRes.rows.length === 0) {
         throw Object.assign(new Error('No credit account found.'), { status: 400 });
       }
@@ -391,12 +449,8 @@ function checkBalanceLocal(ownerKey, n = 1) {
   if (!ownerKey) throw Object.assign(new Error('ownerKey is required'), { status: 400 });
   const amount = normalizeCreditAmount(n);
   let row = db.prepare('SELECT balance, plan FROM credit_accounts WHERE owner_key = ?').get(ownerKey);
-  const inferredPlan = inferPlanFromOwnerKey(ownerKey, 'Free Plan');
   if (!row) {
-    ensureAccountLocal(ownerKey, inferredPlan);
-    row = db.prepare('SELECT balance, plan FROM credit_accounts WHERE owner_key = ?').get(ownerKey);
-  } else if (row.plan === 'Free Plan' && inferredPlan !== 'Free Plan') {
-    ensureAccountLocal(ownerKey, inferredPlan);
+    ensureAccountLocal(ownerKey, 'Free Plan');
     row = db.prepare('SELECT balance, plan FROM credit_accounts WHERE owner_key = ?').get(ownerKey);
   }
   const available = row ? row.balance : 0;

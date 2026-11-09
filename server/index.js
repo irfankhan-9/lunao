@@ -123,6 +123,7 @@ import {
   reserveEmailDiscoveryCredits,
   settleEmailDiscoveryCredits,
   inferPlanFromOwnerKey,
+  checkAndApplyPlanExpiration,
 } from './lib/credits.js';
 import {
   getAffiliateProfileAsync,
@@ -2250,8 +2251,11 @@ app.post('/api/auth/google-session', async (req, res) => {
           [ownerKey, cleanUid, cleanEmail, displayName, avatarUrl, now]
         );
 
+        // Check and apply 30-day plan expiration
+        await checkAndApplyPlanExpiration(ownerKey);
+
         const existingPlanRes = await pool.query(
-          'SELECT plan_tier FROM public.user_plans WHERE user_id = $1 LIMIT 1',
+          'SELECT plan_tier, plan_expires_at FROM public.user_plans WHERE user_id = $1 LIMIT 1',
           [ownerKey]
         );
         const existingCredRes = await pool.query(
@@ -2268,16 +2272,16 @@ app.post('/api/auth/google-session', async (req, res) => {
           vibeCredits = 0;
         } else {
           plan = existingPlanRes.rows[0].plan_tier || 'Free Plan';
-          userCredits = await getSupabaseUserCredits(ownerKey, Number(existingCredRes.rows[0].action_credits_balance ?? 15));
+          userCredits = Number(existingCredRes.rows[0].action_credits_balance ?? 0);
           const aiStatus = await getUserAiStatus(ownerKey);
-          vibeCredits = plan === 'Free Plan' ? 0 : Number(aiStatus?.balanceCredits ?? existingCredRes.rows[0].ai_credits_balance ?? 0);
+          vibeCredits = plan === 'Free Plan' ? 0 : Number(existingCredRes.rows[0].ai_credits_balance ?? aiStatus?.balanceCredits ?? 0);
         }
       } catch (pgErr) {
         console.warn('[auth/google-session] Postgres sync notice:', pgErr.message);
-        userCredits = await getSupabaseUserCredits(ownerKey, 15);
+        userCredits = await getSupabaseUserCredits(ownerKey, 0);
       }
     } else {
-      userCredits = await getSupabaseUserCredits(ownerKey, 15);
+      userCredits = await getSupabaseUserCredits(ownerKey, 0);
     }
 
     // Also ensure local SQLite mirror has the account so local synchronous checks succeed
@@ -2395,17 +2399,40 @@ async function getSupabaseUserPlanAndAi(ownerKey) {
   }
 }
 
-async function getSupabaseUserCredits(ownerKey, defaultBalance = 15) {
+async function getSupabaseUserCredits(ownerKey, defaultBalance = 0) {
+  if (!ownerKey) return defaultBalance;
+
+  // 1. Direct Postgres Pool (< 2ms)
+  const pool = getPgPool();
+  if (pool) {
+    try {
+      const res = await pool.query(
+        'SELECT action_credits_balance FROM public.user_credits WHERE user_id = $1 LIMIT 1',
+        [ownerKey]
+      );
+      if (res.rows.length > 0 && typeof res.rows[0].action_credits_balance === 'number') {
+        const val = Number(res.rows[0].action_credits_balance);
+        try {
+          db.prepare('UPDATE credit_accounts SET balance = ?, updated_at = ? WHERE owner_key = ?').run(val, Math.floor(Date.now() / 1000), ownerKey);
+        } catch {}
+        return val;
+      }
+    } catch (e) {
+      console.warn('[credits] Postgres pool user_credits fetch warning:', e.message);
+    }
+  }
+
+  // 2. Secondary path: Supabase PostgREST
   if (isServerSupabaseDegraded()) return defaultBalance;
   const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
   const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-  if (!sbUrl || !sbKey || !ownerKey) return defaultBalance;
+  if (!sbUrl || !sbKey) return defaultBalance;
   try {
     const credRes = await fetch(
       `${sbUrl}/rest/v1/user_credits?user_id=eq.${encodeURIComponent(ownerKey)}&select=action_credits_balance,ai_credits_balance,updated_at`,
       {
         headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
-        signal: AbortSignal.timeout(1000),
+        signal: AbortSignal.timeout(4000),
       }
     );
     if (credRes.ok) {
@@ -2420,15 +2447,15 @@ async function getSupabaseUserCredits(ownerKey, defaultBalance = 15) {
       }
     }
 
-    // Provision new row if not exists (non-blocking)
-    const encoded = encodeSupabaseBalance(defaultBalance);
+    // Only provision starting 15 credits if the user record genuinely does not exist anywhere yet (ignore-duplicates)
+    const encoded = encodeSupabaseBalance(defaultBalance > 0 ? defaultBalance : 15);
     fetch(`${sbUrl}/rest/v1/user_credits`, {
       method: 'POST',
       headers: {
         apikey: sbKey,
         Authorization: `Bearer ${sbKey}`,
         'Content-Type': 'application/json',
-        Prefer: 'resolution=merge-duplicates',
+        Prefer: 'resolution=ignore-duplicates',
       },
       body: JSON.stringify({
         user_id: ownerKey,
@@ -2436,9 +2463,9 @@ async function getSupabaseUserCredits(ownerKey, defaultBalance = 15) {
         ai_credits_balance: 0,
         updated_at: encoded.updated_at,
       }),
-      signal: AbortSignal.timeout(1000),
+      signal: AbortSignal.timeout(4000),
     }).catch(() => {});
-    return encoded.exactBalance;
+    return defaultBalance;
   } catch (err) {
     tripServerSupabaseCircuitBreaker();
     console.warn('[credits] Supabase get error:', err.message);
@@ -2502,62 +2529,53 @@ app.get('/api/auth/me', authenticate, async (req, res) => {
       return res.status(401).json({ ok: false, error: 'Not authenticated' });
     }
 
+    // Check and apply 30-day plan expiration
+    await checkAndApplyPlanExpiration(ownerKey);
+
     // 1. Instant local read (< 0.2ms)
     const localAcct = getAccount(ownerKey);
     let plan = localAcct?.plan || 'Free Plan';
-    let userCredits = typeof localAcct?.balance === 'number' ? localAcct.balance : 15;
+    let userCredits = typeof localAcct?.balance === 'number' ? localAcct.balance : 0;
     let vibeCredits = 0;
 
-    // 2. Fetch live data if Supabase is healthy (race max 1000ms)
-    if (!isServerSupabaseDegraded()) {
+    // 2. Fetch authoritative live data from Supabase Postgres Pool (< 2ms)
+    const pool = getPgPool();
+    if (pool) {
       try {
-        const [acct, aiStatus, sbPlanAi, sbCredits] = await Promise.race([
+        const [planRes, credRes] = await Promise.all([
+          pool.query('SELECT plan_tier, plan_expires_at FROM public.user_plans WHERE user_id = $1 LIMIT 1', [ownerKey]),
+          pool.query('SELECT action_credits_balance, ai_credits_balance FROM public.user_credits WHERE user_id = $1 LIMIT 1', [ownerKey]),
+        ]);
+        if (planRes.rows.length > 0) {
+          plan = planRes.rows[0].plan_tier || 'Free Plan';
+        }
+        if (credRes.rows.length > 0) {
+          userCredits = Number(credRes.rows[0].action_credits_balance ?? 0);
+          vibeCredits = plan === 'Free Plan' ? 0 : Number(credRes.rows[0].ai_credits_balance ?? 0);
+        }
+      } catch (e) {
+        console.warn('[auth/me] Supabase pool fetch warning:', e.message);
+      }
+    } else if (!isServerSupabaseDegraded()) {
+      try {
+        const [sbPlanAi, sbCredits] = await Promise.race([
           Promise.all([
-            getAccountAsync(ownerKey).catch(() => null),
-            getUserAiStatus(ownerKey).catch(() => null),
             getSupabaseUserPlanAndAi(ownerKey).catch(() => null),
             getSupabaseUserCredits(ownerKey, userCredits).catch(() => userCredits),
           ]),
-          new Promise((resolve) => setTimeout(() => resolve([null, null, null, userCredits]), 1000)),
+          new Promise((resolve) => setTimeout(() => resolve([null, userCredits]), 4000)),
         ]);
         if (sbPlanAi?.plan) plan = sbPlanAi.plan;
-        else if (acct?.plan) plan = acct.plan;
-        else if (aiStatus?.plan) plan = aiStatus.plan;
-
         if (typeof sbCredits === 'number') userCredits = sbCredits;
-
-        vibeCredits =
-          plan === 'Free Plan'
-            ? 0
-            : typeof sbPlanAi?.aiCreditsBalance === 'number'
-              ? sbPlanAi.aiCreditsBalance
-              : Number(aiStatus?.balanceCredits ?? 0);
+        vibeCredits = plan === 'Free Plan' ? 0 : (sbPlanAi?.aiCreditsBalance ?? 0);
       } catch {
         tripServerSupabaseCircuitBreaker();
-      }
-    } else {
-      if (localAcct?.plan) plan = localAcct.plan;
-      vibeCredits = plan === 'Free Plan' ? 0 : Number(localAcct?.balance || 0);
-    }
-
-    if (plan === 'Free Plan') {
-      const inferred = inferPlanFromOwnerKey(ownerKey, 'Free Plan');
-      if (inferred !== 'Free Plan') {
-        plan = inferred;
-        userCredits = typeof localAcct?.balance === 'number' && localAcct.balance > 15 ? localAcct.balance : 50;
-        vibeCredits = 10;
-        try {
-          if (!getAccount(ownerKey)) ensureAccount(ownerKey, plan);
-          db.prepare('UPDATE credit_accounts SET plan = ?, balance = ? WHERE owner_key = ?').run(plan, userCredits, ownerKey);
-        } catch {}
       }
     }
 
     try {
-      if (plan && plan !== 'Free Plan') {
-        if (!getAccount(ownerKey)) ensureAccount(ownerKey, plan);
-        db.prepare('UPDATE credit_accounts SET plan = ?, balance = ? WHERE owner_key = ?').run(plan, userCredits, ownerKey);
-      }
+      if (!getAccount(ownerKey)) ensureAccount(ownerKey, plan);
+      db.prepare('UPDATE credit_accounts SET plan = ?, balance = ? WHERE owner_key = ?').run(plan, userCredits, ownerKey);
     } catch {}
 
     return res.json({
@@ -3546,42 +3564,54 @@ app.get('/api/credits', authenticate, async (req, res) => {
     const ownerKey = getAuthOwnerKey(req);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
 
+    // Check and apply 30-day plan expiration
+    await checkAndApplyPlanExpiration(ownerKey);
+
     // 1. Instant local read (< 0.2ms)
     const localAcct = getAccount(ownerKey);
     let plan = localAcct?.plan || (req.query.plan ? String(req.query.plan) : 'Free Plan');
-    let balance = typeof localAcct?.balance === 'number' ? localAcct.balance : 15;
+    let balance = typeof localAcct?.balance === 'number' ? localAcct.balance : 0;
     let vibeCredits = 0;
 
-    // 2. Race with Supabase if healthy
-    if (!isServerSupabaseDegraded()) {
+    // 2. Fetch authoritative live data from Supabase Postgres Pool (< 2ms)
+    const pool = getPgPool();
+    if (pool) {
+      try {
+        const [planRes, credRes] = await Promise.all([
+          pool.query('SELECT plan_tier, plan_expires_at FROM public.user_plans WHERE user_id = $1 LIMIT 1', [ownerKey]),
+          pool.query('SELECT action_credits_balance, ai_credits_balance FROM public.user_credits WHERE user_id = $1 LIMIT 1', [ownerKey]),
+        ]);
+        if (planRes.rows.length > 0) {
+          plan = planRes.rows[0].plan_tier || 'Free Plan';
+        }
+        if (credRes.rows.length > 0) {
+          balance = Number(credRes.rows[0].action_credits_balance ?? 0);
+          vibeCredits = plan === 'Free Plan' ? 0 : Number(credRes.rows[0].ai_credits_balance ?? 0);
+        }
+      } catch (e) {
+        console.warn('[credits] Supabase pool fetch warning:', e.message);
+      }
+    } else if (!isServerSupabaseDegraded()) {
       try {
         const [sbBalance, sbPlanAi] = await Promise.race([
           Promise.all([
             getSupabaseUserCredits(ownerKey, balance).catch(() => balance),
             getSupabaseUserPlanAndAi(ownerKey).catch(() => null),
           ]),
-          new Promise((resolve) => setTimeout(() => resolve([balance, null]), 1000)),
+          new Promise((resolve) => setTimeout(() => resolve([balance, null]), 4000)),
         ]);
         if (typeof sbBalance === 'number') balance = sbBalance;
         if (sbPlanAi?.plan) plan = sbPlanAi.plan;
-        vibeCredits = sbPlanAi?.aiCreditsBalance ?? 0;
+        vibeCredits = plan === 'Free Plan' ? 0 : (sbPlanAi?.aiCreditsBalance ?? 0);
       } catch {
         tripServerSupabaseCircuitBreaker();
       }
     }
 
-    if (plan === 'Free Plan') {
-      const inferred = inferPlanFromOwnerKey(ownerKey, 'Free Plan');
-      if (inferred !== 'Free Plan') {
-        plan = inferred;
-        balance = typeof localAcct?.balance === 'number' && localAcct.balance > 15 ? localAcct.balance : 50;
-        vibeCredits = 10;
-        try {
-          if (!getAccount(ownerKey)) ensureAccount(ownerKey, plan);
-          db.prepare('UPDATE credit_accounts SET plan = ?, balance = ? WHERE owner_key = ?').run(plan, balance, ownerKey);
-        } catch {}
-      }
-    }
+    try {
+      if (!getAccount(ownerKey)) ensureAccount(ownerKey, plan);
+      db.prepare('UPDATE credit_accounts SET plan = ?, balance = ? WHERE owner_key = ?').run(plan, balance, ownerKey);
+    } catch {}
 
     res.json({
       ok: true,

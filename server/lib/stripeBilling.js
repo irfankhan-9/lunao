@@ -83,19 +83,21 @@ export async function applySuccessfulPlanPayment({ ownerKey, planName, customerI
   const normPlan = planName.includes('Plan') ? planName : `${planName} Plan`;
   console.log(`[billing] Applying successful subscription for ${ownerKey}: plan=${normPlan}`);
 
-  // 1. Ensure user account & update Supabase / local DB
+  const now = Date.now();
+  const expiresAt = now + (30 * 24 * 60 * 60 * 1000); // 30-day plan duration
+
+  // 1. Ensure user account & update Supabase / local DB with upgraded plan
   await ensureAccountAsync(ownerKey, normPlan);
 
-  // 2. Persist customer/subscription record in Supabase & SQLite
+  // 2. Persist 30-day expiration and purchase timestamps in Supabase & SQLite
   const pool = getPgPool();
-  const now = Date.now();
   if (pool) {
     try {
       await pool.query(
-        `UPDATE user_plans 
-         SET plan_name = $2, updated_at = $3 
+        `UPDATE public.user_plans 
+         SET plan_tier = $2, plan_purchased_at = $3, plan_expires_at = $4, updated_at = $3 
          WHERE user_id = $1`,
-        [ownerKey, normPlan, now]
+        [ownerKey, normPlan, now, expiresAt]
       );
     } catch (e) {
       console.warn('[billing] Supabase user_plans update notice:', e.message);
@@ -105,10 +107,16 @@ export async function applySuccessfulPlanPayment({ ownerKey, planName, customerI
   try {
     db.prepare(
       `UPDATE credit_accounts 
-       SET plan = ?, updated_at = ? 
+       SET plan = ?, plan_purchased_at = ?, plan_expires_at = ?, updated_at = ? 
        WHERE owner_key = ?`
-    ).run(normPlan, now, ownerKey);
+    ).run(normPlan, now, expiresAt, now, ownerKey);
   } catch (e) {
-    console.warn('[billing] SQLite credit_accounts update notice:', e.message);
+    try {
+      db.prepare(
+        `UPDATE credit_accounts 
+         SET plan = ?, updated_at = ? 
+         WHERE owner_key = ?`
+      ).run(normPlan, now, ownerKey);
+    } catch {}
   }
 }
