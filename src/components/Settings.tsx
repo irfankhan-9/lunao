@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Sparkles, LogOut, CheckCircle, AlertCircle, Shield, CreditCard, User, Edit3, X, Key, Check, Loader2, Gift, DollarSign, Share2, ArrowRight,
+  Sparkles, LogOut, CheckCircle, AlertCircle, User, Edit3, X, Key, Check, Loader2, Gift, DollarSign, Share2, ArrowRight,
   Phone, RefreshCw, Radio, Zap, ShieldCheck, ExternalLink, ShieldAlert
 } from 'lucide-react';
 import { playDialogPop, playConfirmSuccess, playCancelTone, playTiktokLike, playSoftTap } from '../utils/audio';
@@ -340,10 +340,10 @@ export const Settings: React.FC<SettingsProps> = ({
         </div>
       </header>
 
-      {/* Main Single-Panel Grid container */}
-      <div id="settings-split-grid" className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+      {/* Main Profile Container */}
+      <div id="settings-profile-container" className="max-w-2xl">
         
-        {/* Left Column: Profile Card */}
+        {/* Profile Card */}
         <div id="settings-profile-card" className="bg-white border border-border-main rounded-xl p-6 md:p-8 shadow-sm space-y-6">
           <div className="flex items-center gap-4 pb-4 border-b border-border-light">
             <div className="w-16 h-16 bg-ink text-white font-serif text-2xl rounded-full flex items-center justify-center border border-border-main shrink-0 shadow-sm">
@@ -374,17 +374,17 @@ export const Settings: React.FC<SettingsProps> = ({
               </div>
             </div>
 
-                    <div className="space-y-1.5">
-                      <label className="block text-[11px] font-bold text-ink-secondary uppercase tracking-widest">Username / Email address</label>
-                      <input
-                        type="email"
-                        value={userEmail}
-                        onChange={(e) => setUserEmail(e.target.value)}
-                        placeholder="you@example.com"
-                        className="w-full px-3 py-2 bg-off-white border border-border-main rounded text-xs text-ink-secondary font-mono focus:ring-1 focus:ring-accent focus:outline-none"
-                        required
-                      />
-                    </div>
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold text-ink-secondary uppercase tracking-widest">Username / Email address</label>
+              <input
+                type="email"
+                value={userEmail}
+                onChange={(e) => setUserEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full px-3 py-2 bg-off-white border border-border-main rounded text-xs text-ink-secondary font-mono focus:ring-1 focus:ring-accent focus:outline-none"
+                required
+              />
+            </div>
 
             <div className="flex items-center justify-between pt-4 border-t border-border-light">
               <button
@@ -415,141 +415,6 @@ export const Settings: React.FC<SettingsProps> = ({
               </button>
             </div>
           </form>
-        </div>
-
-        {/* Right Column: Billing & Plan Controls */}
-        <div id="settings-billing-card" className="bg-white border border-border-main rounded-xl p-6 md:p-8 shadow-sm space-y-6">
-          <div className="flex items-start justify-between pb-4 border-b border-border-light">
-            <div className="space-y-1">
-              <span className="text-[10px] uppercase font-bold tracking-widest text-accent font-sans">Active Subscription Tier</span>
-              <h3 className="text-xl font-serif text-ink tracking-tight font-normal">Plan Allocation</h3>
-            </div>
-            
-            {/* CURRENT PLAN ICON - Shows premium shield/creditcard depending on tier */}
-            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-accent-soft text-accent border border-accent/20">
-              {userPlan === 'Scale Plan' || userPlan === 'Agency Tier' ? (
-                <Shield className="w-5 h-5 animate-pulse" />
-              ) : (
-                <CreditCard className="w-5 h-5 text-accent" />
-              )}
-            </div>
-          </div>
-
-          {/* Current plan stats showcase */}
-          <div className="bg-off-white border border-border-light rounded-lg p-5 space-y-3.5">
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-ink-secondary font-medium">Subscription:</span>
-              <span className="text-xs font-bold uppercase font-sans text-ink bg-white border border-border-main px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
-                <span className="w-2 h-2 rounded-full bg-success"></span>
-                {userPlan}
-              </span>
-            </div>
-            <div className="flex justify-between items-center border-t border-border-light/60 pt-3">
-              <span className="text-xs text-ink-secondary font-medium">Invoice:</span>
-              <span className="text-xs font-semibold font-mono text-ink">
-                {userPlan.toLowerCase().includes('free') ? '$0.00 / month' :
-                 userPlan.toLowerCase().includes('starter') ? '$97.00 / month' : 
-                 userPlan.toLowerCase().includes('pro') ? '$187.00 / month' : 
-                 userPlan.toLowerCase().includes('agency') ? '$297.00 / month' : '$0.00 / month'}
-              </span>
-            </div>
-            <div className="flex justify-between items-center border-t border-border-light/60 pt-3">
-              <span className="text-xs text-ink-secondary font-medium">Credit Balance:</span>
-              <span className="text-xs font-bold font-sans text-success flex items-center gap-1.5">
-                <span className="text-success animate-pulse">✦</span>
-                {userCredits.toLocaleString()} Credits Left
-              </span>
-            </div>
-            <div className="flex justify-between items-center border-t border-border-light/60 pt-3">
-              <span className="text-xs text-ink-secondary font-medium">Status:</span>
-              <span className="text-[10px] font-bold uppercase bg-success-soft text-success border border-success/15 px-2 py-0.5 rounded-full">
-                Active & Verified ✓
-              </span>
-            </div>
-          </div>
-
-          {/* New Interactive Upgrade Link Banner */}
-          <div className="bg-accent-soft/40 border border-accent/20 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-left space-y-0.5">
-              <span className="text-xs font-bold text-accent uppercase tracking-wider block">Plans & Credit Breakdowns</span>
-              <p className="text-[11px] text-ink-secondary">View detailed quotas, credit conversion weights, and active enrollment limits.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                playTiktokLike();
-                setActiveTab('plans');
-              }}
-              className="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-[11px] font-bold uppercase tracking-wider rounded shadow-sm hover:shadow active:scale-95 transition-all cursor-pointer whitespace-nowrap shrink-0"
-            >
-              Configure Details
-            </button>
-          </div>
-
-          {/* Plan switching button section */}
-          <div className="space-y-4">
-            <div className="space-y-1">
-              <span className="text-[11px] uppercase tracking-widest font-bold text-ink-secondary">Select your scaling tier</span>
-              <p className="text-xs text-ink-secondary">Upgrade or switch plans instantly to scale credits and Owner PWA quotas.</p>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[
-                { 
-                  name: 'Free Plan', 
-                  desc: '15 credits · No AI allowance · 1 trial PWA', 
-                  price: '$0' 
-                },
-                { 
-                  name: 'Starter Plan', 
-                  desc: '2,500 credits/mo · 600 AI credits · 8 PWAs', 
-                  price: '$97' 
-                },
-                { 
-                  name: 'Pro Plan', 
-                  desc: '6,500 credits/mo · 1,200 AI credits · 25 PWAs', 
-                  price: '$187' 
-                },
-                { 
-                  name: 'Agency Plan', 
-                  desc: '12,000 credits/mo · 1,500 AI credits · 100 PWAs', 
-                  price: '$297' 
-                }
-              ].map((tier) => {
-                const isActive = userPlan === tier.name || 
-                                 userPlan.replace(' Plan', '').replace(' Tier', '').toLowerCase() === 
-                                 tier.name.replace(' Plan', '').replace(' Tier', '').toLowerCase();
-                return (
-                  <button
-                    key={tier.name}
-                    type="button"
-                    onClick={() => {
-                      playConfirmSuccess();
-                      setUserPlan(tier.name);
-                      alert(`Successfully switched workspace subscription to the ${tier.name}! Your database limits and SMS capacities are instantly configured.`);
-                    }}
-                    className={`p-3 rounded-lg border text-left flex flex-col justify-between min-h-[148px] h-auto transition-all cursor-pointer ${
-                      isActive 
-                        ? 'bg-accent-soft border-accent ring-2 ring-accent/10 shadow-xs' 
-                        : 'bg-white border-border-main hover:bg-off-white hover:border-ink-secondary/35'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-1">
-                        <span className={`text-[10px] font-bold tracking-tight leading-tight ${isActive ? 'text-accent' : 'text-ink'}`}>{tier.name}</span>
-                        {isActive && <CheckCircle className="w-3.5 h-3.5 text-accent shrink-0" />}
-                      </div>
-                      <p className="text-[9px] text-ink-secondary mt-1.5 leading-snug font-normal">{tier.desc}</p>
-                    </div>
-                    <div className="pt-2 border-t border-border-light/40 flex items-baseline gap-0.5 mt-2">
-                      <span className="text-base font-serif text-ink font-semibold">{tier.price}</span>
-                      <span className="text-[9px] text-ink-secondary font-sans">/mo</span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
         </div>
 
       </div>
