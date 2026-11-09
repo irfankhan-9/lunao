@@ -461,7 +461,7 @@ self.addEventListener('activate', (e) => {
     if (slugMatch) {
       const slug = slugMatch[1].toLowerCase();
       const reserved = [
-        '404', 'index', 'favicon', 'robots', 'dashboard', 'campaigns', 'sites',
+        'app', '404', 'index', 'favicon', 'robots', 'dashboard', 'campaigns', 'sites',
         'editor', 'auth', 'login', 'register', 'settings', 'pwa', 'manifest', 'sw',
         'privacy', 'terms', 'admin',
       ];

@@ -12,7 +12,6 @@ import { scrollToTop } from './utils/scrollToTop';
 import { DashboardPage } from './pages/DashboardPage';
 import { BookingsPage } from './pages/BookingsPage';
 import { CustomersPage } from './pages/CustomersPage';
-import { WebsitePage } from './pages/WebsitePage';
 import { SettingsPage } from './pages/SettingsPage';
 
 const ActiveSectionRenderer: React.FC = () => {
@@ -35,8 +34,6 @@ const ActiveSectionRenderer: React.FC = () => {
         return <BookingsPage />;
       case 'customers':
         return <CustomersPage />;
-      case 'website':
-        return <WebsitePage />;
       case 'settings':
         return <SettingsPage />;
       default:

@@ -10,6 +10,7 @@ import {
   Plus,
   Phone,
   Workflow,
+  Settings,
 } from 'lucide-react';
 import { useBusiness } from '../context/BusinessContext';
 import { StatCard } from '../components/ui/StatCard';
@@ -201,39 +202,19 @@ export const DashboardPage: React.FC = () => {
           <button
             onClick={() => {
               soundEffects.playButtonClick();
-              setActiveSection('website');
+              setActiveSection('settings');
             }}
             className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50 text-left transition group active:scale-[0.98]"
           >
             <div className="p-2 rounded-lg bg-emerald-100 text-emerald-800 shrink-0">
-              <Globe className="w-4 h-4" />
+              <Settings className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <p className="text-xs font-semibold text-slate-900 group-hover:text-emerald-800 truncate">
-                Website
+                Settings
               </p>
               <p className="text-[10px] text-slate-500 truncate">
-                Live landing page
-              </p>
-            </div>
-          </button>
-
-          <button
-            onClick={() => {
-              soundEffects.playButtonClick();
-              setActiveSection('website');
-            }}
-            className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50 text-left transition group active:scale-[0.98]"
-          >
-            <div className="p-2 rounded-lg bg-emerald-100 text-emerald-800 shrink-0">
-              <Globe className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-slate-900 group-hover:text-emerald-800 truncate">
-                Business Website
-              </p>
-              <p className="text-[10px] text-slate-500 truncate">
-                Preview & details
+                Profile & account
               </p>
             </div>
           </button>

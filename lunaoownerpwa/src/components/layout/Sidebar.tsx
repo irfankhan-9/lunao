@@ -40,11 +40,6 @@ export const Sidebar: React.FC = () => {
       icon: <Users className="w-4 h-4" />,
     },
     {
-      id: 'website',
-      label: 'Business Website',
-      icon: <Globe className="w-4 h-4" />,
-    },
-    {
       id: 'settings',
       label: 'Business Settings',
       icon: <Settings className="w-4 h-4" />,

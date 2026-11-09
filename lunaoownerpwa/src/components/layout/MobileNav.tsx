@@ -3,7 +3,7 @@ import {
   LayoutDashboard,
   CalendarDays,
   Users,
-  Globe,
+  Settings,
   Menu,
 } from 'lucide-react';
 import { useBusiness } from '../../context/BusinessContext';
@@ -32,9 +32,9 @@ export const MobileNav: React.FC = () => {
       icon: <Users className="w-5 h-5" />,
     },
     {
-      id: 'website',
-      label: 'Website',
-      icon: <Globe className="w-5 h-5" />,
+      id: 'settings',
+      label: 'Settings',
+      icon: <Settings className="w-5 h-5" />,
     },
   ];
 

@@ -34,12 +34,6 @@ export const MoreDrawer: React.FC<MoreDrawerProps> = ({ isOpen, onClose }) => {
     icon: React.ReactNode;
   }[] = [
     {
-      id: 'website',
-      label: 'Business Website',
-      sublabel: 'Live preview, content updates, & publishing',
-      icon: <Globe className="w-5 h-5 text-emerald-700" />,
-    },
-    {
       id: 'settings',
       label: 'Business Settings',
       sublabel: 'Profile, contact info, and integrations',

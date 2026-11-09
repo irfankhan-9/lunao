@@ -2,7 +2,6 @@ export type NavSection =
   | 'dashboard'
   | 'bookings'
   | 'customers'
-  | 'website'
   | 'automations'
   | 'settings';
 
