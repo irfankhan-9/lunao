@@ -1,27 +1,18 @@
 import React, { Component, useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Code2, ArrowLeft, Save, UploadCloud, Image as ImageIcon,
-  Monitor, Smartphone, Wand2, Loader2, ExternalLink, X,
-  Rocket, AlertCircle, Pencil, CheckCircle2, Link2,
+  Code2, ArrowLeft, Image as ImageIcon,
+  Monitor, Smartphone, Loader2, ExternalLink, X,
+  AlertCircle, CheckCircle2,
   Globe, Copy, Search, RefreshCw, Clock,
-  Puzzle, MessageCircle, UserPlus, Sparkles,
-  Download, Trash2, Layout, Key, ChevronDown,
-  History, FolderOpen, Eraser, Shuffle, FlaskConical, BookmarkPlus,
-  FileCode, RotateCcw, Check, ChevronRight, PanelLeftOpen, PanelRightOpen,
-  Building2, Phone, Mail, MapPin, Type, PanelLeftClose, Sliders,
+  Key, Eye,
 } from 'lucide-react';
 import {
-  listSites, getSiteHtml, saveSiteHtml, deploySite, streamAiEdit,
-  getAddons, setAddons, SiteAddons,
-  EditorSite, AiChatMessage,
+  listSites, getSiteHtml,
+  EditorSite,
   listInviteCodes, InviteCode,
-  listSiteHistory, createSiteHistory, convertHistoryToTemplate,
-  SiteHistoryEntry, processUploadedHtml, isOfficialBuiltinTemplate,
+  isOfficialBuiltinTemplate,
 } from '../lib/pipelineClient';
-import {
-  extractFieldsFromHtml, applyFieldsToHtml, uploadPhotoToServer, SiteCustomFields,
-} from '../lib/siteCustomizer';
 import {
   playSoftTap, playTiktokLike, playSlideTick, playDialogPop, playSoftBubble,
   playElegantBell, playConfirmSuccess, playVictoryCelebration, playGentleChime,
@@ -30,9 +21,7 @@ import {
 import { OwnerPWADrawer } from './OwnerPWADrawer';
 import { TemplateLabPage } from './TemplateLabPage';
 import { useSyncNiches } from '../lib/nichesSync';
-import { validateBookingContract, CONTRACT_REJECTION_MESSAGE } from '../lib/bookingContractValidator';
 import { VibeCreditBadge } from './VibeCreditBadge';
-import { isUgcOrSalesMode } from '../specialModes/modeManager';
 
 interface EditorProps {
   active: boolean;
@@ -169,30 +158,13 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   const [selected, setSelected] = useState<EditorSite | null>(null);
   const [previewHtml, setPreviewHtml] = useState('');
   const [loadingSite, setLoadingSite] = useState(false);
-  const [dirty, setDirty] = useState(false);
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
-  const [editMode, setEditMode] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [streaming, setStreaming] = useState(false);
 
   // First-page filtering (real, runs over the loaded sites).
   const [allNiches] = useSyncNiches();
   const [search, setSearch] = useState('');
   const [filterNiche, setFilterNiche] = useState('All');
-  const [deploying, setDeploying] = useState(false);
-  const [deployInfo, setDeployInfo] = useState<{ url: string; deployUrl: string | null; dryRun: boolean } | null>(null);
-  const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
-
-  // Image edit panel
-  const [imgPanel, setImgPanel] = useState(false);
-  const [imgUrl, setImgUrl] = useState('');
-  const selectedImgRef = useRef<HTMLImageElement | null>(null);
-
-  // Add-ons (booking chatbot)
-  const [addonsPanel, setAddonsPanel] = useState(false);
-  const [addons, setAddonsState] = useState<SiteAddons>({ booking: false, chatbot: false });
-  const [addonBusy, setAddonBusy] = useState<null | 'chatbot'>(null);
 
   // Invite client (per-site LUNAO-XXXX-XXXX codes)
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -200,39 +172,11 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   const [inviteRefreshKey, setInviteRefreshKey] = useState(0);
   const [quickPwaSite, setQuickPwaSite] = useState<EditorSite | null>(null);
 
-  // Real HTML source code viewer/editor (strictly for UGC & Sales plans)
-  const [showCodeView, setShowCodeView] = useState(false);
-  const [codeBuffer, setCodeBuffer] = useState('');
-  const [codeCopied, setCodeCopied] = useState(false);
-
   // Template Lab — unified AI site builder
   const [browseOpen, setBrowseOpen] = useState(false);
 
-  // AI chat (legacy — AI edit now lives in TemplateLabPage)
-  const [messages, setMessages] = useState<AiChatMessage[]>([]);
-
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const htmlRef = useRef('');
-  const baseLoadedHtmlRef = useRef('');
-  const lastPreviewPush = useRef(0);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const heroFileInputRef = useRef<HTMLInputElement>(null);
-  const logoFileInputRef = useRef<HTMLInputElement>(null);
-
-  // Structured Customizer state
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [isUploadingPhoto, setIsUploadingPhoto] = useState<string | null>(null);
-  const [customFields, setCustomFields] = useState<SiteCustomFields>({
-    businessName: '',
-    phone: '',
-    email: '',
-    address: '',
-    city: '',
-    heroImage: '',
-    logo: '',
-    headline: '',
-    description: '',
-  });
 
   const toastTimeoutRef = useRef<any>(null);
   const flashToast = (t: Toast, duration?: number) => {
@@ -306,100 +250,25 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
       return;
     }
     sfx.open();
-    // Reset scroll on every "Open Editor" click so the user lands at the
-    // top of the edit view instead of inheriting whatever scroll position
-    // they were at in the list. Without this, half-scrolled pages make
-    // the edit toolbar feel misaligned.
     const scrollToTop = () => {
       const main = document.getElementById('main-content-flow');
       if (main) main.scrollTo({ top: 0, behavior: 'smooth' });
       window.scrollTo({ top: 0, behavior: 'smooth' });
     };
     scrollToTop();
-    // Set the state IMMEDIATELY so the view flips to 'edit' before the
-    // smooth-scroll animation finishes; this keeps the toolbar pinned
-    // to the top of the user's viewport.
     setSelected(site);
     setView('edit');
     setLoadingSite(true);
-    setMessages([]);
-    setEditMode(false);
-    setShowCodeView(false);
-    setImgPanel(false);
-    setAddonsPanel(false);
-    setDeployInfo(null);
-    setDirty(false);
     try {
       const html = await getSiteHtml(site.slug);
       htmlRef.current = html;
-      baseLoadedHtmlRef.current = html;
       setPreviewHtml(html);
-      setCodeBuffer(html);
-      const fields = extractFieldsFromHtml(html, { name: site.title, city: site.city });
-      setCustomFields(fields);
-      // Re-scroll once the HTML is loaded — heavy sites can push the
-      // scroll position down when the iframe mounts.
       scrollToTop();
-      getAddons(site.slug)
-        .then((a) => setAddonsState(a))
-        .catch(() => setAddonsState({ booking: false, chatbot: false }));
     } catch (err: any) {
-      flashToast({ type: 'error', text: err?.message || 'Failed to load site HTML.' });
+      flashToast({ type: 'error', text: err?.message || 'Failed to load site preview.' });
       setView('list');
     } finally {
       setLoadingSite(false);
-    }
-  };
-
-  const handleCustomFieldChange = (field: keyof SiteCustomFields, value: string) => {
-    setCustomFields((prev) => {
-      const next = { ...prev, [field]: value };
-      const updatedHtml = applyFieldsToHtml(baseLoadedHtmlRef.current || htmlRef.current, next);
-      htmlRef.current = updatedHtml;
-      setPreviewHtml(updatedHtml);
-      setCodeBuffer(updatedHtml);
-      setDirty(true);
-      return next;
-    });
-  };
-
-  const handleHeroUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsUploadingPhoto('hero');
-    try {
-      const res = await uploadPhotoToServer(file);
-      if (res.ok && res.url) {
-        handleCustomFieldChange('heroImage', res.url);
-        flashToast({ type: 'success', text: 'Hero banner photo updated.' });
-      } else {
-        flashToast({ type: 'error', text: res.error || 'Failed to upload photo.' });
-      }
-    } catch (err: any) {
-      flashToast({ type: 'error', text: err?.message || 'Failed to upload photo.' });
-    } finally {
-      setIsUploadingPhoto(null);
-      e.target.value = '';
-    }
-  };
-
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsUploadingPhoto('logo');
-    try {
-      const res = await uploadPhotoToServer(file);
-      if (res.ok && res.url) {
-        handleCustomFieldChange('logo', res.url);
-        flashToast({ type: 'success', text: 'Business logo updated.' });
-      } else {
-        flashToast({ type: 'error', text: res.error || 'Failed to upload logo.' });
-      }
-    } catch (err: any) {
-      flashToast({ type: 'error', text: err?.message || 'Failed to upload logo.' });
-    } finally {
-      setIsUploadingPhoto(null);
-      e.target.value = '';
     }
   };
 
@@ -408,66 +277,17 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
     setView('list');
     setSelected(null);
     setPreviewHtml('');
-    setCodeBuffer('');
-    setShowCodeView(false);
     htmlRef.current = '';
-    setImgPanel(false);
-    selectedImgRef.current = null;
-    // Reset scroll on back-navigation so the user lands at the top of the
-    // list instead of inheriting whatever mid-list scroll position they
-    // were at before opening a site.
     const main = document.getElementById('main-content-flow');
     if (main) main.scrollTo({ top: 0, behavior: 'smooth' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // ---- iframe wiring -------------------------------------------------------
-  const syncFromIframe = useCallback((): string => {
-    if (showCodeView && codeBuffer.trim()) {
-      htmlRef.current = codeBuffer;
-      return codeBuffer;
-    }
-    const doc = iframeRef.current?.contentDocument;
-    if (!doc || !doc.documentElement) return htmlRef.current;
-    let html = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
-    // Clean temporary visual editing outline and cursor styles from images
-    html = html.replace(/\s*style="outline:\s*2px\s*dashed\s*rgba\(37,\s*99,\s*235,\s*0\.6\);\s*cursor:\s*pointer;"/gi, '');
-    htmlRef.current = html;
-    return html;
-  }, [showCodeView, codeBuffer]);
-
-  const applyEditModeToDoc = useCallback((on: boolean) => {
-    const doc = iframeRef.current?.contentDocument;
-    if (!doc) return;
-    try {
-      doc.designMode = on ? 'on' : 'off';
-    } catch { /* ignore */ }
-
-    const imgs = Array.from(doc.images || []);
-    imgs.forEach((img) => {
-      (img as HTMLImageElement).style.outline = on ? '2px dashed rgba(37,99,235,0.6)' : '';
-      (img as HTMLImageElement).style.cursor = on ? 'pointer' : '';
-    });
-  }, []);
-
   const handleIframeClick = useCallback((e: Event) => {
     const target = e.target as HTMLElement | null;
     if (!target) return;
 
-    // 1. Image replace in edit mode
-    if (target.tagName === 'IMG') {
-      if (editMode) {
-        e.preventDefault();
-        e.stopPropagation();
-        selectedImgRef.current = target as HTMLImageElement;
-        setImgUrl((target as HTMLImageElement).getAttribute('src') || '');
-        setImgPanel(true);
-        sfx.open();
-        return;
-      }
-    }
-
-    // 2. Intercept any anchor click so the preview sandbox strictly stays on the site HTML
     const anchor = target.closest('a') as HTMLAnchorElement | null;
     if (anchor) {
       e.preventDefault();
@@ -497,166 +317,20 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
         return;
       }
 
-      // If it's a home link ('/', '', index.html)
       if (rawHref === '/' || rawHref === '' || rawHref.includes('index.html')) {
         doc.defaultView?.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
-      // External or other links: keep sandboxed within the preview
       return;
     }
-  }, [editMode]);
+  }, []);
 
   const onIframeLoad = () => {
     const doc = iframeRef.current?.contentDocument;
     if (!doc) return;
-    doc.addEventListener('input', () => setDirty(true));
     doc.addEventListener('click', handleIframeClick, true);
     doc.addEventListener('submit', (e) => e.preventDefault(), true);
-    applyEditModeToDoc(editMode);
-  };
-
-  useEffect(() => {
-    const doc = iframeRef.current?.contentDocument;
-    if (doc) {
-      doc.removeEventListener('click', handleIframeClick, true);
-      doc.addEventListener('click', handleIframeClick, true);
-    }
-    applyEditModeToDoc(editMode);
-    if (!editMode) setImgPanel(false);
-  }, [editMode, previewHtml, applyEditModeToDoc, handleIframeClick]);
-
-  const toggleEditMode = () => {
-    setEditMode((v) => {
-      if (v) sfx.tap(); else sfx.engage();
-      return !v;
-    });
-  };
-
-  // ---- image replace -------------------------------------------------------
-  const applyImageUrl = () => {
-    if (selectedImgRef.current && imgUrl.trim()) {
-      selectedImgRef.current.src = imgUrl.trim();
-      setDirty(true);
-      sfx.swap();
-      flashToast({ type: 'success', text: 'Image updated from URL.' });
-      setImgPanel(false);
-    }
-  };
-
-  const onPickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedImgRef.current) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (selectedImgRef.current && typeof reader.result === 'string') {
-        selectedImgRef.current.src = reader.result;
-        setDirty(true);
-        sfx.swap();
-        flashToast({ type: 'success', text: 'Image uploaded & embedded.' });
-        setImgPanel(false);
-      }
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
-  };
-
-  // ---- save / deploy -------------------------------------------------------
-  const handleSave = async () => {
-    if (!selected) return;
-    sfx.tap();
-    const html = showCodeView && codeBuffer.trim() ? codeBuffer : (htmlRef.current || baseLoadedHtmlRef.current);
-
-    // Enforce booking contract validation before saving
-    const check = validateBookingContract(html);
-    if (!check.valid) {
-      sfx.error();
-      flashToast({ type: 'error', text: check.customerMessage || CONTRACT_REJECTION_MESSAGE });
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await saveSiteHtml(selected.slug, html);
-      baseLoadedHtmlRef.current = html;
-      htmlRef.current = html;
-      setPreviewHtml(html);
-      setDirty(false);
-      sfx.saved();
-      flashToast({ type: 'success', text: 'Website changes saved successfully.' });
-    } catch (err: any) {
-      sfx.error();
-      flashToast({ type: 'error', text: err?.message || 'Save failed.' });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeploy = async () => {
-    if (!selected) return;
-    sfx.primary();
-    const html = showCodeView && codeBuffer.trim() ? codeBuffer : (htmlRef.current || baseLoadedHtmlRef.current);
-
-    // Enforce booking contract validation before deploying
-    const check = validateBookingContract(html);
-    if (!check.valid) {
-      sfx.error();
-      flashToast({ type: 'error', text: check.customerMessage || CONTRACT_REJECTION_MESSAGE });
-      return;
-    }
-
-    setDeploying(true);
-    try {
-      const { url } = await deploySite(selected.slug, html);
-      baseLoadedHtmlRef.current = html;
-      htmlRef.current = html;
-      setPreviewHtml(html);
-      setDirty(false);
-      setDeployInfo({ url: selected.url, deployUrl: url, dryRun: !url });
-      sfx.deployed();
-      flashToast({ type: 'success', text: 'Website published live successfully!' });
-    } catch (err: any) {
-      sfx.error();
-      flashToast({ type: 'error', text: err?.message || 'Publishing updates failed.' });
-    } finally {
-      setDeploying(false);
-    }
-  };
-
-  const copyDeployUrl = () => {
-    if (!deployInfo) return;
-    navigator.clipboard.writeText(deployInfo.url);
-    sfx.copy();
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  // ---- Add-ons (booking + chatbot) -----------------------------------------
-  const toggleAddon = async (kind: 'chatbot') => {
-    if (!selected || addonBusy) return;
-    sfx.toggle();
-    const next: SiteAddons = { ...addons, [kind]: !addons[kind] };
-    setAddonBusy(kind);
-    try {
-      const current = syncFromIframe();
-      await saveSiteHtml(selected.slug, current);
-      const { addons: applied, html: newHtml } = await setAddons(selected.slug, next);
-      setAddonsState(applied);
-      htmlRef.current = newHtml;
-      setPreviewHtml(newHtml);
-      setDirty(true);
-      sfx.saved();
-      flashToast({
-        type: 'success',
-        text: `Booking chatbot ${next[kind] ? 'enabled' : 'removed'} — Redeploy to push live.`,
-      });
-    } catch (err: any) {
-      sfx.error();
-      flashToast({ type: 'error', text: err?.message || 'Could not update add-ons.' });
-    } finally {
-      setAddonBusy(null);
-    }
   };
 
   // ===========================================================================
@@ -739,7 +413,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
             <div>
               <h1 className="text-2xl md:text-3xl font-bold font-sans tracking-tight text-ink leading-tight">Site Editor</h1>
               <p className="text-sm text-ink-secondary font-sans max-w-xl mt-1">
-                Pick a deployed client site to edit its text, swap images, or let AI rewrite sections — then redeploy live in one click.
+                Pick a deployed client site to preview its live state or generate Owner PWA access codes.
               </p>
             </div>
           </div>
@@ -884,7 +558,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
                           onClick={() => openSite(site)}
                           className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-ink text-white text-sm font-semibold font-sans hover:bg-ink/90 active:scale-[0.98] transition-all cursor-pointer"
                         >
-                          <Pencil className="w-4 h-4" /> Open Editor
+                          <Eye className="w-4 h-4" /> View Site
                         </button>
                         {isOfficialBuiltinTemplate(site.templateKey) && (
                           <button
@@ -935,28 +609,28 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   }
 
   // ===========================================================================
-  // EDIT VIEW
+  // PREVIEW VIEW (Read-only live site preview + PWA QR code generation)
   // ===========================================================================
   return (
     <div key="editor-edit" className="max-w-[1600px] mx-auto animate-editor-rise">
       {toast && <ToastBanner toast={toast} onClose={() => setToast(null)} />}
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-4">
+      <div className="flex flex-wrap items-center gap-2 mb-4">
         <button
           onClick={backToList}
-          className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg bg-white border border-border-main text-ink-secondary hover:text-ink text-xs sm:text-sm font-medium font-sans active:scale-[0.98] transition-all"
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-border-main text-ink-secondary hover:text-ink text-xs sm:text-sm font-medium font-sans active:scale-[0.98] transition-all cursor-pointer"
         >
-          <ArrowLeft className="w-4 h-4" /> <span className="hidden sm:inline">Sites</span>
+          <ArrowLeft className="w-4 h-4" /> <span>Sites</span>
         </button>
 
         <div className="flex flex-col min-w-0 mr-auto">
           <span className="text-sm font-bold font-sans text-ink truncate max-w-[44vw] sm:max-w-xs">{selected?.title}</span>
-          <span className="text-[11px] text-ink-secondary font-sans truncate">{'/' + selected?.slug + '/' + (dirty ? ' · unsaved' : '')}</span>
+          <span className="text-[11px] text-ink-secondary font-sans truncate">{'/' + selected?.slug + '/'}</span>
         </div>
 
         {/* Live on Edge badge */}
-        <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200">
+        <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live on Edge
         </span>
 
@@ -965,554 +639,85 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
             href={selected.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-border-main text-xs font-medium text-ink-secondary hover:text-ink transition-colors"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-border-main text-xs font-medium text-ink-secondary hover:text-ink transition-colors"
             title="Open live website in new tab"
           >
-            <Globe className="w-3.5 h-3.5" />
-            <span>Visit Site</span>
+            <Globe className="w-3.5 h-3.5 text-blue-600" />
+            <span className="hidden sm:inline">Visit Site</span>
             <ExternalLink className="w-3 h-3 opacity-60" />
           </a>
         )}
 
-        {/* Toggle Details Sidebar */}
+        {/* Reload preview button */}
         <button
-          onClick={() => { sfx.toggle(); setSidebarOpen((prev) => !prev); }}
-          className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium font-sans border transition-all ${
-            sidebarOpen ? 'bg-blue-50 text-blue-700 border-blue-200 font-semibold' : 'bg-white text-ink-secondary border-border-main hover:text-ink'
-          }`}
-          title={sidebarOpen ? 'Hide Website Details Sidebar' : 'Show Website Details Sidebar'}
+          onClick={() => {
+            sfx.tap();
+            if (selected) {
+              setLoadingSite(true);
+              getSiteHtml(selected.slug)
+                .then((h) => {
+                  htmlRef.current = h;
+                  setPreviewHtml(h);
+                })
+                .finally(() => setLoadingSite(false));
+            }
+          }}
+          className="p-2 rounded-lg bg-white border border-border-main text-ink-secondary hover:text-ink transition-all cursor-pointer"
+          title="Reload Preview"
         >
-          <Sliders className="w-4 h-4 text-blue-600" />
-          <span className="hidden sm:inline">Details</span>
+          <RefreshCw className={`w-4 h-4 ${loadingSite ? 'animate-spin' : ''}`} />
         </button>
 
         {/* device toggle */}
         <div className="flex items-center bg-white border border-border-main rounded-lg p-0.5">
           <button
             onClick={() => { sfx.toggle(); setDevice('desktop'); }}
-            className={`p-1.5 rounded-md transition-all ${device === 'desktop' ? 'bg-accent-soft text-accent' : 'text-ink-secondary hover:text-ink'}`}
+            className={`p-1.5 rounded-md transition-all cursor-pointer ${device === 'desktop' ? 'bg-accent-soft text-accent' : 'text-ink-secondary hover:text-ink'}`}
             title="Desktop preview"
           >
             <Monitor className="w-4 h-4" />
           </button>
           <button
             onClick={() => { sfx.toggle(); setDevice('mobile'); }}
-            className={`p-1.5 rounded-md transition-all ${device === 'mobile' ? 'bg-accent-soft text-accent' : 'text-ink-secondary hover:text-ink'}`}
+            className={`p-1.5 rounded-md transition-all cursor-pointer ${device === 'mobile' ? 'bg-accent-soft text-accent' : 'text-ink-secondary hover:text-ink'}`}
             title="Mobile preview"
           >
             <Smartphone className="w-4 h-4" />
           </button>
         </div>
 
-        {isUgcOrSalesMode() && (
-          <button
-            onClick={() => {
-              sfx.toggle();
-              if (!showCodeView) {
-                const latestHtml = htmlRef.current || baseLoadedHtmlRef.current;
-                setCodeBuffer(latestHtml);
-                setEditMode(false);
-                setShowCodeView(true);
-              } else {
-                htmlRef.current = codeBuffer;
-                setPreviewHtml(codeBuffer);
-                setShowCodeView(false);
-              }
-            }}
-            className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold font-sans active:scale-[0.98] transition-all border cursor-pointer ${
-              showCodeView
-                ? 'bg-slate-900 text-amber-400 border-slate-800 shadow-sm'
-                : 'bg-white text-ink-secondary border-border-main hover:text-ink'
-            }`}
-            title="View & edit real compiled HTML source code"
-          >
-            <FileCode className="w-4 h-4" />
-            <span className="hidden sm:inline">{showCodeView ? 'Live Preview' : 'HTML Code'}</span>
-          </button>
-        )}
-
-        {/* PWA Code Generator button - strictly reserved for Lunao official built-in templates */}
+        {/* PWA QR Code Generator button */}
         {selected && isOfficialBuiltinTemplate(selected.templateKey) && (
           <button
             onClick={() => {
               sfx.open();
               setInviteOpen(true);
             }}
-            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 text-xs sm:text-sm font-semibold font-sans active:scale-[0.98] transition-all cursor-pointer shadow-2xs"
-            title="Generate Owner PWA Access Code"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 text-xs sm:text-sm font-semibold font-sans active:scale-[0.98] transition-all cursor-pointer shadow-2xs"
+            title="Generate Owner PWA QR & Access Code"
           >
             <Key className="w-4 h-4 text-emerald-600" />
-            <span className="hidden sm:inline">PWA Code Generator</span>
-            <span className="sm:hidden">PWA Code</span>
+            <span>PWA QR Code</span>
           </button>
         )}
-
-        <button
-          onClick={handleSave}
-          disabled={saving || deploying}
-          className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg bg-white border border-border-main text-ink hover:bg-off-white text-xs sm:text-sm font-semibold font-sans active:scale-[0.98] transition-all disabled:opacity-60"
-        >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} <span className="hidden sm:inline">Save</span>
-        </button>
-
-        <button
-          onClick={handleDeploy}
-          disabled={deploying || saving}
-          className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg bg-accent text-white text-xs sm:text-sm font-semibold font-sans shadow-sm hover:bg-accent/90 active:scale-[0.98] transition-all disabled:opacity-60"
-        >
-          {deploying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />} Publish Updates
-        </button>
       </div>
 
-      {/* Workspace: Side-by-Side Structured Details + Real-Time Preview */}
-      <div className="flex flex-col lg:flex-row gap-4 h-[calc(100dvh-220px)] min-h-[500px] lg:h-[calc(100vh-170px)] lg:min-h-[550px] lg:max-h-[820px]">
-        {/* Left: Structured Customization Sidebar */}
-        {sidebarOpen && !showCodeView && (
-          <div className="w-full lg:w-[380px] xl:w-[420px] shrink-0 bg-white rounded-xl border border-border-main flex flex-col overflow-hidden shadow-2xs animate-editor-fade">
-            {/* Sidebar header */}
-            <div className="px-4 py-3 border-b border-border-light flex items-center justify-between bg-slate-50/70 shrink-0">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center">
-                  <Building2 className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">Website Details</h3>
-                  <p className="text-[11px] text-slate-500">Live preview updates automatically</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setSidebarOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-200/50 transition-colors"
-                title="Hide sidebar"
-              >
-                <PanelLeftClose className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Scrollable form sections */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-5 text-xs">
-              {/* Section 1: Business Details */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-1.5 text-slate-900 font-bold text-xs">
-                  <Building2 className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Business Information</span>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Business Name</label>
-                  <input
-                    type="text"
-                    value={customFields.businessName}
-                    onChange={(e) => handleCustomFieldChange('businessName', e.target.value)}
-                    placeholder="e.g. Apex Mechanical Systems"
-                    className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-500 font-sans"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Phone Number</label>
-                    <input
-                      type="text"
-                      value={customFields.phone}
-                      onChange={(e) => handleCustomFieldChange('phone', e.target.value)}
-                      placeholder="(512) 555-0199"
-                      className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-500 font-sans"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">City</label>
-                    <input
-                      type="text"
-                      value={customFields.city}
-                      onChange={(e) => handleCustomFieldChange('city', e.target.value)}
-                      placeholder="Austin"
-                      className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-500 font-sans"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    value={customFields.email}
-                    onChange={(e) => handleCustomFieldChange('email', e.target.value)}
-                    placeholder="contact@business.com"
-                    className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-500 font-sans"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Street Address</label>
-                  <input
-                    type="text"
-                    value={customFields.address}
-                    onChange={(e) => handleCustomFieldChange('address', e.target.value)}
-                    placeholder="100 Congress Ave, Suite 200"
-                    className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-500 font-sans"
-                  />
-                </div>
-              </div>
-
-              {/* Section 2: Website Photos */}
-              <div className="pt-2 border-t border-slate-100 space-y-3">
-                <div className="flex items-center gap-1.5 text-slate-900 font-bold text-xs">
-                  <ImageIcon className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Website Photos</span>
-                </div>
-
-                {/* Hero Banner Photo */}
-                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
-                  <span className="block text-[11px] font-semibold text-slate-700">Hero Banner Photo</span>
-                  {customFields.heroImage ? (
-                    <div className="h-24 w-full rounded-md overflow-hidden bg-slate-200 border border-slate-300 relative group">
-                      <img src={customFields.heroImage} alt="Hero Banner" className="w-full h-full object-cover" />
-                    </div>
-                  ) : (
-                    <div className="h-16 w-full rounded-md border border-dashed border-slate-300 flex items-center justify-center text-slate-400 text-[11px]">
-                      No hero photo set
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <input
-                      ref={heroFileInputRef}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handleHeroUpload}
-                    />
-                    <button
-                      onClick={() => heroFileInputRef.current?.click()}
-                      disabled={isUploadingPhoto === 'hero'}
-                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold text-[11px] transition-colors cursor-pointer shadow-2xs"
-                    >
-                      {isUploadingPhoto === 'hero' ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
-                      ) : (
-                        <UploadCloud className="w-3.5 h-3.5 text-blue-600" />
-                      )}
-                      <span>Change Photo</span>
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    value={customFields.heroImage}
-                    onChange={(e) => handleCustomFieldChange('heroImage', e.target.value)}
-                    placeholder="Or enter image URL: https://..."
-                    className="w-full px-2.5 py-1.5 bg-white rounded-md border border-slate-200 text-slate-700 text-[11px] focus:outline-none focus:border-blue-500 font-mono"
-                  />
-                </div>
-
-                {/* Business Logo */}
-                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
-                  <span className="block text-[11px] font-semibold text-slate-700">Business Logo</span>
-                  {customFields.logo ? (
-                    <div className="h-14 w-32 rounded-md overflow-hidden bg-white border border-slate-300 p-1 flex items-center justify-center">
-                      <img src={customFields.logo} alt="Logo" className="max-h-full max-w-full object-contain" />
-                    </div>
-                  ) : null}
-                  <div className="flex items-center gap-2">
-                    <input
-                      ref={logoFileInputRef}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handleLogoUpload}
-                    />
-                    <button
-                      onClick={() => logoFileInputRef.current?.click()}
-                      disabled={isUploadingPhoto === 'logo'}
-                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold text-[11px] transition-colors cursor-pointer shadow-2xs"
-                    >
-                      {isUploadingPhoto === 'logo' ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
-                      ) : (
-                        <UploadCloud className="w-3.5 h-3.5 text-blue-600" />
-                      )}
-                      <span>Change Logo</span>
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    value={customFields.logo}
-                    onChange={(e) => handleCustomFieldChange('logo', e.target.value)}
-                    placeholder="Or enter logo URL: https://..."
-                    className="w-full px-2.5 py-1.5 bg-white rounded-md border border-slate-200 text-slate-700 text-[11px] focus:outline-none focus:border-blue-500 font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Section 3: Headlines & Story */}
-              <div className="pt-2 border-t border-slate-100 space-y-3">
-                <div className="flex items-center gap-1.5 text-slate-900 font-bold text-xs">
-                  <Type className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Headline & Story</span>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Website Headline</label>
-                  <input
-                    type="text"
-                    value={customFields.headline}
-                    onChange={(e) => handleCustomFieldChange('headline', e.target.value)}
-                    placeholder="e.g. Expert HVAC and Mechanical Services"
-                    className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-500 font-sans"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">About & Description</label>
-                  <textarea
-                    rows={3}
-                    value={customFields.description}
-                    onChange={(e) => handleCustomFieldChange('description', e.target.value)}
-                    placeholder="Brief description of services and company history..."
-                    className="w-full px-3 py-2 bg-white rounded-lg border border-slate-200 text-slate-900 focus:outline-none focus:border-blue-500 font-sans leading-relaxed resize-none"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Sidebar Sticky Footer */}
-            <div className="p-3 border-t border-border-light bg-slate-50/90 flex items-center gap-2 shrink-0">
-              <button
-                onClick={handleSave}
-                disabled={saving || deploying}
-                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 font-semibold text-xs hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer disabled:opacity-60"
-              >
-                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                <span>Save</span>
-              </button>
-              <button
-                onClick={handleDeploy}
-                disabled={deploying || saving}
-                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 text-white font-semibold text-xs hover:bg-blue-700 transition-colors shadow-sm cursor-pointer disabled:opacity-60"
-              >
-                {deploying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
-                <span>Publish</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Right: Preview Panel / Code View */}
-        <div className="flex-1 bg-white rounded-xl border border-border-main overflow-hidden flex flex-col relative">
-          {editMode && !showCodeView && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-accent-soft/60 border-b border-accent/15 text-[11px] font-sans text-accent font-medium">
-              <Pencil className="w-3.5 h-3.5" />
-              Edit mode on — click any text to type, click any image to replace it.
-            </div>
-          )}
-
-          {isUgcOrSalesMode() && showCodeView ? (
-            <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900 border-b border-slate-800 text-xs font-mono">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[11px] font-semibold">
-                    <Code2 className="w-3.5 h-3.5" /> index.html
-                  </span>
-                  <span className="text-slate-400 truncate">/{selected?.slug}/index.html</span>
-                  <span className="hidden sm:inline text-slate-500">
-                    · {codeBuffer.split('\n').length.toLocaleString()} lines · {(new Blob([codeBuffer]).size / 1024).toFixed(1)} KB
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => {
-                      navigator.clipboard?.writeText(codeBuffer);
-                      sfx.copy();
-                      setCodeCopied(true);
-                      setTimeout(() => setCodeCopied(false), 1800);
-                      flashToast({ type: 'success', text: 'Full HTML source code copied to clipboard.' });
-                    }}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-sans font-semibold transition-colors cursor-pointer"
-                  >
-                    {codeCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    {codeCopied ? 'Copied' : 'Copy HTML'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      sfx.toggle();
-                      htmlRef.current = codeBuffer;
-                      setPreviewHtml(codeBuffer);
-                      setShowCodeView(false);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-sans font-bold transition-colors cursor-pointer"
-                  >
-                    Apply & Preview
-                  </button>
-                </div>
-              </div>
-              <textarea
-                value={codeBuffer}
-                onChange={(e) => {
-                  setCodeBuffer(e.target.value);
-                  htmlRef.current = e.target.value;
-                  setDirty(true);
-                }}
-                spellCheck={false}
-                className="flex-1 w-full p-4 bg-slate-950 text-emerald-300/95 font-mono text-xs leading-relaxed focus:outline-none resize-none overflow-y-auto selection:bg-amber-500/30"
-              />
+      {/* Main Preview Container */}
+      <div className="bg-white rounded-xl border border-border-main overflow-hidden flex flex-col h-[calc(100dvh-220px)] min-h-[500px] lg:h-[calc(100vh-170px)] lg:min-h-[550px] lg:max-h-[820px] relative">
+        <div className="flex-1 overflow-hidden bg-[#f4f2ee] flex justify-center items-stretch">
+          {loadingSite ? (
+            <div className="flex-1 flex items-center justify-center">
+              <Loader2 className="w-7 h-7 animate-spin text-accent" />
             </div>
           ) : (
-            /* Live preview — kept mounted so inline edits are never lost */
-            <div className="flex-1 overflow-hidden bg-[#f4f2ee] flex justify-center items-stretch">
-              {loadingSite ? (
-                <div className="flex-1 flex items-center justify-center">
-                  <Loader2 className="w-7 h-7 animate-spin text-accent" />
-                </div>
-              ) : (
-                <div className={`h-full bg-white transition-[width] duration-300 ${device === 'mobile' ? 'w-[390px] max-w-full border-x border-border-main shadow-[0_0_40px_rgba(26,25,22,0.12)]' : 'w-full'}`}>
-                  <iframe
-                    ref={iframeRef}
-                    title="Site preview"
-                    srcDoc={previewHtml}
-                    onLoad={onIframeLoad}
-                    className="w-full h-full border-0 bg-white block"
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* streaming overlay */}
-          {streaming && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-ink text-white text-xs font-sans font-medium shadow-lg">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" /> AI is writing your changes…
-            </div>
-          )}
-
-          {/* Image edit panel — centered floating card inside the preview area */}
-          {imgPanel && (
-            <div
-              className="absolute inset-0 z-30 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-sm animate-editor-fade"
-              onClick={() => { sfx.close(); setImgPanel(false); }}
-            >
-              <div
-                className="w-full max-w-sm bg-white rounded-2xl border border-border-main shadow-[0_24px_60px_rgba(26,25,22,0.25)] p-5 animate-editor-rise"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-accent-soft flex items-center justify-center">
-                      <ImageIcon className="w-4 h-4 text-accent" />
-                    </div>
-                    <span className="text-sm font-bold font-sans text-ink">Replace image</span>
-                  </div>
-                  <button onClick={() => { sfx.close(); setImgPanel(false); }} className="text-ink-secondary hover:text-ink">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* current image preview */}
-                <div className="mb-4 rounded-xl border border-border-light bg-off-white overflow-hidden flex items-center justify-center h-32">
-                  {imgUrl ? (
-                    <img src={imgUrl} alt="Selected" className="max-h-32 max-w-full object-contain" />
-                  ) : (
-                    <ImageIcon className="w-8 h-8 text-ink-tertiary" />
-                  )}
-                </div>
-
-                <button
-                  onClick={() => { sfx.tap(); fileInputRef.current?.click(); }}
-                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-white text-sm font-semibold font-sans hover:bg-accent/90 active:scale-[0.98] transition-all mb-3"
-                >
-                  <UploadCloud className="w-4 h-4" /> Upload from your PC
-                </button>
-
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="h-px flex-1 bg-border-light" />
-                  <span className="text-[10px] uppercase tracking-wide font-bold text-ink-tertiary font-sans">or paste a URL</span>
-                  <span className="h-px flex-1 bg-border-light" />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 flex items-center gap-2 bg-off-white border border-border-main rounded-lg px-3 focus-within:border-accent transition-all">
-                    <Link2 className="w-4 h-4 text-ink-secondary shrink-0" />
-                    <input
-                      value={imgUrl}
-                      onChange={(e) => setImgUrl(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') applyImageUrl(); }}
-                      placeholder="https://…"
-                      className="flex-1 bg-transparent py-2.5 text-sm font-sans text-ink placeholder:text-ink-secondary/70 focus:outline-none min-w-0"
-                    />
-                  </div>
-                  <button
-                    onClick={applyImageUrl}
-                    disabled={!imgUrl.trim()}
-                    className="px-4 py-2.5 rounded-lg bg-ink text-white text-sm font-semibold font-sans hover:bg-ink/90 active:scale-[0.98] transition-all disabled:opacity-50 shrink-0"
-                  >
-                    Apply
-                  </button>
-                </div>
-                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onPickFile} />
-              </div>
-            </div>
-          )}
-
-
-
-          {/* Deploy success — beautiful animated URL reveal in the preview area */}
-          {deployInfo && (            <div
-              className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-ink/45 backdrop-blur-sm animate-editor-fade"
-              onClick={() => { sfx.close(); setDeployInfo(null); }}
-            >
-              <div
-                className="relative w-full max-w-md bg-white rounded-2xl border border-border-main shadow-[0_24px_70px_rgba(26,25,22,0.3)] p-6 text-center overflow-hidden animate-editor-rise"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {/* ambient glow */}
-                <div className="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-72 h-72 bg-accent/15 blur-3xl rounded-full" />
-
-                <button onClick={() => { sfx.close(); setDeployInfo(null); }} className="absolute top-3 right-3 text-ink-secondary hover:text-ink z-10">
-                  <X className="w-4 h-4" />
-                </button>
-
-                {/* animated success check */}
-                <div className="relative mx-auto mb-5 w-16 h-16">
-                  <span className="absolute inset-0 rounded-full bg-success/15 animate-editor-ring" />
-                  <div className="relative w-16 h-16 rounded-full bg-success-soft flex items-center justify-center animate-editor-pop">
-                    <CheckCircle2 className="w-9 h-9 text-success" />
-                  </div>
-                </div>
-
-                <h3 className="text-xl font-bold font-sans text-ink mb-1">
-                  {deployInfo.dryRun ? 'Saved & staged!' : 'Your site is live!'}
-                </h3>
-                <p className="text-sm text-ink-secondary font-sans mb-5 px-2">
-                  {deployInfo.dryRun
-                    ? 'Changes were saved and staged locally.'
-                    : 'Your edits are deploying to Lunao Edge Servers now — live in a few seconds.'}
-                </p>
-
-                {/* URL pill */}
-                <div className="flex items-center gap-2 bg-off-white border border-border-main rounded-xl pl-3 pr-1.5 py-1.5 mb-4">
-                  <Globe className="w-4 h-4 text-accent shrink-0" />
-                  <span className="flex-1 text-sm font-mono text-ink truncate text-left">{deployInfo.url}</span>
-                  <button
-                    onClick={copyDeployUrl}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold font-sans transition-all shrink-0 ${
-                      copied ? 'bg-success-soft text-success' : 'bg-accent-soft text-accent hover:bg-accent hover:text-white'
-                    }`}
-                  >
-                    {copied ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                    {copied ? 'Copied' : 'Copy'}
-                  </button>
-                </div>
-
-                <div className="flex gap-2">
-                  <a
-                    href={deployInfo.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={() => sfx.primary()}
-                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-white text-sm font-semibold font-sans shadow-sm hover:bg-accent/90 active:scale-[0.98] transition-all"
-                  >
-                    Open Live Site <ExternalLink className="w-4 h-4" />
-                  </a>
-                  <button
-                    onClick={() => { sfx.close(); setDeployInfo(null); }}
-                    className="px-4 py-2.5 rounded-lg bg-white border border-border-main text-ink text-sm font-semibold font-sans hover:bg-off-white active:scale-[0.98] transition-all"
-                  >
-                    Done
-                  </button>
-                </div>
-              </div>
+            <div className={`h-full bg-white transition-[width] duration-300 ${device === 'mobile' ? 'w-[390px] max-w-full border-x border-border-main shadow-[0_0_40px_rgba(26,25,22,0.12)]' : 'w-full'}`}>
+              <iframe
+                ref={iframeRef}
+                title="Site preview"
+                srcDoc={previewHtml}
+                onLoad={onIframeLoad}
+                className="w-full h-full border-0 bg-white block"
+              />
             </div>
           )}
         </div>
@@ -1527,7 +732,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
           open={inviteOpen}
           onClose={() => {
             setInviteOpen(false);
-            setInviteRefreshKey((k) => k + 1); // re-pull active count for the badge
+            setInviteRefreshKey((k) => k + 1);
           }}
           refreshKey={inviteRefreshKey}
         />
@@ -1535,57 +740,6 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
     </div>
   );
 };
-
-// A single brand-consistent add-on row with an animated toggle switch.
-const AddonToggle: React.FC<{
-  icon: React.ReactNode;
-  title: string;
-  desc: string;
-  enabled: boolean;
-  busy: boolean;
-  onToggle: () => void;
-}> = ({ icon, title, desc, enabled, busy, onToggle }) => (
-  <div
-    className={`flex items-start gap-3 p-3.5 rounded-xl border transition-all ${
-      enabled ? 'bg-accent-soft/50 border-accent/30' : 'bg-white border-border-main'
-    }`}
-  >
-    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
-      enabled ? 'bg-accent text-white' : 'bg-off-white text-ink-secondary'
-    }`}>
-      {icon}
-    </div>
-    <div className="flex-1 min-w-0">
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-bold font-sans text-ink">{title}</span>
-        {enabled && (
-          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold font-sans bg-success-soft text-success uppercase tracking-wide">
-            Live
-          </span>
-        )}
-      </div>
-      <p className="text-[11px] text-ink-secondary font-sans leading-snug mt-0.5">{desc}</p>
-    </div>
-    <button
-      onClick={onToggle}
-      disabled={busy}
-      role="switch"
-      aria-checked={enabled}
-      aria-label={`Toggle ${title}`}
-      className={`relative w-11 h-6 rounded-full shrink-0 transition-colors duration-200 disabled:opacity-60 ${
-        enabled ? 'bg-accent' : 'bg-border-main'
-      }`}
-    >
-      <span
-        className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm flex items-center justify-center transition-transform duration-200 ${
-          enabled ? 'translate-x-5' : 'translate-x-0'
-        }`}
-      >
-        {busy && <Loader2 className="w-3 h-3 animate-spin text-accent" />}
-      </span>
-    </button>
-  </div>
-);
 
 // Brand-consistent toast
 const ToastBanner: React.FC<{ toast: NonNullable<Toast>; onClose: () => void }> = ({ toast, onClose }) => {

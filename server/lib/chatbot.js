@@ -194,6 +194,13 @@ export async function chatTurn({ slug, sessionId, message, businessName, service
   let reply;
 
   if (complete) {
+    const { isPwaActiveForSlugAsync } = await import('./inviteCodes.js');
+    const pwaActive = await isPwaActiveForSlugAsync(slug);
+    if (!pwaActive) {
+      reply = `Online booking is not yet active for this business. Please generate the QR code inside Lunao first to activate live bookings.`;
+      saveMessage(sid, slug, 'assistant', reply);
+      return { sessionId: sid, reply, booking: null, done: false, pwaActive: false };
+    }
     booking = await bookFromSlots(slug, slots, businessName, 'chatbot');
     reply =
       `You're all set, ${slots.name}! I've booked your ${slots.service} for ${slots.date} at ${slots.time}. ` +

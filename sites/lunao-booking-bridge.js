@@ -311,40 +311,23 @@
         },
         body: JSON.stringify(payload)
       }).then(function(res) {
-        var contentType = (res.headers && res.headers.get && res.headers.get('content-type')) || '';
-        if (res.ok || res.status === 200 || res.status === 201) {
-          if (contentType.indexOf('application/json') !== -1) {
-            return res.json().then(function(data) {
-              if (data && data.code === 'PWA_ACTIVATION_REQUIRED') {
-                return data;
-              }
-              if (data && data.ok === false) {
-                throw new Error(data.error || 'Server rejected booking confirmation.');
-              }
-              return data;
-            });
+        return res.json().catch(function() { return null; }).then(function(data) {
+          if (!res.ok || (data && (data.ok === false || data.code === 'PWA_ACTIVATION_REQUIRED' || data.pwaActive === false))) {
+            var errMsg = (data && (data.error || data.message)) || ('Booking rejected by server (HTTP ' + res.status + ').');
+            throw new Error(errMsg);
           }
-          return { ok: true, id: idempotencyKey, booking: payload };
-        }
-        return res.json().then(function(data) {
-          if (data && data.code === 'PWA_ACTIVATION_REQUIRED') {
-            return data;
-          }
-          throw new Error(data.error || ('HTTP ' + res.status + ' error'));
-        }).catch(function(err) {
-          if (err && err.code === 'PWA_ACTIVATION_REQUIRED') return err;
-          throw new Error('HTTP ' + res.status + ' error');
+          return data || { ok: true, id: idempotencyKey, booking: payload };
         });
       });
     }
 
     sendBookingRequest()
       .then(function(resData) {
-        showSuccessUI();
-
-        if (resData && (resData.code === 'PWA_ACTIVATION_REQUIRED' || resData.pwaActive === false)) {
-          renderPwaActivationModal(resData);
+        var existingError = form.querySelector('.lunao-booking-error-banner');
+        if (existingError) {
+          try { existingError.remove(); } catch (e) {}
         }
+        showSuccessUI();
 
         if (isIframe) {
           try {
@@ -352,8 +335,7 @@
               type: 'LUNAO_CONFIRMED_BOOKING',
               data: resData.booking || payload,
               id: resData.id || idempotencyKey,
-              pwaActive: resData.pwaActive !== false,
-              pwaCode: resData.pwaCode,
+              pwaActive: true,
               timestamp: Date.now()
             }, '*');
           } catch (postErr) {

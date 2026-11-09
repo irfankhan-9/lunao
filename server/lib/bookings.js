@@ -11,6 +11,7 @@ import {
 import { supabase as supabaseCfg } from './config.js';
 import { validateBookingPayloadContract } from './bookingContractValidator.js';
 import { getBookingConfig, validateBookingAgainstConfig } from './bookingConfig.js';
+import { isPwaActiveForSlug, isPwaActiveForSlugAsync } from './inviteCodes.js';
 
 const VALID_STATUS = new Set(['new', 'confirmed', 'completed', 'cancelled']);
 const VALID_SOURCE = new Set(['form', 'chatbot']);
@@ -108,6 +109,15 @@ export function createBooking(rawInput = {}) {
   }
 
   const slug = str(input.slug);
+
+  // Strict Activation Gate: site must not confirm bookings until QR code has been generated
+  if (!isPwaActiveForSlug(slug)) {
+    const err = new Error('Booking Failed: Generate QR code for this site inside Lunao first to activate bookings.');
+    err.status = 400;
+    err.code = 'PWA_ACTIVATION_REQUIRED';
+    throw err;
+  }
+
   const idempotencyKey = str(input.idempotencyKey || input.idempotency_key) || null;
   if (idempotencyKey) {
     const existing = localBookingsMemory.find(b => b.slug === slug && b.idempotencyKey === idempotencyKey);
@@ -176,6 +186,16 @@ export async function createBookingAsync(rawInput = {}) {
   }
 
   const slug = str(input.slug);
+
+  // Strict Activation Gate: site must not confirm bookings until QR code has been generated
+  const pwaActive = await isPwaActiveForSlugAsync(slug);
+  if (!pwaActive) {
+    const err = new Error('Booking Failed: Generate QR code for this site inside Lunao first to activate bookings.');
+    err.status = 400;
+    err.code = 'PWA_ACTIVATION_REQUIRED';
+    throw err;
+  }
+
   const config = await getBookingConfig(slug).catch(() => null);
   if (config) {
     const configCheck = validateBookingAgainstConfig(input, config);
