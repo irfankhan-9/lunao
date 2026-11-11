@@ -23,7 +23,7 @@ function resetSbAiCircuitBreaker() {
 // One-time AI Vibe Coding credits granted to every Free-plan account (15 credits = $0.15).
 // This is NOT a monthly allowance: it is granted exactly once per account, tracked by
 // user_credits.free_vibe_granted_at (see grantFreeVibeCreditsOnce).
-export const FREE_VIBE_CREDITS = 15;
+export const FREE_VIBE_CREDITS = 1;
 
 // Free accounts may only use low-cost Flash-tier models so the $0.15 grant stays bounded.
 export const FREE_ALLOWED_MODEL_IDS = ['gemini-3.5-flash', 'gemini-3.8-flash'];
@@ -33,7 +33,7 @@ export function isFreePlanName(planName) {
 }
 
 export const PLAN_ALLOWANCES = {
-  'Free Plan': { monthlyUsd: 0.15, monthlyCredits: FREE_VIBE_CREDITS, priceUsd: 0 },
+  'Free Plan': { monthlyUsd: 0.05, monthlyCredits: FREE_VIBE_CREDITS, priceUsd: 0 },
   'Starter Plan': { monthlyUsd: 6.00, monthlyCredits: 600, priceUsd: 97 },
   'Pro Plan': { monthlyUsd: 13.00, monthlyCredits: 1300, priceUsd: 187 },
   'Agency Plan': { monthlyUsd: 20.00, monthlyCredits: 2000, priceUsd: 297 },
@@ -446,7 +446,7 @@ export async function reserveBudget({
   if (insufficient) {
     const err = new Error(
       isFreeAccount
-        ? `You've used your ${FREE_VIBE_CREDITS} free vibe-coding credits (${currentBalance.toFixed(2)} left, need about ${estimatedCredits.toFixed(2)}). Upgrade to Starter, Pro, or Agency to keep building with AI Web Studio.`
+        ? `You've used your 1 free AI prompt. Upgrade to Starter, Pro, or Agency to keep building with AI Web Studio.`
         : `Insufficient AI credits: have ${currentBalance.toFixed(2)}, need at least ${estimatedCredits.toFixed(2)}.`
     );
     err.status = 402;
@@ -582,7 +582,9 @@ export async function settleUsage({
   let refundedCredits = 0;
 
   if (status === 'settled') {
-    newBalance = Math.max(0, Number((currentBalance - actualCredits).toFixed(4)));
+    const isFree = isFreePlanName(activePlan);
+    const deduction = isFree ? Math.max(1, actualCredits) : actualCredits;
+    newBalance = Math.max(0, Number((currentBalance - deduction).toFixed(4)));
     newDollarsSpent = Number((currentDollarsSpent + actualCostUsd).toFixed(6));
     if (targetUserId) {
       await persistSupabaseAiBalance(targetUserId, newBalance, newDollarsSpent);
@@ -838,7 +840,7 @@ export async function getUserAiStatus(userId, planHint = null) {
     }
 
     // Free accounts that have never spent credits yet get the full one-time 15 free vibe credits
-    if (isFreePlanName(activePlan) && balanceCredits === 0 && dollarsSpent === 0) {
+    if (isFreePlanName(activePlan) && (balanceCredits === 0 || balanceCredits > 1) && dollarsSpent === 0) {
       balanceCredits = FREE_VIBE_CREDITS;
       persistSupabaseAiBalance(effectiveUserId, FREE_VIBE_CREDITS, 0, 'Free Plan').catch(() => {});
     }

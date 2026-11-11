@@ -2395,7 +2395,7 @@ async function getSupabaseUserPlanAndAi(ownerKey) {
     return {
       plan: planTier,
       // Free accounts hold their one-time free vibe credits in the stored balance (never forced to 0).
-      aiCreditsBalance: aiBalance,
+      aiCreditsBalance: isFreeTier ? (Number(cRow?.ai_dollars_spent || 0) > 0 ? aiBalance : FREE_VIBE_CREDITS) : aiBalance,
       monthlyAiCredits: isFreeTier ? Math.max(monthlyAiCredits, FREE_VIBE_CREDITS) : monthlyAiCredits,
       monthlyAiAllowanceUsd: Number(pRow?.monthly_ai_allowance_usd ?? (monthlyAiCredits * 0.01)),
       aiDollarsSpent: Number(cRow?.ai_dollars_spent || 0),

@@ -76,6 +76,9 @@ export const VibeCreditBadge: React.FC<VibeCreditBadgeProps> = ({
     }
   };
 
+  const isFree = userPlan.toLowerCase().includes('free');
+  const labelText = isFree ? (balance === 1 ? 'AI Prompt' : 'AI Prompts') : 'AI Credits';
+
   const formattedBalance = balance.toLocaleString(undefined, {
     minimumFractionDigits: balance % 1 !== 0 ? 1 : 0,
     maximumFractionDigits: 2,
@@ -86,7 +89,7 @@ export const VibeCreditBadge: React.FC<VibeCreditBadgeProps> = ({
       <button
         type="button"
         onClick={handleClick}
-        title={`Lunao AI Credits: ${formattedBalance} remaining.`}
+        title={isFree ? `Lunao AI: ${formattedBalance} free prompt${balance === 1 ? '' : 's'} remaining.` : `Lunao AI Credits: ${formattedBalance} remaining.`}
         className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-mono transition-all select-none ${
           justDeducted
             ? 'bg-accent/15 border-accent text-accent scale-102 ring-2 ring-accent/30'
@@ -96,7 +99,7 @@ export const VibeCreditBadge: React.FC<VibeCreditBadgeProps> = ({
         <span className="font-bold text-ink tracking-tight font-sans">
           {formattedBalance}
         </span>
-        <span className="text-[11px] text-ink-secondary font-sans font-medium">AI Credits</span>
+        <span className="text-[11px] text-ink-secondary font-sans font-medium">{labelText}</span>
       </button>
     );
   }
@@ -105,7 +108,7 @@ export const VibeCreditBadge: React.FC<VibeCreditBadgeProps> = ({
     <button
       type="button"
       onClick={handleClick}
-      title={`Lunao AI Credits: ${formattedBalance} remaining.`}
+      title={isFree ? `Lunao AI: ${formattedBalance} free prompt${balance === 1 ? '' : 's'} remaining.` : `Lunao AI Credits: ${formattedBalance} remaining.`}
       className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all text-xs select-none shadow-2xs ${
         justDeducted
           ? 'bg-accent/15 border-accent text-accent scale-102 ring-2 ring-accent/30'
@@ -114,7 +117,7 @@ export const VibeCreditBadge: React.FC<VibeCreditBadgeProps> = ({
     >
       <div className="flex items-center gap-1">
         <span className="font-mono font-bold text-ink">{formattedBalance}</span>
-        <span className="text-xs text-ink-secondary font-medium font-sans">AI Credits</span>
+        <span className="text-xs text-ink-secondary font-medium font-sans">{labelText}</span>
       </div>
       {interactive && <ChevronRight className="w-3 h-3 text-ink-tertiary ml-0.5" />}
     </button>

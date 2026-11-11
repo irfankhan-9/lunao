@@ -596,7 +596,7 @@ export const TemplateLabPage: React.FC<{
   const isPlanEligible = isVibeEligiblePlan(userPlan);
   const isFreeVibe = isFreeVibePlan(userPlan);
   const vibeLockedMessage = isFreeVibe
-    ? `You've used your ${FREE_VIBE_CREDITS} free vibe-coding credits. Upgrade to Starter, Pro, or Agency to keep building with AI.`
+    ? `You've used your 1 free AI prompt. Upgrade to Starter, Pro, or Agency to keep building with AI.`
     : 'Vibe Coding is available on Starter, Pro, and Agency plans. Please upgrade in Subscription Plans.';
   const freeModelLockedMessage =
     'Free vibe-coding credits work with Gemini Flash models. Upgrade to Starter, Pro, or Agency to use premium models.';
@@ -2164,7 +2164,7 @@ export const TemplateLabPage: React.FC<{
                         <Lock className="w-4 h-4" />
                       </div>
                       <div className="flex-1">
-                        <p className="text-xs font-bold leading-snug">{isFreeVibe ? `Your ${FREE_VIBE_CREDITS} free vibe-coding credits are used up` : `Vibe Coding Not Supported on ${userPlan}`}</p>
+                        <p className="text-xs font-bold leading-snug">{isFreeVibe ? `Your free AI prompt is used up` : `Vibe Coding Not Supported on ${userPlan}`}</p>
                         <p className="text-[11px] text-amber-800 mt-1 leading-relaxed">
                           {isFreeVibe ? "Upgrade to Starter, Pro, or Agency to keep vibe coding with AI. Your saved sites stay available." : "Not eligible to vibe code. Upgrade to supported plans (Starter, Pro, or Agency) to vibe code with AI."}
                         </p>
@@ -2315,7 +2315,7 @@ export const TemplateLabPage: React.FC<{
                         <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-3 text-xs text-amber-800">
                           <Lock className="w-4 h-4 text-amber-600 shrink-0" />
                           {isFreeVibe ? (
-                            <span>You&apos;ve used your <strong>{FREE_VIBE_CREDITS} free vibe-coding credits</strong>. Upgrade to <strong>Starter, Pro, or Agency</strong> to keep building with AI.</span>
+                            <span>You&apos;ve used your <strong>1 free AI prompt</strong>. Upgrade to <strong>Starter, Pro, or Agency</strong> to keep building with AI.</span>
                           ) : (
                             <span>Vibe Coding requires a <strong>Starter, Pro, or Agency</strong> plan. Free plan users have access to pre-built templates.</span>
                           )}
@@ -2341,7 +2341,7 @@ export const TemplateLabPage: React.FC<{
                         }`}
                       >
                         {streaming ? <Loader2 className="w-5 h-5 animate-spin" /> : !isPlanEligible ? <Lock className="w-5 h-5" /> : <Code2 className="w-5 h-5" />}
-                        {!isPlanEligible ? (isFreeVibe ? 'Free Credits Used — Upgrade to Keep Vibe Coding' : 'Starter Plan Required to Vibe Code') : 'Generate Website'}
+                        {!isPlanEligible ? (isFreeVibe ? 'Free Prompt Used — Upgrade to Keep Vibe Coding' : 'Starter Plan Required to Vibe Code') : 'Generate Website'}
                       </button>
                     </div>
 

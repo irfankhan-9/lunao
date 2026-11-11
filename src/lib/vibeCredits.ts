@@ -5,10 +5,10 @@
 //   Starter ($97/mo):   $6.00  = 600 AI credits
 //   Pro ($187/mo):      $13.00 = 1,300 AI credits
 //   Agency ($297/mo):   $20.00 = 2,000 AI credits
-//   Free ($0/mo):       $0.15  = 15 AI credits, ONE-TIME grant per account (never monthly, never re-granted)
+//   Free ($0/mo):       $0.05  = 1 AI prompt, ONE-TIME grant per account (never monthly, never re-granted)
 
-/** One-time AI Vibe Coding credits every Free account receives (15 credits = $0.15). */
-export const FREE_VIBE_CREDITS = 15;
+/** One-time AI Web Studio prompt every Free account receives (strictly 1 free AI prompt). */
+export const FREE_VIBE_CREDITS = 1;
 
 /** Free accounts may only use these low-cost Flash-tier models (mirrors server FREE_ALLOWED_MODEL_IDS). */
 export const FREE_ALLOWED_MODEL_IDS = ['gemini-3.5-flash', 'gemini-3.8-flash'];
@@ -59,7 +59,7 @@ export const PLAN_AI_CREDITS: Record<string, PlanAiCredits> = {
     planKey: 'free',
     planName: 'Free Plan',
     monthlyCredits: FREE_VIBE_CREDITS,
-    dollarValue: 0.15,
+    dollarValue: 0.05,
     creditCostUsd: 0.01,
     subscriptionPriceUsd: 0,
   },
@@ -139,18 +139,21 @@ export function getVibeCreditBalance(explicitPlan?: string | null): number {
     'Free Plan';
   const config = getPlanAiConfig(activePlan);
   const isFree = normalizePlanKey(activePlan) === 'free';
-  // Free accounts hold a one-time grant that only the server knows about (it may already be spent),
-  // so never assume the 15-credit default locally: show 0 until the server balance is synced.
-  const defaultBalance = isFree ? 0 : (config.monthlyCredits ?? 0);
+  const defaultBalance = isFree ? 1 : (config.monthlyCredits ?? 0);
 
   if (typeof window === 'undefined') return defaultBalance;
   try {
+    const hasUsed = localStorage.getItem('lunao_has_used_ai_credits') === 'true';
+    if (isFree && hasUsed) return 0;
     const raw =
       localStorage.getItem(`lunao_u_${userId}_vibe_credits`) ??
       localStorage.getItem('lunao_vibe_credits');
     if (raw !== null) {
       const parsed = parseFloat(raw);
       if (!Number.isNaN(parsed) && parsed >= 0) {
+        if (isFree) {
+          return hasUsed ? 0 : Math.min(parsed > 0 ? 1 : 0, 1);
+        }
         return parsed;
       }
     }
@@ -261,7 +264,7 @@ export function hasSufficientVibeCredits(planName?: string | null): {
       ok: false,
       balance: 0,
       error: isFree
-        ? `You've used your ${FREE_VIBE_CREDITS} free vibe-coding credits. Upgrade to Starter, Pro, or Agency to keep building with AI.`
+        ? `You've used your 1 free AI prompt. Upgrade to Starter, Pro, or Agency to keep building with AI.`
         : 'Insufficient AI credits (0 remaining). Please upgrade your plan in Subscription Plans.',
     };
   }
@@ -325,16 +328,22 @@ export function deductVibeCreditsFromMetadata(
     const calculatedCostUsd = (inputTokens * inRate + (outputTokens + thoughtTokens) * outRate) / 1000000;
     const calculatedCredits = Math.max(0.01, Number((calculatedCostUsd * 100).toFixed(4)));
 
-    if (typeof rawMeta?.creditsDeducted === 'number' && rawMeta.creditsDeducted > 0) {
-      creditsDeducted = Number(rawMeta.creditsDeducted.toFixed(4));
+    const isFree = normalizePlanKey(currentPlan) === 'free';
+    if (isFree) {
+      creditsDeducted = Math.min(currentBalance, 1);
+      remainingCredits = Math.max(0, currentBalance - creditsDeducted);
     } else {
-      creditsDeducted = calculatedCredits;
-    }
+      if (typeof rawMeta?.creditsDeducted === 'number' && rawMeta.creditsDeducted > 0) {
+        creditsDeducted = Number(rawMeta.creditsDeducted.toFixed(4));
+      } else {
+        creditsDeducted = calculatedCredits;
+      }
 
-    if (typeof rawMeta?.remainingCredits === 'number' && rawMeta.remainingCredits >= 0) {
-      remainingCredits = Math.max(0, Number(rawMeta.remainingCredits.toFixed(4)));
-    } else {
-      remainingCredits = Math.max(0, Number((currentBalance - creditsDeducted).toFixed(4)));
+      if (typeof rawMeta?.remainingCredits === 'number' && rawMeta.remainingCredits >= 0) {
+        remainingCredits = Math.max(0, Number(rawMeta.remainingCredits.toFixed(4)));
+      } else {
+        remainingCredits = Math.max(0, Number((currentBalance - creditsDeducted).toFixed(4)));
+      }
     }
 
     setVibeCreditBalance(remainingCredits);

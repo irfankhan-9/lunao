@@ -25,9 +25,9 @@ export const heroCopy = {
   headline: 'The Automated System to Acquire, Keep, and Scale Your Web & AI Agency',
   sub:
     'We built Lunao to automate every service agencies sell to local businesses, starting with pixel-perfect websites, and expanding to AI and upcoming services. No repetitive vibe-coding. No wasted AI credits.',
-  ctaPrimary: 'Start Free (15 Credits + 15 AI)',
+  ctaPrimary: 'Start Free (15 Credits + 1 AI Prompt)',
   ctaSecondary: 'See How It Works',
-  microTrust: '15 free Lunao credits + 15 free AI vibe-coding credits included • No credit card required • Setup in 60 seconds',
+  microTrust: '15 free Lunao credits + 1 free AI prompt included • No credit card required • Setup in 60 seconds',
   previewEyebrow: 'LIVE PIPELINE OUTREACH',
   previewRows: [
     { niche: 'Barber', city: 'Austin, TX', status: 'Deployed', credits: 3, url: 'vintage-cuts.lunao.app' },
@@ -45,7 +45,7 @@ export const socialProofCopy = {
     { value: '10x', label: 'Lower cost per deployed client website' },
     { value: '20x', label: 'Faster speed from search to live domain' },
     { value: '100%', label: 'Automated site rebranding & delivery' },
-    { value: '15 + 15', suffix: ' credits', label: 'Free on sign-up: 15 Lunao credits + 15 AI vibe-coding credits' },
+    { value: '15 + 1', suffix: ' credits', label: 'Free on sign-up: 15 Lunao credits + 1 free AI prompt' },
     { value: '700K+', label: 'Active websites deployed across niches' },
   ],
 };
@@ -246,7 +246,7 @@ export const pricingCopy = {
       tagline: 'Trial sandbox for testing the Lunao engine and AI Vibe Coding.',
       features: [
         '15 one-time Lunao Credits',
-        '15 free AI Vibe Coding credits (one-time)',
+        '1 free AI Web Studio prompt (one-time)',
         '1 trial Owner PWA business',
         'Site rebrand & deploy (3 credits)',
         'Find SMS lead (1.5 credits)',
@@ -254,7 +254,7 @@ export const pricingCopy = {
         'Email discovery (1.5 credits/email)',
         'Email sending: 0 credits (Free for all)'
       ],
-      cta: 'Start Free (15 Credits + 15 AI)',
+      cta: 'Start Free (15 Credits + 1 AI Prompt)',
       recommended: false,
     },
     {
@@ -334,8 +334,8 @@ export const pricingCopy = {
 
 export const ctvCopy = {
   heading: 'Ready to scale your web & AI agency on autopilot?',
-  body: 'Sign up free, get 15 Lunao credits plus 15 free AI vibe-coding credits, and launch your first campaign in under 60 seconds. No credit card required.',
-  ctaPrimary: 'Start Free (15 Credits + 15 AI)',
+  body: 'Sign up free, get 15 Lunao credits plus 1 free AI prompt, and launch your first campaign in under 60 seconds. No credit card required.',
+  ctaPrimary: 'Start Free (15 Credits + 1 AI Prompt)',
   ctaSecondary: 'Contact Support',
   mailto: 'mailto:support@lunao.app',
 };
@@ -346,7 +346,7 @@ export const faqCopy = {
   items: [
     {
       q: 'How many credits do new accounts receive?',
-      a: 'Free plan accounts start with 15 one-time Lunao Credits to test website rebranding and lead discovery, plus 15 free AI vibe-coding credits (one-time) to try the AI Web Studio with Gemini Flash models.',
+      a: 'Free plan accounts start with 15 one-time Lunao Credits to test website rebranding and lead discovery, plus 1 free AI prompt (one-time) to try the AI Web Studio with Gemini Flash models.',
     },
     {
       q: 'How much do subscription plans cost?',
