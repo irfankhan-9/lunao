@@ -63,7 +63,12 @@ Use ONLY these exact uppercase handlebar tags:
 - Always use a prominent direct phone call-to-action button (<a href="tel:{{PHONE_RAW}}" class="btn-cta">Call {{PHONE_DISPLAY}}</a>).
 
 4. TARGETED EDITS & SPEED:
-- Modify ONLY the parts of CURRENT HTML needed to fulfill EDIT INSTRUCTION while preserving the rest of the existing HTML document intact, unless the user explicitly asks for a full redesign.`;
+- Modify ONLY the parts of CURRENT HTML needed to fulfill EDIT INSTRUCTION while preserving the rest of the existing HTML document intact, unless the user explicitly asks for a full redesign.
+
+5. BEAUTIFUL ANIMATIONS & MODERN VISUAL POLISH:
+- Make sure the generated website is exceptionally beautiful, modern, and engaging with tasteful, fluid animations.
+- Include smooth CSS transitions, subtle hover micro-interactions on cards and buttons, gentle fade-in and slide-up keyframe animations for hero elements, floating subtle badge effects, and smooth scroll behavior.
+- Ensure all animations are performance-optimized, clean, and elegant using pure modern CSS (cubic-bezier easing, hardware-accelerated transforms).`;
 
 function buildGeminiPrompt(html, instruction, history = []) {
   const convo = (history || [])
@@ -90,16 +95,13 @@ function resolveRealGeminiModel(requestedModel) {
   if (norm.includes('3.1') || norm.includes('pro')) {
     return process.env.GEMINI_PRO_MODEL || 'gemini-3.1-pro-preview';
   }
-  if (norm.includes('3.8')) {
-    return process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+  if (norm.includes('3.8') || norm.includes('flash') || norm.includes('3.5')) {
+    return process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
   }
-  if (norm.includes('3.5')) {
-    return 'gemini-3.5-flash';
+  if (norm.includes('lite')) {
+    return 'gemini-3.5-flash-lite';
   }
-  if (norm.includes('lite') || norm.includes('3.1')) {
-    return 'gemini-3.1-flash-lite';
-  }
-  return process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+  return process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
 }
 
 /**
@@ -120,7 +122,12 @@ export async function streamGeminiEdit(
   }
 
   const primaryModel = resolveRealGeminiModel(model);
-  const candidates = [primaryModel, 'gemini-3.5-flash', 'gemini-3.1-flash-lite'].filter((v, i, a) => a.indexOf(v) === i);
+  const candidates = [
+    primaryModel,
+    'gemini-3-flash-preview',
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite',
+  ].filter((v, i, a) => Boolean(v) && a.indexOf(v) === i);
   const prompt = buildGeminiPrompt(html, instruction, history);
   const isProReasoning = String(model).includes('pro') || String(model).includes('fable');
 
@@ -131,7 +138,7 @@ export async function streamGeminiEdit(
   for (const candidate of candidates) {
     try {
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('AI servers busy, try later.')), 150000)
+        setTimeout(() => reject(new Error('AI servers busy, try later.')), 30000)
       );
 
       stream = await Promise.race([
@@ -170,7 +177,12 @@ export async function streamGeminiEdit(
       if (chunk.usageMetadata) {
         lastUsageMetadata = chunk.usageMetadata;
       }
-      const text = chunk.text || '';
+      let text = '';
+      try {
+        text = chunk.text || '';
+      } catch {
+        text = '';
+      }
       if (text) {
         fullHtml += text;
         if (onChunk) onChunk(text);
@@ -204,7 +216,7 @@ export async function streamGeminiEdit(
       latencyMs,
     };
   } catch (err) {
-    console.warn(`[geminiAdapter] Generation failed on ${actualModel}: ${err.message}`);
-    throw new Error('AI servers busy, try later.');
+    console.warn(`[geminiAdapter] Generation failed on ${activeModelUsed}: ${err.message}`);
+    throw err;
   }
 }

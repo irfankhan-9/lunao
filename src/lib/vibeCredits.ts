@@ -143,6 +143,12 @@ export function getVibeCreditBalance(explicitPlan?: string | null): number {
 
   if (typeof window === 'undefined') return defaultBalance;
   try {
+    if (isFree) {
+      const usedFlag =
+        localStorage.getItem(`lunao_u_${userId}_free_prompt_used`) === 'true' ||
+        localStorage.getItem('lunao_free_prompt_used') === 'true';
+      if (usedFlag) return 0;
+    }
     const raw =
       localStorage.getItem(`lunao_u_${userId}_vibe_credits`) ??
       localStorage.getItem('lunao_vibe_credits');
@@ -150,7 +156,7 @@ export function getVibeCreditBalance(explicitPlan?: string | null): number {
       const parsed = parseFloat(raw);
       if (!Number.isNaN(parsed) && parsed >= 0) {
         if (isFree) {
-          return parsed > 0 ? 1 : 0;
+          return parsed >= 1 ? 1 : 0;
         }
         return parsed;
       }
@@ -256,7 +262,20 @@ export function hasSufficientVibeCredits(planName?: string | null): {
       : null) ||
     'Free Plan';
   const isFree = normalizePlanKey(currentPlan) === 'free';
+  const isUsedFlag =
+    typeof localStorage !== 'undefined' &&
+    (localStorage.getItem(`lunao_u_${userId}_free_prompt_used`) === 'true' ||
+      localStorage.getItem('lunao_free_prompt_used') === 'true');
   const currentBalance = getVibeCreditBalance(currentPlan);
+
+  if (isFree && (currentBalance < 1 || isUsedFlag)) {
+    return {
+      ok: false,
+      balance: 0,
+      error: `You've used your 1 free AI prompt. Upgrade to Starter, Pro, or Agency to keep building with AI.`,
+    };
+  }
+
   if (currentBalance <= 0) {
     return {
       ok: false,
@@ -328,8 +347,17 @@ export function deductVibeCreditsFromMetadata(
 
     const isFree = normalizePlanKey(currentPlan) === 'free';
     if (isFree) {
-      creditsDeducted = Math.min(currentBalance, 1);
-      remainingCredits = Math.max(0, currentBalance - creditsDeducted);
+      creditsDeducted = 1;
+      remainingCredits = 0;
+      setVibeCreditBalance(0);
+      try {
+        if (typeof localStorage !== 'undefined') {
+          const userId = getVibeUserId();
+          localStorage.setItem(`lunao_u_${userId}_free_prompt_used`, 'true');
+          localStorage.setItem('lunao_free_prompt_used', 'true');
+          localStorage.setItem('lunao_has_used_ai_credits', 'true');
+        }
+      } catch {}
     } else {
       if (typeof rawMeta?.creditsDeducted === 'number' && rawMeta.creditsDeducted > 0) {
         creditsDeducted = Number(rawMeta.creditsDeducted.toFixed(4));
@@ -342,9 +370,8 @@ export function deductVibeCreditsFromMetadata(
       } else {
         remainingCredits = Math.max(0, Number((currentBalance - creditsDeducted).toFixed(4)));
       }
+      setVibeCreditBalance(remainingCredits);
     }
-
-    setVibeCreditBalance(remainingCredits);
     try {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem('lunao_has_used_ai_credits', 'true');

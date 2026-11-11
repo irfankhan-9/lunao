@@ -1528,12 +1528,25 @@ app.post('/api/ai/edit', async (req, res) => {
   const instruction = rawInstruction || rawPrompt;
 
   res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders?.();
-  const send = (event) => res.write(`data: ${JSON.stringify(event)}\n\n`);
+  const send = (event) => {
+    try {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    } catch {}
+  };
+
+  // Heartbeat to prevent Cloudflare / Nginx proxy timeouts during streaming
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(': keepalive\n\n');
+    } catch {}
+  }, 10000);
 
   if (typeof html !== 'string' || !html.trim() || typeof instruction !== 'string' || !instruction.trim()) {
+    clearInterval(heartbeat);
     send({ type: 'error', error: 'Missing html or instruction prompt.' });
     return res.end();
   }
@@ -1591,6 +1604,7 @@ app.post('/api/ai/edit', async (req, res) => {
       needed: err.needed,
     });
   } finally {
+    clearInterval(heartbeat);
     res.end();
   }
 });
@@ -1662,11 +1676,13 @@ app.post('/api/ai/deduct', async (req, res) => {
           const rows = await ledgerRes.json();
           if (Array.isArray(rows) && rows.length > 0 && rows[0].status === 'settled') {
             const row = rows[0];
+            const userStatus = await getUserAiStatus(userId).catch(() => null);
+            const isFreeUser = !userStatus?.plan || /free/i.test(userStatus.plan);
             return res.json({
               ok: true,
               idempotent: true,
-              creditsDeducted: Number(row.actual_credits),
-              remainingCredits: Number(row.balance_credits_after),
+              creditsDeducted: isFreeUser ? 1 : Number(row.actual_credits),
+              remainingCredits: isFreeUser ? 0 : Number(row.balance_credits_after),
               actualCostUsd: Number(row.actual_cost_usd),
             });
           }
@@ -1682,10 +1698,11 @@ app.post('/api/ai/deduct', async (req, res) => {
 
     if (safeDeduct > 0 && userId) {
       const currentStatus = await getUserAiStatus(userId);
+      const isFreePlan = !currentStatus?.plan || /free/i.test(currentStatus.plan);
       const currentBal = Number(currentStatus?.balanceCredits ?? 0);
       const currentSpent = Number(currentStatus?.dollarsSpent ?? 0);
-      const newBal = Math.max(0, Number((currentBal - safeDeduct).toFixed(4)));
-      const newSpent = Number((currentSpent + safeSpent).toFixed(6));
+      const newBal = isFreePlan ? 0 : Math.max(0, Number((currentBal - safeDeduct).toFixed(4)));
+      const newSpent = Number((currentSpent + (isFreePlan ? Math.max(0.01, safeSpent) : safeSpent)).toFixed(6));
 
       await persistSupabaseAiBalance(userId, newBal, newSpent);
 

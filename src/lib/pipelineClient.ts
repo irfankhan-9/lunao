@@ -1643,7 +1643,11 @@ export async function streamAiEdit(
     throw new Error('AI servers busy, try later.');
   }
 
-  const finalHtml = (doneHtml || fullHtml || '').trim();
+  let finalHtml = (doneHtml || fullHtml || '').trim();
+  const fence = finalHtml.match(/```(?:html)?\s*([\s\S]*?)\s*```/i);
+  if (fence && fence[1]) {
+    finalHtml = fence[1].trim();
+  }
   const lower = finalHtml.toLowerCase();
   if (
     !finalHtml ||

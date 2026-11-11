@@ -132,8 +132,8 @@ export const AiStudioModelSelector: React.FC<AiStudioModelSelectorProps> = ({
   const activeModel = STUDIO_MODELS.find(m => m.id === selectedModel) || STUDIO_MODELS[0];
   const isFreePlan = isFreeVibePlan(userPlan);
   const effectiveBalance = Math.max(0, balance);
-  const isExhausted = effectiveBalance <= 0 && !aiServerError;
-  const isLow = effectiveBalance > 0 && effectiveBalance < 5;
+  const isExhausted = (isFreePlan ? effectiveBalance < 1 : effectiveBalance <= 0) && !aiServerError;
+  const isLow = isFreePlan ? false : (effectiveBalance > 0 && effectiveBalance < 5);
 
   // Free accounts run on a one-time grant and are limited to Flash-tier models.
   useEffect(() => {
@@ -157,10 +157,12 @@ export const AiStudioModelSelector: React.FC<AiStudioModelSelectorProps> = ({
   const googleModels = STUDIO_MODELS.filter(m => m.provider === 'google');
   const anthropicModels = STUDIO_MODELS.filter(m => m.provider === 'anthropic');
 
-  const formattedBalance = effectiveBalance.toLocaleString(undefined, {
-    minimumFractionDigits: effectiveBalance % 1 !== 0 ? 1 : 0,
-    maximumFractionDigits: 2,
-  });
+  const formattedBalance = isFreePlan
+    ? (effectiveBalance >= 1 ? '1' : '0')
+    : effectiveBalance.toLocaleString(undefined, {
+        minimumFractionDigits: effectiveBalance % 1 !== 0 ? 1 : 0,
+        maximumFractionDigits: 2,
+      });
 
   return (
     <div className={`relative inline-block ${className}`}>
@@ -195,13 +197,13 @@ export const AiStudioModelSelector: React.FC<AiStudioModelSelectorProps> = ({
         <button
           type="button"
           onClick={handleUpgradeClick}
-          title={isFreePlan ? `${formattedBalance} free AI prompt${effectiveBalance === 1 ? '' : 's'} available. Click to manage plan.` : `${formattedBalance} AI credits available. Click to manage plan.`}
+          title={isFreePlan ? `${formattedBalance} free AI prompt${effectiveBalance >= 1 ? '' : 's'} available. Click to manage plan.` : `${formattedBalance} AI credits available. Click to manage plan.`}
           className="inline-flex items-center gap-1.5 px-2 py-1 text-xs text-slate-600 hover:text-slate-900 transition-colors cursor-pointer select-none"
         >
           <span className={`font-mono font-bold ${isExhausted ? 'text-red-600' : isLow ? 'text-amber-600' : 'text-slate-900'}`}>
             {formattedBalance}
           </span>
-          <span className="text-[11px] text-slate-500 font-medium">{isFreePlan ? (effectiveBalance === 1 ? 'Prompt' : 'Prompts') : 'Credits'}</span>
+          <span className="text-[11px] text-slate-500 font-medium">{isFreePlan ? (effectiveBalance >= 1 ? 'Prompt' : 'Prompts') : 'Credits'}</span>
 
           {typeof lastUsageCredits === 'number' && lastUsageCredits > 0 && (
             <span className="text-[10px] font-mono text-emerald-700 font-semibold bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200/60 animate-in fade-in">

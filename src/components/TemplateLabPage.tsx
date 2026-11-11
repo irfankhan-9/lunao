@@ -112,7 +112,12 @@ Preserve the original design, styling, layout, typography, responsiveness, and i
 - Online booking forms are temporarily disabled in AI Website Studio ("Bookings coming soon to Lunao AI Website Studio").
 - Do NOT generate booking forms, appointment scheduling inputs, date/time pickers, or reservation forms.
 - Instead, always use a prominent direct phone call-to-action button (<a href="tel:{{PHONE_RAW}}" class="btn-cta">Call {{PHONE_DISPLAY}}</a>) and direct contact inquiry sections.
-- Never add inline mock success handlers, fake booking alerts, or alternative booking endpoints.`;
+- Never add inline mock success handlers, fake booking alerts, or alternative booking endpoints.
+
+7. BEAUTIFUL ANIMATIONS & MODERN VISUAL POLISH:
+- Make sure the generated website is exceptionally beautiful, modern, and engaging with tasteful, fluid animations.
+- Include smooth CSS transitions, subtle hover micro-interactions on cards and buttons, gentle fade-in and slide-up keyframe animations for hero elements, floating subtle badge effects, and smooth scroll behavior.
+- Ensure all animations are performance-optimized, clean, and elegant using pure modern CSS (cubic-bezier easing, hardware-accelerated transforms).`;
 
 const sfx = {
   tap: playSoftTap,
@@ -604,7 +609,7 @@ export const TemplateLabPage: React.FC<{
   }, [userPlan]);
 
   const isFreeVibe = isFreeVibePlan(userPlan);
-  const isPlanEligible = isFreeVibe ? vibeBalance > 0 : isVibeEligiblePlan(userPlan);
+  const isPlanEligible = isFreeVibe ? vibeBalance >= 1 : isVibeEligiblePlan(userPlan);
   const vibeLockedMessage = isFreeVibe
     ? `You've used your 1 free AI prompt. Upgrade to Starter, Pro, or Agency to keep building with AI.`
     : 'Vibe Coding is available on Starter, Pro, and Agency plans. Please upgrade in Subscription Plans.';
@@ -1225,12 +1230,19 @@ export const TemplateLabPage: React.FC<{
         );
       }
 
-      const lowerResult = (result || '').trim().toLowerCase();
+      let cleanResult = (result || '').trim();
+      const fenceMatch = cleanResult.match(/```(?:html)?\s*([\s\S]*?)\s*```/i);
+      if (fenceMatch && fenceMatch[1]) {
+        cleanResult = fenceMatch[1].trim();
+      }
+      result = cleanResult;
+
+      const lowerResult = result.toLowerCase();
       if (
         !result ||
         typeof result !== 'string' ||
-        result.trim().length < 150 ||
-        result.trim() === BLANK_CANVAS.trim() ||
+        result.length < 150 ||
+        result === BLANK_CANVAS.trim() ||
         (!lowerResult.includes('<!doctype') && !lowerResult.includes('<html')) ||
         !lowerResult.includes('</html>') ||
         (!isUgcMode() &&
@@ -1260,6 +1272,9 @@ export const TemplateLabPage: React.FC<{
       );
       if (promptMeta?.creditsDeducted) {
         setLastUsageCredits(promptMeta.creditsDeducted);
+      }
+      if (isFreeVibe) {
+        setVibeBalance(0);
       }
 
       const finalTitle = isSpecialBarber
@@ -1441,6 +1456,9 @@ export const TemplateLabPage: React.FC<{
       );
       if (promptMeta?.creditsDeducted) {
         setLastUsageCredits(promptMeta.creditsDeducted);
+      }
+      if (isFreeVibe) {
+        setVibeBalance(0);
       }
 
       const finalTitle = isSpecialBarber ? SPECIAL_BARBER_VIBE_TITLE : title;

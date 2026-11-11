@@ -77,19 +77,22 @@ export const VibeCreditBadge: React.FC<VibeCreditBadgeProps> = ({
   };
 
   const isFree = userPlan.toLowerCase().includes('free');
-  const labelText = isFree ? (balance === 1 ? 'AI Prompt' : 'AI Prompts') : 'AI Credits';
+  const displayBalance = isFree ? (balance >= 1 ? 1 : 0) : balance;
+  const labelText = isFree ? (displayBalance === 1 ? 'AI Prompt' : 'AI Prompts') : 'AI Credits';
 
-  const formattedBalance = balance.toLocaleString(undefined, {
-    minimumFractionDigits: balance % 1 !== 0 ? 1 : 0,
-    maximumFractionDigits: 2,
-  });
+  const formattedBalance = isFree
+    ? String(displayBalance)
+    : balance.toLocaleString(undefined, {
+        minimumFractionDigits: balance % 1 !== 0 ? 1 : 0,
+        maximumFractionDigits: 2,
+      });
 
   if (size === 'sm') {
     return (
       <button
         type="button"
         onClick={handleClick}
-        title={isFree ? `Lunao AI: ${formattedBalance} free prompt${balance === 1 ? '' : 's'} remaining.` : `Lunao AI Credits: ${formattedBalance} remaining.`}
+        title={isFree ? `Lunao AI: ${formattedBalance} free prompt${displayBalance === 1 ? '' : 's'} remaining.` : `Lunao AI Credits: ${formattedBalance} remaining.`}
         className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-mono transition-all select-none ${
           justDeducted
             ? 'bg-accent/15 border-accent text-accent scale-102 ring-2 ring-accent/30'

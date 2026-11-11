@@ -440,7 +440,7 @@ export async function reserveBudget({
   }
 
   const insufficient = isFreeAccount
-    ? currentBalance <= 0 || currentBalance < estimatedCredits
+    ? currentBalance < 1
     : currentBalance <= 0 || currentBalance < Math.min(estimatedCredits, 0.01);
 
   if (insufficient) {
@@ -583,9 +583,9 @@ export async function settleUsage({
 
   if (status === 'settled') {
     const isFree = isFreePlanName(activePlan);
-    const deduction = isFree ? Math.max(1, actualCredits) : actualCredits;
-    newBalance = Math.max(0, Number((currentBalance - deduction).toFixed(4)));
-    newDollarsSpent = Number((currentDollarsSpent + actualCostUsd).toFixed(6));
+    const deduction = isFree ? Math.max(1, currentBalance) : actualCredits;
+    newBalance = isFree ? 0 : Math.max(0, Number((currentBalance - deduction).toFixed(4)));
+    newDollarsSpent = Number((currentDollarsSpent + (isFree ? Math.max(0.01, actualCostUsd) : actualCostUsd)).toFixed(6));
     if (targetUserId) {
       await persistSupabaseAiBalance(targetUserId, newBalance, newDollarsSpent);
     }
@@ -606,8 +606,9 @@ export async function settleUsage({
   }
 
   if (rec) {
+    const isFree = isFreePlanName(activePlan);
     rec.status = status;
-    rec.actualCredits = actualCredits;
+    rec.actualCredits = isFree ? 1 : actualCredits;
     rec.actualCostUsd = actualCostUsd;
     rec.balanceAfter = newBalance;
     rec.inputTokens = costData.inputTokens;
@@ -839,10 +840,17 @@ export async function getUserAiStatus(userId, planHint = null) {
       balanceCredits = planConfig.monthlyCredits;
     }
 
-    // Free accounts that have never spent credits yet get the full one-time 15 free vibe credits
-    if (isFreePlanName(activePlan) && (balanceCredits === 0 || balanceCredits > 1) && dollarsSpent === 0) {
-      balanceCredits = FREE_VIBE_CREDITS;
-      persistSupabaseAiBalance(effectiveUserId, FREE_VIBE_CREDITS, 0, 'Free Plan').catch(() => {});
+    // Free accounts get strictly 1 free AI prompt.
+    // If dollarsSpent > 0 or balance < 1, balance is locked to 0 permanently.
+    if (isFreePlanName(activePlan)) {
+      if (rawCredBal === null && rawPlanBal === null && dollarsSpent === 0) {
+        balanceCredits = FREE_VIBE_CREDITS;
+        persistSupabaseAiBalance(effectiveUserId, FREE_VIBE_CREDITS, 0, 'Free Plan').catch(() => {});
+      } else if (dollarsSpent > 0 || balanceCredits < 1) {
+        balanceCredits = 0;
+      } else {
+        balanceCredits = 1;
+      }
     }
 
     const monthlyCredits =

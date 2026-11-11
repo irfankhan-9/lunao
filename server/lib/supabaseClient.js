@@ -198,12 +198,12 @@ export async function runAiSmokeTests() {
       });
 
       const t0 = Date.now();
-      const modelName = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+      const modelName = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
       const call = ai.models.generateContent({
         model: modelName,
         contents: 'reply 1 word: OK',
       });
-      const response = await Promise.race([call, timeoutPromise(2000)]);
+      const response = await Promise.race([call, timeoutPromise(3500)]);
       const latencyMs = Date.now() - t0;
 
       results.gemini = {

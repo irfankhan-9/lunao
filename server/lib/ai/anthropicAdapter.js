@@ -50,7 +50,12 @@ Use ONLY these exact uppercase handlebar tags:
 3. AI WEBSITE STUDIO TEMPORARY BOOKING RESTRICTION:
 - Online booking forms are temporarily disabled.
 - Do NOT generate booking forms, date/time pickers, or reservation inputs.
-- Always use a prominent direct phone call-to-action button (<a href="tel:{{PHONE_RAW}}" class="btn-cta">Call {{PHONE_DISPLAY}}</a>).`;
+- Always use a prominent direct phone call-to-action button (<a href="tel:{{PHONE_RAW}}" class="btn-cta">Call {{PHONE_DISPLAY}}</a>).
+
+4. BEAUTIFUL ANIMATIONS & MODERN VISUAL POLISH:
+- Make sure the generated website is exceptionally beautiful, modern, and engaging with tasteful, fluid animations.
+- Include smooth CSS transitions, subtle hover micro-interactions on cards and buttons, gentle fade-in and slide-up keyframe animations for hero elements, floating subtle badge effects, and smooth scroll behavior.
+- Ensure all animations are performance-optimized, clean, and elegant using pure modern CSS (cubic-bezier easing, hardware-accelerated transforms).`;
 
 function buildClaudeMessages(html, instruction, history = []) {
   const messages = [];
