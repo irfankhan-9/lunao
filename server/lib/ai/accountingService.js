@@ -837,6 +837,12 @@ export async function getUserAiStatus(userId, planHint = null) {
       balanceCredits = planConfig.monthlyCredits;
     }
 
+    // Free accounts that have never spent credits yet get the full one-time 15 free vibe credits
+    if (isFreePlanName(activePlan) && balanceCredits === 0 && dollarsSpent === 0) {
+      balanceCredits = FREE_VIBE_CREDITS;
+      persistSupabaseAiBalance(effectiveUserId, FREE_VIBE_CREDITS, 0, 'Free Plan').catch(() => {});
+    }
+
     const monthlyCredits =
       planRow && Number(planRow.monthly_ai_credits) > 0
         ? Number(planRow.monthly_ai_credits)

@@ -595,7 +595,6 @@ export const TemplateLabPage: React.FC<{
 
   const isPlanEligible = isVibeEligiblePlan(userPlan);
   const isFreeVibe = isFreeVibePlan(userPlan);
-  const freeVibeBalance = isFreeVibe ? getVibeCreditBalance(userPlan) : 0;
   const vibeLockedMessage = isFreeVibe
     ? `You've used your ${FREE_VIBE_CREDITS} free vibe-coding credits. Upgrade to Starter, Pro, or Agency to keep building with AI.`
     : 'Vibe Coding is available on Starter, Pro, and Agency plans. Please upgrade in Subscription Plans.';
@@ -2320,13 +2319,6 @@ export const TemplateLabPage: React.FC<{
                           ) : (
                             <span>Vibe Coding requires a <strong>Starter, Pro, or Agency</strong> plan. Free plan users have access to pre-built templates.</span>
                           )}
-                        </div>
-                      ) : isFreeVibe ? (
-                        <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 flex items-center gap-3 text-xs text-blue-800">
-                          <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
-                          <span>
-                            <strong>{freeVibeBalance.toLocaleString(undefined, { maximumFractionDigits: 1 })} of {FREE_VIBE_CREDITS} free vibe-coding credits</strong> left — one-time gift on the Free plan (Gemini Flash models). Upgrade anytime for 600+ credits and premium models.
-                          </span>
                         </div>
                       ) : null}
 
