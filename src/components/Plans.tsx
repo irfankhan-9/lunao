@@ -211,8 +211,7 @@ export const Plans: React.FC<PlansProps> = ({
       const parsed = parseFloat(stored);
       if (!isNaN(parsed) && parsed >= 0) {
         if (p.includes('free')) {
-          const hasUsed = typeof localStorage !== 'undefined' && localStorage.getItem('lunao_has_used_ai_credits') === 'true';
-          return hasUsed ? 0 : Math.min(parsed > 0 ? 1 : 0, 1);
+          return parsed > 0 ? 1 : 0;
         }
         return parsed;
       }

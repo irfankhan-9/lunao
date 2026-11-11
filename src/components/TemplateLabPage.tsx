@@ -584,17 +584,27 @@ export const TemplateLabPage: React.FC<{
   }, []);
 
   // Re-render when the vibe credit balance changes (free users unlock/lock as their one-time credits are used).
-  const [, setVibeBalanceTick] = useState(0);
+  const [vibeBalance, setVibeBalance] = useState<number>(() => getVibeCreditBalance(userPlan));
   useEffect(() => {
-    const bump = () => setVibeBalanceTick((t) => t + 1);
+    const bump = (e?: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail && typeof detail.balance === 'number') {
+        setVibeBalance(detail.balance);
+      } else {
+        setVibeBalance(getVibeCreditBalance(userPlan));
+      }
+    };
     window.addEventListener('lunao_vibe_credits_changed', bump);
-    // Pull the authoritative server balance (includes the one-time free vibe credits for Free accounts).
-    syncAllowanceWithServer().then(bump).catch(() => {});
+    syncAllowanceWithServer().then((res) => {
+      if (res && typeof res.balanceCredits === 'number') {
+        setVibeBalance(res.balanceCredits);
+      }
+    }).catch(() => {});
     return () => window.removeEventListener('lunao_vibe_credits_changed', bump);
-  }, []);
+  }, [userPlan]);
 
-  const isPlanEligible = isVibeEligiblePlan(userPlan);
   const isFreeVibe = isFreeVibePlan(userPlan);
+  const isPlanEligible = isFreeVibe ? vibeBalance > 0 : isVibeEligiblePlan(userPlan);
   const vibeLockedMessage = isFreeVibe
     ? `You've used your 1 free AI prompt. Upgrade to Starter, Pro, or Agency to keep building with AI.`
     : 'Vibe Coding is available on Starter, Pro, and Agency plans. Please upgrade in Subscription Plans.';

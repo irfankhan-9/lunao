@@ -143,8 +143,6 @@ export function getVibeCreditBalance(explicitPlan?: string | null): number {
 
   if (typeof window === 'undefined') return defaultBalance;
   try {
-    const hasUsed = localStorage.getItem('lunao_has_used_ai_credits') === 'true';
-    if (isFree && hasUsed) return 0;
     const raw =
       localStorage.getItem(`lunao_u_${userId}_vibe_credits`) ??
       localStorage.getItem('lunao_vibe_credits');
@@ -152,7 +150,7 @@ export function getVibeCreditBalance(explicitPlan?: string | null): number {
       const parsed = parseFloat(raw);
       if (!Number.isNaN(parsed) && parsed >= 0) {
         if (isFree) {
-          return hasUsed ? 0 : Math.min(parsed > 0 ? 1 : 0, 1);
+          return parsed > 0 ? 1 : 0;
         }
         return parsed;
       }
@@ -429,8 +427,10 @@ export function deductVibeCreditsForPrompt(params: {
 
 /**
  * Synchronize client balance with authoritative Supabase account for this user.
+ * Fetches ONE time per user and caches permanently in localStorage.
+ * Subsequent visits/renders instantly read from the localStorage cache with 0 network latency.
  */
-export async function syncAllowanceWithServer(): Promise<{
+export async function syncAllowanceWithServer(force = false): Promise<{
   balanceCredits: number;
   monthlyCredits: number;
   plan: string;
@@ -442,6 +442,24 @@ export async function syncAllowanceWithServer(): Promise<{
       localStorage.getItem(`lunao_u_${userId}_plan`) ||
       localStorage.getItem('lunao_user_plan') ||
       'Free Plan';
+    const isFree = normalizePlanKey(localPlan) === 'free';
+    const syncCacheKey = `lunao_u_${userId}_ai_synced`;
+    const hasSyncedOnce = localStorage.getItem(syncCacheKey) === 'true';
+    const cachedBalanceRaw =
+      localStorage.getItem(`lunao_u_${userId}_vibe_credits`) ??
+      localStorage.getItem('lunao_vibe_credits');
+
+    // Serve from localStorage cache if already fetched once
+    if (!force && hasSyncedOnce && cachedBalanceRaw !== null) {
+      const parsed = parseFloat(cachedBalanceRaw);
+      const cachedBal = !Number.isNaN(parsed) && parsed >= 0 ? (isFree ? (parsed > 0 ? 1 : 0) : parsed) : (isFree ? 1 : 0);
+      return {
+        balanceCredits: cachedBal,
+        monthlyCredits: isFree ? 1 : (getPlanAiConfig(localPlan).monthlyCredits || 600),
+        plan: localPlan,
+      };
+    }
+
     const qs = new URLSearchParams({ userId, plan: localPlan });
     const res = await fetch(`/api/ai/allowance?${qs.toString()}`, {
       headers: {
@@ -454,10 +472,15 @@ export async function syncAllowanceWithServer(): Promise<{
     if (data.ok && data.status) {
       const activePlan = data.status.plan || localPlan;
       const config = getPlanAiConfig(activePlan);
+      const isFreeActive = normalizePlanKey(activePlan) === 'free';
       const dollarsSpent = Number(data.status.dollarsSpent || 0);
       let balance = Number(data.status.balanceCredits);
       if (Number.isNaN(balance) || balance < 0) {
         balance = 0;
+      }
+      if (isFreeActive) {
+        // Free tier: 1 prompt if never spent; 0 if already spent
+        balance = dollarsSpent > 0 || balance <= 0 ? 0 : 1;
       }
       if (dollarsSpent > 0) {
         localStorage.setItem(`lunao_u_${userId}_ai_dollars_spent`, dollarsSpent.toFixed(6));
@@ -465,9 +488,10 @@ export async function syncAllowanceWithServer(): Promise<{
         localStorage.setItem('lunao_has_used_ai_credits', 'true');
       }
       setVibeCreditBalance(balance);
+      localStorage.setItem(syncCacheKey, 'true');
       return {
         balanceCredits: balance,
-        monthlyCredits: Number(data.status.monthlyCredits ?? config.monthlyCredits),
+        monthlyCredits: isFreeActive ? 1 : Number(data.status.monthlyCredits ?? config.monthlyCredits),
         plan: activePlan,
       };
     }
