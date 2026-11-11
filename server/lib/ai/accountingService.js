@@ -20,8 +20,20 @@ function resetSbAiCircuitBreaker() {
   _sbAiCircuitBreakerUntil = 0;
 }
 
+// One-time AI Vibe Coding credits granted to every Free-plan account (15 credits = $0.15).
+// This is NOT a monthly allowance: it is granted exactly once per account, tracked by
+// user_credits.free_vibe_granted_at (see grantFreeVibeCreditsOnce).
+export const FREE_VIBE_CREDITS = 15;
+
+// Free accounts may only use low-cost Flash-tier models so the $0.15 grant stays bounded.
+export const FREE_ALLOWED_MODEL_IDS = ['gemini-3.5-flash', 'gemini-3.8-flash'];
+
+export function isFreePlanName(planName) {
+  return getPlanConfig(planName) === PLAN_ALLOWANCES['Free Plan'];
+}
+
 export const PLAN_ALLOWANCES = {
-  'Free Plan': { monthlyUsd: 0.00, monthlyCredits: 0, priceUsd: 0 },
+  'Free Plan': { monthlyUsd: 0.15, monthlyCredits: FREE_VIBE_CREDITS, priceUsd: 0 },
   'Starter Plan': { monthlyUsd: 6.00, monthlyCredits: 600, priceUsd: 97 },
   'Pro Plan': { monthlyUsd: 13.00, monthlyCredits: 1300, priceUsd: 187 },
   'Agency Plan': { monthlyUsd: 20.00, monthlyCredits: 2000, priceUsd: 297 },
@@ -126,7 +138,7 @@ export async function persistSupabaseAiBalance(userId, newBalance, newDollarsSpe
       }
     );
 
-    if (!credPatch.ok && !existingRow) {
+    if (!existingRow || !credPatch.ok) {
       await fetch(`${sbUrl}/rest/v1/user_credits`, {
         method: 'POST',
         headers: {
@@ -172,6 +184,140 @@ export async function persistSupabaseAiBalance(userId, newBalance, newDollarsSpe
   } catch (err) {
     console.warn('[accountingService] Supabase REST balance update notice:', err.message);
     return false;
+  }
+}
+
+// Accounts we have already verified/granted in this process (avoids a DB round-trip per request).
+const _freeVibeGrantSettled = new Set();
+let _freeVibeColumnEnsured = false;
+
+/**
+ * Best-effort: add user_credits.free_vibe_granted_at if the migration has not been applied yet
+ * (same self-healing approach credits.js uses for plan_expires_at). No-op without a Postgres pool.
+ */
+async function ensureFreeVibeColumn() {
+  if (_freeVibeColumnEnsured) return;
+  const pool = getPgPool();
+  if (!pool) return;
+  try {
+    await pool.query('ALTER TABLE public.user_credits ADD COLUMN IF NOT EXISTS free_vibe_granted_at BIGINT');
+    await pool.query("NOTIFY pgrst, 'reload schema'").catch(() => {});
+    _freeVibeColumnEnsured = true;
+    // Give PostgREST a moment to pick up the new column.
+    await new Promise((r) => setTimeout(r, 400));
+  } catch (err) {
+    console.warn('[accountingService] ensureFreeVibeColumn notice:', err.message);
+  }
+}
+
+/**
+ * Grant the one-time FREE_VIBE_CREDITS to a Free-plan account.
+ *
+ * Safety properties:
+ *  - Atomic claim: PATCH ... WHERE free_vibe_granted_at IS NULL. Only one concurrent caller gets a row back,
+ *    so the credits can never be granted twice (also not across Free -> paid -> Free toggling).
+ *  - Additive: new balance = existing balance + grant. Existing balances are never overwritten.
+ *  - Free plan only: paid accounts are skipped (they get their plan allowance instead).
+ *
+ * Returns { granted: boolean, balance?: number }.
+ */
+export async function grantFreeVibeCreditsOnce(userId, knownPlanName = null) {
+  if (!userId || _freeVibeGrantSettled.has(userId)) return { granted: false };
+  const { sbUrl, sbKey } = getSupabaseRestCredentials();
+  if (!sbUrl || !sbKey || isSbAiDegraded()) return { granted: false };
+
+  const headers = { apikey: sbKey, Authorization: `Bearer ${sbKey}`, 'Content-Type': 'application/json' };
+  const enc = encodeURIComponent(userId);
+
+  try {
+    let plan = knownPlanName;
+    if (!plan) {
+      const planRes = await fetch(`${sbUrl}/rest/v1/user_plans?user_id=eq.${enc}&select=plan_tier&limit=1`, {
+        headers,
+        signal: AbortSignal.timeout(2500),
+      });
+      const planRows = planRes.ok ? await planRes.json() : [];
+      plan = Array.isArray(planRows) && planRows[0] ? planRows[0].plan_tier || 'Free Plan' : null;
+    }
+    // No plan row yet (account not provisioned) or a paid plan: nothing to grant here.
+    if (!plan) return { granted: false };
+    if (!isFreePlanName(plan)) return { granted: false };
+
+    const claim = async () =>
+      fetch(`${sbUrl}/rest/v1/user_credits?user_id=eq.${enc}&free_vibe_granted_at=is.null`, {
+        method: 'PATCH',
+        headers: { ...headers, Prefer: 'return=representation' },
+        body: JSON.stringify({ free_vibe_granted_at: Date.now() }),
+        signal: AbortSignal.timeout(3500),
+      });
+
+    let claimRes = await claim();
+    if (!claimRes.ok) {
+      // Column missing (migration pending): add it, then retry once.
+      await ensureFreeVibeColumn();
+      claimRes = await claim();
+      if (!claimRes.ok) {
+        console.warn('[accountingService] free vibe grant claim failed:', claimRes.status);
+        return { granted: false };
+      }
+    }
+    const claimed = await claimRes.json();
+    if (!Array.isArray(claimed) || claimed.length === 0) {
+      // Either already granted earlier, or no user_credits row yet. Only cache the "already granted" case.
+      const chk = await fetch(`${sbUrl}/rest/v1/user_credits?user_id=eq.${enc}&select=free_vibe_granted_at&limit=1`, {
+        headers,
+        signal: AbortSignal.timeout(2500),
+      });
+      const chkRows = chk.ok ? await chk.json() : [];
+      if (Array.isArray(chkRows) && chkRows[0]?.free_vibe_granted_at) _freeVibeGrantSettled.add(userId);
+      return { granted: false };
+    }
+
+    // We won the claim. Add the grant on top of whatever balance exists.
+    const row = claimed[0];
+    const priorBalance = Number(row.ai_credits_balance || 0);
+    const newBalance = Number((priorBalance + FREE_VIBE_CREDITS).toFixed(4));
+    const spent = Number(row.ai_dollars_spent || 0);
+    const persisted = await persistSupabaseAiBalance(userId, newBalance, spent);
+    if (!persisted) {
+      // Roll the claim back so the grant is retried on the next call instead of being lost.
+      await fetch(`${sbUrl}/rest/v1/user_credits?user_id=eq.${enc}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ free_vibe_granted_at: null }),
+        signal: AbortSignal.timeout(3500),
+      }).catch(() => {});
+      return { granted: false };
+    }
+
+    _freeVibeGrantSettled.add(userId);
+    _localAccounts.set(userId, {
+      userId,
+      plan: 'Free Plan',
+      balance: newBalance,
+      monthlyCredits: FREE_VIBE_CREDITS,
+      dollarsSpent: spent,
+    });
+
+    // Audit trail (best effort). Action-credit ledger value stays 0; description carries the AI grant.
+    fetch(`${sbUrl}/rest/v1/credit_transactions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        user_id: userId,
+        action_type: 'free_vibe_grant',
+        credits_charged: 0,
+        description: `Free plan one-time grant: ${FREE_VIBE_CREDITS} AI Vibe Coding credits`,
+        created_at: Date.now(),
+      }),
+      signal: AbortSignal.timeout(3500),
+    }).catch(() => {});
+
+    console.log(`[accountingService] Granted ${FREE_VIBE_CREDITS} free vibe credits to ${userId} (balance ${newBalance})`);
+    return { granted: true, balance: newBalance };
+  } catch (err) {
+    console.warn('[accountingService] grantFreeVibeCreditsOnce notice:', err.message);
+    return { granted: false };
   }
 }
 
@@ -279,14 +425,32 @@ export async function reserveBudget({
   const currentBalance = Number(status?.balanceCredits ?? 0);
   const activePlan = status?.plan || planHint || 'Free Plan';
 
-  if (activePlan === 'Free Plan' || currentBalance <= 0 || currentBalance < Math.min(estimatedCredits, 0.01)) {
+  const isFreeAccount = isFreePlanName(activePlan);
+
+  // Free accounts run on the one-time grant: Flash-tier models only, and no overdraft.
+  if (isFreeAccount && !FREE_ALLOWED_MODEL_IDS.includes(normModel)) {
     const err = new Error(
-      activePlan === 'Free Plan'
-        ? 'Free Plan includes 0 AI credits. Upgrade to Starter, Pro, or Agency Plan to use AI Web Studio.'
+      'This model is available on Starter, Pro and Agency plans. Free accounts can use Gemini Flash models with their free vibe-coding credits.'
+    );
+    err.status = 402;
+    err.code = 'FREE_MODEL_LOCKED';
+    err.balance = currentBalance;
+    err.needed = estimatedCredits;
+    throw err;
+  }
+
+  const insufficient = isFreeAccount
+    ? currentBalance <= 0 || currentBalance < estimatedCredits
+    : currentBalance <= 0 || currentBalance < Math.min(estimatedCredits, 0.01);
+
+  if (insufficient) {
+    const err = new Error(
+      isFreeAccount
+        ? `You've used your ${FREE_VIBE_CREDITS} free vibe-coding credits (${currentBalance.toFixed(2)} left, need about ${estimatedCredits.toFixed(2)}). Upgrade to Starter, Pro, or Agency to keep building with AI Web Studio.`
         : `Insufficient AI credits: have ${currentBalance.toFixed(2)}, need at least ${estimatedCredits.toFixed(2)}.`
     );
     err.status = 402;
-    err.code = 'INSUFFICIENT_CREDITS';
+    err.code = isFreeAccount ? 'FREE_VIBE_EXHAUSTED' : 'INSUFFICIENT_CREDITS';
     err.balance = currentBalance;
     err.needed = estimatedCredits;
     throw err;
@@ -542,11 +706,19 @@ export async function syncUserAiPlan(userId, planName = 'Starter Plan', forceRes
 
       // If the user is already on this plan and has a valid balance in Supabase, preserve their exact Supabase balance!
       if (existingPlan === planName && existingBal !== null && (existingBal > 0 || existingSpent > 0 || existingPlan === 'Free Plan')) {
-        const monthlyCreds = Number(existing.planRow?.monthly_ai_credits || existingBal || planConfig.monthlyCredits);
+        let preservedBal = existingBal;
+        // Free accounts: make sure the one-time free vibe grant has been applied (idempotent, additive).
+        if (isFreePlanName(existingPlan)) {
+          const grant = await grantFreeVibeCreditsOnce(effectiveUserId, existingPlan);
+          if (grant.granted && typeof grant.balance === 'number') preservedBal = grant.balance;
+        }
+        const monthlyCreds = Number(
+          existing.planRow?.monthly_ai_credits || (isFreePlanName(existingPlan) ? planConfig.monthlyCredits : preservedBal) || planConfig.monthlyCredits
+        );
         _localAccounts.set(effectiveUserId, {
           userId: effectiveUserId,
           plan: existingPlan,
-          balance: existingBal,
+          balance: preservedBal,
           monthlyCredits: monthlyCreds,
           dollarsSpent: existingSpent,
         });
@@ -555,7 +727,7 @@ export async function syncUserAiPlan(userId, planName = 'Starter Plan', forceRes
           plan: existingPlan,
           monthlyCredits: monthlyCreds,
           monthlyAllowanceUsd: Number((monthlyCreds * 0.01).toFixed(2)),
-          balanceCredits: Number(existingBal.toFixed(4)),
+          balanceCredits: Number(preservedBal.toFixed(4)),
           dollarsSpent: Number(existingSpent.toFixed(6)),
           isFree: existingPlan === 'Free Plan',
         };
@@ -563,7 +735,12 @@ export async function syncUserAiPlan(userId, planName = 'Starter Plan', forceRes
     }
   }
 
-  // Provision or upgrade in Supabase REST
+  // Provision or upgrade in Supabase REST.
+  // Free plan: provision with a 0 AI balance; the one-time grant below ADDS the free vibe credits exactly once
+  // (so toggling Free <-> paid can never re-grant them).
+  const isFreeTarget = isFreePlanName(planName);
+  const provisionBalance = isFreeTarget ? 0 : planConfig.monthlyCredits;
+  let resultBalance = provisionBalance;
   if (sbUrl && sbKey && !isSbAiDegraded()) {
     try {
       const nowMs = Date.now();
@@ -580,12 +757,16 @@ export async function syncUserAiPlan(userId, planName = 'Starter Plan', forceRes
           plan_tier: planName,
           monthly_ai_credits: planConfig.monthlyCredits,
           monthly_ai_allowance_usd: planConfig.monthlyUsd,
-          ai_credits_balance: planConfig.monthlyCredits,
+          ai_credits_balance: provisionBalance,
           updated_at: nowMs,
         }),
         signal: AbortSignal.timeout(1000),
       });
-      await persistSupabaseAiBalance(effectiveUserId, planConfig.monthlyCredits, 0, planName);
+      await persistSupabaseAiBalance(effectiveUserId, provisionBalance, 0, planName);
+      if (isFreeTarget) {
+        const grant = await grantFreeVibeCreditsOnce(effectiveUserId, planName);
+        if (grant.granted && typeof grant.balance === 'number') resultBalance = grant.balance;
+      }
     } catch (err) {
       tripSbAiCircuitBreaker(45000);
       console.warn('[accountingService] syncUserAiPlan REST error:', err.message);
@@ -595,7 +776,7 @@ export async function syncUserAiPlan(userId, planName = 'Starter Plan', forceRes
   const localUser = {
     userId: effectiveUserId,
     plan: planName,
-    balance: planConfig.monthlyCredits,
+    balance: resultBalance,
     monthlyCredits: planConfig.monthlyCredits,
     dollarsSpent: 0,
   };
@@ -605,7 +786,7 @@ export async function syncUserAiPlan(userId, planName = 'Starter Plan', forceRes
     plan: planName,
     monthlyCredits: planConfig.monthlyCredits,
     monthlyAllowanceUsd: planConfig.monthlyUsd,
-    balanceCredits: planConfig.monthlyCredits,
+    balanceCredits: resultBalance,
     dollarsSpent: 0,
     isFree: planName.toLowerCase().includes('free'),
   };
@@ -619,7 +800,17 @@ export async function getUserAiStatus(userId, planHint = null) {
   const effectiveUserId = userId || 'dashboard';
 
   // 1. Primary path: Supabase REST API
-  const sbData = await fetchSupabaseAiAccount(effectiveUserId);
+  let sbData = await fetchSupabaseAiAccount(effectiveUserId);
+
+  // Free accounts: self-heal the one-time free vibe grant (covers new + pre-existing Free users).
+  // Cheap after the first call per account (in-memory settled set); atomic + idempotent in the DB.
+  if (sbData?.planRow && isFreePlanName(sbData.planRow.plan_tier || 'Free Plan') && sbData.credRow) {
+    const grant = await grantFreeVibeCreditsOnce(effectiveUserId, sbData.planRow.plan_tier || 'Free Plan');
+    if (grant.granted) {
+      sbData = (await fetchSupabaseAiAccount(effectiveUserId)) || sbData;
+    }
+  }
+
   if (sbData && (sbData.planRow || sbData.credRow)) {
     const planRow = sbData.planRow;
     const credRow = sbData.credRow;
@@ -636,14 +827,13 @@ export async function getUserAiStatus(userId, planHint = null) {
         : null;
     const dollarsSpent = Number(credRow?.ai_dollars_spent || 0);
 
+    // Always trust the stored balance (Free accounts hold their one-time free vibe credits here).
     let balanceCredits = 0;
-    if (activePlan === 'Free Plan') {
-      balanceCredits = 0;
-    } else if (rawCredBal !== null && !Number.isNaN(rawCredBal)) {
+    if (rawCredBal !== null && !Number.isNaN(rawCredBal)) {
       balanceCredits = rawCredBal;
     } else if (rawPlanBal !== null && !Number.isNaN(rawPlanBal)) {
       balanceCredits = rawPlanBal;
-    } else {
+    } else if (!isFreePlanName(activePlan)) {
       balanceCredits = planConfig.monthlyCredits;
     }
 

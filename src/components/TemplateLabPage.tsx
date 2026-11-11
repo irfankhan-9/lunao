@@ -53,6 +53,10 @@ import {
   isVibeEligiblePlan,
   getPlanAiConfig,
   getVibeCreditBalance,
+  isFreeVibePlan,
+  isModelAllowedOnFree,
+  syncAllowanceWithServer,
+  FREE_VIBE_CREDITS,
 } from '../lib/vibeCredits';
 
 export interface FlashToastFn {
@@ -579,7 +583,24 @@ export const TemplateLabPage: React.FC<{
     }
   }, []);
 
+  // Re-render when the vibe credit balance changes (free users unlock/lock as their one-time credits are used).
+  const [, setVibeBalanceTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setVibeBalanceTick((t) => t + 1);
+    window.addEventListener('lunao_vibe_credits_changed', bump);
+    // Pull the authoritative server balance (includes the one-time free vibe credits for Free accounts).
+    syncAllowanceWithServer().then(bump).catch(() => {});
+    return () => window.removeEventListener('lunao_vibe_credits_changed', bump);
+  }, []);
+
   const isPlanEligible = isVibeEligiblePlan(userPlan);
+  const isFreeVibe = isFreeVibePlan(userPlan);
+  const freeVibeBalance = isFreeVibe ? getVibeCreditBalance(userPlan) : 0;
+  const vibeLockedMessage = isFreeVibe
+    ? `You've used your ${FREE_VIBE_CREDITS} free vibe-coding credits. Upgrade to Starter, Pro, or Agency to keep building with AI.`
+    : 'Vibe Coding is available on Starter, Pro, and Agency plans. Please upgrade in Subscription Plans.';
+  const freeModelLockedMessage =
+    'Free vibe-coding credits work with Gemini Flash models. Upgrade to Starter, Pro, or Agency to use premium models.';
 
   // Load real history from server on mount (never inject fake seed websites for normal users)
   useEffect(() => {
@@ -1079,7 +1100,12 @@ export const TemplateLabPage: React.FC<{
     if (!promptText.trim() || streaming || generatingNewSite) return;
     if (!isPlanEligible) {
       sfx.error();
-      flashError('Vibe Coding requires a Starter, Pro, or Agency plan. Please upgrade in Subscription Plans.');
+      flashError(vibeLockedMessage);
+      return;
+    }
+    if (isFreeVibe && !isModelAllowedOnFree(selectedModel)) {
+      sfx.error();
+      flashError(freeModelLockedMessage);
       return;
     }
 
@@ -1304,7 +1330,12 @@ export const TemplateLabPage: React.FC<{
     if (!instruction || streaming) return;
     if (!isPlanEligible) {
       sfx.error();
-      flashError('Not eligible to vibe code. Upgrade to supported plans (Starter, Pro, or Agency) to vibe code.');
+      flashError(isFreeVibe ? vibeLockedMessage : 'Not eligible to vibe code. Upgrade to supported plans (Starter, Pro, or Agency) to vibe code.');
+      return;
+    }
+    if (isFreeVibe && !isModelAllowedOnFree(selectedModel)) {
+      sfx.error();
+      flashError(freeModelLockedMessage);
       return;
     }
 
@@ -2134,9 +2165,9 @@ export const TemplateLabPage: React.FC<{
                         <Lock className="w-4 h-4" />
                       </div>
                       <div className="flex-1">
-                        <p className="text-xs font-bold leading-snug">Vibe Coding Not Supported on {userPlan}</p>
+                        <p className="text-xs font-bold leading-snug">{isFreeVibe ? `Your ${FREE_VIBE_CREDITS} free vibe-coding credits are used up` : `Vibe Coding Not Supported on ${userPlan}`}</p>
                         <p className="text-[11px] text-amber-800 mt-1 leading-relaxed">
-                          Not eligible to vibe code. Upgrade to supported plans (Starter, Pro, or Agency) to vibe code with AI.
+                          {isFreeVibe ? "Upgrade to Starter, Pro, or Agency to keep vibe coding with AI. Your saved sites stay available." : "Not eligible to vibe code. Upgrade to supported plans (Starter, Pro, or Agency) to vibe code with AI."}
                         </p>
                       </div>
                     </div>
@@ -2232,7 +2263,7 @@ export const TemplateLabPage: React.FC<{
                             if (e.key === 'Enter' && !e.shiftKey) {
                               e.preventDefault();
                               if (!isPlanEligible) {
-                                flashError('Vibe Coding is available on Starter, Pro, and Agency plans. Please upgrade in Subscription Plans.');
+                                flashError(vibeLockedMessage);
                                 return;
                               }
                               const val = e.currentTarget.value.trim();
@@ -2281,17 +2312,28 @@ export const TemplateLabPage: React.FC<{
                         </div>
                       )}
 
-                      {!isPlanEligible && (
+                      {!isPlanEligible ? (
                         <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-3 text-xs text-amber-800">
                           <Lock className="w-4 h-4 text-amber-600 shrink-0" />
-                          <span>Vibe Coding requires a <strong>Starter, Pro, or Agency</strong> plan. Free plan users have access to pre-built templates.</span>
+                          {isFreeVibe ? (
+                            <span>You&apos;ve used your <strong>{FREE_VIBE_CREDITS} free vibe-coding credits</strong>. Upgrade to <strong>Starter, Pro, or Agency</strong> to keep building with AI.</span>
+                          ) : (
+                            <span>Vibe Coding requires a <strong>Starter, Pro, or Agency</strong> plan. Free plan users have access to pre-built templates.</span>
+                          )}
                         </div>
-                      )}
+                      ) : isFreeVibe ? (
+                        <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 flex items-center gap-3 text-xs text-blue-800">
+                          <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
+                          <span>
+                            <strong>{freeVibeBalance.toLocaleString(undefined, { maximumFractionDigits: 1 })} of {FREE_VIBE_CREDITS} free vibe-coding credits</strong> left — one-time gift on the Free plan (Gemini Flash models). Upgrade anytime for 600+ credits and premium models.
+                          </span>
+                        </div>
+                      ) : null}
 
                       <button
                         onClick={() => {
                           if (!isPlanEligible) {
-                            flashError('Vibe Coding is available on Starter, Pro, and Agency plans. Please upgrade in Subscription Plans.');
+                            flashError(vibeLockedMessage);
                             return;
                           }
                           const ta = document.getElementById('custom-vibe-textarea') as HTMLTextAreaElement;
@@ -2307,7 +2349,7 @@ export const TemplateLabPage: React.FC<{
                         }`}
                       >
                         {streaming ? <Loader2 className="w-5 h-5 animate-spin" /> : !isPlanEligible ? <Lock className="w-5 h-5" /> : <Code2 className="w-5 h-5" />}
-                        {!isPlanEligible ? 'Starter Plan Required to Vibe Code' : 'Generate Website'}
+                        {!isPlanEligible ? (isFreeVibe ? 'Free Credits Used — Upgrade to Keep Vibe Coding' : 'Starter Plan Required to Vibe Code') : 'Generate Website'}
                       </button>
                     </div>
 

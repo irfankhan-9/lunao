@@ -274,7 +274,7 @@ export function extractJsonLdAndMailtoEmails(html) {
   const jsonLdSet = new Set();
 
   // 1. Extract explicit mailto: links (both HTML href="mailto:..." and JS/JSON embedded mailto: strings)
-  const mailtoRe = /(?:href\s*[:=]\s*\\?["']\s*|\b)mailto:([^"'?#\s>\\&]+)/gi;
+  const mailtoRe = /\bmailto:([^"'?#\s>\\&]{1,200})/gi;
   let m;
   while ((m = mailtoRe.exec(html)) !== null) {
     try {
@@ -345,9 +345,11 @@ export function decodeHtmlEntitiesAndObfuscation(text) {
     .replace(/&#46;|&#046;|&#x2e;|&#x2E;|&period;/g, '.')
     .replace(/%40/g, '@')
     .replace(/&nbsp;/gi, ' ')
+    // Collapse whitespace runs before matching [at]/[dot] to prevent O(N^2) regex backtracking
+    .replace(/\s+/g, ' ')
     // Common human obfuscations: "info [at] business [dot] com"
-    .replace(/\s*(?:\[at\]|\(at\)|\{at\})\s*/gi, '@')
-    .replace(/\s*(?:\[dot\]|\(dot\)|\{dot\})\s*/gi, '.');
+    .replace(/ ?(?:\[at\]|\(at\)|\{at\}) ?/gi, '@')
+    .replace(/ ?(?:\[dot\]|\(dot\)|\{dot\}) ?/gi, '.');
 }
 
 // ============================================================================
@@ -393,7 +395,7 @@ export function discoverInternalContactUrls(html, baseUrl) {
     }
   };
 
-  const linkRe = /<a\s+[^>]*href=["']([^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  const linkRe = /<a\s+[^>]{0,600}href=["']([^"'#]{1,500})["'][^>]{0,600}>([\s\S]{0,1500}?)<\/a>/gi;
   let m;
   while ((m = linkRe.exec(html)) !== null) {
     const rawHref = (m[1] || '').trim();
@@ -555,6 +557,45 @@ export function isValidBusinessEmail(rawEmail) {
   return /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,15}$/.test(email);
 }
 
+function stripTagBlocks(html, tagName) {
+  const lower = html.toLowerCase();
+  const openToken = `<${tagName}`;
+  const closeToken = `</${tagName}`;
+  const parts = [];
+  let cursor = 0;
+  while (cursor < html.length) {
+    const start = lower.indexOf(openToken, cursor);
+    if (start === -1) {
+      parts.push(html.slice(cursor));
+      break;
+    }
+    const nextChar = lower[start + openToken.length];
+    if (
+      nextChar &&
+      nextChar !== '>' &&
+      nextChar !== ' ' &&
+      nextChar !== '\t' &&
+      nextChar !== '\r' &&
+      nextChar !== '\n' &&
+      nextChar !== '/'
+    ) {
+      parts.push(html.slice(cursor, start + openToken.length));
+      cursor = start + openToken.length;
+      continue;
+    }
+    parts.push(html.slice(cursor, start), ' ');
+    const endTagStart = lower.indexOf(closeToken, start + openToken.length);
+    if (endTagStart === -1) {
+      const gt = lower.indexOf('>', start + openToken.length);
+      cursor = gt === -1 ? html.length : gt + 1;
+      continue;
+    }
+    const gt = lower.indexOf('>', endTagStart + closeToken.length);
+    cursor = gt === -1 ? html.length : gt + 1;
+  }
+  return parts.join('');
+}
+
 export function extractAllCandidateEmails(html) {
   if (!html) return [];
   const candidates = new Map(); // email -> { email, method }
@@ -581,11 +622,9 @@ export function extractAllCandidateEmails(html) {
   for (const em of jsonLd) addCandidate(em, 'seo_schema');
   for (const em of mailto) addCandidate(em, 'mailto_link');
 
-  // 3. Decoded visible text regex scan (strip script/style tags and replace HTML tags with spaces)
-  const strippedHtml = html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
-    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ');
+  // 3. Decoded visible text regex scan (strip script/style blocks in O(N) time and replace HTML tags with spaces)
+  const noScriptHtml = stripTagBlocks(stripTagBlocks(html, 'script'), 'style');
+  const strippedHtml = noScriptHtml.replace(/<[^>]{0,2000}>/g, ' ');
   const decodedText = decodeHtmlEntitiesAndObfuscation(strippedHtml);
   const matches = decodedText.match(EMAIL_REGEX) || [];
   for (const m of matches) {
@@ -881,7 +920,41 @@ function buildCandidateUrls(url) {
   return candidates;
 }
 
-async function fetchPageFast(url, timeoutMs = DEFAULT_TIMEOUT_MS, allowReaderFallback = false) {
+async function readBoundedText(response, maxBytes = 3_500_000) {
+  if (!response?.body?.getReader) {
+    const html = await response.text();
+    if (html.length > maxBytes) {
+      const midStart = Math.floor(html.length / 2) - 500_000;
+      return `${html.slice(0, 1_500_000)}\n${html.slice(midStart, midStart + 1_000_000)}\n${html.slice(-1_000_000)}`;
+    }
+    return html;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder('utf-8', { fatal: false });
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        totalBytes += value.byteLength;
+        chunks.push(decoder.decode(value, { stream: true }));
+        if (totalBytes >= maxBytes) {
+          try { await reader.cancel(); } catch {}
+          break;
+        }
+      }
+    }
+    chunks.push(decoder.decode());
+  } catch {
+    try { await reader.cancel(); } catch {}
+  }
+  return chunks.join('');
+}
+
+async function fetchPageFast(url, timeoutMs = DEFAULT_TIMEOUT_MS, allowReaderFallback = false, parentSignal = null) {
+  if (parentSignal?.aborted) return null;
   const candidateUrls = buildCandidateUrls(url);
 
   const headerProfiles = [
@@ -904,10 +977,14 @@ async function fetchPageFast(url, timeoutMs = DEFAULT_TIMEOUT_MS, allowReaderFal
   let blockedByWaf = false;
 
   for (const targetUrl of candidateUrls) {
+    if (parentSignal?.aborted) return null;
     let extraCookie = null;
 
     for (let attempt = 0; attempt < headerProfiles.length; attempt++) {
+      if (parentSignal?.aborted) return null;
       const controller = new AbortController();
+      const onParentAbort = () => controller.abort();
+      if (parentSignal) parentSignal.addEventListener('abort', onParentAbort, { once: true });
       const startMs = Date.now();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -928,7 +1005,7 @@ async function fetchPageFast(url, timeoutMs = DEFAULT_TIMEOUT_MS, allowReaderFal
           // Check for lightweight JS cookie challenges (e.g. Bluehost/Endurance `humans_21909=1` on 409 Conflict)
           if ((response.status === 409 || response.status === 403) && !extraCookie) {
             try {
-              const errText = await response.text();
+              const errText = await readBoundedText(response, 100_000);
               const cookieMatch = errText && errText.match(/document\.cookie\s*=\s*["']([^"';]+=\d+)/i);
               if (cookieMatch && cookieMatch[1]) {
                 extraCookie = cookieMatch[1].trim();
@@ -959,10 +1036,11 @@ async function fetchPageFast(url, timeoutMs = DEFAULT_TIMEOUT_MS, allowReaderFal
 
         const contentType = (response.headers.get('content-type') || '').toLowerCase();
         if (contentType && !contentType.includes('text/html') && !contentType.includes('application/xhtml')) {
+          try { await response.body?.cancel(); } catch {}
           return null;
         }
 
-        let html = await response.text();
+        let html = await readBoundedText(response, 3_500_000);
         if (!html) return null;
 
         // Also handle 200 OK responses that contain only a tiny `document.cookie = "humans_..."` reload script
@@ -980,14 +1058,9 @@ async function fetchPageFast(url, timeoutMs = DEFAULT_TIMEOUT_MS, allowReaderFal
           break;
         }
 
-        // Preserve up to 3.5MB in full (covering 2.5MB Wix Thunderbolt SSR pages where inline CSS
-        // occupies the first 1.7MB and the footer email is around 1.8MB). If > 3.5MB, keep head, middle, and footer.
-        if (html.length > 3_500_000) {
-          const midStart = Math.floor(html.length / 2) - 500_000;
-          html = `${html.slice(0, 1_500_000)}\n${html.slice(midStart, midStart + 1_000_000)}\n${html.slice(-1_000_000)}`;
-        }
         return { html, finalUrl, viaReader: false };
       } catch (err) {
+        if (parentSignal?.aborted) return null;
         const causeCode = err?.cause?.code || err?.code || '';
         if (
           causeCode === 'UND_ERR_SOCKET' ||
@@ -1019,6 +1092,7 @@ async function fetchPageFast(url, timeoutMs = DEFAULT_TIMEOUT_MS, allowReaderFal
         if (attempt === headerProfiles.length - 1) break;
       } finally {
         clearTimeout(timer);
+        if (parentSignal) parentSignal.removeEventListener('abort', onParentAbort);
       }
     }
 
@@ -1027,15 +1101,15 @@ async function fetchPageFast(url, timeoutMs = DEFAULT_TIMEOUT_MS, allowReaderFal
     if (blockedByWaf) break;
   }
 
-  if (blockedByWaf && allowReaderFallback) {
+  if (blockedByWaf && allowReaderFallback && !parentSignal?.aborted) {
     return fetchReaderFallback(candidateUrls[0], Math.max(4500, timeoutMs));
   }
 
   return null;
 }
 
-async function fetchHtmlFast(url, timeoutMs = DEFAULT_TIMEOUT_MS, allowReaderFallback = false) {
-  const page = await fetchPageFast(url, timeoutMs, allowReaderFallback);
+async function fetchHtmlFast(url, timeoutMs = DEFAULT_TIMEOUT_MS, allowReaderFallback = false, parentSignal = null) {
+  const page = await fetchPageFast(url, timeoutMs, allowReaderFallback, parentSignal);
   return page ? page.html : null;
 }
 
@@ -1044,6 +1118,11 @@ async function fetchHtmlFast(url, timeoutMs = DEFAULT_TIMEOUT_MS, allowReaderFal
 // ============================================================================
 export async function crawlWebsiteForEmail(websiteUrl, options = {}) {
   const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
+  const parentSignal = options.signal || null;
+  const siteDeadline = Date.now() + Math.max(timeoutMs * 2.5, 11_000);
+  if (parentSignal?.aborted) {
+    return { email: null, emails: [], reason: 'Aborted' };
+  }
   if (!websiteUrl) {
     return { email: null, reason: 'No website provided' };
   }
@@ -1074,7 +1153,7 @@ export async function crawlWebsiteForEmail(websiteUrl, options = {}) {
   const allCandidates = new Map(); // email -> candidate
 
   // Step 1: Fetch Homepage (with HTTPS-first upgrade, www/bare TLS fallback & automatic WAF HTML reader fallback)
-  const homePage = await fetchPageFast(normalizedUrl, timeoutMs, true);
+  const homePage = await fetchPageFast(normalizedUrl, timeoutMs, true, parentSignal);
   const homeHtml = homePage?.html || null;
   const effectiveBaseUrl = homePage?.finalUrl || normalizedUrl.replace(/^http:\/\//i, 'https://');
   const homeUsedReader = Boolean(homePage?.viaReader);
@@ -1086,7 +1165,7 @@ export async function crawlWebsiteForEmail(websiteUrl, options = {}) {
   }
 
   // Step 1b: If Square Online / Weebly site (or no email on homepage yet), check Square store-locations API
-  if (homeHtml && (allCandidates.size === 0 || effectiveBaseUrl.includes('square.site') || homeHtml.includes('__BOOTSTRAP_STATE__'))) {
+  if (homeHtml && !parentSignal?.aborted && Date.now() < siteDeadline && (allCandidates.size === 0 || effectiveBaseUrl.includes('square.site') || homeHtml.includes('__BOOTSTRAP_STATE__'))) {
     const sqCandidates = await extractSquareOnlineEmails(homeHtml, effectiveBaseUrl, Math.min(timeoutMs, 3000));
     for (const c of sqCandidates) {
       if (!allCandidates.has(c.email)) {
@@ -1097,7 +1176,7 @@ export async function crawlWebsiteForEmail(websiteUrl, options = {}) {
 
   // Step 1c: If Homepage is a Client-Side React/Vite SPA shell (<div id="app"> or <div id="root">) with 0 emails in HTML,
   //          scan the primary local JS bundle for embedded business emails / mailto links.
-  if (homeHtml && allCandidates.size === 0) {
+  if (homeHtml && allCandidates.size === 0 && !parentSignal?.aborted && Date.now() < siteDeadline) {
     const spaCandidates = await extractSpaBundleEmails(homeHtml, effectiveBaseUrl, Math.min(timeoutMs, 2500));
     for (const c of spaCandidates) {
       if (!allCandidates.has(c.email)) {
@@ -1147,9 +1226,10 @@ export async function crawlWebsiteForEmail(websiteUrl, options = {}) {
 
   if (contactUrls.length > 0) {
     for (let i = 0; i < contactUrls.length; i += 2) {
+      if (parentSignal?.aborted || Date.now() >= siteDeadline) break;
       const wave = contactUrls.slice(i, i + 2);
       const subPages = await Promise.allSettled(
-        wave.map((u) => fetchHtmlFast(u, Math.min(timeoutMs, 4000), false))
+        wave.map((u) => fetchHtmlFast(u, Math.min(timeoutMs, 3500), false, parentSignal))
       );
       let foundHighConfidenceInWave = false;
       for (const res of subPages) {
@@ -1249,6 +1329,10 @@ export async function discoverEmailFromWebsite(websiteUrl, options = {}) {
     console.log(`[emailDiscovery] Crawler error for ${websiteUrl}: ${err.message}`);
   }
 
+  if (options.signal?.aborted) {
+    return { email: null, source: null, reason: 'Aborted' };
+  }
+
   try {
     const hunterResult = await searchHunterDomain(domain);
     if (hunterResult.email) {
@@ -1274,6 +1358,7 @@ export async function discoverEmailFromWebsite(websiteUrl, options = {}) {
 export async function discoverEmailsInParallel(placesLeads = [], options = {}) {
   const concurrency = options.concurrency || 10;
   const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
+  const signal = options.signal || null;
   if (!Array.isArray(placesLeads) || placesLeads.length === 0) return [];
 
   const results = [];
@@ -1283,6 +1368,7 @@ export async function discoverEmailsInParallel(placesLeads = [], options = {}) {
     { length: Math.min(concurrency, placesLeads.length) },
     async () => {
       while (true) {
+        if (signal?.aborted) return;
         const idx = cursor++;
         if (idx >= placesLeads.length) return;
         const lead = placesLeads[idx];
@@ -1290,7 +1376,7 @@ export async function discoverEmailsInParallel(placesLeads = [], options = {}) {
         if (!website) continue;
 
         try {
-          const disc = await discoverEmailFromWebsite(website, { timeoutMs });
+          const disc = await discoverEmailFromWebsite(website, { timeoutMs, signal });
           if (disc && disc.email) {
             const emailLower = disc.email.toLowerCase().trim();
             const host = emailLower.split('@')[1] || '';

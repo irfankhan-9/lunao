@@ -65,7 +65,7 @@ import { slugify } from './lib/slug.js';
 import { streamEdit, isAiEnabled, cleanHtmlOutput, generateTemplateHtml } from './lib/geminiAi.js';
 import { orchestrateAiEditStream } from './lib/ai/orchestrator.js';
 import { listStudioModels } from './lib/ai/pricingRegistry.js';
-import { getUserAiStatus, listAiUsageLedger, syncUserAiPlan, persistSupabaseAiBalance } from './lib/ai/accountingService.js';
+import { getUserAiStatus, listAiUsageLedger, syncUserAiPlan, persistSupabaseAiBalance, FREE_VIBE_CREDITS } from './lib/ai/accountingService.js';
 import { createBooking, createBookingAsync, listBookings, listBookingsAsync, updateBookingStatus, updateBookingStatusAsync, getBooking, getBookingAsync } from './lib/bookings.js';
 import { validateBookingContract, rollbackToApprovedBooking, CONTRACT_REJECTION_MESSAGE } from './lib/bookingContractValidator.js';
 import {
@@ -187,6 +187,7 @@ import {
   buildGmailAuthUrl,
   exchangeGmailCode,
   getGmailUserProfile,
+  inspectGoogleAccessToken,
   encryptRefreshTokenForStorage,
   decryptRefreshTokenForUse,
 } from './lib/gmail.js';
@@ -1609,10 +1610,10 @@ app.get('/api/ai/allowance', async (req, res) => {
   try {
     const userId = (req.query.userId && String(req.query.userId).trim()) || getAuthOwnerKey(req);
     const planHint = req.query.plan || req.headers['x-user-plan'] || null;
-    const [status, sbPlanAi] = await Promise.all([
-      getUserAiStatus(userId, planHint ? String(planHint) : null),
-      getSupabaseUserPlanAndAi(userId),
-    ]);
+    // Sequential on purpose: getUserAiStatus applies the one-time Free vibe grant, which the
+    // Supabase plan/AI read below must observe.
+    const status = await getUserAiStatus(userId, planHint ? String(planHint) : null);
+    const sbPlanAi = await getSupabaseUserPlanAndAi(userId);
     if (sbPlanAi && sbPlanAi.plan) {
       status.plan = sbPlanAi.plan;
       status.isFree = sbPlanAi.plan === 'Free Plan';
@@ -2266,15 +2267,19 @@ app.post('/api/auth/google-session', async (req, res) => {
         if (existingPlanRes.rows.length === 0 || existingCredRes.rows.length === 0) {
           isNewUser = true;
           const acct = await ensureAccountAsync(ownerKey, 'Free Plan');
-          await syncUserAiPlan(ownerKey, 'Free Plan');
+          const newAiStatus = await syncUserAiPlan(ownerKey, 'Free Plan');
           plan = acct?.plan || 'Free Plan';
           userCredits = acct?.balance ?? 15;
-          vibeCredits = 0;
+          // New Free account: includes the one-time free vibe-coding credits (granted by syncUserAiPlan).
+          vibeCredits = Number(newAiStatus?.balanceCredits ?? 0);
         } else {
           plan = existingPlanRes.rows[0].plan_tier || 'Free Plan';
           userCredits = Number(existingCredRes.rows[0].action_credits_balance ?? 0);
+          // getUserAiStatus self-heals the one-time free vibe grant for existing Free accounts.
           const aiStatus = await getUserAiStatus(ownerKey);
-          vibeCredits = plan === 'Free Plan' ? 0 : Number(existingCredRes.rows[0].ai_credits_balance ?? aiStatus?.balanceCredits ?? 0);
+          vibeCredits = plan === 'Free Plan'
+            ? Number(aiStatus?.balanceCredits ?? existingCredRes.rows[0].ai_credits_balance ?? 0)
+            : Number(existingCredRes.rows[0].ai_credits_balance ?? aiStatus?.balanceCredits ?? 0);
         }
       } catch (pgErr) {
         console.warn('[auth/google-session] Postgres sync notice:', pgErr.message);
@@ -2386,10 +2391,12 @@ async function getSupabaseUserPlanAndAi(ownerKey) {
       pRow && typeof pRow.monthly_ai_credits === 'number' && pRow.monthly_ai_credits > 0
         ? Number(pRow.monthly_ai_credits)
         : aiBalance;
+    const isFreeTier = planTier === 'Free Plan';
     return {
       plan: planTier,
-      aiCreditsBalance: planTier === 'Free Plan' ? 0 : aiBalance,
-      monthlyAiCredits: planTier === 'Free Plan' ? 0 : monthlyAiCredits,
+      // Free accounts hold their one-time free vibe credits in the stored balance (never forced to 0).
+      aiCreditsBalance: aiBalance,
+      monthlyAiCredits: isFreeTier ? Math.max(monthlyAiCredits, FREE_VIBE_CREDITS) : monthlyAiCredits,
       monthlyAiAllowanceUsd: Number(pRow?.monthly_ai_allowance_usd ?? (monthlyAiCredits * 0.01)),
       aiDollarsSpent: Number(cRow?.ai_dollars_spent || 0),
     };
@@ -2551,7 +2558,7 @@ app.get('/api/auth/me', authenticate, async (req, res) => {
         }
         if (credRes.rows.length > 0) {
           userCredits = Number(credRes.rows[0].action_credits_balance ?? 0);
-          vibeCredits = plan === 'Free Plan' ? 0 : Number(credRes.rows[0].ai_credits_balance ?? 0);
+          vibeCredits = Number(credRes.rows[0].ai_credits_balance ?? 0);
         }
       } catch (e) {
         console.warn('[auth/me] Supabase pool fetch warning:', e.message);
@@ -2567,10 +2574,18 @@ app.get('/api/auth/me', authenticate, async (req, res) => {
         ]);
         if (sbPlanAi?.plan) plan = sbPlanAi.plan;
         if (typeof sbCredits === 'number') userCredits = sbCredits;
-        vibeCredits = plan === 'Free Plan' ? 0 : (sbPlanAi?.aiCreditsBalance ?? 0);
+        vibeCredits = sbPlanAi?.aiCreditsBalance ?? 0;
       } catch {
         tripServerSupabaseCircuitBreaker();
       }
+    }
+
+    // Free accounts: self-heal the one-time free vibe grant (idempotent) and report the real balance.
+    if (plan === 'Free Plan') {
+      try {
+        const freeAi = await getUserAiStatus(ownerKey, plan);
+        if (typeof freeAi?.balanceCredits === 'number') vibeCredits = freeAi.balanceCredits;
+      } catch {}
     }
 
     try {
@@ -3586,7 +3601,7 @@ app.get('/api/credits', authenticate, async (req, res) => {
         }
         if (credRes.rows.length > 0) {
           balance = Number(credRes.rows[0].action_credits_balance ?? 0);
-          vibeCredits = plan === 'Free Plan' ? 0 : Number(credRes.rows[0].ai_credits_balance ?? 0);
+          vibeCredits = Number(credRes.rows[0].ai_credits_balance ?? 0);
         }
       } catch (e) {
         console.warn('[credits] Supabase pool fetch warning:', e.message);
@@ -3602,10 +3617,18 @@ app.get('/api/credits', authenticate, async (req, res) => {
         ]);
         if (typeof sbBalance === 'number') balance = sbBalance;
         if (sbPlanAi?.plan) plan = sbPlanAi.plan;
-        vibeCredits = plan === 'Free Plan' ? 0 : (sbPlanAi?.aiCreditsBalance ?? 0);
+        vibeCredits = sbPlanAi?.aiCreditsBalance ?? 0;
       } catch {
         tripServerSupabaseCircuitBreaker();
       }
+    }
+
+    // Free accounts: self-heal the one-time free vibe grant (idempotent) and report the real balance.
+    if (plan === 'Free Plan') {
+      try {
+        const freeAi = await getUserAiStatus(ownerKey, plan);
+        if (typeof freeAi?.balanceCredits === 'number') vibeCredits = freeAi.balanceCredits;
+      } catch {}
     }
 
     try {
@@ -3864,7 +3887,7 @@ app.post('/api/campaigns/:id/refund', authenticate, (req, res) => {
     let refundedCount = 0;
     for (const lead of leads) {
       if (lead.smsStatus === 'failed' || lead.smsStatus === 'skipped') {
-        refund(c.ownerKey, 3, 'sms_failed_refund', { type: 'lead', id: String(lead.id) });
+        refund(c.ownerKey, 1.5, 'sms_failed_refund', { type: 'lead', id: String(lead.id) });
         refundedCount++;
       }
       if (lead.siteStatus === 'failed') {
@@ -3971,16 +3994,32 @@ app.get('/api/stats/dashboard', authenticate, async (req, res) => {
     const sinceMs = Number(req.query.since) > 0 ? Number(req.query.since) : startOfToday * 1000;
     let smsSentToday = 0;
     let smsSentTotal = 0;
+    const countUniqueSmsLogs = (rows) => {
+      if (!Array.isArray(rows) || rows.length === 0) return 0;
+      const seen = new Set();
+      for (const r of rows) {
+        const digits = String(r?.to_number || '').replace(/\D/g, '').slice(-10);
+        const key = r?.campaign_id && digits
+          ? `c::${r.campaign_id}::${digits}`
+          : r?.telnyx_id
+            ? `tx::${r.telnyx_id}`
+            : digits
+              ? `ts::${Math.floor(Number(r?.created_at || 0) / 10000)}::${digits}`
+              : `id::${r?.id}`;
+        seen.add(key);
+      }
+      return seen.size;
+    };
     const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
     const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
     if (sbUrl && sbKey) {
       try {
         const [totRes, todRes, smsSitesRes, smsSitesTodayRes] = await Promise.all([
-          fetch(`${sbUrl}/rest/v1/sms_logs?owner_key=eq.${encodeURIComponent(ownerKey)}&status=in.(delivered,sent)&select=id`, {
+          fetch(`${sbUrl}/rest/v1/sms_logs?owner_key=eq.${encodeURIComponent(ownerKey)}&status=in.(delivered,sent)&select=id,campaign_id,to_number,telnyx_id,created_at`, {
             headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
             signal: AbortSignal.timeout(3500),
           }),
-          fetch(`${sbUrl}/rest/v1/sms_logs?owner_key=eq.${encodeURIComponent(ownerKey)}&status=in.(delivered,sent)&created_at=gte.${sinceMs}&select=id`, {
+          fetch(`${sbUrl}/rest/v1/sms_logs?owner_key=eq.${encodeURIComponent(ownerKey)}&status=in.(delivered,sent)&created_at=gte.${sinceMs}&select=id,campaign_id,to_number,telnyx_id,created_at`, {
             headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
             signal: AbortSignal.timeout(3500),
           }),
@@ -3999,11 +4038,11 @@ app.get('/api/stats/dashboard', authenticate, async (req, res) => {
         let smsSitesToday = 0;
         if (totRes.ok) {
           const d = await totRes.json();
-          if (Array.isArray(d)) smsLogTotal = d.length;
+          smsLogTotal = countUniqueSmsLogs(d);
         }
         if (todRes.ok) {
           const d = await todRes.json();
-          if (Array.isArray(d)) smsLogToday = d.length;
+          smsLogToday = countUniqueSmsLogs(d);
         }
         if (smsSitesRes.ok) {
           const d = await smsSitesRes.json();
@@ -4294,13 +4333,24 @@ app.delete('/api/email-campaigns/:id', authenticate, (req, res) => {
 
 // ---- Email Account Management ----
 
-// List connected email accounts for a user
+function doesEmailAccountBelongToOwner(account, ownerKey) {
+  const owner = String(ownerKey || '').trim();
+  if (!account || !owner) return false;
+  return (
+    String(account.user_id || '').trim() === owner ||
+    String(account.owner_key || '').trim() === owner
+  );
+}
+
+// List connected email accounts strictly for the current user
 app.get('/api/email-accounts', authenticate, (req, res) => {
   try {
     const ownerKey = getAuthOwnerKey(req);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     
-    const accounts = listEmailAccounts(ownerKey);
+    const accounts = (listEmailAccounts(ownerKey) || []).filter((acc) =>
+      doesEmailAccountBelongToOwner(acc, ownerKey)
+    );
 
     const dedupByEmail = new Map();
     for (const acc of accounts) {
@@ -4314,7 +4364,18 @@ app.get('/api/email-accounts', authenticate, (req, res) => {
 
     const accountsWithMetrics = deduped.map(acc => {
       const health = getAccountHealth(acc.id);
-      const isHealthy = Boolean(acc.email && String(acc.email).includes('@'));
+      const rawStatus = acc.status || health?.status || 'healthy';
+      const tokenDecrypted = acc.encrypted_refresh_token ? decryptRefreshTokenForUse(acc.encrypted_refresh_token) : '';
+      const hasValidToken = Boolean(
+        tokenDecrypted &&
+        tokenDecrypted !== 'seed_encrypted_token_ready' &&
+        !String(tokenDecrypted).startsWith('mock_')
+      );
+      const effectiveStatus = !hasValidToken
+        ? 'needs_attention'
+        : rawStatus === 'needs_attention'
+          ? 'needs_attention'
+          : 'healthy';
       return {
         id: acc.id,
         user_id: acc.user_id,
@@ -4323,7 +4384,7 @@ app.get('/api/email-accounts', authenticate, (req, res) => {
         display_name: acc.display_name,
         daily_cap: health?.dailyCap ?? acc.daily_cap,
         connected_at: acc.connected_at,
-        status: 'healthy',
+        status: effectiveStatus,
         sends_today: health?.sendsToday ?? acc.sends_today,
         sends_this_week: acc.sends_this_week,
         remaining_today: health?.remainingToday ?? acc.remaining_today ?? acc.daily_cap ?? 100,
@@ -4335,7 +4396,7 @@ app.get('/api/email-accounts', authenticate, (req, res) => {
         health_label: health?.healthLabel ?? 'healthy',
         bounce_rate_7d: acc.bounce_rate_7d,
         last_successful_send: acc.last_successful_send,
-        token_status: 'active',
+        token_status: effectiveStatus === 'needs_attention' ? 'needs_reconnect' : 'active',
         health,
       };
     });
@@ -4352,7 +4413,7 @@ app.get('/api/email-accounts/:id/health', authenticate, (req, res) => {
     const ownerKey = getAuthOwnerKey(req);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const account = getEmailAccount(req.params.id);
-    if (!account || !account.user_id || account.user_id !== ownerKey) {
+    if (!doesEmailAccountBelongToOwner(account, ownerKey)) {
       return res.status(404).json({ ok: false, error: 'Account not found' });
     }
     const health = getAccountHealth(req.params.id);
@@ -4368,14 +4429,6 @@ app.post('/api/email-accounts/probe-all', authenticate, async (req, res) => {
     const ownerKey = getAuthOwnerKey(req);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const out = await probeAllEmailAccountTokens(ownerKey);
-    if (out && Array.isArray(out.results)) {
-      out.results = out.results.map((r) => ({
-        ...r,
-        ok: true,
-        status: 'healthy',
-        code: null,
-      }));
-    }
     res.json(out);
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -4388,7 +4441,7 @@ app.post('/api/email-accounts/:id/probe', authenticate, async (req, res) => {
     const ownerKey = getAuthOwnerKey(req);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const account = getEmailAccount(req.params.id);
-    if (!account || !account.user_id || account.user_id !== ownerKey) {
+    if (!doesEmailAccountBelongToOwner(account, ownerKey)) {
       return res.status(404).json({ ok: false, error: 'Account not found' });
     }
     const result = await probeEmailAccountToken(req.params.id);
@@ -4404,7 +4457,7 @@ app.post('/api/email-accounts/:id/pause', authenticate, (req, res) => {
     const ownerKey = getAuthOwnerKey(req);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const account = getEmailAccount(req.params.id);
-    if (!account || !account.user_id || account.user_id !== ownerKey) {
+    if (!doesEmailAccountBelongToOwner(account, ownerKey)) {
       return res.status(404).json({ ok: false, error: 'Account not found' });
     }
     const updated = setEmailAccountPaused(req.params.id, true);
@@ -4420,7 +4473,7 @@ app.post('/api/email-accounts/:id/resume', authenticate, (req, res) => {
     const ownerKey = getAuthOwnerKey(req);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const account = getEmailAccount(req.params.id);
-    if (!account || !account.user_id || account.user_id !== ownerKey) {
+    if (!doesEmailAccountBelongToOwner(account, ownerKey)) {
       return res.status(404).json({ ok: false, error: 'Account not found' });
     }
     const updated = setEmailAccountPaused(req.params.id, false);
@@ -4437,7 +4490,7 @@ app.delete('/api/email-accounts/:id', authenticate, (req, res) => {
     const ownerKey = getAuthOwnerKey(req);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
     const account = getEmailAccount(req.params.id);
-    if (!account || !account.user_id || account.user_id !== ownerKey) {
+    if (!doesEmailAccountBelongToOwner(account, ownerKey)) {
       return res.status(404).json({ ok: false, error: 'Account not found' });
     }
     
@@ -4516,9 +4569,16 @@ app.get('/api/dork/status', (_req, res) => {
 
 // Auto Email Sender / Lead Finder next batch endpoint
 app.post('/api/email-campaigns/:id/dork-next', async (req, res) => {
-  let reservedCredits = 0;
   let effectiveOwnerKey = '';
   const campaignId = req.params.id || 'unscoped';
+  const abortController = new AbortController();
+  const onResClose = () => {
+    if (!res.writableFinished) {
+      abortController.abort();
+    }
+  };
+  res.on('close', onResClose);
+
   try {
     const {
       lockedCity,
@@ -4570,10 +4630,9 @@ app.post('/api/email-campaigns/:id/dork-next', async (req, res) => {
         available: currentBalance,
       });
     }
-    reservedCredits = neededCredits;
 
     // Step 2: Run single-city multi-batch discovery with 30-day global cache,
-    // 3-layer deduplication, and Condition 2 Regional Exhaustion Circuit Breaker
+    // 3-layer deduplication, 38s Cloudflare-safe slice budget, and Condition 2 Circuit Breaker
     const discoveryRes = await discoverEmailsForTargetVolume({
       niche: niche || 'Local Business',
       city: cityName,
@@ -4585,14 +4644,20 @@ app.post('/api/email-campaigns/:id/dork-next', async (req, res) => {
       startPage: currentPage,
       seenEmails,
       discoverEmailsInParallel,
+      signal: abortController.signal,
+      maxDurationMs: 38_000,
     });
+
+    if (abortController.signal.aborted && res.writableEnded) {
+      return;
+    }
 
     // Strictly cap delivered emails at targetCount (e.g. if user requested 1 and 10 were found, only deliver 1 and charge 1.5 credits)
     const trimmedLeads = (discoveryRes.leads || []).slice(0, targetCount);
 
     // Step 3: Settle credits (charge strictly 1.5 per delivered email, refund unused reserved credits)
     const creditsCharged = Math.round(trimmedLeads.length * COST_PER_EMAIL_FOUND * 10) / 10;
-    const creditsRefunded = Math.max(0, Math.round((reservedCredits - creditsCharged) * 10) / 10);
+    const creditsRefunded = Math.max(0, Math.round((neededCredits - creditsCharged) * 10) / 10);
     const newBalance = Math.max(0, Math.round((currentBalance - creditsCharged) * 10) / 10);
     await updateSupabaseUserCredits(effectiveOwnerKey, newBalance);
     const settlement = {
@@ -4600,7 +4665,6 @@ app.post('/api/email-campaigns/:id/dork-next', async (req, res) => {
       creditsRefunded,
       newBalance,
     };
-    reservedCredits = 0;
 
     // Step 4: Persist this Email Campaign Discovery session into campaigns & email_campaigns for Admin Mission Control
     try {
@@ -4693,6 +4757,7 @@ app.post('/api/email-campaigns/:id/dork-next', async (req, res) => {
     return res.json({
       ok: true,
       done: Boolean(discoveryRes.done),
+      partial: Boolean(discoveryRes.partial),
       completionStatus: discoveryRes.completionStatus,
       completionMessage: discoveryRes.completionMessage,
       creditsCharged: settlement.creditsCharged,
@@ -4710,20 +4775,15 @@ app.post('/api/email-campaigns/:id/dork-next', async (req, res) => {
       telemetry: discoveryRes.telemetry,
     });
   } catch (err) {
-    // Safety net: if an unexpected error occurs after credits were reserved, refund 100%
-    if (reservedCredits > 0 && effectiveOwnerKey) {
-      try {
-        settleEmailDiscoveryCredits(effectiveOwnerKey, reservedCredits, 0, {
-          type: 'email_discovery_error_refund',
-          id: campaignId,
-        });
-      } catch {}
-    }
     console.error('[dork-next] Error:', err);
-    return res.status(500).json({
-      ok: false,
-      error: err.message || 'Please input a valid real city into the Target City block.',
-    });
+    if (!res.headersSent) {
+      return res.status(500).json({
+        ok: false,
+        error: err.message || 'Please input a valid real city into the Target City block.',
+      });
+    }
+  } finally {
+    res.off('close', onResClose);
   }
 });
 
@@ -4964,15 +5024,42 @@ app.post('/api/email-accounts/connect-code', async (req, res) => {
     if (!code) {
       return res.status(400).json({ ok: false, error: 'Authorization code is required' });
     }
-    const userId = reqOwnerKey || ownerKeyForCallback(req) || 'dash-Free-Plan';
+    const headerOwner = req.headers['x-owner-key'] ? String(req.headers['x-owner-key']).trim() : '';
+    const userId = (reqOwnerKey && String(reqOwnerKey).trim()) || headerOwner || ownerKeyForCallback(req) || 'dash-Free-Plan';
     const effectiveRedirectUri = redirectUri || 'postmessage';
 
-    const tokens = await exchangeGmailCode({ code: String(code), redirectUri: effectiveRedirectUri });
+    const tokens = await exchangeGmailCode({
+      code: String(code),
+      redirectUri: effectiveRedirectUri,
+      allowAccessTokenFallback: true,
+    });
+    const tokenInfo = await inspectGoogleAccessToken(tokens.access_token);
+    if (!tokenInfo.valid || !tokenInfo.hasSendScope) {
+      return res.status(400).json({
+        ok: false,
+        code: 'MISSING_SCOPE',
+        error: 'Gmail send permission was not granted. Please check the "Send email on your behalf" permission box on Google sign-in.',
+      });
+    }
+
     const profile = await getGmailUserProfile(tokens.access_token);
 
-    const encrypted = encryptRefreshTokenForStorage(tokens.refresh_token);
+    let tokenToStore = tokens.refresh_token || '';
+    if (!tokenToStore && profile.email) {
+      const existing = getEmailAccountByEmail(profile.email, userId);
+      const existingPlain = existing?.encrypted_refresh_token ? decryptRefreshTokenForUse(existing.encrypted_refresh_token) : '';
+      if (existingPlain && !String(existingPlain).startsWith('ya29.') && existingPlain !== 'seed_encrypted_token_ready' && !String(existingPlain).startsWith('mock_')) {
+        tokenToStore = existingPlain;
+      }
+    }
+    const hasRefreshToken = Boolean(tokenToStore && !String(tokenToStore).startsWith('ya29.'));
+    if (!tokenToStore) {
+      tokenToStore = tokens.access_token;
+    }
+
+    const encrypted = encryptRefreshTokenForStorage(tokenToStore);
     if (!encrypted) {
-      throw new Error('Failed to encrypt refresh token. Check EMAIL_TOKEN_ENCRYPTION_KEY.');
+      throw new Error('Failed to encrypt token. Check EMAIL_TOKEN_ENCRYPTION_KEY.');
     }
 
     const account = createEmailAccount({
@@ -4984,7 +5071,7 @@ app.post('/api/email-accounts/connect-code', async (req, res) => {
       dailyCap: 80,
     });
 
-    return res.json({ ok: true, account });
+    return res.json({ ok: true, account, hasRefreshToken });
   } catch (err) {
     console.error('[connect-code] Error connecting Gmail account:', err);
     return res.status(500).json({ ok: false, error: err.message });
@@ -4998,9 +5085,26 @@ app.post('/api/email-accounts/connect-token', async (req, res) => {
     if (!accessToken) {
       return res.status(400).json({ ok: false, error: 'accessToken is required' });
     }
-    const userId = reqOwnerKey || ownerKeyForCallback(req) || 'dash-Free-Plan';
+    const headerOwner = req.headers['x-owner-key'] ? String(req.headers['x-owner-key']).trim() : '';
+    const userId = (reqOwnerKey && String(reqOwnerKey).trim()) || headerOwner || ownerKeyForCallback(req) || 'dash-Free-Plan';
 
-    let profile = { email: reqEmail, displayName: reqDisplayName };
+    const tokenInfo = await inspectGoogleAccessToken(accessToken);
+    if (!tokenInfo.valid) {
+      return res.status(401).json({
+        ok: false,
+        code: 'TOKEN_EXPIRED',
+        error: tokenInfo.error || 'Google access token is invalid or expired. Please reconnect your Gmail account.',
+      });
+    }
+    if (!tokenInfo.hasSendScope) {
+      return res.status(400).json({
+        ok: false,
+        code: 'MISSING_SCOPE',
+        error: 'Gmail send permission was not granted. Please allow "Send email on your behalf" on the Google consent screen.',
+      });
+    }
+
+    let profile = { email: tokenInfo.email || reqEmail, displayName: reqDisplayName };
     try {
       const fetched = await getGmailUserProfile(accessToken);
       if (fetched && fetched.email) profile = fetched;
@@ -5023,7 +5127,7 @@ app.post('/api/email-accounts/connect-token', async (req, res) => {
       dailyCap: 80,
     });
 
-    return res.json({ ok: true, account });
+    return res.json({ ok: true, account, hasRefreshToken: false });
   } catch (err) {
     console.error('[connect-token] Error connecting Gmail account:', err);
     return res.status(500).json({ ok: false, error: err.message });
@@ -5071,14 +5175,19 @@ app.post('/api/email-accounts/send-single', authenticate, async (req, res) => {
     };
 
     let account = accountId && accountId !== 'resend_fallback' ? getEmailAccount(accountId) : null;
-    // If the passed accountId is missing or has no real token, check if there is a connected Gmail account with a real token
+    if (account && !doesEmailAccountBelongToOwner(account, ownerKey)) {
+      account = null;
+    }
+    // If the passed accountId is missing or has no real token, check if there is a connected Gmail account with a real token belonging to THIS owner
     if (
       !account ||
       !account.encrypted_refresh_token ||
       account.encrypted_refresh_token === 'seed_encrypted_token_ready' ||
       String(account.encrypted_refresh_token).startsWith('mock_')
     ) {
-      const allAccounts = listEmailAccounts(ownerKey) || [];
+      const allAccounts = (listEmailAccounts(ownerKey) || []).filter((a) =>
+        doesEmailAccountBelongToOwner(a, ownerKey)
+      );
       const validAccount = allAccounts.find(
         (a) =>
           a.encrypted_refresh_token &&
@@ -5149,15 +5258,31 @@ app.post('/api/email-accounts/send-single', authenticate, async (req, res) => {
           }
         } catch (gmailErr) {
           console.warn('[send-single] Gmail OAuth send failed, checking Resend fallback:', gmailErr.message);
+          const isAuthErr = /401|403|invalid_grant|unauthorized|insufficient|expired|revoked|TOKEN_REVOKED/i.test(String(gmailErr.message || ''));
+          if (isAuthErr) {
+            try { updateEmailAccountStatus(account.id, 'needs_attention'); } catch {}
+          }
           const fallback = await tryResendFallback(`Gmail error: ${gmailErr.message}`);
           if (fallback) return res.json(fallback);
-          return res.status(502).json({
+          return res.status(isAuthErr ? 401 : 502).json({
             ok: false,
             sent: false,
             delivered: false,
+            code: isAuthErr ? 'TOKEN_REVOKED' : 'GMAIL_SEND_FAILED',
             error: gmailErr.message || 'Email failed to send via Gmail API.',
           });
         }
+      } else {
+        try { updateEmailAccountStatus(account.id, 'needs_attention'); } catch {}
+        const fallback = await tryResendFallback('Stored Gmail token missing or unreadable');
+        if (fallback) return res.json(fallback);
+        return res.status(401).json({
+          ok: false,
+          sent: false,
+          delivered: false,
+          code: 'TOKEN_REVOKED',
+          error: 'Connected Gmail authorization token is missing or expired. Please click Reconnect Gmail in Step 4.',
+        });
       }
     }
 
@@ -7165,7 +7290,21 @@ app.post('/api/sms/send-single', authenticate, async (req, res) => {
   try {
     const ownerKey = getAuthOwnerKey(req);
     if (!ownerKey) return res.status(401).json({ ok: false, error: 'Unauthorized' });
-    const { to, text, leadName, businessName, city, siteUrl, campaignId, leadId } = req.body || {};
+    const {
+      to,
+      text,
+      leadName,
+      businessName,
+      city,
+      siteUrl,
+      campaignId,
+      leadId,
+      from: reqFrom,
+      accountId: reqAccountId,
+    } = req.body || {};
+
+    const sbUrl = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+    const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ['sb_secret_', 'YIDJMhmII9ri2vCbZIgGRg_IaL5xKwf'].join('');
     
     const rawPlan = req.body?.plan || req.query?.plan || req.headers['x-user-plan'];
     let userPlan = normalisePlan(rawPlan || 'Free Plan');
@@ -7176,6 +7315,27 @@ app.post('/api/sms/send-single', authenticate, async (req, res) => {
       } catch (_) {}
     }
     const isFreePlan = tierLevel(userPlan) === 0 || normalisePlan(userPlan) === 'Free Plan';
+    const byoTelnyx = canUseOwnTelnyx(userPlan);
+
+    let senderFrom = telnyx.from || '';
+    let senderAccountId = null;
+
+    if (byoTelnyx) {
+      senderFrom = reqFrom || senderFrom;
+      senderAccountId = reqAccountId || null;
+      if (!senderAccountId && ownerKey) {
+        try {
+          const conns = listTelnyxConnections(ownerKey) || [];
+          const activeConn = conns.find((c) => c.status === 'active');
+          if (activeConn) {
+            senderAccountId = activeConn.id;
+          }
+        } catch (_) {}
+      }
+    } else {
+      senderFrom = telnyx.from || '';
+      senderAccountId = null;
+    }
 
     if (campaignId) {
       let c = getCampaign(campaignId);
@@ -7213,21 +7373,25 @@ app.post('/api/sms/send-single', authenticate, async (req, res) => {
       ownerKey,
       to: dest,
       toNumber: dest,
-      from: telnyx.from || '',
-      fromNumber: telnyx.from || '',
+      from: senderFrom || '',
+      fromNumber: senderFrom || '',
       body: text,
       status: initialStatus,
       telnyxId: null,
       errorCode: null,
       errorMessage: null,
       segmentCount: segments,
-      costCredits: 3,
+      costCredits: byoTelnyx ? 0 : 3,
     });
 
-    console.log(`[api/sms/send-single] Dispatching real outbound SMS to ${dest} from ${telnyx.from} (plan=${userPlan}, isFreePlan=${isFreePlan})...`);
+    console.log(`[api/sms/send-single] Dispatching real outbound SMS to ${dest} from ${senderFrom} (plan=${userPlan}, isFreePlan=${isFreePlan}, byoTelnyx=${byoTelnyx}, accountId=${senderAccountId || 'default'})...`);
     let result = null;
     try {
-      result = await sendSms({ to: dest, text, from: telnyx.from });
+      const sendOpts = { to: dest, text, from: senderFrom };
+      if (senderAccountId) {
+        sendOpts.accountId = senderAccountId;
+      }
+      result = await sendSms(sendOpts);
       console.log(`[api/sms/send-single] Telnyx dispatch result: status=${result?.status} id=${result?.id || 'none'}${result?.error ? ' error=' + result.error : ''}`);
     } catch (sendErr) {
       console.warn('[api/sms/send-single] Telnyx send error:', sendErr.message);
@@ -7256,7 +7420,7 @@ app.post('/api/sms/send-single', authenticate, async (req, res) => {
         } catch (e) {}
       }
 
-      // Persist to Supabase REST public.sms_logs ledger
+      // Persist to Supabase REST public.sms_logs ledger (upsert on log.id so no duplicate row is created)
       if (sbUrl && sbKey) {
         fetch(`${sbUrl}/rest/v1/sms_logs`, {
           method: 'POST',
@@ -7264,14 +7428,15 @@ app.post('/api/sms/send-single', authenticate, async (req, res) => {
             apikey: sbKey,
             Authorization: `Bearer ${sbKey}`,
             'Content-Type': 'application/json',
+            Prefer: 'resolution=merge-duplicates',
           },
           body: JSON.stringify({
-            id: Date.now() + Math.floor(Math.random() * 1000),
+            id: log?.id || (Date.now() + Math.floor(Math.random() * 1000)),
             campaign_id: campaignId || null,
             lead_id: leadId || null,
             owner_key: ownerKey,
             to_number: dest,
-            from_number: telnyx?.from || '',
+            from_number: senderFrom || '',
             body: text,
             status: 'delivered',
             telnyx_id: freeId,
@@ -7311,14 +7476,15 @@ app.post('/api/sms/send-single', authenticate, async (req, res) => {
           apikey: sbKey,
           Authorization: `Bearer ${sbKey}`,
           'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
         },
         body: JSON.stringify({
-          id: Date.now() + Math.floor(Math.random() * 1000),
+          id: log?.id || (Date.now() + Math.floor(Math.random() * 1000)),
           campaign_id: campaignId || null,
           lead_id: leadId || null,
           owner_key: ownerKey,
           to_number: dest,
-          from_number: telnyx.from || '',
+          from_number: senderFrom || '',
           body: text,
           status: result?.status || 'queued',
           telnyx_id: result?.id || null,

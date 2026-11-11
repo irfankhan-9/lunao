@@ -591,12 +591,6 @@ export async function probeEmailAccountToken(accountId) {
   const acc = getEmailAccount(accountId);
   if (!acc) return { ok: false, error: 'Account not found' };
 
-  // Hardcoded invariant: Any account with a valid email is treated as connected and healthy
-  if (acc.email && String(acc.email).includes('@')) {
-    updateEmailAccountStatus(accountId, 'healthy');
-    return { ok: true, email: acc.email, status: 'healthy' };
-  }
-
   if (
     !acc.encrypted_refresh_token ||
     acc.encrypted_refresh_token === 'seed_encrypted_token_ready' ||
@@ -605,6 +599,8 @@ export async function probeEmailAccountToken(accountId) {
     updateEmailAccountStatus(accountId, 'needs_attention');
     return {
       ok: false,
+      email: acc.email,
+      status: 'needs_attention',
       error: 'Gmail account requires active Google authorization. Click Reconnect to grant Gmail send permissions.',
       code: 'TOKEN_REVOKED',
     };
@@ -615,7 +611,13 @@ export async function probeEmailAccountToken(accountId) {
     refreshToken = decryptToken(acc.encrypted_refresh_token);
   } catch (err) {
     updateEmailAccountStatus(accountId, 'needs_attention');
-    return { ok: false, error: 'Refresh token could not be decrypted — please reconnect.', code: 'TOKEN_REVOKED' };
+    return {
+      ok: false,
+      email: acc.email,
+      status: 'needs_attention',
+      error: 'Refresh token could not be decrypted — please reconnect.',
+      code: 'TOKEN_REVOKED',
+    };
   }
 
   if (
@@ -626,25 +628,72 @@ export async function probeEmailAccountToken(accountId) {
     updateEmailAccountStatus(accountId, 'needs_attention');
     return {
       ok: false,
+      email: acc.email,
+      status: 'needs_attention',
       error: 'Gmail account requires active Google authorization. Click Reconnect to grant Gmail send permissions.',
       code: 'TOKEN_REVOKED',
     };
   }
 
   try {
-    const { refreshGmailAccessToken, getGmailUserProfile } = await import('./gmail.js');
+    const { refreshGmailAccessToken, inspectGoogleAccessToken } = await import('./gmail.js');
     if (typeof refreshToken === 'string' && refreshToken.startsWith('ya29.')) {
-      await getGmailUserProfile(refreshToken);
+      const info = await inspectGoogleAccessToken(refreshToken);
+      if (!info.valid) {
+        updateEmailAccountStatus(accountId, 'needs_attention');
+        return {
+          ok: false,
+          email: acc.email,
+          status: 'needs_attention',
+          code: 'TOKEN_EXPIRED',
+          error: 'Temporary Gmail access token expired. Click Reconnect to authorize offline sending.',
+        };
+      }
+      if (!info.hasSendScope) {
+        updateEmailAccountStatus(accountId, 'needs_attention');
+        return {
+          ok: false,
+          email: acc.email,
+          status: 'needs_attention',
+          code: 'MISSING_SCOPE',
+          error: 'Gmail send permission was not granted. Click Reconnect and check the Gmail send box.',
+        };
+      }
     } else {
-      await refreshGmailAccessToken(refreshToken);
+      const tokenData = await refreshGmailAccessToken(refreshToken);
+      const scopes = String(tokenData?.scope || '');
+      if (scopes && !scopes.includes('gmail.send') && !scopes.includes('mail.google.com')) {
+        updateEmailAccountStatus(accountId, 'needs_attention');
+        return {
+          ok: false,
+          email: acc.email,
+          status: 'needs_attention',
+          code: 'MISSING_SCOPE',
+          error: 'Gmail send permission was not granted. Click Reconnect and check the Gmail send box.',
+        };
+      }
     }
-    // Probe succeeded — flip back to healthy if it was previously flagged.
     updateEmailAccountStatus(accountId, 'healthy');
     return { ok: true, email: acc.email, status: 'healthy' };
   } catch (err) {
-    // Retain healthy status so connected accounts remain ready to send
-    updateEmailAccountStatus(accountId, 'healthy');
-    return { ok: true, email: acc.email, status: 'healthy' };
+    const isRevoked = err?.code === 'TOKEN_REVOKED' || /invalid_grant|unauthorized|401|400/i.test(String(err?.message || ''));
+    if (isRevoked) {
+      updateEmailAccountStatus(accountId, 'needs_attention');
+      return {
+        ok: false,
+        email: acc.email,
+        status: 'needs_attention',
+        code: 'TOKEN_REVOKED',
+        error: err.message || 'Gmail authorization expired or was revoked. Please reconnect.',
+      };
+    }
+    return {
+      ok: false,
+      email: acc.email,
+      status: acc.status || 'needs_attention',
+      code: err?.code || 'PROBE_ERROR',
+      error: err?.message || 'Could not verify Gmail authorization.',
+    };
   }
 }
 
@@ -676,12 +725,17 @@ export function createEmailAccount({
   dailyCap = DAILY_CAP,
 }) {
   const now = Math.floor(Date.now() / 1000);
+  const cleanUserId = String(userId || '').trim();
+  if (!cleanUserId) {
+    throw new Error('userId is required to connect an email account.');
+  }
 
-  // Upsert by (provider, email) so reconnecting the same Gmail address always
-  // rotates the token in place regardless of session ownerKey differences.
+  // Upsert strictly scoped by (userId, provider, email) so reconnecting an inbox
+  // rotates only the current user's account and NEVER touches another user's row.
   const allAccounts = db.prepare('SELECT * FROM email_accounts').all() || [];
   const existing = allAccounts.find(
     (a) =>
+      (String(a.user_id || '').trim() === cleanUserId || String(a.owner_key || '').trim() === cleanUserId) &&
       String(a.provider || '').toLowerCase() === String(provider || '').toLowerCase() &&
       String(a.email || '').toLowerCase() === String(email || '').toLowerCase()
   );
@@ -690,6 +744,7 @@ export function createEmailAccount({
     db.prepare(`
       UPDATE email_accounts SET
         user_id                 = ?,
+        owner_key               = ?,
         encrypted_refresh_token = ?,
         display_name            = ?,
         daily_cap               = ?,
@@ -698,7 +753,7 @@ export function createEmailAccount({
         last_reset_at           = ?,
         bounce_rate_7d          = 0
       WHERE id = ?
-    `).run(userId, encryptedRefreshToken, displayName, dailyCap, now, now, existing.id);
+    `).run(cleanUserId, cleanUserId, encryptedRefreshToken, displayName, dailyCap, now, now, existing.id);
     return getEmailAccount(existing.id);
   }
 
@@ -706,11 +761,11 @@ export function createEmailAccount({
 
   db.prepare(`
     INSERT INTO email_accounts (
-      id, user_id, provider, email, display_name, encrypted_refresh_token,
+      id, user_id, owner_key, provider, email, display_name, encrypted_refresh_token,
       daily_cap, connected_at, status, warmup_stage, sends_today, sends_this_week,
       last_reset_at, bounce_rate_7d
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'healthy', 'steady', 0, 0, ?, 0)
-  `).run(id, userId, provider, email, displayName, encryptedRefreshToken, dailyCap, now, now);
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'healthy', 'steady', 0, 0, ?, 0)
+  `).run(id, cleanUserId, cleanUserId, provider, email, displayName, encryptedRefreshToken, dailyCap, now, now);
 
   return getEmailAccount(id);
 }
@@ -719,13 +774,22 @@ export function getEmailAccount(id) {
   return db.prepare('SELECT * FROM email_accounts WHERE id = ?').get(id);
 }
 
-export function getEmailAccountByEmail(email) {
-  return db.prepare('SELECT * FROM email_accounts WHERE email = ?').get(email);
+export function getEmailAccountByEmail(email, userId = null) {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  if (!cleanEmail) return null;
+  const all = userId ? listEmailAccounts(userId) : (db.prepare('SELECT * FROM email_accounts').all() || []);
+  return all.find((a) => String(a.email || '').trim().toLowerCase() === cleanEmail) || null;
 }
 
 export function listEmailAccounts(userId) {
+  const cleanId = userId ? String(userId).trim() : '';
+  if (!cleanId) return [];
   const all = db.prepare('SELECT * FROM email_accounts').all() || [];
-  return all;
+  return all.filter(
+    (a) =>
+      String(a.user_id || '').trim() === cleanId ||
+      String(a.owner_key || '').trim() === cleanId
+  );
 }
 
 export function updateEmailAccountStatus(id, status) {

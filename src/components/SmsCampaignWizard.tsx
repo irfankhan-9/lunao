@@ -938,6 +938,8 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                 campaignId: newCampId,
                 ownerKey: resolvedOwnerKey,
                 plan: userPlan,
+                from: selectedPhoneNumber || undefined,
+                accountId: selectedAccountId || undefined,
               }),
             });
             const smsData = await smsRes.json().catch(() => ({}));
@@ -982,9 +984,10 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
           }
         }
 
-        const initialSmsRef = smsSegs <= 1 ? 4 : 8;
-        const initialSiteRef = 1.5;
-        const initialTotRef = initialSmsRef + initialSiteRef;
+        // Strict refund policy: failed SMS outreach refunds 1.5 credits (not 5.5)
+        const initialSmsRef = 1.5;
+        const initialSiteRef = 0;
+        const initialTotRef = 1.5;
 
         siteItem.smsStatus = smsDeliveryStatus;
         siteItem.smsError = deliveryErrorMessage;
@@ -1127,10 +1130,10 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                     siteItem.smsStatus = 'failed';
                     siteItem.smsError = reason;
 
-                    // Instant credit refund logic on failure: 4/8 SMS + 1.5 Site
-                    const smsRef = smsSegs <= 1 ? 4 : 8;
-                    const siteRef = 1.5;
-                    const totRef = smsRef + siteRef;
+                    // Instant credit refund logic on failure: strictly 1.5 credits (not 5.5)
+                    const smsRef = 1.5;
+                    const siteRef = 0;
+                    const totRef = 1.5;
                     siteItem.smsRefundAmount = smsRef;
                     siteItem.siteRefundAmount = siteRef;
                     siteItem.totalRefundAmount = totRef;
@@ -1675,11 +1678,11 @@ export const SmsCampaignWizard: React.FC<SmsCampaignWizardProps> = ({
                                 {siteFailed ? 'Site Rebrand Failed' : 'SMS Delivery Failed'}
                               </span>
                               <span className="text-emerald-800 font-bold bg-emerald-100/90 px-2 py-0.5 rounded border border-emerald-300/80">
-                                +{(s.totalRefundAmount || ((s.segments && s.segments > 1 ? 8 : 4) + (siteFailed ? 3.0 : 1.5))).toFixed(1)} Credits To Be Refunded
+                                +{(s.totalRefundAmount || (siteFailed ? 3.0 : 1.5)).toFixed(1)} Credits Refunded
                               </span>
                             </div>
                             <p className="text-[10px] text-rose-800/90 mt-1 font-sans">
-                              {s.smsRefundAmount || (s.segments && s.segments > 1 ? 8 : 4)} SMS credits ({s.segments && s.segments > 1 ? '2+ segments' : '1 segment'}) + {siteFailed ? '3.0' : '1.5'} site credits will be refunded instantly after campaign.
+                              {siteFailed ? '3.0 site credits refunded.' : '1.5 SMS credits refunded for failed outreach.'}
                             </p>
                             {s.smsError && (
                               <p className="text-[10px] text-rose-700 font-mono mt-1 border-t border-rose-200/80 pt-1">

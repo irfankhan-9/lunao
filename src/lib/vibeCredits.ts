@@ -5,7 +5,13 @@
 //   Starter ($97/mo):   $6.00  = 600 AI credits
 //   Pro ($187/mo):      $13.00 = 1,300 AI credits
 //   Agency ($297/mo):   $20.00 = 2,000 AI credits
-//   Free ($0/mo):       $0.00  = 0 AI credits (trial upgrade required)
+//   Free ($0/mo):       $0.15  = 15 AI credits, ONE-TIME grant per account (never monthly, never re-granted)
+
+/** One-time AI Vibe Coding credits every Free account receives (15 credits = $0.15). */
+export const FREE_VIBE_CREDITS = 15;
+
+/** Free accounts may only use these low-cost Flash-tier models (mirrors server FREE_ALLOWED_MODEL_IDS). */
+export const FREE_ALLOWED_MODEL_IDS = ['gemini-3.5-flash', 'gemini-3.8-flash'];
 
 export interface PlanAiCredits {
   planKey: 'starter' | 'pro' | 'agency' | 'free';
@@ -52,8 +58,8 @@ export const PLAN_AI_CREDITS: Record<string, PlanAiCredits> = {
   free: {
     planKey: 'free',
     planName: 'Free Plan',
-    monthlyCredits: 0,
-    dollarValue: 0.00,
+    monthlyCredits: FREE_VIBE_CREDITS,
+    dollarValue: 0.15,
     creditCostUsd: 0.01,
     subscriptionPriceUsd: 0,
   },
@@ -89,8 +95,25 @@ export function getPlanAiConfig(planName?: string | null): PlanAiCredits {
   return PLAN_AI_CREDITS[key] || PLAN_AI_CREDITS.free;
 }
 
+/**
+ * Paid plans are always eligible. Free accounts are eligible while they still hold
+ * some of their one-time free vibe-coding credits (balance > 0).
+ */
 export function isVibeEligiblePlan(planName?: string | null): boolean {
-  return normalizePlanKey(planName) !== 'free';
+  if (normalizePlanKey(planName) !== 'free') return true;
+  return getVibeCreditBalance(planName) > 0;
+}
+
+export function isFreeVibePlan(planName?: string | null): boolean {
+  return normalizePlanKey(planName) === 'free';
+}
+
+/** True when a model id (or display name) is allowed on the Free plan's free vibe credits. */
+export function isModelAllowedOnFree(modelIdOrName?: string | null): boolean {
+  const raw = String(modelIdOrName || '').toLowerCase();
+  if (!raw) return true;
+  if (FREE_ALLOWED_MODEL_IDS.includes(raw)) return true;
+  return (raw.includes('flash') || raw.includes('3.5') || raw.includes('3.8')) && !raw.includes('pro') && !raw.includes('claude');
 }
 
 export function getVibeUserId(): string {
@@ -115,11 +138,10 @@ export function getVibeCreditBalance(explicitPlan?: string | null): number {
       : null) ||
     'Free Plan';
   const config = getPlanAiConfig(activePlan);
-  const defaultBalance = config.monthlyCredits ?? 0;
-
-  if (normalizePlanKey(activePlan) === 'free') {
-    return 0;
-  }
+  const isFree = normalizePlanKey(activePlan) === 'free';
+  // Free accounts hold a one-time grant that only the server knows about (it may already be spent),
+  // so never assume the 15-credit default locally: show 0 until the server balance is synced.
+  const defaultBalance = isFree ? 0 : (config.monthlyCredits ?? 0);
 
   if (typeof window === 'undefined') return defaultBalance;
   try {
@@ -159,6 +181,7 @@ export function setVibeCreditBalance(newBalance: number): void {
 
 export function resetVibeCreditsToPlan(planName?: string | null): number {
   const config = getPlanAiConfig(planName);
+  const isFree = normalizePlanKey(planName) === 'free';
   try {
     if (typeof localStorage !== 'undefined') {
       const userId = getVibeUserId();
@@ -169,7 +192,11 @@ export function resetVibeCreditsToPlan(planName?: string | null): number {
   } catch {
     /* ignore */
   }
-  setVibeCreditBalance(config.monthlyCredits);
+  // Free plan: the 15 credits are a ONE-TIME server-side grant. Never write the plan default locally
+  // (that would refill spent credits); the server response below is the only source of truth.
+  if (!isFree) {
+    setVibeCreditBalance(config.monthlyCredits);
+  }
 
   // Immediately sync updated plan allowance to Supabase PostgreSQL for this user
   if (typeof window !== 'undefined') {
@@ -195,7 +222,7 @@ export function resetVibeCreditsToPlan(planName?: string | null): number {
       .catch(() => {});
   }
 
-  return config.monthlyCredits;
+  return isFree ? getVibeCreditBalance(planName) : config.monthlyCredits;
 }
 
 export interface RawProviderMetadata {
@@ -227,19 +254,15 @@ export function hasSufficientVibeCredits(planName?: string | null): {
       ? localStorage.getItem(`lunao_u_${userId}_plan`) || localStorage.getItem('lunao_user_plan')
       : null) ||
     'Free Plan';
-  if (normalizePlanKey(currentPlan) === 'free') {
-    return {
-      ok: false,
-      balance: 0,
-      error: 'Free Plan includes 0 AI Vibe-Coding credits. Upgrade to Starter Plan or above to unlock AI Vibe Coding.',
-    };
-  }
+  const isFree = normalizePlanKey(currentPlan) === 'free';
   const currentBalance = getVibeCreditBalance(currentPlan);
   if (currentBalance <= 0) {
     return {
       ok: false,
       balance: 0,
-      error: 'Insufficient AI credits (0 remaining). Please upgrade your plan in Subscription Plans.',
+      error: isFree
+        ? `You've used your ${FREE_VIBE_CREDITS} free vibe-coding credits. Upgrade to Starter, Pro, or Agency to keep building with AI.`
+        : 'Insufficient AI credits (0 remaining). Please upgrade your plan in Subscription Plans.',
     };
   }
   return {
@@ -424,9 +447,7 @@ export async function syncAllowanceWithServer(): Promise<{
       const config = getPlanAiConfig(activePlan);
       const dollarsSpent = Number(data.status.dollarsSpent || 0);
       let balance = Number(data.status.balanceCredits);
-      if (normalizePlanKey(activePlan) === 'free') {
-        balance = 0;
-      } else if (Number.isNaN(balance) || balance < 0) {
+      if (Number.isNaN(balance) || balance < 0) {
         balance = 0;
       }
       if (dollarsSpent > 0) {

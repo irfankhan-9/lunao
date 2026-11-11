@@ -47,10 +47,25 @@ export const EmailAccountsManager: React.FC<EmailAccountsManagerProps> = ({
   // Track OAuth popup for instant reload on close
   const [oauthPopup, setOauthPopup] = useState<Window | null>(null);
 
+  const resolveOwnerKey = () => {
+    try {
+      const direct = localStorage.getItem('lunao_owner_key');
+      if (direct && direct.trim()) return direct.trim();
+      const rawUser = localStorage.getItem('lunao_auth_user');
+      if (rawUser) {
+        const parsed = JSON.parse(rawUser);
+        if (parsed?.ownerKey && String(parsed.ownerKey).trim()) {
+          return String(parsed.ownerKey).trim();
+        }
+      }
+    } catch {}
+    return 'dash-Free-Plan';
+  };
+
   const loadAccounts = useCallback(async () => {
     setIsLoading(true);
     try {
-      const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
+      const ownerKey = resolveOwnerKey();
       const { listEmailAccounts } = await import('../lib/pipelineClient');
       const raw = await listEmailAccounts(ownerKey);
       // Defensive dedupe by (provider,email) so the UI never shows the same
@@ -90,9 +105,19 @@ export const EmailAccountsManager: React.FC<EmailAccountsManagerProps> = ({
     }
   }, []);
 
-  // Initial load
+  // Initial load & reload when signed-in account changes
   useEffect(() => {
     loadAccounts();
+    const handleOwnerChange = () => {
+      setAccounts([]);
+      loadAccounts();
+    };
+    window.addEventListener('lunao_owner_key_changed', handleOwnerChange);
+    window.addEventListener('lunao_auth_changed', handleOwnerChange);
+    return () => {
+      window.removeEventListener('lunao_owner_key_changed', handleOwnerChange);
+      window.removeEventListener('lunao_auth_changed', handleOwnerChange);
+    };
   }, [loadAccounts]);
 
   // Listen for postMessage from the OAuth popup window.
@@ -140,7 +165,7 @@ export const EmailAccountsManager: React.FC<EmailAccountsManagerProps> = ({
   const handleConnect = async () => {
     setConnecting(true);
     try {
-      const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
+      const ownerKey = resolveOwnerKey();
       const qs = new URLSearchParams({ provider: connectProvider });
       if (ownerKey) qs.set('ownerKey', ownerKey);
 

@@ -106,10 +106,10 @@ export const Plans: React.FC<PlansProps> = ({
       borderColor: 'border-border-main',
       badgeColor: 'bg-off-white text-ink-secondary border-border-main',
       icon: <Award className="w-5 h-5 text-ink-secondary" />,
-      tagline: 'Trial sandbox for testing the Lunao engine',
+      tagline: 'Trial sandbox for testing the Lunao engine + AI Vibe Coding',
       features: [
         '15 one-time Lunao Credits included',
-        'No AI allowance included',
+        '15 free AI Vibe Coding credits (one-time)',
         '1 trial Owner PWA business',
         'Rebrand & deploy websites (3 credits/site)',
         'Find SMS lead (1.5 credits/lead)',
@@ -200,13 +200,13 @@ export const Plans: React.FC<PlansProps> = ({
   ];
 
   const planNormalized = (userPlan || '').toLowerCase();
-  const isVibeCodingEligible = ['starter', 'pro', 'agency'].some(tier => planNormalized.includes(tier));
+  // Every plan (including Free, with its one-time 15 vibe credits) can see the vibe-coding balance.
 
   const getVibeCodingCredits = (plan: string): number => {
     const p = (plan || '').toLowerCase();
     const stored = typeof window !== 'undefined' ? localStorage.getItem('lunao_vibe_credits') : null;
     if (stored) {
-      const parsed = parseInt(stored, 10);
+      const parsed = parseFloat(stored);
       if (!isNaN(parsed) && parsed > 0) return parsed;
     }
     if (p.includes('agency')) return 1500;
@@ -236,16 +236,14 @@ export const Plans: React.FC<PlansProps> = ({
             </div>
           </div>
 
-          {/* Vibe Coding Credits Card */}
-          {isVibeCodingEligible && (
-            <div className="bg-accent-soft/30 border border-accent/20 rounded-xl px-4 py-2.5 flex items-center gap-2.5 text-left shadow-2xs">
-              <span className="w-2.5 h-2.5 rounded-full bg-accent animate-pulse shrink-0"></span>
-              <div>
-                <div className="text-[10px] uppercase tracking-wider font-extrabold text-ink-secondary">Vibe Coding Balance</div>
-                <div className="text-lg font-bold font-sans text-ink">{vibeCodingCredits.toLocaleString()} AI Tokens</div>
-              </div>
+          {/* Vibe Coding Credits Card (all plans; Free shows its one-time 15 free credits) */}
+          <div className="bg-accent-soft/30 border border-accent/20 rounded-xl px-4 py-2.5 flex items-center gap-2.5 text-left shadow-2xs">
+            <span className="w-2.5 h-2.5 rounded-full bg-accent animate-pulse shrink-0"></span>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider font-extrabold text-ink-secondary">Vibe Coding Balance</div>
+              <div className="text-lg font-bold font-sans text-ink">{vibeCodingCredits.toLocaleString(undefined, { maximumFractionDigits: 1 })} AI Credits{planNormalized.includes('free') ? ' (free, one-time)' : ''}</div>
             </div>
-          )}
+          </div>
 
           <button
             onClick={() => {

@@ -993,13 +993,16 @@ The Lunao Team`);
       } catch { /* ignore */ }
       for (const camp of polledCampaigns) {
         try {
-          // camp.id IS the server's campaign id (the wizard passes the
-          // backend's id directly as the local id when adding the row).
-          // Skip the temp id the wizard allocates before the server returns
-          // the real one (emc_run_<ts>) — that id never exists in the DB
-          // and would only generate a 404 console error per poll.
+          // Skip client-local and temp wizard ids (emc_run_*, em_*, sd_*) that are
+          // managed directly by the browser wizard and do not have a row in the
+          // email_campaigns DB table — polling them generates 404 console errors.
           const id = camp.id;
-          if (typeof id === 'string' && id.startsWith('emc_run_')) continue;
+          if (
+            typeof id === 'string' &&
+            (id.startsWith('emc_run_') || id.startsWith('em_') || id.startsWith('sd_'))
+          ) {
+            continue;
+          }
           const result = await fetchEmailCampaign(id);
           if (cancelled || !result) continue;
           const { campaign: dbCamp, leads } = result;

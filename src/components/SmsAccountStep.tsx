@@ -54,8 +54,14 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
   const [initialCached] = useState<CachedTelnyxData>(() => getCachedTelnyxData());
   const [apiKey, setApiKey] = useState<string>(initialCached.apiKey || '');
   const [inputKey, setInputKey] = useState<string>(initialCached.apiKey || '');
-  const [isConnected, setIsConnected] = useState<boolean>(initialCached.connected);
-  const [tokenExpired, setTokenExpired] = useState<boolean>(initialCached.tokenExpired);
+  const [tokenExpired, setTokenExpired] = useState<boolean>(
+    Boolean(
+      initialCached.tokenExpired ||
+      initialCached.account?.status === 'needs_reconnect' ||
+      initialCached.account?.status === 'revoked'
+    )
+  );
+  const [isConnected, setIsConnected] = useState<boolean>(initialCached.connected && !initialCached.tokenExpired);
   const [connectedAccountLabel, setConnectedAccountLabel] = useState<string>(
     initialCached.account?.label || initialCached.account?.email || (initialCached.apiKey ? 'Telnyx Authenticated Carrier' : '')
   );
@@ -63,7 +69,11 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isOAuthConnecting, setIsOAuthConnecting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [numbers, setNumbers] = useState<TelnyxNumberItem[]>(initialCached.numbers || []);
+  const [numbers, setNumbers] = useState<TelnyxNumberItem[]>(
+    initialCached.tokenExpired ? [] : (initialCached.numbers || [])
+  );
+
+  const needsReauth = Boolean(tokenExpired);
 
   const isStarterOrAbove = canUseOwnTelnyx(userPlan);
 
@@ -77,8 +87,12 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
     selectedPhoneNumberRef.current = selectedPhoneNumber;
   }, [selectedPhoneNumber]);
 
-  // Auto-select ready number immediately from cache on initial mount
+  // Auto-select ready number immediately from cache on initial mount ONLY if authenticated
   useEffect(() => {
+    if (needsReauth) {
+      onSelectPhoneRef.current('', '', null);
+      return;
+    }
     if (numbers.length > 0 && !selectedPhoneNumberRef.current) {
       const firstReady = numbers.find((n) => n.canSend);
       if (firstReady) {
@@ -87,7 +101,7 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
         onSelectPhoneRef.current(numbers[0].phoneNumber, 'telnyx-account', numbers[0].profileId);
       }
     }
-  }, []);
+  }, [needsReauth, numbers]);
 
   const isFetchingRef = useRef(false);
 
@@ -106,8 +120,8 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
 
       const live = await syncTelnyxAccountLive(ownerKey);
 
-      setNumbers(live.numbers);
-      setIsConnected(live.connected);
+      setNumbers(live.tokenExpired ? [] : live.numbers);
+      setIsConnected(live.connected && !live.tokenExpired);
       setTokenExpired(live.tokenExpired);
       if (live.account) {
         setConnectedAccountLabel(live.account.label || live.account.email || 'Telnyx Account');
@@ -116,17 +130,20 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
       }
 
       if (live.tokenExpired) {
-        setError('Telnyx session or cookie expired. Please reconnect to resume carrier sending.');
+        setError('Telnyx session or token expired. Please re-authenticate your Telnyx account.');
+        onSelectPhoneRef.current('', '', null);
       } else {
         setError(null);
       }
 
-      const currentSel = selectedPhoneNumberRef.current;
-      const firstReady = live.numbers.find((n: TelnyxNumberItem) => n.canSend);
-      if (firstReady && !currentSel) {
-        onSelectPhoneRef.current(firstReady.phoneNumber, 'telnyx-account', firstReady.profileId);
-      } else if (live.numbers.length > 0 && !currentSel) {
-        onSelectPhoneRef.current(live.numbers[0].phoneNumber, 'telnyx-account', live.numbers[0].profileId);
+      if (!live.tokenExpired) {
+        const currentSel = selectedPhoneNumberRef.current;
+        const firstReady = live.numbers.find((n: TelnyxNumberItem) => n.canSend);
+        if (firstReady && !currentSel) {
+          onSelectPhoneRef.current(firstReady.phoneNumber, 'telnyx-account', firstReady.profileId);
+        } else if (live.numbers.length > 0 && !currentSel) {
+          onSelectPhoneRef.current(live.numbers[0].phoneNumber, 'telnyx-account', live.numbers[0].profileId);
+        }
       }
     } catch (err: any) {
       console.warn('[Telnyx Query Error]', err.message);
@@ -144,12 +161,15 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
     const onSync = (e: any) => {
       const detail: CachedTelnyxData = e.detail;
       if (!detail) return;
-      setIsConnected(detail.connected);
+      setIsConnected(detail.connected && !detail.tokenExpired);
       setTokenExpired(detail.tokenExpired);
-      setNumbers(detail.numbers || []);
+      setNumbers(detail.tokenExpired ? [] : (detail.numbers || []));
       if (detail.apiKey) setApiKey(detail.apiKey);
       if (detail.account) {
         setConnectedAccountLabel(detail.account.label || detail.account.email || 'Telnyx Account');
+      }
+      if (detail.tokenExpired) {
+        onSelectPhoneRef.current('', '', null);
       }
     };
     window.addEventListener('lunao:telnyx_sync', onSync);
@@ -257,8 +277,95 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Top Banner: Connection Status or Connect Options */}
-      {isConnected && !isChangingKey ? (
+      {/* Top Banner: Re-Authentication Required, Active Connection, or Connect Options */}
+      {needsReauth ? (
+        <div className="p-5 sm:p-7 rounded-2xl bg-amber-50/80 border border-amber-300 shadow-sm space-y-4">
+          <div className="flex items-start gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-800 shrink-0">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <h4 className="text-base font-bold text-amber-950">Telnyx Re-Authentication Required</h4>
+                <span className="px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900 border border-amber-300 text-[10px] font-bold">
+                  Action Required
+                </span>
+              </div>
+              <p className="text-xs text-amber-900/90 leading-relaxed">
+                Your Telnyx session or token has expired. You must re-authenticate your Telnyx account in this section before active carrier phone numbers can be accessed or used for outreach.
+              </p>
+            </div>
+          </div>
+
+          {error && (
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={handleConnectOAuth}
+              disabled={isOAuthConnecting || isLoading}
+              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {isOAuthConnecting ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  Connecting to Telnyx...
+                </>
+              ) : (
+                'Reconnect with Telnyx (1-Click OAuth)'
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsChangingKey(!isChangingKey);
+                setError(null);
+              }}
+              className="px-4 py-2.5 rounded-xl bg-white hover:bg-amber-100/50 border border-amber-300 text-amber-950 text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <Key className="w-3.5 h-3.5" />
+              {isChangingKey ? 'Close Key Input' : 'Update Telnyx API Key'}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDisconnect}
+              className="px-4 py-2.5 rounded-xl bg-transparent hover:bg-red-50 hover:text-red-700 text-ink-secondary text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 sm:ml-auto"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Clear Credentials
+            </button>
+          </div>
+
+          {isChangingKey && (
+            <form onSubmit={handleConnectKey} className="pt-3 border-t border-amber-200/80 space-y-3">
+              <label className="text-xs font-bold text-amber-950 block">Enter Telnyx API Key (V2)</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={inputKey}
+                  onChange={(e) => setInputKey(e.target.value)}
+                  placeholder="KEY018... (starts with KEY)"
+                  className="flex-1 px-3.5 py-2.5 rounded-xl border border-amber-300 bg-white text-ink text-xs font-mono outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+                <button
+                  type="submit"
+                  disabled={isLoading || !inputKey.trim()}
+                  className="px-4 py-2.5 rounded-xl bg-ink hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-bold transition-all shrink-0 cursor-pointer"
+                >
+                  {isLoading ? 'Verifying...' : 'Validate & Connect'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      ) : isConnected && !isChangingKey ? (
         <div className="p-4 sm:p-5 rounded-2xl bg-white border border-border-main shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
             <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 shrink-0">
@@ -433,7 +540,27 @@ export const SmsAccountStep: React.FC<SmsAccountStepProps> = ({
           )}
         </div>
 
-        {isLoading && numbers.length === 0 ? (
+        {needsReauth ? (
+          <div className="p-6 sm:p-8 rounded-2xl bg-amber-50/50 border border-dashed border-amber-300 text-center space-y-3">
+            <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center mx-auto">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <p className="text-sm font-bold text-amber-950">Phone Numbers Locked</p>
+            <p className="text-xs text-amber-900/80 max-w-md mx-auto leading-relaxed">
+              Carrier numbers are hidden until your Telnyx connection is re-authenticated. Please reconnect your account in the section above before viewing or selecting sender numbers.
+            </p>
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={handleConnectOAuth}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Re-Authenticate Telnyx
+              </button>
+            </div>
+          </div>
+        ) : isLoading && numbers.length === 0 ? (
           <div className="p-8 rounded-2xl bg-white border border-border-main text-center space-y-3">
             <RefreshCw className="w-6 h-6 text-blue-600 animate-spin mx-auto" />
             <p className="text-xs text-ink-secondary">Querying Telnyx carrier numbers and checking messaging profile status...</p>

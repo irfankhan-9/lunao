@@ -2489,7 +2489,7 @@ const MOCK_CONNECTED_ACCOUNTS: ConnectedEmailAccountInfo[] = [];
 // List connected email accounts
 export async function listEmailAccounts(ownerKey: string): Promise<ConnectedEmailAccountInfo[]> {
   try {
-    const key = ownerKey || (typeof localStorage !== 'undefined' && localStorage.getItem('lunao_owner_key')) || 'dash-Free-Plan';
+    const key = ownerKey || getEditorOwnerKey();
     const qs = new URLSearchParams({ ownerKey: key });
     const res = await fetch(`${API_BASE}/api/email-accounts?${qs.toString()}`, {
       headers: {
@@ -2507,12 +2507,16 @@ export async function listEmailAccounts(ownerKey: string): Promise<ConnectedEmai
             const em = String(a.email).toLowerCase();
             return !em.includes('josh40zx') && !em.includes('webdesginagency3x3') && !String(a.id || '').startsWith('ugc_acc_');
           })
-          .map((a: any) => ({
-            ...a,
-            status: 'healthy',
-            token_status: 'active',
-            tokenStatus: 'active',
-          }));
+          .map((a: any) => {
+            const st = a.status || 'healthy';
+            const tokSt = a.token_status || (st === 'needs_attention' ? 'needs_reconnect' : 'active');
+            return {
+              ...a,
+              status: st,
+              token_status: tokSt,
+              tokenStatus: tokSt,
+            };
+          });
       }
     }
     return MOCK_CONNECTED_ACCOUNTS;
@@ -2556,7 +2560,7 @@ export interface EmailAccountProbeResult {
 
 export async function probeAllEmailAccounts(ownerKey: string): Promise<EmailAccountProbeResult[]> {
   try {
-    const key = ownerKey || (typeof localStorage !== 'undefined' && localStorage.getItem('lunao_owner_key')) || 'dash-Free-Plan';
+    const key = ownerKey || getEditorOwnerKey();
     const res = await fetch(`${API_BASE}/api/email-accounts/probe-all`, {
       method: 'POST',
       headers: {
@@ -2573,9 +2577,10 @@ export async function probeAllEmailAccounts(ownerKey: string): Promise<EmailAcco
     const d = await res.json();
     return (d.results || []).map((r: any) => ({
       ...r,
-      ok: true,
-      status: 'healthy',
-      error: undefined,
+      ok: r.ok !== false,
+      status: r.status || (r.ok === false ? 'needs_attention' : 'healthy'),
+      error: r.error || undefined,
+      code: r.code || undefined,
     }));
   } catch {
     return [];
@@ -2584,8 +2589,14 @@ export async function probeAllEmailAccounts(ownerKey: string): Promise<EmailAcco
 
 // Disconnect email account
 export async function disconnectEmailAccount(accountId: string): Promise<void> {
+  const ownerKey = getEditorOwnerKey();
   const res = await fetch(`${API_BASE}/api/email-accounts/${encodeURIComponent(accountId)}`, {
     method: 'DELETE',
+    headers: {
+      'x-owner-key': ownerKey,
+      'Authorization': `Bearer ${ownerKey}`,
+    },
+    credentials: 'include',
   });
   if (!res.ok) {
     const d = await res.json().catch(() => ({}));
@@ -2601,9 +2612,17 @@ export async function toggleEmailAccount(
   accountId: string,
   action: 'pause' | 'resume',
 ): Promise<{ account: any; health: any }> {
+  const ownerKey = getEditorOwnerKey();
   const res = await fetch(
     `${API_BASE}/api/email-accounts/${encodeURIComponent(accountId)}/${action}`,
-    { method: 'POST' },
+    {
+      method: 'POST',
+      headers: {
+        'x-owner-key': ownerKey,
+        'Authorization': `Bearer ${ownerKey}`,
+      },
+      credentials: 'include',
+    },
   );
   if (!res.ok) {
     const d = await res.json().catch(() => ({}));
@@ -2786,40 +2805,120 @@ async function ensureGisLoaded(): Promise<void> {
   });
 }
 
-// Flow: open GIS Token popup → user accepts → access_token received → saved at /api/email-accounts/connect-token
+// Flow: open GIS Code popup (offline refresh_token) → /api/email-accounts/connect-code,
+// falling back to GIS Token / Firebase Auth → /api/email-accounts/connect-token
 export async function initiateOAuthFlow(
   provider: 'gmail' | 'outlook',
   options: { returnUrl?: string } = {},
-): Promise<void> {
+): Promise<any> {
   if (provider === 'gmail') {
-    const ownerKey =
-      (typeof localStorage !== 'undefined' && localStorage.getItem('lunao_owner_key')) ||
-      'dash-Free-Plan';
+    const ownerKey = getEditorOwnerKey();
+    const clientId =
+      import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+      '613207679335-kv6plsos20rp4j3oangsikmq2hkoekab.apps.googleusercontent.com';
 
-    // Primary: Google Identity Services (GIS) Token Client (client-side OAuth access token with gmail.send scope)
+    let userCancelled = false;
+
     try {
       await ensureGisLoaded();
       const google = (window as any).google;
 
-      if (google?.accounts?.oauth2?.initTokenClient) {
-        const clientId =
-          import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+      // 1. Primary: GIS Authorization Code popup (gets permanent offline refresh_token!)
+      if (google?.accounts?.oauth2?.initCodeClient) {
+        try {
+          const codeResult = await new Promise<any>((resolve, reject) => {
+            const codeClient = google.accounts.oauth2.initCodeClient({
+              client_id: clientId,
+              scope: 'openid email profile https://www.googleapis.com/auth/gmail.send',
+              ux_mode: 'popup',
+              select_account: true,
+              include_granted_scopes: true,
+              error_callback: (err: any) => {
+                if (err?.type === 'popup_closed') {
+                  userCancelled = true;
+                  reject(new Error('popup_closed_by_user'));
+                } else {
+                  reject(new Error(err?.message || err?.type || 'GIS code popup failed'));
+                }
+              },
+              callback: async (response: any) => {
+                if (response?.error) {
+                  if (response.error === 'access_denied' || response.error === 'popup_closed_by_user') {
+                    userCancelled = true;
+                  }
+                  reject(new Error(response.error_description || response.error));
+                  return;
+                }
+                if (!response?.code) {
+                  resolve(null);
+                  return;
+                }
+                try {
+                  const res = await fetch(`${API_BASE}/api/email-accounts/connect-code`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-owner-key': ownerKey,
+                    },
+                    body: JSON.stringify({
+                      code: response.code,
+                      redirectUri: 'postmessage',
+                      ownerKey,
+                    }),
+                    credentials: 'include',
+                  });
+                  const data = await res.json().catch(() => ({}));
+                  if (!res.ok || !data.ok) {
+                    const err: any = new Error(data.error || `Failed to connect Gmail (${res.status})`);
+                    err.code = data.code;
+                    throw err;
+                  }
+                  window.postMessage({ type: 'LUNAO_EMAIL_CONNECTED', account: data.account }, '*');
+                  resolve(data.account || true);
+                } catch (err) {
+                  reject(err);
+                }
+              },
+            });
+            codeClient.requestCode();
+          });
+          if (codeResult) return codeResult;
+        } catch (codeErr: any) {
+          if (userCancelled || codeErr?.code === 'MISSING_SCOPE') {
+            throw codeErr;
+          }
+          console.warn('[initiateOAuthFlow] GIS code flow notice, trying token flow:', codeErr?.message);
+        }
+      }
 
+      // 2. Secondary: GIS Token Client
+      if (google?.accounts?.oauth2?.initTokenClient) {
         const tokenSuccess = await new Promise<any>((resolve, reject) => {
           const tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: clientId,
-            scope:
-              'openid email profile https://www.googleapis.com/auth/gmail.send',
+            scope: 'openid email profile https://www.googleapis.com/auth/gmail.send',
             prompt: 'select_account consent',
+            error_callback: (err: any) => {
+              if (err?.type === 'popup_closed') {
+                userCancelled = true;
+                reject(new Error('popup_closed_by_user'));
+              } else {
+                resolve(null);
+              }
+            },
             callback: async (response: any) => {
               if (response.error) {
+                if (response.error === 'access_denied' || response.error === 'popup_closed_by_user') {
+                  userCancelled = true;
+                  reject(new Error(response.error));
+                  return;
+                }
                 console.warn('[GIS] OAuth token popup notice:', response.error);
                 resolve(null);
                 return;
               }
               if (response.access_token) {
                 try {
-                  // Fetch user profile directly in browser to guarantee email is known immediately
                   let profileEmail = '';
                   let profileName = '';
                   try {
@@ -2837,17 +2936,23 @@ export async function initiateOAuthFlow(
 
                   const res = await fetch(`${API_BASE}/api/email-accounts/connect-token`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-owner-key': ownerKey,
+                    },
                     body: JSON.stringify({
                       accessToken: response.access_token,
                       email: profileEmail,
                       displayName: profileName,
                       ownerKey,
                     }),
+                    credentials: 'include',
                   });
-                  const data = await res.json();
+                  const data = await res.json().catch(() => ({}));
                   if (!res.ok || !data.ok) {
-                    throw new Error(data.error || 'Failed to save Gmail access token');
+                    const err: any = new Error(data.error || 'Failed to save Gmail access token');
+                    err.code = data.code;
+                    throw err;
                   }
                   window.postMessage({ type: 'LUNAO_EMAIL_CONNECTED', account: data.account }, '*');
                   resolve(data.account || true);
@@ -2865,20 +2970,27 @@ export async function initiateOAuthFlow(
         if (tokenSuccess) return tokenSuccess;
       }
     } catch (gisErr: any) {
-      console.warn('[initiateOAuthFlow] GIS token flow skipped or failed, trying Firebase Auth fallback:', gisErr?.message);
+      if (userCancelled || gisErr?.code === 'MISSING_SCOPE') {
+        throw gisErr;
+      }
+      console.warn('[initiateOAuthFlow] GIS flow skipped or failed, trying Firebase Auth fallback:', gisErr?.message);
     }
 
-    // Fallback: Firebase Auth Google Provider Sign-In
+    // 3. Fallback: Firebase Auth Google Provider Sign-In
     try {
       const { connectGmailWithFirebase } = await import('./firebaseAuth');
       const { email, displayName, accessToken } = await connectGmailWithFirebase();
 
       const res = await fetch(`${API_BASE}/api/email-accounts/connect-token`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-owner-key': ownerKey,
+        },
         body: JSON.stringify({ accessToken, email, displayName, ownerKey }),
+        credentials: 'include',
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
         throw new Error(data.error || 'Failed to connect Gmail via Firebase Auth');
       }
@@ -4312,7 +4424,8 @@ export interface DorkNextRequest {
 export interface DorkNextResponse {
   ok: true;
   done: boolean;
-  completionStatus?: 'target_reached' | 'region_exhausted' | 'no_businesses_found' | 'in_progress';
+  partial?: boolean;
+  completionStatus?: 'target_reached' | 'region_exhausted' | 'no_businesses_found' | 'in_progress' | 'partial_batch';
   completionMessage?: string;
   creditsCharged?: number;
   creditsRefunded?: number;
@@ -4330,23 +4443,122 @@ export async function dorkNext(
   if (isUgcOrSalesMode()) {
     return await generateUgcOrSalesDorkLeads(payload);
   }
-  const res = await fetch(
-    `${API_BASE}/api/email-campaigns/${encodeURIComponent(campaignId)}/dork-next`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(payload.ownerKey ? { 'x-owner-key': payload.ownerKey } : {}),
-      },
-      body: JSON.stringify(payload),
-      signal,
-    },
+
+  const requestedTarget = Number(payload.targetVolume) || 10;
+  const collectedLeads: DiscoveredLead[] = [];
+  const seenSet = new Set<string>(
+    (Array.isArray(payload.seenEmails) ? payload.seenEmails : []).map((e) =>
+      String(e || '').trim().toLowerCase(),
+    ).filter(Boolean),
   );
-  if (!res.ok) {
-    const d = await res.json().catch(() => ({}));
-    throw new Error(d.error || `Dork discover failed (${res.status})`);
+  let visitedState: Array<string | { name: string; page: number }> = Array.isArray(payload.visited)
+    ? [...payload.visited]
+    : [];
+  let runningCredits = payload.currentCredits;
+  let totalCharged = 0;
+  let lastRes: DorkNextResponse | null = null;
+  let consecutiveEmptyPartials = 0;
+  const maxSlices = 12;
+
+  for (let slice = 0; slice < maxSlices; slice++) {
+    if (signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+
+    const remainingTarget = slice === 0
+      ? requestedTarget
+      : Math.max(1, requestedTarget - collectedLeads.length);
+
+    const slicePayload: DorkNextRequest = {
+      ...payload,
+      visited: visitedState,
+      seenEmails: Array.from(seenSet),
+      targetVolume: remainingTarget,
+      ...(typeof runningCredits === 'number' ? { currentCredits: runningCredits } : {}),
+    };
+
+    let data: DorkNextResponse;
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/email-campaigns/${encodeURIComponent(campaignId)}/dork-next`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(payload.ownerKey ? { 'x-owner-key': payload.ownerKey } : {}),
+          },
+          body: JSON.stringify(slicePayload),
+          signal,
+        },
+      );
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || `Dork discover failed (${res.status})`);
+      }
+      data = await res.json() as DorkNextResponse;
+    } catch (err) {
+      if (slice > 0 && collectedLeads.length > 0 && !signal?.aborted) {
+        break;
+      }
+      throw err;
+    }
+
+    lastRes = data;
+    totalCharged += Number(data.creditsCharged) || 0;
+    if (typeof data.newBalance === 'number') {
+      runningCredits = data.newBalance;
+    }
+
+    let addedThisSlice = 0;
+    for (const lead of data.leads || []) {
+      const emailLower = String(lead?.email || '').trim().toLowerCase();
+      if (!emailLower || seenSet.has(emailLower)) continue;
+      seenSet.add(emailLower);
+      collectedLeads.push(lead);
+      addedThisSlice++;
+    }
+
+    if (data.nextCity) {
+      const nextEntry = { name: data.nextCity.name, page: data.nextCity.page };
+      const idx = visitedState.findIndex(
+        (v) => String(typeof v === 'string' ? v : v?.name || '').toLowerCase() === nextEntry.name.toLowerCase(),
+      );
+      if (idx >= 0) {
+        visitedState[idx] = nextEntry;
+      } else {
+        visitedState = [...visitedState, nextEntry];
+      }
+    }
+
+    if (addedThisSlice === 0) {
+      consecutiveEmptyPartials++;
+    } else {
+      consecutiveEmptyPartials = 0;
+    }
+
+    if (
+      !data.partial ||
+      data.done ||
+      collectedLeads.length >= requestedTarget ||
+      !data.nextCity ||
+      consecutiveEmptyPartials >= 3
+    ) {
+      break;
+    }
   }
-  return await res.json() as DorkNextResponse;
+
+  return {
+    ...(lastRes as DorkNextResponse),
+    done: Boolean(lastRes?.done),
+    partial: false,
+    completionStatus: collectedLeads.length >= requestedTarget
+      ? 'target_reached'
+      : (lastRes?.completionStatus || 'region_exhausted'),
+    leads: collectedLeads.slice(0, requestedTarget),
+    creditsCharged: Math.round(totalCharged * 10) / 10,
+    creditsRefunded: lastRes?.creditsRefunded ?? 0,
+    newBalance: lastRes?.newBalance ?? null,
+  };
 }
 
 export async function saveDorkLeads(

@@ -361,7 +361,7 @@ function extractCity(addressComponents) {
 async function searchPlacesLegacyFallback(query, apiKey, pageSize = 20) {
   try {
     const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${apiKey}`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return [];
     const data = await res.json();
     const rawPlaces = (data.results || []).slice(0, Math.min(pageSize, 20));
@@ -371,7 +371,7 @@ async function searchPlacesLegacyFallback(query, apiKey, pageSize = 20) {
       rawPlaces.map(async (p) => {
         try {
           const dUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${p.place_id}&fields=name,website,formatted_phone_number,formatted_address,address_components&key=${apiKey}`;
-          const dRes = await fetch(dUrl);
+          const dRes = await fetch(dUrl, { signal: AbortSignal.timeout(6000) });
           const dData = await dRes.json();
           const r = dData.result || {};
           return {
@@ -439,6 +439,7 @@ export async function searchPlaces(query, apiKey, pageSize = 20, locationCoords 
         'X-Goog-Maps-Solution-ID': 'gmp_mcp_codeassist_v1_aistudio',
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(8000),
     });
   } catch (netErr) {
     console.warn('[placesApi] SearchText request notice, engaging fallback:', netErr.message);
@@ -614,6 +615,7 @@ export async function searchNearbyPlacesFallback({
           },
         },
       }),
+      signal: AbortSignal.timeout(8000),
     });
 
     if (!res.ok) {
@@ -849,11 +851,29 @@ export async function discoverEmailsForTargetVolume({
   startPage = 1,
   seenEmails = [],
   discoverEmailsInParallel,
+  signal = null,
+  maxDurationMs = 0,
 }) {
   const variants = getQueryVariantsForNiche(niche);
   const maxPages = Math.max(variants.length, 25);
   const cityKey = normalizeCityKey(city, state, country);
   const nicheKey = normalizeNicheKey(niche);
+
+  const loopCtrl = new AbortController();
+  let batchTimedOut = false;
+  let deadlineTimer = null;
+  const onParentAbort = () => loopCtrl.abort();
+  if (signal) {
+    if (signal.aborted) loopCtrl.abort();
+    else signal.addEventListener('abort', onParentAbort, { once: true });
+  }
+  const deadlineAt = maxDurationMs > 0 ? Date.now() + maxDurationMs : 0;
+  if (maxDurationMs > 0) {
+    deadlineTimer = setTimeout(() => {
+      batchTimedOut = true;
+      loopCtrl.abort();
+    }, maxDurationMs);
+  }
 
   const seenEmailSet = new Set(
     (Array.isArray(seenEmails) ? seenEmails : [])
@@ -877,276 +897,294 @@ export async function discoverEmailsForTargetVolume({
   let consecutiveLowYieldBatches = 0;
   let lastQuery = `${niche} in ${city}`;
 
-//Step 1: On initial run (startPage === 1), check the 30-day global cache first
-  // so repeated or overlapping city searches return cached leads at $0 Google Places API cost.
-  // Only mark seenPlaceIds/seenDomains for rows that actually have a discovered email so
-  // sites that previously timed out or had no email are not permanently skipped.
-  if (currentPage === 1) {
-    const cachedRows = getCachedPlaceRows(cityKey, nicheKey);
-    for (const row of cachedRows) {
-      if (row.email) {
-        if (row.place_id) seenPlaceIds.add(row.place_id);
-        if (row.root_domain) seenDomains.add(row.root_domain);
-        const lowerEmail = String(row.email).trim().toLowerCase();
-        if (!seenEmailSet.has(lowerEmail)) {
-          seenEmailSet.add(lowerEmail);
-          const leadObj = {
-            placeId: row.place_id,
-            business_name: row.business_name,
-            name: row.business_name,
-            email: lowerEmail,
-            email_host: row.email_host || lowerEmail.split('@')[1] || '',
-            phone: row.phone || '',
-            website: row.website || '',
-            discovery_method: row.discovery_method || 'page_text',
-            city: row.resolved_city || city,
-            state: row.state || state || undefined,
-            source_query: row.source_query || `${niche} in ${city}`,
-            source_page: row.source_page || 1,
-            source_rank: foundLeads.length + 1,
-            slug: slugify(row.business_name, row.resolved_city || city),
-          };
-          foundLeads.push(leadObj);
-          allCrawledWithEmail.push({
-            business_name: leadObj.business_name,
-            website: leadObj.website,
-            email: leadObj.email,
-            phone: leadObj.phone,
-            method: leadObj.discovery_method,
-            status: 'email_found',
-          });
-          if (foundLeads.length >= targetCount) {
-            break;
+  try {
+    //Step 1: On initial run (startPage === 1), check the 30-day global cache first
+    // so repeated or overlapping city searches return cached leads at $0 Google Places API cost.
+    // Only mark seenPlaceIds/seenDomains for rows that actually have a discovered email so
+    // sites that previously timed out or had no email are not permanently skipped.
+    if (currentPage === 1) {
+      const cachedRows = getCachedPlaceRows(cityKey, nicheKey);
+      for (const row of cachedRows) {
+        if (row.email) {
+          if (row.place_id) seenPlaceIds.add(row.place_id);
+          if (row.root_domain) seenDomains.add(row.root_domain);
+          const lowerEmail = String(row.email).trim().toLowerCase();
+          if (!seenEmailSet.has(lowerEmail)) {
+            seenEmailSet.add(lowerEmail);
+            const leadObj = {
+              placeId: row.place_id,
+              business_name: row.business_name,
+              name: row.business_name,
+              email: lowerEmail,
+              email_host: row.email_host || lowerEmail.split('@')[1] || '',
+              phone: row.phone || '',
+              website: row.website || '',
+              discovery_method: row.discovery_method || 'page_text',
+              city: row.resolved_city || city,
+              state: row.state || state || undefined,
+              source_query: row.source_query || `${niche} in ${city}`,
+              source_page: row.source_page || 1,
+              source_rank: foundLeads.length + 1,
+              slug: slugify(row.business_name, row.resolved_city || city),
+            };
+            foundLeads.push(leadObj);
+            allCrawledWithEmail.push({
+              business_name: leadObj.business_name,
+              website: leadObj.website,
+              email: leadObj.email,
+              phone: leadObj.phone,
+              method: leadObj.discovery_method,
+              status: 'email_found',
+            });
+            if (foundLeads.length >= targetCount) {
+              break;
+            }
           }
         }
       }
     }
-  }
 
-  let completionStatus = 'in_progress';
-  let completionMessage = '';
+    let completionStatus = 'in_progress';
+    let completionMessage = '';
 
-  if (foundLeads.length >= targetCount) {
-    completionStatus = 'target_reached';
-    completionMessage = `Target reached: Found ${foundLeads.length} emails in ${city}.`;
-  } else {
-    // Step 2: Walk intra-city query variations for the user's exact city until targetCount is reached
-    // or Market Saturation (>= 40% duplicate businesses in batch) triggers an immediate stop.
-    while (foundLeads.length < targetCount && currentPage <= maxPages) {
-      let placesResult = null;
-      try {
-        placesResult = await searchPlacesForEmailDiscovery({
-          niche,
-          city,
-          state,
-          country,
-          lat,
-          lon,
-          page: currentPage,
-        });
-        consecutiveErrors = 0;
-      } catch (err) {
-        console.warn(`[placesApi] Page ${currentPage} notice for ${city}:`, err.message);
-        consecutiveErrors += 1;
-        currentPage += 1;
-        if (consecutiveErrors >= 2) break;
-        continue;
-      }
+    if (foundLeads.length >= targetCount) {
+      completionStatus = 'target_reached';
+      completionMessage = `Target reached: Found ${foundLeads.length} emails in ${city}.`;
+    } else {
+      // Step 2: Walk intra-city query variations for the user's exact city until targetCount is reached
+      // or Market Saturation (>= 40% duplicate businesses in batch) triggers an immediate stop.
+      while (foundLeads.length < targetCount && currentPage <= maxPages) {
+        if (loopCtrl.signal.aborted || (deadlineAt > 0 && Date.now() >= deadlineAt)) {
+          if (deadlineAt > 0 && Date.now() >= deadlineAt) batchTimedOut = true;
+          break;
+        }
+        let placesResult = null;
+        try {
+          placesResult = await searchPlacesForEmailDiscovery({
+            niche,
+            city,
+            state,
+            country,
+            lat,
+            lon,
+            page: currentPage,
+          });
+          consecutiveErrors = 0;
+        } catch (err) {
+          console.warn(`[placesApi] Page ${currentPage} notice for ${city}:`, err.message);
+          consecutiveErrors += 1;
+          currentPage += 1;
+          if (consecutiveErrors >= 2) break;
+          continue;
+        }
 
-      totalSearchesMade += 1;
-      lastQuery = placesResult?.query || lastQuery;
-      const batchPlacesCount = Number(placesResult?.totalPlacesReturned || 0);
-      totalPlacesReturned += batchPlacesCount;
+        totalSearchesMade += 1;
+        lastQuery = placesResult?.query || lastQuery;
+        const batchPlacesCount = Number(placesResult?.totalPlacesReturned || 0);
+        totalPlacesReturned += batchPlacesCount;
 
-      for (const noWeb of placesResult?.candidatesWithoutWebsite || []) {
-        allMapsWithoutWebsite.push(noWeb);
-      }
+        for (const noWeb of placesResult?.candidatesWithoutWebsite || []) {
+          allMapsWithoutWebsite.push(noWeb);
+        }
 
-      // Small-Town Zero-Result Guard on first query
-      if (totalSearchesMade === 1 && currentPage === 1 && batchPlacesCount === 0 && foundLeads.length === 0) {
-        completionStatus = 'no_businesses_found';
-        completionMessage = `No ${niche} businesses with websites were found in ${city} on Google Maps. 0 credits charged.`;
+        // Small-Town Zero-Result Guard on first query
+        if (totalSearchesMade === 1 && currentPage === 1 && batchPlacesCount === 0 && foundLeads.length === 0) {
+          completionStatus = 'no_businesses_found';
+          completionMessage = `No ${niche} businesses with websites were found in ${city} on Google Maps. 0 credits charged.`;
+          searchBatchHistory.push({
+            batchNumber: totalSearchesMade,
+            page: currentPage,
+            query: lastQuery,
+            placesReturned: 0,
+            duplicatesFiltered: 0,
+            duplicateRate: 0,
+            newUniqueWebsites: 0,
+            emailsFound: 0,
+            noWebsiteCount: (placesResult?.candidatesWithoutWebsite || []).length,
+            stoppedDueToSaturation: false,
+          });
+          currentPage += 1;
+          break;
+        }
+
+        // Filter batch through Layer 1 (placeId) and Layer 2 (normalized root domain) deduplication
+        const newUniqueCandidates = [];
+        let batchDuplicates = 0;
+        const candidatesInThisBatch = placesResult?.candidatesWithWebsite || [];
+        const totalBatchCandidates = candidatesInThisBatch.length;
+
+        for (const cand of candidatesInThisBatch) {
+          const pid = cand.placeId || '';
+          const dom = cand.rootDomain || extractNormalizedDomain(cand.website);
+          if ((pid && seenPlaceIds.has(pid)) || (dom && seenDomains.has(dom))) {
+            batchDuplicates += 1;
+            continue;
+          }
+          if (pid) seenPlaceIds.add(pid);
+          if (dom) seenDomains.add(dom);
+          newUniqueCandidates.push(cand);
+        }
+        totalDuplicatesFiltered += batchDuplicates;
+
+        // Duplication Rate Circuit Breaker:
+        // Strictly follows the rule: Only trigger if search > 1 AND Google returns 8 or more duplicates out of ~20 (>= 40% duplicates)
+        const duplicateRate = batchPlacesCount > 0 ? (batchDuplicates / batchPlacesCount) : (totalBatchCandidates > 0 ? batchDuplicates / totalBatchCandidates : 0);
+        const duplicatePercent = Math.round(duplicateRate * 100);
+        const isSaturated = totalSearchesMade > 1 && batchDuplicates >= 8 && duplicateRate >= 0.40;
+
+        // Track low-yield streak (< 2 new unique websites)
+        if (newUniqueCandidates.length < 2) {
+          consecutiveLowYieldBatches += 1;
+        } else {
+          consecutiveLowYieldBatches = 0;
+        }
+
+        let emailsFoundInThisBatch = 0;
+        // Crawl the new unique candidate websites using the existing high-speed scraper
+        if (newUniqueCandidates.length > 0 && typeof discoverEmailsInParallel === 'function' && !loopCtrl.signal.aborted) {
+          const discoveredBatch = await discoverEmailsInParallel(newUniqueCandidates, {
+            concurrency: 8,
+            timeoutMs: 4500,
+            signal: loopCtrl.signal,
+          });
+
+          // Persist crawled batch (both with and without email) to global cache
+          saveBatchToPlaceCache(cityKey, nicheKey, newUniqueCandidates, discoveredBatch);
+
+          for (const d of discoveredBatch) {
+            if (foundLeads.length >= targetCount) break;
+            const lowerEmail = String(d.email || '').trim().toLowerCase();
+            if (!lowerEmail || seenEmailSet.has(lowerEmail)) continue;
+            seenEmailSet.add(lowerEmail);
+            emailsFoundInThisBatch += 1;
+
+            const leadObj = {
+              ...d,
+              email: lowerEmail,
+              email_host: lowerEmail.split('@')[1] || '',
+              source_page: currentPage,
+              source_rank: foundLeads.length + 1,
+              slug: slugify(d.business_name || d.name || 'business', d.city || city),
+            };
+            foundLeads.push(leadObj);
+            allCrawledWithEmail.push({
+              business_name: leadObj.business_name,
+              website: leadObj.website,
+              email: leadObj.email,
+              phone: leadObj.phone || '',
+              method: leadObj.discovery_method || 'page_text',
+              status: 'email_found',
+            });
+          }
+
+          for (const c of newUniqueCandidates) {
+            const matched = discoveredBatch.some(
+              (d) => (d.placeId && d.placeId === c.placeId) || d.website === c.website
+            );
+            if (!matched) {
+              allCrawledWithoutEmail.push({
+                business_name: c.business_name || c.name,
+                website: c.website,
+                reason: 'No public email listed on website (contact form only)',
+                status: 'no_email',
+              });
+            }
+          }
+        }
+
         searchBatchHistory.push({
           batchNumber: totalSearchesMade,
           page: currentPage,
-          query: lastQuery,
-          placesReturned: 0,
-          duplicatesFiltered: 0,
-          duplicateRate: 0,
-          newUniqueWebsites: 0,
-          emailsFound: 0,
+          query: placesResult?.query || lastQuery,
+          placesReturned: batchPlacesCount,
+          duplicatesFiltered: batchDuplicates,
+          duplicateRate: duplicatePercent,
+          newUniqueWebsites: newUniqueCandidates.length,
+          emailsFound: emailsFoundInThisBatch,
           noWebsiteCount: (placesResult?.candidatesWithoutWebsite || []).length,
-          stoppedDueToSaturation: false,
+          stoppedDueToSaturation: isSaturated,
         });
+
         currentPage += 1;
-        break;
-      }
 
-      // Filter batch through Layer 1 (placeId) and Layer 2 (normalized root domain) deduplication
-      const newUniqueCandidates = [];
-      let batchDuplicates = 0;
-      const candidatesInThisBatch = placesResult?.candidatesWithWebsite || [];
-      const totalBatchCandidates = candidatesInThisBatch.length;
-
-      for (const cand of candidatesInThisBatch) {
-        const pid = cand.placeId || '';
-        const dom = cand.rootDomain || extractNormalizedDomain(cand.website);
-        if ((pid && seenPlaceIds.has(pid)) || (dom && seenDomains.has(dom))) {
-          batchDuplicates += 1;
-          continue;
-        }
-        if (pid) seenPlaceIds.add(pid);
-        if (dom) seenDomains.add(dom);
-        newUniqueCandidates.push(cand);
-      }
-      totalDuplicatesFiltered += batchDuplicates;
-
-      // Duplication Rate Circuit Breaker:
-      // Strictly follows the rule: Only trigger if search > 1 AND Google returns 8 or more duplicates out of ~20 (>= 40% duplicates)
-      const duplicateRate = batchPlacesCount > 0 ? (batchDuplicates / batchPlacesCount) : (totalBatchCandidates > 0 ? batchDuplicates / totalBatchCandidates : 0);
-      const duplicatePercent = Math.round(duplicateRate * 100);
-      const isSaturated = totalSearchesMade > 1 && batchDuplicates >= 8 && duplicateRate >= 0.40;
-
-      // Track low-yield streak (< 2 new unique websites)
-      if (newUniqueCandidates.length < 2) {
-        consecutiveLowYieldBatches += 1;
-      } else {
-        consecutiveLowYieldBatches = 0;
-      }
-
-      let emailsFoundInThisBatch = 0;
-      // Crawl the new unique candidate websites using the existing high-speed scraper
-      if (newUniqueCandidates.length > 0 && typeof discoverEmailsInParallel === 'function') {
-        const discoveredBatch = await discoverEmailsInParallel(newUniqueCandidates, {
-          concurrency: 8,
-          timeoutMs: 4800,
-        });
-
-        // Persist crawled batch (both with and without email) to global cache
-        saveBatchToPlaceCache(cityKey, nicheKey, newUniqueCandidates, discoveredBatch);
-
-        for (const d of discoveredBatch) {
-          if (foundLeads.length >= targetCount) break;
-          const lowerEmail = String(d.email || '').trim().toLowerCase();
-          if (!lowerEmail || seenEmailSet.has(lowerEmail)) continue;
-          seenEmailSet.add(lowerEmail);
-          emailsFoundInThisBatch += 1;
-
-          const leadObj = {
-            ...d,
-            email: lowerEmail,
-            email_host: lowerEmail.split('@')[1] || '',
-            source_page: currentPage,
-            source_rank: foundLeads.length + 1,
-            slug: slugify(d.business_name || d.name || 'business', d.city || city),
-          };
-          foundLeads.push(leadObj);
-          allCrawledWithEmail.push({
-            business_name: leadObj.business_name,
-            website: leadObj.website,
-            email: leadObj.email,
-            phone: leadObj.phone || '',
-            method: leadObj.discovery_method || 'page_text',
-            status: 'email_found',
-          });
+        // Priority Stop 1: Target email volume reached
+        if (foundLeads.length >= targetCount) {
+          completionStatus = 'target_reached';
+          completionMessage = `Target reached: Found ${ Math.min(foundLeads.length, targetCount) } emails in ${city}.`;
+          break;
         }
 
-        for (const c of newUniqueCandidates) {
-          const matched = discoveredBatch.some(
-            (d) => (d.placeId && d.placeId === c.placeId) || d.website === c.website
-          );
-          if (!matched) {
-            allCrawledWithoutEmail.push({
-              business_name: c.business_name || c.name,
-              website: c.website,
-              reason: 'No public email listed on website (contact form only)',
-              status: 'no_email',
-            });
-          }
+        // Priority Stop 2: User-commanded 40% duplicate immediate-stop circuit breaker
+        if (isSaturated) {
+          completionStatus = foundLeads.length > 0 ? 'region_exhausted' : 'no_businesses_found';
+          completionMessage =
+            foundLeads.length > 0
+              ? `COMPLETED (Market Saturated: Google Places returned ${duplicatePercent}% duplicate businesses in ${city}. Found all ${foundLeads.length} available emails). Unused reserved credits have been automatically refunded.`
+              : `No ${niche} businesses with public emails were found in ${city}. 100% of reserved credits refunded.`;
+          break;
+        }
+
+        // Priority Stop 3: 3 consecutive low-yield batches (< 2 new sites)
+        if (consecutiveLowYieldBatches >= 3) {
+          completionStatus = foundLeads.length > 0 ? 'region_exhausted' : 'no_businesses_found';
+          completionMessage =
+            foundLeads.length > 0
+              ? `COMPLETED (Region Exhausted: Found all ${foundLeads.length} emails available in ${city}). Unused reserved credits have been automatically refunded.`
+              : `No ${niche} businesses with public emails were found in ${city}. 100% of reserved credits refunded.`;
+          break;
+        }
+
+        if (batchTimedOut || loopCtrl.signal.aborted || (deadlineAt > 0 && Date.now() >= deadlineAt)) {
+          if (deadlineAt > 0 && Date.now() >= deadlineAt) batchTimedOut = true;
+          break;
         }
       }
 
-      searchBatchHistory.push({
-        batchNumber: totalSearchesMade,
-        page: currentPage,
-        query: placesResult?.query || lastQuery,
-        placesReturned: batchPlacesCount,
-        duplicatesFiltered: batchDuplicates,
-        duplicateRate: duplicatePercent,
-        newUniqueWebsites: newUniqueCandidates.length,
-        emailsFound: emailsFoundInThisBatch,
-        noWebsiteCount: (placesResult?.candidatesWithoutWebsite || []).length,
-        stoppedDueToSaturation: isSaturated,
-      });
-
-      currentPage += 1;
-
-      // Priority Stop 1: Target email volume reached
-      if (foundLeads.length >= targetCount) {
-        completionStatus = 'target_reached';
-        completionMessage = `Target reached: Found ${ Math.min(foundLeads.length, targetCount) } emails in ${city}.`;
-        break;
-      }
-
-      // Priority Stop 2: User-commanded 40% duplicate immediate-stop circuit breaker
-      if (isSaturated) {
-        completionStatus = foundLeads.length > 0 ? 'region_exhausted' : 'no_businesses_found';
-        completionMessage =
-          foundLeads.length > 0
-            ? `COMPLETED (Market Saturated: Google Places returned ${duplicatePercent}% duplicate businesses in ${city}. Found all ${foundLeads.length} available emails). Unused reserved credits have been automatically refunded.`
-            : `No ${niche} businesses with public emails were found in ${city}. 100% of reserved credits refunded.`;
-        break;
-      }
-
-      // Priority Stop 3: 3 consecutive low-yield batches (< 2 new sites)
-      if (consecutiveLowYieldBatches >= 3) {
-        completionStatus = foundLeads.length > 0 ? 'region_exhausted' : 'no_businesses_found';
-        completionMessage =
-          foundLeads.length > 0
-            ? `COMPLETED (Region Exhausted: Found all ${foundLeads.length} emails available in ${city}). Unused reserved credits have been automatically refunded.`
-            : `No ${niche} businesses with public emails were found in ${city}. 100% of reserved credits refunded.`;
-        break;
+      if (completionStatus === 'in_progress') {
+        if (foundLeads.length >= targetCount) {
+          completionStatus = 'target_reached';
+          completionMessage = `Target reached: Found ${Math.min(foundLeads.length, targetCount)} emails in ${city}.`;
+        } else if (currentPage > maxPages) {
+          completionStatus = foundLeads.length > 0 ? 'region_exhausted' : 'no_businesses_found';
+          completionMessage =
+            foundLeads.length > 0
+              ? `COMPLETED (Region Exhausted: Found all ${foundLeads.length} emails available in ${city}). Unused reserved credits have been automatically refunded.`
+              : `No ${niche} businesses with public emails were found in ${city}. 100% of reserved credits refunded.`;
+        } else if (batchTimedOut) {
+          completionStatus = 'partial_batch';
+        }
       }
     }
 
-    if (completionStatus === 'in_progress') {
-      if (foundLeads.length >= targetCount) {
-        completionStatus = 'target_reached';
-        completionMessage = `Target reached: Found ${Math.min(foundLeads.length, targetCount)} emails in ${city}.`;
-      } else if (currentPage > maxPages) {
-        completionStatus = foundLeads.length > 0 ? 'region_exhausted' : 'no_businesses_found';
-        completionMessage =
-          foundLeads.length > 0
-            ? `COMPLETED (Region Exhausted: Found all ${foundLeads.length} emails available in ${city}). Unused reserved credits have been automatically refunded.`
-            : `No ${niche} businesses with public emails were found in ${city}. 100% of reserved credits refunded.`;
-      }
-    }
+    const trimmedLeads = foundLeads.slice(0, targetCount);
+    const isRegionExhausted =
+      completionStatus === 'region_exhausted' ||
+      completionStatus === 'no_businesses_found' ||
+      currentPage > maxPages;
+
+    return {
+      leads: trimmedLeads,
+      done: isRegionExhausted,
+      partial: Boolean(batchTimedOut && !isRegionExhausted && trimmedLeads.length < targetCount),
+      completionStatus,
+      completionMessage,
+      nextPage: currentPage,
+      telemetry: {
+        totalSearchesMade,
+        placesReturnedPerSearch: totalPlacesReturned,
+        totalDuplicatesFiltered,
+        searches: searchBatchHistory,
+        crawledWithEmail: allCrawledWithEmail.slice(0, targetCount),
+        crawledWithoutEmail: allCrawledWithoutEmail,
+        mapsWithoutWebsite: allMapsWithoutWebsite,
+        query: lastQuery,
+        timestamp: new Date().toLocaleTimeString(),
+      },
+    };
+  } finally {
+    if (deadlineTimer) clearTimeout(deadlineTimer);
+    if (signal) signal.removeEventListener('abort', onParentAbort);
   }
-
-  const trimmedLeads = foundLeads.slice(0, targetCount);
-  const isRegionExhausted =
-    completionStatus === 'region_exhausted' ||
-    completionStatus === 'no_businesses_found' ||
-    currentPage > maxPages;
-
-  return {
-    leads: trimmedLeads,
-    done: isRegionExhausted,
-    completionStatus,
-    completionMessage,
-    nextPage: currentPage,
-    telemetry: {
-      totalSearchesMade,
-      placesReturnedPerSearch: totalPlacesReturned,
-      totalDuplicatesFiltered,
-      searches: searchBatchHistory,
-      crawledWithEmail: allCrawledWithEmail.slice(0, targetCount),
-      crawledWithoutEmail: allCrawledWithoutEmail,
-      mapsWithoutWebsite: allMapsWithoutWebsite,
-      query: lastQuery,
-      timestamp: new Date().toLocaleTimeString(),
-    },
-  };
 }
 
 // Get place details for a specific place (legacy helper)
@@ -1161,6 +1199,7 @@ export async function getPlaceDetails(placeId, apiKey) {
     {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(8000),
     }
   );
 

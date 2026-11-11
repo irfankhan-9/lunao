@@ -509,9 +509,9 @@ export async function runPipeline({
         recordLeadResult(result.leadId, { smsStatus: 'failed', smsError: failReason });
       }
       const segs = countSegments(text) || 1;
-      const smsRefund = segs <= 1 ? 4 : 8;
-      const siteRefund = 1.5;
-      const refundAmt = smsRefund + siteRefund;
+      const smsRefund = 1.5;
+      const siteRefund = 0;
+      const refundAmt = 1.5;
       if (ownerKey && result.leadId && isFreePlanStrict) {
         try {
           refund(ownerKey, refundAmt, 'sms_failed_refund', { type: 'lead', id: String(result.leadId) });
@@ -615,9 +615,9 @@ export async function runPipeline({
         }
       }
       const segs = sms?.segmentCount || countSegments(text) || 1;
-      const smsRefund = segs <= 1 ? 4 : 8;
-      const siteRefund = 1.5;
-      const refundAmt = smsRefund + siteRefund;
+      const smsRefund = 1.5;
+      const siteRefund = 0;
+      const refundAmt = 1.5;
       emit('sms:failed', {
         index: result.index,
         name: result.name,

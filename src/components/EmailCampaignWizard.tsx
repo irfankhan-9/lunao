@@ -285,16 +285,42 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
     );
   };
 
-  // Connected accounts (cached in localStorage & cookie so user never has to reconnect repeatedly)
+  const getCurrentEmailOwnerKey = (): string => {
+    if (typeof window === 'undefined') return 'dash-Free-Plan';
+    try {
+      const direct = localStorage.getItem('lunao_owner_key');
+      if (direct && direct.trim()) return direct.trim();
+      const rawUser = localStorage.getItem('lunao_auth_user');
+      if (rawUser) {
+        const parsed = JSON.parse(rawUser);
+        if (parsed?.ownerKey && String(parsed.ownerKey).trim()) {
+          return String(parsed.ownerKey).trim();
+        }
+      }
+    } catch {}
+    return 'dash-Free-Plan';
+  };
+
+  const getScopedEmailAccountsCacheKey = (ownerKey: string): string =>
+    `lunao_cached_email_accounts_v2_${ownerKey}`;
+
+  // Connected accounts (strictly scoped in localStorage per ownerKey so accounts NEVER bleed across logins)
   const [connectedAccounts, setConnectedAccounts] = useState<EmailAccount[]>(() => {
     try {
-      const cached = localStorage.getItem('lunao_cached_email_accounts_v2');
+      localStorage.removeItem('lunao_cached_email_accounts_v2');
+      const ownerKey = getCurrentEmailOwnerKey();
+      const cached = localStorage.getItem(getScopedEmailAccountsCacheKey(ownerKey));
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const cleaned = parsed.filter((a: any) => !isMockEmailAccount(a));
+          const cleaned = parsed.filter(
+            (a: any) =>
+              !isMockEmailAccount(a) &&
+              (!a.user_id || String(a.user_id).trim() === ownerKey) &&
+              (!a.owner_key || String(a.owner_key).trim() === ownerKey)
+          );
           try {
-            localStorage.setItem('lunao_cached_email_accounts_v2', JSON.stringify(cleaned));
+            localStorage.setItem(getScopedEmailAccountsCacheKey(ownerKey), JSON.stringify(cleaned));
           } catch {}
           return cleaned;
         }
@@ -304,11 +330,17 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   });
   const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(() => {
     try {
-      const cached = localStorage.getItem('lunao_cached_email_accounts_v2');
+      const ownerKey = getCurrentEmailOwnerKey();
+      const cached = localStorage.getItem(getScopedEmailAccountsCacheKey(ownerKey));
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const cleaned = parsed.filter((a: any) => !isMockEmailAccount(a));
+          const cleaned = parsed.filter(
+            (a: any) =>
+              !isMockEmailAccount(a) &&
+              (!a.user_id || String(a.user_id).trim() === ownerKey) &&
+              (!a.owner_key || String(a.owner_key).trim() === ownerKey)
+          );
           return new Set(cleaned.map((a: any) => a.id));
         }
       }
@@ -317,11 +349,13 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   });
   const [isLoadingAccounts, setIsLoadingAccounts] = useState<boolean>(false);
   const [isConnectingAccount, setIsConnectingAccount] = useState<boolean>(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
   const [isCheckingStep4, setIsCheckingStep4] = useState<boolean>(false);
   const [isProbingTokens, setIsProbingTokens] = useState<boolean>(false);
   const [accountProbes, setAccountProbes] = useState<Record<string, EmailAccountProbeResult>>({});
   const lastLoadedAccountsHashRef = useRef<string>('');
   const isRefreshingAccountsRef = useRef<boolean>(false);
+  const loadAccountsSeqRef = useRef<number>(0);
   const connectPollingRef = useRef<NodeJS.Timeout | null>(null);
   // Per-account email distribution (used in UGC Creator & Sales Guy modes)
   const [accountEmailAllocations, setAccountEmailAllocations] = useState<Record<string, number>>({});
@@ -879,57 +913,98 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   };
 
   const loadConnectedAccounts = async (silent = false) => {
+    const ownerKey = getCurrentEmailOwnerKey();
+    const reqSeq = ++loadAccountsSeqRef.current;
+
     // Only show full loading spinner on initial cold load when there are no accounts
     if (!silent && connectedAccounts.length === 0) {
       setIsLoadingAccounts(true);
     }
-    if (isRefreshingAccountsRef.current) return;
     isRefreshingAccountsRef.current = true;
 
     try {
-      const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
       const { listEmailAccounts } = await import('../lib/pipelineClient');
       const raw = await listEmailAccounts(ownerKey);
+
+      // Ignore out-of-order responses or responses received after the user switched accounts
+      if (reqSeq !== loadAccountsSeqRef.current || ownerKey !== getCurrentEmailOwnerKey()) {
+        return;
+      }
+
       const filteredRaw = (Array.isArray(raw) ? raw : []).filter(
-        (acc: any) => acc && acc.id !== 'ea_lunao_primary_verified' && acc.email && !isMockEmailAccount(acc)
+        (acc: any) =>
+          acc &&
+          acc.id !== 'ea_lunao_primary_verified' &&
+          acc.email &&
+          !isMockEmailAccount(acc) &&
+          (
+            (!acc.user_id && !acc.owner_key) ||
+            String(acc.user_id || '').trim() === ownerKey ||
+            String(acc.owner_key || '').trim() === ownerKey
+          )
       );
       const accounts = dedupeAccounts(filteredRaw);
-      const mapped: EmailAccount[] = accounts.map((acc: any) => ({
-        id: acc.id,
-        provider: acc.provider || 'gmail',
-        email: acc.email,
-        displayName: acc.displayName || acc.display_name || 'Verified Outbound Sender',
-        status: 'healthy',
-        sendsToday: acc.sendsToday ?? acc.sends_today ?? 0,
-        remainingToday: acc.remainingToday ?? acc.remaining_today ?? 100,
-        dailyCap: acc.dailyCap ?? acc.daily_cap ?? 100,
-        warmupStage: String(acc.warmupStage ?? acc.warmup_stage ?? 'Stage 4 (Steady)'),
-        bounceRate7d: acc.bounceRate7d ?? acc.bounce_rate_7d ?? 0,
-        lastSuccessfulSend: acc.lastSuccessfulSend ?? acc.last_successful_send ?? null,
-        tokenStatus: 'active',
-        tokenError: null,
-        tokenCheckedAt: null,
-      }));
+      const mapped: EmailAccount[] = accounts.map((acc: any) => {
+        const rawStatus = String(acc.status || '').toLowerCase();
+        const rawTokenStatus = String(acc.tokenStatus || acc.token_status || '').toLowerCase();
+        const needsAttention =
+          rawStatus === 'needs_attention' ||
+          rawStatus === 'paused' ||
+          rawTokenStatus === 'expired' ||
+          rawTokenStatus === 'revoked' ||
+          rawTokenStatus === 'missing_scope';
+        const normalizedTokenStatus: 'active' | 'needs_reconnect' | 'revoked' =
+          rawTokenStatus === 'revoked'
+            ? 'revoked'
+            : needsAttention
+              ? 'needs_reconnect'
+              : 'active';
+        return {
+          id: acc.id,
+          provider: acc.provider || 'gmail',
+          email: acc.email,
+          displayName: acc.displayName || acc.display_name || 'Verified Outbound Sender',
+          status: needsAttention ? 'needs_attention' : 'healthy',
+          sendsToday: acc.sendsToday ?? acc.sends_today ?? 0,
+          remainingToday: acc.remainingToday ?? acc.remaining_today ?? 100,
+          dailyCap: acc.dailyCap ?? acc.daily_cap ?? 100,
+          warmupStage: String(acc.warmupStage ?? acc.warmup_stage ?? 'Stage 4 (Steady)'),
+          bounceRate7d: acc.bounceRate7d ?? acc.bounce_rate_7d ?? 0,
+          lastSuccessfulSend: acc.lastSuccessfulSend ?? acc.last_successful_send ?? null,
+          tokenStatus: normalizedTokenStatus,
+          tokenError: acc.tokenError || acc.token_error || null,
+          tokenCheckedAt: acc.tokenCheckedAt || acc.token_checked_at || null,
+        };
+      });
 
-      // Cache locally and set cookie so user never has to reconnect repeatedly
+      // Cache scoped to this ownerKey only (and strip any legacy unscoped cache)
       try {
-        localStorage.setItem('lunao_cached_email_accounts_v2', JSON.stringify(mapped));
+        localStorage.removeItem('lunao_cached_email_accounts_v2');
+        localStorage.setItem(getScopedEmailAccountsCacheKey(ownerKey), JSON.stringify(mapped));
         document.cookie = `lunao_email_acc_count=${mapped.length}; path=/; max-age=31536000; SameSite=Lax`;
       } catch {}
 
       setConnectedAccounts(mapped);
       setSelectedAccountIds(prev => {
-        const next = new Set(prev);
+        const validIds = new Set<string>(mapped.map(a => a.id));
+        const next = new Set<string>(Array.from(prev as Set<string>).filter(id => validIds.has(id)));
         for (const acc of mapped) {
-          next.add(acc.id);
+          if (acc.status !== 'needs_attention') {
+            next.add(acc.id);
+          }
+        }
+        if (next.size === 0 && mapped.length > 0) {
+          for (const acc of mapped) next.add(acc.id);
         }
         return next;
       });
     } catch (err) {
       console.warn('Failed to load accounts:', err);
     } finally {
-      setIsLoadingAccounts(false);
-      isRefreshingAccountsRef.current = false;
+      if (reqSeq === loadAccountsSeqRef.current) {
+        setIsLoadingAccounts(false);
+        isRefreshingAccountsRef.current = false;
+      }
     }
   };
 
@@ -958,16 +1033,19 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   const handleConnectGmail = async () => {
     playSoftTap();
     setIsConnectingAccount(true);
+    setConnectError(null);
     if (connectPollingRef.current) {
       clearInterval(connectPollingRef.current);
       connectPollingRef.current = null;
     }
 
     const prevCount = connectedAccounts.length;
+    let oauthSettled = false;
 
     try {
       const result: any = await initiateOAuthFlow('gmail');
       if (result && result.email) {
+        oauthSettled = true;
         // Immediately add to UI state without waiting for poll
         const mappedAcc: EmailAccount = {
           id: result.id || `ea_${Date.now()}`,
@@ -998,12 +1076,18 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       await loadConnectedAccounts(true);
       await probeAllTokens();
     } catch (err: any) {
-      console.warn('OAuth flow notice:', err?.message);
+      oauthSettled = true;
+      const msg = err?.message || 'Unable to connect Gmail account. Please grant Gmail send permission and try again.';
+      console.warn('OAuth flow notice:', msg);
+      setConnectError(msg);
+      playElegantError();
     } finally {
       setIsConnectingAccount(false);
     }
 
-    // Gentle fallback background polling: check every 1.5s, and stop immediately once new account appears
+    if (oauthSettled) return;
+
+    // Gentle fallback background polling when OAuth opens a redirect window
     let polls = 0;
     connectPollingRef.current = setInterval(async () => {
       polls++;
@@ -1019,12 +1103,15 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   };
 
   const probeAllTokens = async () => {
-    const ownerKey = localStorage.getItem('lunao_owner_key') || 'dash-Free-Plan';
+    const ownerKey = getCurrentEmailOwnerKey();
     setIsProbingTokens(true);
     try {
       const results = await probeAllEmailAccounts(ownerKey);
+      if (ownerKey !== getCurrentEmailOwnerKey()) return;
       const map: Record<string, EmailAccountProbeResult> = {};
-      for (const r of results) map[r.id] = { ...r, ok: true, status: 'healthy', error: undefined };
+      for (const r of results) {
+        map[r.id] = r;
+      }
       setAccountProbes(map);
       await loadConnectedAccounts(true);
     } catch (err) {
@@ -1033,6 +1120,43 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
       setIsProbingTokens(false);
     }
   };
+
+  useEffect(() => {
+    const handleOwnerChange = () => {
+      loadAccountsSeqRef.current++;
+      isRefreshingAccountsRef.current = false;
+      setAccountProbes({});
+      setConnectError(null);
+      const nextOwnerKey = getCurrentEmailOwnerKey();
+      let restored: EmailAccount[] = [];
+      try {
+        localStorage.removeItem('lunao_cached_email_accounts_v2');
+        const cached = localStorage.getItem(getScopedEmailAccountsCacheKey(nextOwnerKey));
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            restored = parsed.filter(
+              (a: any) =>
+                !isMockEmailAccount(a) &&
+                (!a.user_id || String(a.user_id).trim() === nextOwnerKey) &&
+                (!a.owner_key || String(a.owner_key).trim() === nextOwnerKey)
+            );
+          }
+        }
+      } catch {}
+      setConnectedAccounts(restored);
+      setSelectedAccountIds(new Set(restored.map((a) => a.id)));
+      if (activeStep === 4) {
+        loadConnectedAccounts(true).then(() => probeAllTokens());
+      }
+    };
+    window.addEventListener('lunao_owner_key_changed', handleOwnerChange);
+    window.addEventListener('lunao_auth_changed', handleOwnerChange);
+    return () => {
+      window.removeEventListener('lunao_owner_key_changed', handleOwnerChange);
+      window.removeEventListener('lunao_auth_changed', handleOwnerChange);
+    };
+  }, [activeStep]);
 
   useEffect(() => {
     if (activeStep === 4) {
@@ -1246,7 +1370,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
 
     const newCampId = 'em_' + Date.now();
     const finalName = campaignName || `${selectedNiche} Email Campaign`;
-    const resolvedOwnerKey = localStorage.getItem('lunao_owner_key') || `dash-${userPlan.replace(/\s+/g, '-')}`;
+    const resolvedOwnerKey = getCurrentEmailOwnerKey();
 
     // Deduct credits immediately and write permanently to Supabase
     const baseCredits = typeof userCredits === 'number' && !Number.isNaN(userCredits)
@@ -1423,9 +1547,12 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${localStorage.getItem('lunao_auth_token') || 'lunao-mock-dev-token'}`,
+              'x-owner-key': resolvedOwnerKey,
             },
             body: JSON.stringify({
               accountId: assignedAccountId,
+              ownerKey: resolvedOwnerKey,
+              campaignId: newCampId,
               to: leadEmail,
               subject: personalizedSubj,
               body: renderedBody,
@@ -1452,18 +1579,18 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
             addLog(`[Inbox Delivered] Real proposal dispatched via ${viaLabel} (${rawMsgId}) to ${leadEmail}`, 'success');
           } else {
             emailSendSuccess = false;
-            emailSendError = emailData?.error || `Email pending queue`;
-            addLog(`[Email Pending] Proposal queued for ${leadEmail}`, 'info');
+            emailSendError = emailData?.error || `Send rejected (HTTP ${emailResp.status})`;
+            addLog(`[Inbox Failed] ${leadEmail}: ${emailSendError}`, 'info');
           }
         } catch (sendErr: any) {
           emailSendSuccess = false;
-          emailSendError = sendErr?.message || 'Email pending';
-          addLog(`[Email Pending] Proposal queued for ${leadEmail}`, 'info');
+          emailSendError = sendErr?.message || 'Network error while sending email';
+          addLog(`[Inbox Failed] ${leadEmail}: ${emailSendError}`, 'info');
         }
       } else {
         emailSendSuccess = false;
-        emailSendError = 'Email pending';
-        addLog(`[Email Pending] Proposal queued for ${leadEmail}`, 'info');
+        emailSendError = 'No connected sending account selected';
+        addLog(`[Inbox Skipped] No connected sending account for ${leadEmail}`, 'info');
       }
 
       sentAccumulator.push({
@@ -2924,6 +3051,24 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               <h3 className="font-serif text-xl sm:text-2xl text-ink">Choose sending accounts</h3>
               <p className="text-sm text-ink-secondary">Select which email accounts to send from. Emails are distributed across selected accounts.</p>
             </div>
+
+            {connectError && (
+              <div className="p-3.5 rounded-xl bg-danger-soft border border-danger/30 text-danger flex items-start gap-2.5 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold">Gmail connection failed</p>
+                  <p className="text-[11px] opacity-90 mt-0.5 break-words">{connectError}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConnectError(null)}
+                  className="text-danger/70 hover:text-danger p-0.5 shrink-0 cursor-pointer"
+                  aria-label="Dismiss error"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
             
             {isLoadingAccounts && connectedAccounts.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 space-y-3">
@@ -2946,10 +3091,20 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 <button
                   type="button"
                   onClick={handleConnectGmail}
-                  className="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-xs font-semibold rounded-xl flex items-center gap-2 mx-auto cursor-pointer transition-all shadow-sm"
+                  disabled={isConnectingAccount}
+                  className="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-xs font-semibold rounded-xl flex items-center gap-2 mx-auto cursor-pointer transition-all shadow-sm disabled:opacity-60"
                 >
-                  <Plus className="w-4 h-4" />
-                  <span>Connect Gmail Account</span>
+                  {isConnectingAccount ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Connecting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" />
+                      <span>Connect Gmail Account</span>
+                    </>
+                  )}
                 </button>
               </div>
             ) : (
@@ -2961,6 +3116,14 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-accent/10 text-accent font-medium border border-accent/20">
                         <Loader2 className="w-3 h-3 animate-spin" />
                         <span>Verifying connection...</span>
+                      </span>
+                    ) : connectedAccounts.some((a) => {
+                      const p = accountProbes[a.id];
+                      return p ? !p.ok : a.status === 'needs_attention' || a.tokenStatus === 'needs_reconnect' || a.tokenStatus === 'revoked';
+                    }) ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-50 text-amber-800 font-medium border border-amber-200">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Reconnect required on one or more accounts</span>
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-success-soft text-success font-medium border border-success/25">
@@ -3023,15 +3186,22 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                 {connectedAccounts.map((account) => {
                   const displayTitle = account.displayName || account.email || 'Connected Gmail Account';
                   const isSelected = selectedAccountIds.has(account.id);
+                  const probe = accountProbes[account.id];
+                  const needsReconnect = probe
+                    ? !probe.ok
+                    : account.status === 'needs_attention' || account.tokenStatus === 'needs_reconnect' || account.tokenStatus === 'revoked';
+                  const healthDetail = probe?.error || account.tokenError;
 
                   return (
                     <div
                       key={account.id}
                       onClick={() => { toggleAccount(account.id); }}
                       className={`p-3.5 sm:p-4 rounded-xl border transition-all ${
-                        isSelected
-                          ? 'bg-accent-soft/30 border-accent/40 cursor-pointer shadow-2xs'
-                          : 'bg-white border-border-main hover:border-accent/30 cursor-pointer'
+                        needsReconnect
+                          ? 'bg-amber-50/40 border-amber-300/70 cursor-pointer'
+                          : isSelected
+                            ? 'bg-accent-soft/30 border-accent/40 cursor-pointer shadow-2xs'
+                            : 'bg-white border-border-main hover:border-accent/30 cursor-pointer'
                       }`}
                     >
                       <div className="flex items-start gap-3 sm:gap-4">
@@ -3049,14 +3219,38 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2">
                             <div className="flex items-center gap-2 flex-wrap min-w-0">
                               <p className="text-xs sm:text-sm font-semibold text-ink truncate">{displayTitle}</p>
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                <Check className="w-3 h-3 text-emerald-600" />
-                                <span>Ready to send</span>
-                              </span>
+                              {needsReconnect ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-800 border border-amber-300">
+                                  <AlertTriangle className="w-3 h-3 text-amber-700" />
+                                  <span>Reconnect required</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                  <span>Ready to send</span>
+                                </span>
+                              )}
                             </div>
+
+                            {needsReconnect && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleConnectGmail();
+                                }}
+                                disabled={isConnectingAccount}
+                                className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium text-[11px] shrink-0 cursor-pointer transition-colors disabled:opacity-60"
+                              >
+                                Reconnect
+                              </button>
+                            )}
                           </div>
 
                           <p className="text-xs text-ink-secondary truncate mt-1 font-mono">{account.email}</p>
+                          {needsReconnect && healthDetail && (
+                            <p className="text-[11px] text-amber-800 mt-1 break-words">{healthDetail}</p>
+                          )}
                         </div>
                       </div>
                     </div>

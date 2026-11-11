@@ -95,12 +95,15 @@ export function Numbers() {
   // silently showing an empty list (so the user knows why their numbers
   // disappeared).
   const loadNumbers = useCallback(async (accs: TelnyxAccountSummary[]) => {
+    const active = accs.find((a) => a.status === 'active');
+    if (!active) {
+      setLoadingNumbers(false);
+      setNumbers([]);
+      return;
+    }
     setLoadingNumbers(true);
-    const active = accs.find((a) => a.status === 'active') || accs[0];
     try {
-      const endpoint = active
-        ? `/api/telnyx/accounts/${encodeURIComponent(active.id)}/numbers?ownerKey=${encodeURIComponent(ownerKey)}`
-        : `/api/numbers?ownerKey=${encodeURIComponent(ownerKey)}`;
+      const endpoint = `/api/telnyx/accounts/${encodeURIComponent(active.id)}/numbers?ownerKey=${encodeURIComponent(ownerKey)}`;
       const res = await fetch(endpoint, { credentials: 'include' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -212,6 +215,27 @@ export function Numbers() {
         {loadingAccounts || loadingNumbers ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-6 h-6 animate-spin text-accent" />
+          </div>
+        ) : needsReconnect && !activeAccount ? (
+          <div className="py-16 text-center">
+            <div className="w-16 h-16 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto mb-4 text-amber-600">
+              <AlertCircle className="w-8 h-8" />
+            </div>
+            <h3 className="text-base font-bold text-ink mb-2">Re-Authentication Required</h3>
+            <p className="text-xs text-ink-secondary mb-5 max-w-sm mx-auto leading-relaxed">
+              Your Telnyx access token expired or was revoked. Please reconnect your Telnyx account in Settings before phone numbers can be loaded.
+            </p>
+            <a
+              href="#settings"
+              onClick={(e) => {
+                e.preventDefault();
+                window.location.hash = 'settings';
+                window.dispatchEvent(new CustomEvent('lunao_navigate', { detail: { tab: 'settings' } }));
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors shadow-sm"
+            >
+              Go to Settings & Reconnect
+            </a>
           </div>
         ) : accounts.length === 0 ? (
           <div className="py-16 text-center">

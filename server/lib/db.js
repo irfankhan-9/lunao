@@ -2,7 +2,7 @@
 // Hydrates state from Supabase PostgreSQL on startup (after auto-migrating any legacy records)
 // and executes all INSERT, UPDATE, and DELETE mutations directly against Supabase PostgreSQL.
 
-import { getPgPool } from './supabase.js';
+import { getPgPool, getSupabase } from './supabase.js';
 import { initSupabaseSyncAndMigrate, pgUpsertRow, hydrateTablesMapFromSupabase, TABLE_PRIMARY_KEYS } from './supabaseSync.js';
 
 const tables = new Map();
@@ -18,9 +18,8 @@ export function waitForDbReady() {
 
 export async function refreshTableFromSupabase(tableName) {
   const pool = getPgPool();
-  if (!pool) return;
   try {
-    await hydrateTablesMapFromSupabase(tables, pool);
+    await hydrateTablesMapFromSupabase(tables, pool || null);
   } catch (err) {
     console.warn(`[db] Refresh notice on ${tableName}:`, err.message);
   }
@@ -33,9 +32,27 @@ function syncRowToSupabase(tableName, row) {
   });
 }
 
+async function deleteViaSupabaseRest(cleanTbl, pkCols, row) {
+  const sb = getSupabase();
+  if (!sb) return;
+  try {
+    let q = sb.from(cleanTbl).delete();
+    let hasFilter = false;
+    for (const col of pkCols) {
+      if (row[col] !== undefined && row[col] !== null) {
+        q = q.eq(col, row[col]);
+        hasFilter = true;
+      }
+    }
+    if (!hasFilter) return;
+    await q;
+  } catch (err) {
+    console.warn(`[db] Supabase REST delete warning on ${cleanTbl}:`, err.message);
+  }
+}
+
 function deleteRowFromSupabase(tableName, row) {
-  const pool = getPgPool();
-  if (!pool || !row) return;
+  if (!row) return;
   const cleanTbl = tableName.trim().toLowerCase();
   const pkCols = TABLE_PRIMARY_KEYS[cleanTbl] || (row.id !== undefined ? ['id'] : []);
   if (pkCols.length === 0) return;
@@ -50,13 +67,29 @@ function deleteRowFromSupabase(tableName, row) {
   }
   if (conds.length === 0) return;
 
-  pool.query(`DELETE FROM public.${cleanTbl} WHERE ${conds.join(' AND ')}`, vals).catch((err) => {
-    console.warn(`[db] Supabase delete warning on ${cleanTbl}:`, err.message);
-  });
+  const pool = getPgPool();
+  if (pool) {
+    pool.query(`DELETE FROM public.${cleanTbl} WHERE ${conds.join(' AND ')}`, vals).catch((err) => {
+      console.warn(`[db] Supabase delete warning on ${cleanTbl}:`, err.message);
+      deleteViaSupabaseRest(cleanTbl, pkCols, row).catch(() => {});
+    });
+    if (cleanTbl === 'campaigns') {
+      pool.query(`DELETE FROM public.sms_campaigns WHERE ${conds.join(' AND ')}`, vals).catch(() => {
+        deleteViaSupabaseRest('sms_campaigns', pkCols, row).catch(() => {});
+      });
+    } else if (cleanTbl === 'campaign_leads') {
+      pool.query(`DELETE FROM public.sms_campaign_leads WHERE ${conds.join(' AND ')}`, vals).catch(() => {
+        deleteViaSupabaseRest('sms_campaign_leads', pkCols, row).catch(() => {});
+      });
+    }
+    return;
+  }
+
+  deleteViaSupabaseRest(cleanTbl, pkCols, row).catch(() => {});
   if (cleanTbl === 'campaigns') {
-    pool.query(`DELETE FROM public.sms_campaigns WHERE ${conds.join(' AND ')}`, vals).catch(() => {});
+    deleteViaSupabaseRest('sms_campaigns', pkCols, row).catch(() => {});
   } else if (cleanTbl === 'campaign_leads') {
-    pool.query(`DELETE FROM public.sms_campaign_leads WHERE ${conds.join(' AND ')}`, vals).catch(() => {});
+    deleteViaSupabaseRest('sms_campaign_leads', pkCols, row).catch(() => {});
   }
 }
 
@@ -141,24 +174,37 @@ export const db = {
             }
           });
 
+          const cleanTbl = tableName.trim().toLowerCase().replace(/[`"']/g, '');
+          const schemaPks = TABLE_PRIMARY_KEYS[cleanTbl];
           const table = getTable(tableName);
-          if (row.id === undefined) {
-            row.id = table.length + 1;
+          if (row.id === undefined && (!schemaPks || schemaPks.includes('id'))) {
+            let maxId = 0;
+            for (const r of table) {
+              const n = Number(r.id);
+              if (Number.isFinite(n) && n > maxId) maxId = n;
+            }
+            row.id = maxId + 1;
           }
 
-          const keyCol = cols.includes('id')
-            ? 'id'
-            : cols.includes('slug')
-            ? 'slug'
-            : cols.includes('state')
-            ? 'state'
-            : cols.includes('code')
-            ? 'code'
-            : cols.includes('email')
-            ? 'email'
-            : null;
-          if (keyCol && row[keyCol] !== undefined && row[keyCol] !== null) {
-            const existingIdx = table.findIndex((r) => String(r[keyCol]) === String(row[keyCol]));
+          const pkCols =
+            schemaPks && schemaPks.every((pk) => cols.includes(pk))
+              ? schemaPks
+              : cols.includes('id')
+                ? ['id']
+                : cols.includes('slug')
+                  ? ['slug']
+                  : cols.includes('state')
+                    ? ['state']
+                    : cols.includes('code')
+                      ? ['code']
+                      : cols.includes('email')
+                        ? ['email']
+                        : [];
+
+          if (pkCols.length > 0 && pkCols.every((pk) => row[pk] !== undefined && row[pk] !== null)) {
+            const existingIdx = table.findIndex((r) =>
+              pkCols.every((pk) => String(r[pk]) === String(row[pk]))
+            );
             if (existingIdx !== -1) {
               if (isIgnore) {
                 return { changes: 0, lastInsertRowid: existingIdx + 1 };

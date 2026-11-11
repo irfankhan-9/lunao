@@ -74,13 +74,18 @@ export function getCachedTelnyxData(): CachedTelnyxData {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
+        const isExpired = Boolean(
+          parsed.tokenExpired ||
+          parsed.account?.status === 'needs_reconnect' ||
+          parsed.account?.status === 'revoked'
+        );
         return {
-          connected: Boolean(parsed.connected || storedApiKey || parsed.numbers?.length > 0),
+          connected: !isExpired && Boolean(parsed.connected || storedApiKey || parsed.numbers?.length > 0),
           apiKey: storedApiKey || parsed.apiKey || '',
           account: parsed.account || null,
-          numbers: Array.isArray(parsed.numbers) ? parsed.numbers : [],
+          numbers: isExpired ? [] : (Array.isArray(parsed.numbers) ? parsed.numbers : []),
           balance: parsed.balance || { available: '0.00', currency: 'USD' },
-          tokenExpired: Boolean(parsed.tokenExpired),
+          tokenExpired: isExpired,
           lastSyncedAt: Number(parsed.lastSyncedAt) || 0,
         };
       }
@@ -140,10 +145,10 @@ export async function syncTelnyxAccountLive(ownerKey: string): Promise<CachedTel
   const keyToUse = (current.apiKey || localStorage.getItem(STORAGE_API_KEY) || getCookie(STORAGE_API_KEY) || '').trim();
 
   let tokenExpired = false;
-  let numbers: TelnyxNumberItem[] = current.numbers || [];
+  let numbers: TelnyxNumberItem[] = [];
   let account = current.account;
   let balance = current.balance || { available: '0.00', currency: 'USD' };
-  let isConnected = current.connected;
+  let isConnected = false;
 
   try {
     // 1. If we have an API Key, verify and fetch live numbers directly
@@ -154,10 +159,18 @@ export async function syncTelnyxAccountLive(ownerKey: string): Promise<CachedTel
         body: JSON.stringify({ apiKey: keyToUse, ownerKey }),
       });
 
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401 || res.status === 403 || !res.ok) {
         tokenExpired = true;
         isConnected = false;
-      } else if (res.ok) {
+        numbers = [];
+        account = {
+          id: 'api_key_account',
+          email: 'Telnyx Authenticated Carrier',
+          label: 'Telnyx API Key Line',
+          status: 'needs_reconnect',
+          totalNumbers: 0,
+        };
+      } else {
         const data = await res.json().catch(() => ({}));
         if (data.ok && Array.isArray(data.numbers)) {
           numbers = data.numbers.map((n: any) => ({
@@ -179,6 +192,10 @@ export async function syncTelnyxAccountLive(ownerKey: string): Promise<CachedTel
             status: 'active',
             totalNumbers: numbers.length,
           };
+        } else {
+          tokenExpired = true;
+          isConnected = false;
+          numbers = [];
         }
       }
     }
@@ -197,27 +214,36 @@ export async function syncTelnyxAccountLive(ownerKey: string): Promise<CachedTel
       const liveAcc = accRes.accounts[0];
       if (liveAcc.status === 'needs_reconnect' || liveAcc.status === 'revoked') {
         tokenExpired = true;
+        isConnected = false;
+        numbers = [];
+        account = {
+          id: liveAcc.id,
+          email: liveAcc.account_email || 'Telnyx Account',
+          label: liveAcc.account_label || liveAcc.account_email || 'Telnyx Account',
+          status: 'needs_reconnect',
+          totalNumbers: 0,
+        };
       } else {
-        isConnected = true;
-        tokenExpired = false;
-      }
-      account = {
-        id: liveAcc.id,
-        email: liveAcc.account_email || 'Telnyx Account',
-        label: liveAcc.account_label || liveAcc.account_email || 'Telnyx Account',
-        status: tokenExpired ? 'needs_reconnect' : 'active',
-        totalNumbers: liveAcc.total_numbers || numbers.length,
-      };
-
-      // Fetch numbers for this OAuth account if numbers list is still empty
-      if (numbers.length === 0 && !tokenExpired) {
+        // Query live numbers with capability check
         const numRes = await fetch(
           `/api/telnyx/accounts/${encodeURIComponent(liveAcc.id)}/numbers-with-status?ownerKey=${encodeURIComponent(ownerKey)}`,
           { credentials: 'include' }
-        ).then((r) => r.json()).catch(() => null);
+        );
 
-        const list = Array.isArray(numRes) ? numRes : (Array.isArray(numRes?.numbers) ? numRes.numbers : []);
-        if (list.length > 0) {
+        if (numRes.status === 401 || numRes.status === 403) {
+          tokenExpired = true;
+          isConnected = false;
+          numbers = [];
+          account = {
+            id: liveAcc.id,
+            email: liveAcc.account_email || 'Telnyx Account',
+            label: liveAcc.account_label || liveAcc.account_email || 'Telnyx Account',
+            status: 'needs_reconnect',
+            totalNumbers: 0,
+          };
+        } else if (numRes.ok) {
+          const numData = await numRes.json().catch(() => ({}));
+          const list = Array.isArray(numData) ? numData : (Array.isArray(numData?.numbers) ? numData.numbers : []);
           numbers = list.map((n: any) => ({
             id: String(n.id || n.phoneNumber || n.number),
             phoneNumber: String(n.phoneNumber || n.number),
@@ -228,8 +254,23 @@ export async function syncTelnyxAccountLive(ownerKey: string): Promise<CachedTel
             canSend: Boolean(n.canSend),
             needsMessagingProfile: Boolean(n.needsMessagingProfile),
           }));
+          isConnected = true;
+          tokenExpired = false;
+          account = {
+            id: liveAcc.id,
+            email: liveAcc.account_email || 'Telnyx Account',
+            label: liveAcc.account_label || liveAcc.account_email || 'Telnyx Account',
+            status: 'active',
+            totalNumbers: numbers.length,
+          };
         }
       }
+    } else if (!keyToUse) {
+      // Neither API key nor OAuth account connected
+      isConnected = false;
+      tokenExpired = false;
+      numbers = [];
+      account = null;
     }
 
     if (statsRes?.balance) {
@@ -240,6 +281,11 @@ export async function syncTelnyxAccountLive(ownerKey: string): Promise<CachedTel
     }
   } catch (err: any) {
     console.warn('[Telnyx Live Sync Notice]', err?.message);
+  }
+
+  if (tokenExpired) {
+    numbers = [];
+    isConnected = false;
   }
 
   return saveCachedTelnyxData({

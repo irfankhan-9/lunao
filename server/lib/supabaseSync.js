@@ -43,6 +43,7 @@ export const TABLE_PRIMARY_KEYS = {
   special_mode_sessions: ['owner_key'],
   owner_businesses: ['owner_key', 'slug'],
   user_sites: ['slug'],
+  email_automation_jobs: ['idempotency_key'],
 };
 
 const BOOLEAN_COLUMNS = new Set([
@@ -64,11 +65,9 @@ export function sanitizeRowForPostgres(tableName, rawRow) {
   if (!rawRow || typeof rawRow !== 'object') return {};
   const clean = {};
   for (const [k, v] of Object.entries(rawRow)) {
-    // Skip synthetic auto-increment id on tables where id is not primary key or where composite key is used
-    if (
-      k === 'id' &&
-      ['business_profiles', 'places_lead_cache', 'owner_businesses', 'invite_codes', 'site_addons', 'booking_configs', 'credit_accounts', 'special_mode_sessions'].includes(tableName)
-    ) {
+    // Skip synthetic auto-increment id on tables where id is not primary key or where composite/non-id key is used
+    const pkForTbl = TABLE_PRIMARY_KEYS[tableName];
+    if (k === 'id' && Array.isArray(pkForTbl) && !pkForTbl.includes('id')) {
       continue;
     }
     if (BOOLEAN_COLUMNS.has(k)) {
@@ -107,41 +106,61 @@ export function sanitizeRowForPostgres(tableName, rawRow) {
  * Upserts a single record into a Supabase PostgreSQL table.
  */
 export async function pgUpsertRow(tableName, rawRow, customPool = null) {
-  const pool = customPool || getPgPool();
-  if (!pool) return null;
-
   const row = sanitizeRowForPostgres(tableName, rawRow);
   const cols = Object.keys(row);
   if (cols.length === 0) return null;
 
-  const vals = cols.map((c) => row[c]);
-  const placeholders = cols.map((_, idx) => `$${idx + 1}`).join(', ');
   const pkCols = TABLE_PRIMARY_KEYS[tableName] || (cols.includes('id') ? ['id'] : []);
+  const pool = customPool || getPgPool();
 
-  let sql = `INSERT INTO public.${tableName} (${cols.join(', ')}) VALUES (${placeholders})`;
-  if (pkCols.length > 0 && pkCols.every((pk) => cols.includes(pk))) {
-    const updateCols = cols.filter((c) => !pkCols.includes(c));
-    if (updateCols.length > 0) {
-      const updates = updateCols.map((c) => `${c} = EXCLUDED.${c}`).join(', ');
-      sql += ` ON CONFLICT (${pkCols.join(', ')}) DO UPDATE SET ${updates}`;
-    } else {
-      sql += ` ON CONFLICT (${pkCols.join(', ')}) DO NOTHING`;
+  if (pool) {
+    const vals = cols.map((c) => row[c]);
+    const placeholders = cols.map((_, idx) => `$${idx + 1}`).join(', ');
+    let sql = `INSERT INTO public.${tableName} (${cols.join(', ')}) VALUES (${placeholders})`;
+    if (pkCols.length > 0 && pkCols.every((pk) => cols.includes(pk))) {
+      const updateCols = cols.filter((c) => !pkCols.includes(c));
+      if (updateCols.length > 0) {
+        const updates = updateCols.map((c) => `${c} = EXCLUDED.${c}`).join(', ');
+        sql += ` ON CONFLICT (${pkCols.join(', ')}) DO UPDATE SET ${updates}`;
+      } else {
+        sql += ` ON CONFLICT (${pkCols.join(', ')}) DO NOTHING`;
+      }
+    }
+
+    try {
+      await pool.query(sql, vals);
+      if (tableName === 'campaigns') {
+        await pgUpsertRow('sms_campaigns', rawRow, pool);
+      } else if (tableName === 'campaign_leads') {
+        await pgUpsertRow('sms_campaign_leads', rawRow, pool);
+      }
+      return true;
+    } catch (err) {
+      if (!String(err.message).includes('duplicate key')) {
+        console.warn(`[supabaseSync] Upsert notice on ${tableName}:`, err.message);
+      }
+      // Fall through to Supabase REST client below (e.g. if PG pool hit IPv6 ENETUNREACH)
     }
   }
 
+  // Fallback: Supabase HTTPS REST client (works over IPv4 in all environments)
+  const sb = getSupabase();
+  if (!sb) return null;
   try {
-    await pool.query(sql, vals);
-    // Keep canonical paired tables in sync (campaigns <-> sms_campaigns, campaign_leads <-> sms_campaign_leads, email_suppression <-> email_suppressions)
+    const onConflict = pkCols.length > 0 && pkCols.every((pk) => cols.includes(pk)) ? pkCols.join(',') : undefined;
+    const { error } = await sb.from(tableName).upsert(row, onConflict ? { onConflict } : undefined);
+    if (error && !String(error.message).includes('duplicate key')) {
+      console.warn(`[supabaseSync] REST upsert notice on ${tableName}:`, error.message);
+    }
     if (tableName === 'campaigns') {
-      await pgUpsertRow('sms_campaigns', rawRow, pool);
+      await pgUpsertRow('sms_campaigns', rawRow, customPool);
     } else if (tableName === 'campaign_leads') {
-      await pgUpsertRow('sms_campaign_leads', rawRow, pool);
+      await pgUpsertRow('sms_campaign_leads', rawRow, customPool);
     }
-  } catch (err) {
-    // Ignore benign duplicate or constraint notices during background sync
-    if (!String(err.message).includes('duplicate key')) {
-      console.warn(`[supabaseSync] Upsert notice on ${tableName}:`, err.message);
-    }
+    return !error;
+  } catch (restErr) {
+    console.warn(`[supabaseSync] REST upsert error on ${tableName}:`, restErr.message);
+    return null;
   }
 }
 
@@ -155,7 +174,15 @@ let _initialized = false;
 export async function initSupabaseSyncAndMigrate(inMemoryTablesMap = null) {
   const pool = getPgPool();
   if (!pool) {
-    console.warn('[supabaseSync] No PostgreSQL pool available.');
+    console.warn('[supabaseSync] No PostgreSQL pool available; hydrating via Supabase REST.');
+    if (inMemoryTablesMap && typeof inMemoryTablesMap.set === 'function') {
+      try {
+        await hydrateTablesMapFromSupabase(inMemoryTablesMap, null);
+        return { ok: true, mode: 'rest' };
+      } catch (err) {
+        console.warn('[supabaseSync] REST hydration notice:', err.message);
+      }
+    }
     return { ok: false };
   }
 

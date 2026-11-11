@@ -54,7 +54,7 @@ export function buildGmailAuthUrl({ redirectUri, state }) {
 }
 
 // ----- Exchange authorization code → tokens -----
-export async function exchangeGmailCode({ code, redirectUri }) {
+export async function exchangeGmailCode({ code, redirectUri, allowAccessTokenFallback = false }) {
   if (!googleOAuth.enabled) {
     throw new Error('Gmail OAuth not configured');
   }
@@ -75,12 +75,35 @@ export async function exchangeGmailCode({ code, redirectUri }) {
     throw new Error(`Google token exchange failed (${res.status}): ${text}`);
   }
   const data = await res.json();
-  if (!data.refresh_token) {
+  if (!data.refresh_token && !allowAccessTokenFallback) {
     // Means user already authorized this app and Google didn't re-issue one.
     // We must rotate the connection (prompt=consent forces this on first connect).
     throw new Error('No refresh_token returned. Reconnect with prompt=consent to grant offline access.');
   }
-  return data; // { access_token, refresh_token, expires_in, scope, token_type, id_token? }
+  return data; // { access_token, refresh_token?, expires_in, scope, token_type, id_token? }
+}
+
+export async function inspectGoogleAccessToken(accessToken) {
+  if (!accessToken) return { valid: false, hasSendScope: false, error: 'Missing access token' };
+  try {
+    const res = await fetchWithTimeout(`${GOOGLE_TOKENINFO_URL}?access_token=${encodeURIComponent(accessToken)}`);
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      return { valid: false, hasSendScope: false, error: `Google token expired or invalid (${res.status}): ${txt.slice(0, 120)}` };
+    }
+    const d = await res.json();
+    const scopes = String(d?.scope || '');
+    const hasSendScope = scopes.includes('https://www.googleapis.com/auth/gmail.send') || scopes.includes('https://mail.google.com/');
+    return {
+      valid: true,
+      hasSendScope,
+      email: d?.email || null,
+      expiresIn: Number(d?.expires_in) || 0,
+      scope: scopes,
+    };
+  } catch (err) {
+    return { valid: false, hasSendScope: false, error: err.message };
+  }
 }
 
 // ----- Use refresh_token to mint fresh access_token (called at send time) -----
@@ -189,9 +212,11 @@ export async function sendGmailEmail({ refreshToken, to, from, subject, body, fr
   }
 
   // Build the From header. If fromName is provided we use "Name <email>".
-  const fromHeader = fromName ? `"${fromName.replace(/"/g, '')}" <${from}>` : from;
+  const cleanName = fromName ? String(fromName).replace(/[\r\n"]/g, '').trim() : '';
+  const fromHeader = cleanName ? `"${encodeSubject(cleanName)}" <${from}>` : from;
 
   // Simple RFC 5322. We keep it minimal but valid (no attachments).
+  const normalizedBody = String(body || '').replace(/\r?\n/g, '\r\n');
   const headers = [
     `From: ${fromHeader}`,
     `To: ${to}`,
@@ -199,7 +224,7 @@ export async function sendGmailEmail({ refreshToken, to, from, subject, body, fr
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset=UTF-8',
   ];
-  const message = `${headers.join('\r\n')}\r\n\r\n${body}`;
+  const message = `${headers.join('\r\n')}\r\n\r\n${normalizedBody}`;
   const raw = Buffer.from(message, 'utf8').toString('base64url');
 
   const res = await fetchWithTimeout(GMAIL_SEND_URL, {

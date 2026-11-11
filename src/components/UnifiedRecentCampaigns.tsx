@@ -1156,6 +1156,14 @@ const CampaignDetailModal: React.FC<CampaignDetailModalProps> = ({
     if (!isEmail) return;
     const cid = camp.serverCampaignId || camp.id;
     if (!cid) return;
+    if (
+      !camp.serverCampaignId &&
+      typeof cid === 'string' &&
+      (cid.startsWith('em_') || cid.startsWith('sd_') || cid.startsWith('emc_run_'))
+    ) {
+      setLoadingLeads(false);
+      return;
+    }
     setLoadingLeads(true);
     const ownerKey = (typeof localStorage !== 'undefined' && localStorage.getItem('lunao_owner_key')) || 'dash-Free-Plan';
     fetch(`${import.meta.env.VITE_API_BASE || ''}/api/email-campaigns/${encodeURIComponent(cid)}/leads`, {

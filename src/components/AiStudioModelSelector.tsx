@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
-  ChevronDown, Check, ArrowUpRight, AlertCircle
+  ChevronDown, Check, ArrowUpRight, AlertCircle, Lock
 } from 'lucide-react';
 import {
   getVibeCreditBalance,
   getPlanAiConfig,
   syncAllowanceWithServer,
+  isFreeVibePlan,
+  isModelAllowedOnFree,
+  FREE_VIBE_CREDITS,
 } from '../lib/vibeCredits';
 
 export interface StudioModelOption {
@@ -127,11 +130,23 @@ export const AiStudioModelSelector: React.FC<AiStudioModelSelectorProps> = ({
   }, [userPlan]);
 
   const activeModel = STUDIO_MODELS.find(m => m.id === selectedModel) || STUDIO_MODELS[0];
+  const isFreePlan = isFreeVibePlan(userPlan);
   const effectiveBalance = Math.max(0, balance);
   const isExhausted = effectiveBalance <= 0 && !aiServerError;
   const isLow = effectiveBalance > 0 && effectiveBalance < 5;
 
-  const maxCredits = Math.max(effectiveBalance, monthlyMax || planConfig.monthlyCredits || 10);
+  // Free accounts run on a one-time grant and are limited to Flash-tier models.
+  useEffect(() => {
+    if (isFreePlan && !isModelAllowedOnFree(selectedModel)) {
+      onSelectModel('gemini-3.8-flash');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFreePlan, selectedModel]);
+
+  const maxCredits = Math.max(
+    effectiveBalance,
+    isFreePlan ? FREE_VIBE_CREDITS : (monthlyMax || planConfig.monthlyCredits || 10)
+  );
   const percentRemaining = Math.min(100, Math.max(0, (effectiveBalance / maxCredits) * 100));
 
   const handleUpgradeClick = (e?: React.MouseEvent) => {
@@ -221,6 +236,11 @@ export const AiStudioModelSelector: React.FC<AiStudioModelSelectorProps> = ({
                   key={m.id}
                   type="button"
                   onClick={() => {
+                    if (isFreePlan && !isModelAllowedOnFree(m.id)) {
+                      handleUpgradeClick();
+                      setIsOpen(false);
+                      return;
+                    }
                     onSelectModel(m.id);
                     setIsOpen(false);
                   }}
@@ -240,6 +260,11 @@ export const AiStudioModelSelector: React.FC<AiStudioModelSelectorProps> = ({
                       )}
                     </div>
                     <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{m.humanDescription}</p>
+                    {isFreePlan && !isModelAllowedOnFree(m.id) && (
+                      <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                        <Lock className="w-2.5 h-2.5" /> Starter plan or above
+                      </p>
+                    )}
                   </div>
                   {selectedModel === m.id && (
                     <Check className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
@@ -259,6 +284,11 @@ export const AiStudioModelSelector: React.FC<AiStudioModelSelectorProps> = ({
                   key={m.id}
                   type="button"
                   onClick={() => {
+                    if (isFreePlan && !isModelAllowedOnFree(m.id)) {
+                      handleUpgradeClick();
+                      setIsOpen(false);
+                      return;
+                    }
                     onSelectModel(m.id);
                     setIsOpen(false);
                   }}
@@ -273,6 +303,11 @@ export const AiStudioModelSelector: React.FC<AiStudioModelSelectorProps> = ({
                       <span className="font-semibold text-xs text-slate-900">{m.displayName}</span>
                     </div>
                     <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{m.humanDescription}</p>
+                    {isFreePlan && !isModelAllowedOnFree(m.id) && (
+                      <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                        <Lock className="w-2.5 h-2.5" /> Starter plan or above
+                      </p>
+                    )}
                   </div>
                   {selectedModel === m.id && (
                     <Check className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
@@ -284,7 +319,7 @@ export const AiStudioModelSelector: React.FC<AiStudioModelSelectorProps> = ({
             {/* Monthly Allowance Footer Card */}
             <div className="mt-1.5 pt-1.5 border-t border-slate-100 px-2 py-1 bg-slate-50/80 rounded-lg">
               <div className="flex items-center justify-between text-[10px] mb-1">
-                <span className="text-slate-500 font-medium">Monthly AI Credits</span>
+                <span className="text-slate-500 font-medium">{isFreePlan ? 'Free AI Credits (one-time)' : 'Monthly AI Credits'}</span>
                 <span className="font-mono font-bold text-slate-800">
                   {formattedBalance} / {maxCredits.toLocaleString()}
                 </span>
@@ -315,7 +350,7 @@ export const AiStudioModelSelector: React.FC<AiStudioModelSelectorProps> = ({
       ) : isExhausted ? (
         <div className="mt-1.5 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
           <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0" />
-          <span>Credits exhausted.</span>
+          <span>{isFreePlan ? 'Free vibe credits used.' : 'Credits exhausted.'}</span>
           <button
             type="button"
             onClick={handleUpgradeClick}

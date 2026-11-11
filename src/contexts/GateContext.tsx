@@ -73,10 +73,9 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem(`lunao_u_${ownerKey}_credits`, String(resolvedCredits));
         localStorage.setItem('lunao_user_credits', String(resolvedCredits));
 
-        const isFree = resolvedPlan.toLowerCase().includes('free');
-        const resolvedVibe = isFree
-          ? 0
-          : typeof vibeCreditsInput === 'number'
+        // Free accounts hold a one-time server-granted vibe balance (never forced to 0 here).
+        const resolvedVibe =
+          typeof vibeCreditsInput === 'number'
             ? vibeCreditsInput
             : parseFloat(localStorage.getItem(`lunao_u_${ownerKey}_vibe_credits`) || '0');
         setVibeCreditBalance(resolvedVibe);
@@ -91,7 +90,9 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('lunao_owner_key', ownerKey);
         localStorage.setItem('lunao_auth_token', ownerKey);
         localStorage.setItem('lunao_unlocked', 'true');
+        localStorage.removeItem('lunao_cached_email_accounts_v2');
 
+        window.dispatchEvent(new Event('lunao_owner_key_changed'));
         window.dispatchEvent(
           new CustomEvent('lunao_auth_changed', {
             detail: {
@@ -354,11 +355,14 @@ export function GateProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem('lunao_businesses');
       localStorage.removeItem('lunao_sms_logs');
       localStorage.removeItem('lunao_sd_results');
+      localStorage.removeItem('lunao_cached_email_accounts_v2');
+      document.cookie = 'lunao_email_acc_count=0; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
     } catch {}
 
     setUser(null);
     setUnlocked(false);
     if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('lunao_owner_key_changed'));
       window.dispatchEvent(new CustomEvent('lunao_auth_changed', { detail: { user: null } }));
     }
   }, []);
