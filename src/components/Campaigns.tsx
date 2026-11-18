@@ -2098,6 +2098,7 @@ The Lunao Team`);
                 setScrollTarget?.(campaignId);
               }}
               onStepChange={(step) => setEmailActiveStep(step)}
+              setActiveTab={setActiveTab}
               initialSubject={initialEmailSubject}
               initialBody={initialEmailBody}
             />

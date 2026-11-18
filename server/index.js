@@ -7044,6 +7044,149 @@ app.get('/api/email-campaigns/:id/pending-discovery', authenticate, (req, res) =
   }
 });
 
+/**
+ * Resolve the caller's authoritative plan tier from DB / Supabase before
+ * falling back to request headers so Free Plan users cannot bypass gating.
+ */
+async function resolveAuthoritativeUserPlan(ownerKey, req) {
+  let resolved = null;
+  if (ownerKey && ownerKey !== 'dash-Free-Plan' && ownerKey !== 'user_default') {
+    const localAcct = getAccount(ownerKey);
+    if (localAcct?.plan) resolved = normalisePlan(localAcct.plan);
+
+    const pool = getPgPool();
+    if (pool) {
+      try {
+        const planRes = await pool.query(
+          'SELECT plan_tier FROM public.user_plans WHERE user_id = $1 LIMIT 1',
+          [ownerKey]
+        );
+        if (planRes.rows.length > 0 && planRes.rows[0].plan_tier) {
+          resolved = normalisePlan(planRes.rows[0].plan_tier);
+        }
+      } catch {}
+    } else if (!isServerSupabaseDegraded()) {
+      try {
+        const sbPlan = await Promise.race([
+          getSupabaseUserPlanAndAi(ownerKey).catch(() => null),
+          new Promise((resolve) => setTimeout(() => resolve(null), 3000)),
+        ]);
+        if (sbPlan?.plan) resolved = normalisePlan(sbPlan.plan);
+      } catch {}
+    }
+  }
+  if (resolved) return resolved;
+  const fallbackRaw = req.body?.plan || req.headers['x-user-plan'] || 'Free Plan';
+  return normalisePlan(fallbackRaw);
+}
+
+// Lunao Scraper: crawl a batch of uploaded CSV business websites using the exact
+// parallel email discovery engine. Free for all plans above Free Plan (0 credits).
+app.post('/api/email-scraper/crawl-batch', authenticate, async (req, res) => {
+  const abortController = new AbortController();
+  const onResClose = () => {
+    if (!res.writableFinished) {
+      abortController.abort();
+    }
+  };
+  res.on('close', onResClose);
+
+  try {
+    const ownerKey = getAuthOwnerKey(req);
+    if (!ownerKey) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    }
+
+    const userPlan = await resolveAuthoritativeUserPlan(ownerKey, req);
+    if (tierLevel(userPlan) < TIER['Starter Plan']) {
+      return res.status(403).json({
+        ok: false,
+        error: 'Lunao Scraper is available on all paid plans above Free Plan.',
+        requiredPlan: 'Starter Plan',
+        currentPlan: userPlan,
+      });
+    }
+
+    const rawRows = Array.isArray(req.body?.rows) ? req.body.rows : null;
+    if (!rawRows || rawRows.length === 0) {
+      return res.status(400).json({ ok: false, error: 'rows array is required' });
+    }
+    if (rawRows.length > 20) {
+      return res.status(400).json({ ok: false, error: 'Maximum 20 rows per batch request' });
+    }
+
+    const normalizedRows = rawRows.map((row, idx) => ({
+      _rowIdx: idx,
+      business_name: String(row?.business_name || row?.name || '').trim(),
+      name: String(row?.business_name || row?.name || '').trim(),
+      website: String(row?.website || row?.site || row?.url || '').trim(),
+      city: String(row?.city || '').trim(),
+      phone: String(row?.phone || '').trim(),
+      existingEmail: String(row?.email || '').trim(),
+    }));
+
+    const crawlTargets = normalizedRows.filter((r) => Boolean(r.website));
+    const discovered = crawlTargets.length > 0
+      ? await discoverEmailsInParallel(crawlTargets, {
+          concurrency: 10,
+          signal: abortController.signal,
+        })
+      : [];
+
+    const byIdx = new Map();
+    for (const item of discovered) {
+      if (typeof item?._rowIdx === 'number') {
+        byIdx.set(item._rowIdx, item);
+      }
+    }
+
+    const results = normalizedRows.map((row) => {
+      if (!row.website) {
+        return {
+          business_name: row.business_name,
+          website: '',
+          email: row.existingEmail || '',
+          city: row.city,
+          phone: row.phone,
+          status: row.existingEmail ? 'found' : 'no_website',
+          mx_verified: false,
+          discovery_method: row.existingEmail ? 'csv_existing' : '',
+        };
+      }
+      const match = byIdx.get(row._rowIdx);
+      if (match?.email) {
+        return {
+          business_name: row.business_name || match.business_name || '',
+          website: row.website,
+          email: match.email,
+          city: row.city,
+          phone: row.phone,
+          status: 'found',
+          mx_verified: Boolean(match.mx_verified),
+          discovery_method: match.discovery_method || 'crawler',
+        };
+      }
+      return {
+        business_name: row.business_name,
+        website: row.website,
+        email: row.existingEmail || '',
+        city: row.city,
+        phone: row.phone,
+        status: row.existingEmail ? 'found' : 'not_found',
+        mx_verified: false,
+        discovery_method: row.existingEmail ? 'csv_existing' : '',
+      };
+    });
+
+    return res.json({ ok: true, results });
+  } catch (err) {
+    if (abortController.signal.aborted) return;
+    return res.status(500).json({ ok: false, error: err.message || 'Scraper failed' });
+  } finally {
+    res.off('close', onResClose);
+  }
+});
+
 
 
 // Persist the user's manually-ticked lead set into `email_leads`. Wipes

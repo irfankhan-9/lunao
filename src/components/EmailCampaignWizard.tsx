@@ -8,7 +8,7 @@ import {
   CheckCircle, CheckCircle2, Loader2, X, ShieldAlert, Plus, Trash2, Eye, ExternalLink,
   RefreshCw, Link2, AlertTriangle, Zap, Clock, Pencil, FileSpreadsheet,
   Smartphone, Monitor, Maximize2, Users, Layout, Type, Search, MapPin, Terminal, Cloud, Key,
-  Minus, SlidersHorizontal, Building2
+  Minus, SlidersHorizontal, Building2, Lock
 } from 'lucide-react';
 import { playGentleChime, playLaunchSwell, playVictoryCelebration, playSoftTap, playElegantError, playSoftBubble, playElegantBell } from '../utils/audio';
 import { dedupeLeads } from '../utils/leads';
@@ -20,6 +20,7 @@ import { CsvPreview } from './CsvPreview';
 import { TemplatePreviewModal } from './TemplatePreviewModal';
 import { CampaignProgressToggle, CampaignProgressData } from './CampaignProgressToggle';
 import { CampaignTemplateStep } from './CampaignTemplateStep';
+import { LunaoScraperPanel } from './LunaoScraperPanel';
 import { isUgcOrSalesMode, getContractorSiteUrl } from '../specialModes/modeManager';
 
 // Types
@@ -50,6 +51,7 @@ interface EmailCampaignWizardProps {
   onCampaignCreated?: (campaign: any) => void;
   onViewDetails?: (campaignId: string) => void;
   onStepChange?: (step: number) => void;
+  setActiveTab?: (tab: any) => void;
   initialSubject?: string;
   initialBody?: string;
   // Active campaign registry
@@ -99,6 +101,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   onCampaignCreated,
   onViewDetails,
   onStepChange,
+  setActiveTab,
   initialSubject,
   initialBody,
   activeCampaignRuns = [],
@@ -122,6 +125,7 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
   
   // Lead source
   const [leadSource, setLeadSource] = useState<'csv' | 'leads'>('leads');
+  const [showLunaoScraper, setShowLunaoScraper] = useState<boolean>(false);
 
   // CSV state
   const [csvFileName, setCsvFileName] = useState<string | null>(null);
@@ -2275,46 +2279,77 @@ export const EmailCampaignWizard: React.FC<EmailCampaignWizardProps> = ({
               <p className="text-sm text-ink-secondary">Upload a CSV or use Auto Email Finder to discover verified local businesses.</p>
             </div>
             
-            {/* Lead Source Tabs */}
-            <div className={`flex flex-wrap sm:flex-nowrap gap-1.5 sm:gap-2 p-1 sm:p-1.5 bg-gradient-to-r from-surface to-off-white rounded-2xl w-full sm:w-fit shadow-inner ${
-              dorkFetchingNext ? 'opacity-50 pointer-events-none' : ''
-            }`}>
+            {/* Lead Source Tabs + Lunao Scraper Toggle */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className={`flex flex-wrap sm:flex-nowrap gap-1.5 sm:gap-2 p-1 sm:p-1.5 bg-gradient-to-r from-surface to-off-white rounded-2xl w-full sm:w-fit shadow-inner ${
+                dorkFetchingNext ? 'opacity-50 pointer-events-none' : ''
+              }`}>
+                <button
+                  type="button"
+                  disabled={dorkFetchingNext}
+                  onClick={() => { playSoftTap(); setLeadSource('leads'); }}
+                  className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-6 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-300 ${
+                    dorkFetchingNext ? 'cursor-not-allowed pointer-events-none' : 'cursor-pointer'
+                  } ${
+                    leadSource === 'leads'
+                      ? 'bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30'
+                      : 'text-ink-secondary hover:text-ink hover:bg-white/50'
+                  }`}
+                >
+                  <Globe className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                  <span className="truncate">Auto Email Finder</span>
+                  {dorkSelected.size > 0 && (
+                    <span className="ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent text-white text-[10px] font-black shadow-sm">
+                      {dorkSelected.size > 99 ? '99+' : dorkSelected.size}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  disabled={dorkFetchingNext}
+                  onClick={() => { playSoftTap(); setLeadSource('csv'); }}
+                  className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-6 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-300 ${
+                    dorkFetchingNext ? 'cursor-not-allowed pointer-events-none' : 'cursor-pointer'
+                  } ${
+                    leadSource === 'csv'
+                      ? 'bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30'
+                      : 'text-ink-secondary hover:text-ink hover:bg-white/50'
+                  }`}
+                >
+                  <Upload className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                  <span className="truncate">Upload CSV</span>
+                </button>
+              </div>
+
               <button
                 type="button"
-                disabled={dorkFetchingNext}
-                onClick={() => { playSoftTap(); setLeadSource('leads'); }}
-                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-6 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-300 ${
-                  dorkFetchingNext ? 'cursor-not-allowed pointer-events-none' : 'cursor-pointer'
-                } ${
-                  leadSource === 'leads'
-                    ? 'bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30'
-                    : 'text-ink-secondary hover:text-ink hover:bg-white/50'
+                onClick={() => {
+                  playSoftTap();
+                  setShowLunaoScraper((prev) => !prev);
+                }}
+                className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold border transition-colors cursor-pointer ${
+                  showLunaoScraper
+                    ? 'bg-white text-accent border-accent/40 shadow-sm'
+                    : 'bg-white text-ink-secondary hover:text-ink border-border-main hover:bg-surface'
                 }`}
               >
-                <Globe className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-                <span className="truncate">Auto Email Finder</span>
-                {dorkSelected.size > 0 && (
-                  <span className="ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent text-white text-[10px] font-black shadow-sm">
-                    {dorkSelected.size > 99 ? '99+' : dorkSelected.size}
-                  </span>
+                {String(userPlan || 'Free Plan').trim().toLowerCase() === 'free plan' ||
+                String(userPlan || '').trim().toLowerCase() === 'free' ? (
+                  <Lock className="w-4 h-4 shrink-0" />
+                ) : (
+                  <Search className="w-4 h-4 shrink-0" />
                 )}
-              </button>
-              <button
-                type="button"
-                disabled={dorkFetchingNext}
-                onClick={() => { playSoftTap(); setLeadSource('csv'); }}
-                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-6 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-300 ${
-                  dorkFetchingNext ? 'cursor-not-allowed pointer-events-none' : 'cursor-pointer'
-                } ${
-                  leadSource === 'csv'
-                    ? 'bg-white text-accent shadow-lg shadow-accent/20 ring-2 ring-accent/30'
-                    : 'text-ink-secondary hover:text-ink hover:bg-white/50'
-                }`}
-              >
-                <Upload className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-                <span className="truncate">Upload CSV</span>
+                <span>Lunao Scraper</span>
               </button>
             </div>
+
+            {showLunaoScraper && (
+              <LunaoScraperPanel
+                userPlan={userPlan}
+                onUpgrade={() => setActiveTab?.('plans')}
+                onClose={() => setShowLunaoScraper(false)}
+              />
+            )}
 
             {/* CSV Upload */}
             {leadSource === 'csv' && (
