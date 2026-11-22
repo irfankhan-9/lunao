@@ -158,7 +158,7 @@ export const AiStudioModelSelector: React.FC<AiStudioModelSelectorProps> = ({
   const anthropicModels = STUDIO_MODELS.filter(m => m.provider === 'anthropic');
 
   const formattedBalance = isFreePlan
-    ? (effectiveBalance >= 1 ? '1' : '0')
+    ? '0'
     : effectiveBalance.toLocaleString(undefined, {
         minimumFractionDigits: effectiveBalance % 1 !== 0 ? 1 : 0,
         maximumFractionDigits: 2,
@@ -197,13 +197,13 @@ export const AiStudioModelSelector: React.FC<AiStudioModelSelectorProps> = ({
         <button
           type="button"
           onClick={handleUpgradeClick}
-          title={isFreePlan ? `${formattedBalance} free AI prompt${effectiveBalance >= 1 ? '' : 's'} available. Click to manage plan.` : `${formattedBalance} AI credits available. Click to manage plan.`}
+          title={isFreePlan ? '0 AI Prompts — No Vibe Coding on Free Plan. Upgrade to Starter+ to unlock.' : `${formattedBalance} AI credits available. Click to manage plan.`}
           className="inline-flex items-center gap-1.5 px-2 py-1 text-xs text-slate-600 hover:text-slate-900 transition-colors cursor-pointer select-none"
         >
           <span className={`font-mono font-bold ${isExhausted ? 'text-red-600' : isLow ? 'text-amber-600' : 'text-slate-900'}`}>
             {formattedBalance}
           </span>
-          <span className="text-[11px] text-slate-500 font-medium">{isFreePlan ? (effectiveBalance >= 1 ? 'Prompt' : 'Prompts') : 'Credits'}</span>
+          <span className="text-[11px] text-slate-500 font-medium">{isFreePlan ? 'Prompts (Locked)' : 'Credits'}</span>
 
           {typeof lastUsageCredits === 'number' && lastUsageCredits > 0 && (
             <span className="text-[10px] font-mono text-emerald-700 font-semibold bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200/60 animate-in fade-in">

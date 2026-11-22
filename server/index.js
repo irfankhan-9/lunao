@@ -66,6 +66,7 @@ import { streamEdit, isAiEnabled, cleanHtmlOutput, generateTemplateHtml } from '
 import { orchestrateAiEditStream } from './lib/ai/orchestrator.js';
 import { listStudioModels } from './lib/ai/pricingRegistry.js';
 import { getUserAiStatus, listAiUsageLedger, syncUserAiPlan, persistSupabaseAiBalance, FREE_VIBE_CREDITS } from './lib/ai/accountingService.js';
+import { fetchAdminUserDetailsMaps, adminGrantUserPlanAndCredits } from './lib/adminGrants.js';
 import { createBooking, createBookingAsync, listBookings, listBookingsAsync, updateBookingStatus, updateBookingStatusAsync, getBooking, getBookingAsync } from './lib/bookings.js';
 import { validateBookingContract, rollbackToApprovedBooking, CONTRACT_REJECTION_MESSAGE } from './lib/bookingContractValidator.js';
 import {
@@ -1532,22 +1533,36 @@ app.post('/api/ai/edit', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders?.();
+
+  const abortController = new AbortController();
   const send = (event) => {
+    if (res.writableEnded || res.destroyed) return;
     try {
       res.write(`data: ${JSON.stringify(event)}\n\n`);
     } catch {}
   };
 
-  // Heartbeat to prevent Cloudflare / Nginx proxy timeouts during streaming
+  // Heartbeat every 5s to prevent Cloudflare / Nginx / browser proxy idle timeouts
   const heartbeat = setInterval(() => {
+    if (res.writableEnded || res.destroyed) {
+      clearInterval(heartbeat);
+      return;
+    }
     try {
       res.write(': keepalive\n\n');
     } catch {}
-  }, 10000);
+  }, 5000);
+
+  res.on('close', () => {
+    clearInterval(heartbeat);
+    if (!res.writableEnded) {
+      abortController.abort();
+    }
+  });
 
   if (typeof html !== 'string' || !html.trim() || typeof instruction !== 'string' || !instruction.trim()) {
     clearInterval(heartbeat);
-    send({ type: 'error', error: 'Missing html or instruction prompt.' });
+    send({ type: 'error', error: 'Missing html or instruction prompt.', code: 'INVALID_REQUEST', statusCode: 400 });
     return res.end();
   }
 
@@ -1556,9 +1571,19 @@ app.post('/api/ai/edit', async (req, res) => {
   const requestId = reqId || req.id || `req_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
   try {
-    if (planHint) {
-      await getUserAiStatus(userId, String(planHint));
+    const authoritativePlan = await resolveAuthoritativeUserPlan(userId, req);
+    if (tierLevel(authoritativePlan) < TIER['Starter Plan']) {
+      clearInterval(heartbeat);
+      send({
+        type: 'error',
+        error: 'AI Vibe Coding Studio is available on Starter Plan ($97/mo) and above. Upgrade your plan in Plans & Credits to unlock AI Web Studio.',
+        code: 'PLAN_UPGRADE_REQUIRED',
+        statusCode: 403,
+        balance: 0,
+      });
+      return res.end();
     }
+
     let started = false;
     const result = await orchestrateAiEditStream({
       html,
@@ -1571,11 +1596,15 @@ app.post('/api/ai/edit', async (req, res) => {
       anthropicApiKey,
       geminiApiKey,
       apiKey,
+      signal: abortController.signal,
       onStart: () => {
         if (!started) {
           started = true;
           send({ type: 'start' });
         }
+      },
+      onReset: () => {
+        send({ type: 'reset' });
       },
       onThinking: (delta) => {
         if (!started) {
@@ -1593,19 +1622,26 @@ app.post('/api/ai/edit', async (req, res) => {
       },
     });
 
-    send({ type: 'done', html: result.html, metadata: result.metadata });
+    if (!abortController.signal.aborted) {
+      send({ type: 'done', html: result.html, metadata: result.metadata });
+    }
   } catch (err) {
-    console.warn('[AI Edit] Stream error:', err.message);
-    send({
-      type: 'error',
-      error: err.message || 'AI servers busy, try later.',
-      code: err.code || 'GENERATION_ERROR',
-      balance: err.balance,
-      needed: err.needed,
-    });
+    if (!abortController.signal.aborted) {
+      console.warn(`[AI Edit] Stream error requestId=${requestId} code=${err.code || 'GENERATION_ERROR'} msg=${err.message}`);
+      send({
+        type: 'error',
+        error: err.message || 'AI servers busy, try later.',
+        code: err.code || 'GENERATION_ERROR',
+        statusCode: err.statusCode || err.status || 500,
+        balance: err.balance,
+        needed: err.needed,
+      });
+    }
   } finally {
     clearInterval(heartbeat);
-    res.end();
+    if (!res.writableEnded) {
+      res.end();
+    }
   }
 });
 
@@ -2411,10 +2447,10 @@ async function getSupabaseUserPlanAndAi(ownerKey) {
     const isFreeTier = planTier === 'Free Plan';
     return {
       plan: planTier,
-      // Free accounts hold their one-time free vibe credits in the stored balance (never forced to 0).
-      aiCreditsBalance: isFreeTier ? (Number(cRow?.ai_dollars_spent || 0) > 0 ? aiBalance : FREE_VIBE_CREDITS) : aiBalance,
-      monthlyAiCredits: isFreeTier ? Math.max(monthlyAiCredits, FREE_VIBE_CREDITS) : monthlyAiCredits,
-      monthlyAiAllowanceUsd: Number(pRow?.monthly_ai_allowance_usd ?? (monthlyAiCredits * 0.01)),
+      // Free accounts have 0 AI Vibe Coding credits (Starter Plan and above only).
+      aiCreditsBalance: isFreeTier ? 0 : aiBalance,
+      monthlyAiCredits: isFreeTier ? 0 : monthlyAiCredits,
+      monthlyAiAllowanceUsd: isFreeTier ? 0 : Number(pRow?.monthly_ai_allowance_usd ?? (monthlyAiCredits * 0.01)),
       aiDollarsSpent: Number(cRow?.ai_dollars_spent || 0),
     };
   } catch (err) {
@@ -2597,12 +2633,9 @@ app.get('/api/auth/me', authenticate, async (req, res) => {
       }
     }
 
-    // Free accounts: self-heal the one-time free vibe grant (idempotent) and report the real balance.
+    // Free accounts have 0 AI Vibe Coding credits (Starter Plan and above only).
     if (plan === 'Free Plan') {
-      try {
-        const freeAi = await getUserAiStatus(ownerKey, plan);
-        if (typeof freeAi?.balanceCredits === 'number') vibeCredits = freeAi.balanceCredits;
-      } catch {}
+      vibeCredits = 0;
     }
 
     try {
@@ -2859,11 +2892,15 @@ app.use('/sites', express.static(SITES_DIR, { extensions: ['html'], index: ['ind
 // directly from source so it works in both dev and prod. The gate middleware
 // redirects unauthenticated browser requests here.
 // Admin Mission Control Overview Endpoint (Secured by Admin Password)
-app.get('/api/admin/overview', async (req, res) => {
+function isAdminAuthorized(req) {
   const authHeader = req.headers['authorization'] || '';
   const pwdHeader = req.headers['x-admin-password'] || req.query.password || '';
   const expected = '$KHAN1234455';
-  if (pwdHeader !== expected && authHeader !== `Bearer ${expected}`) {
+  return pwdHeader === expected || authHeader === `Bearer ${expected}`;
+}
+
+app.get('/api/admin/overview', async (req, res) => {
+  if (!isAdminAuthorized(req)) {
     return res.status(401).json({ ok: false, error: 'Unauthorized: Invalid Admin Password' });
   }
 
@@ -2872,11 +2909,12 @@ app.get('/api/admin/overview', async (req, res) => {
     const sbKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ['sb_secret_', 'YIDJMhmII9ri2vCbZIgGRg_IaL5xKwf'].join('');
     const headers = { apikey: sbKey, Authorization: `Bearer ${sbKey}` };
 
-    const [sitesRes, usersRes, campaignsRes, cacheRes] = await Promise.all([
+    const [sitesRes, usersRes, campaignsRes, cacheRes, adminDetails] = await Promise.all([
       fetch(`${sbUrl}/rest/v1/user_sites?select=owner_id,slug,business_name,city,niche,deploy_url,campaign_source,campaign_id,created_at&order=created_at.desc`, { headers }),
       fetch(`${sbUrl}/rest/v1/credit_accounts?select=owner_key,plan,balance,lifetime_used,created_at,updated_at`, { headers }),
       fetch(`${sbUrl}/rest/v1/campaigns?select=id,owner_key,name,niche,status,total_leads,sites_generated,sms_sent,started_at,type,csv_snapshot&order=started_at.desc`, { headers }),
       fetch(`${sbUrl}/rest/v1/places_lead_cache?select=searched_city_norm,niche_norm,place_id`, { headers }),
+      fetchAdminUserDetailsMaps(),
     ]);
 
     const sites = (await sitesRes.json()) || [];
@@ -3029,6 +3067,58 @@ app.get('/api/admin/overview', async (req, res) => {
       };
     });
 
+    // Enrich userMap with authoritative Supabase user_plans, user_credits, and lunao_users
+    const { plansByUser, creditsByUser, profilesByUser, decodeActionBalance } = adminDetails || {};
+    const extraKeys = new Set([
+      ...(plansByUser ? plansByUser.keys() : []),
+      ...(creditsByUser ? creditsByUser.keys() : []),
+      ...(profilesByUser ? profilesByUser.keys() : []),
+    ]);
+    for (const k of extraKeys) {
+      if (!userMap.has(k)) {
+        const pRow = plansByUser?.get(k);
+        const cRow = creditsByUser?.get(k);
+        const uRow = profilesByUser?.get(k);
+        userMap.set(k, {
+          owner_key: k,
+          plan: pRow?.plan_tier || 'Free Plan',
+          balance: cRow ? decodeActionBalance(cRow, 0) : 0,
+          sitesRebranded: 0,
+          sitesDeployed: 0,
+          campaignsCount: 0,
+          businessesRequested: 0,
+          googleMapsCalls: 0,
+          lastActive: uRow?.last_login_at || pRow?.updated_at || cRow?.updated_at || uRow?.created_at || null,
+        });
+      }
+    }
+    for (const [k, rec] of userMap.entries()) {
+      const pRow = plansByUser?.get(k);
+      const cRow = creditsByUser?.get(k);
+      const uRow = profilesByUser?.get(k);
+      if (uRow) {
+        rec.email = uRow.email || '';
+        rec.name = uRow.name || '';
+        if (uRow.last_login_at && (!rec.lastActive || Number(uRow.last_login_at) > Number(rec.lastActive))) {
+          rec.lastActive = uRow.last_login_at;
+        }
+      }
+      if (pRow?.plan_tier) {
+        rec.plan = pRow.plan_tier;
+      }
+      rec.planExpiresAt = pRow?.plan_expires_at ? Number(pRow.plan_expires_at) : null;
+      if (cRow) {
+        rec.balance = decodeActionBalance(cRow, rec.balance || 0);
+      }
+      const aiVal =
+        cRow && cRow.ai_credits_balance !== null && cRow.ai_credits_balance !== undefined
+          ? Number(cRow.ai_credits_balance)
+          : pRow && pRow.ai_credits_balance !== null && pRow.ai_credits_balance !== undefined
+            ? Number(pRow.ai_credits_balance)
+            : 0;
+      rec.aiCreditsBalance = Number.isFinite(aiVal) ? aiVal : 0;
+    }
+
     const usersList = Array.from(userMap.values()).sort((a, b) => (b.sitesRebranded + b.campaignsCount) - (a.sitesRebranded + a.campaignsCount));
     const totalSitesRebranded = validSites.length;
     const totalSitesDeployed = validSites.filter((s) => s.deploy_url).length;
@@ -3049,6 +3139,42 @@ app.get('/api/admin/overview', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: 'Failed to aggregate admin metrics: ' + err.message });
+  }
+});
+
+// Admin Grant Endpoint: Permanently update a user's plan, Lunao credits, and AI credits in Supabase
+app.post('/api/admin/users/grant', async (req, res) => {
+  if (!isAdminAuthorized(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized: Invalid Admin Password' });
+  }
+  try {
+    const {
+      ownerKey,
+      email,
+      plan,
+      durationDays,
+      lunaoMode,
+      lunaoAmount,
+      aiMode,
+      aiAmount,
+      note,
+    } = req.body || {};
+
+    const updated = await adminGrantUserPlanAndCredits({
+      ownerKey,
+      email,
+      plan,
+      durationDays,
+      lunaoMode,
+      lunaoAmount,
+      aiMode,
+      aiAmount,
+      note,
+    });
+
+    return res.json({ ok: true, user: updated });
+  } catch (err) {
+    return res.status(err.status || 500).json({ ok: false, error: err.message || 'Failed to grant plan and credits' });
   }
 });
 
@@ -3640,12 +3766,9 @@ app.get('/api/credits', authenticate, async (req, res) => {
       }
     }
 
-    // Free accounts: self-heal the one-time free vibe grant (idempotent) and report the real balance.
+    // Free accounts have 0 AI Vibe Coding credits (Starter Plan and above only).
     if (plan === 'Free Plan') {
-      try {
-        const freeAi = await getUserAiStatus(ownerKey, plan);
-        if (typeof freeAi?.balanceCredits === 'number') vibeCredits = freeAi.balanceCredits;
-      } catch {}
+      vibeCredits = 0;
     }
 
     try {
@@ -9021,6 +9144,10 @@ if (process.env.NO_SERVER_LISTEN !== 'true') {
 
     console.log('');
   });
+
+  server.keepAliveTimeout = 65_000;
+  server.headersTimeout = 66_000;
+  server.requestTimeout = 300_000;
 
   const onShutdownSignal = async (sig) => {
     await gracefulShutdown(sig);

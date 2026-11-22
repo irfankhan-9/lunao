@@ -86,12 +86,62 @@ function buildClaudeMessages(html, instruction, history = []) {
   return messages;
 }
 
+function resolveAnthropicCandidates(requestedModel) {
+  const norm = String(requestedModel || '').toLowerCase();
+  const envModel = process.env.ANTHROPIC_MODEL ? process.env.ANTHROPIC_MODEL.trim() : '';
+
+  let list;
+  if (norm.includes('haiku')) {
+    list = ['claude-haiku-5-5', 'claude-haiku-4-5', envModel, 'claude-sonnet-4-5'];
+  } else if (norm.includes('fable')) {
+    list = ['claude-fable-5-1', envModel || 'claude-sonnet-4-5', 'claude-sonnet-5-5'];
+  } else {
+    list = [envModel || 'claude-sonnet-4-5', 'claude-sonnet-5-5', 'claude-sonnet-4-5', 'claude-haiku-4-5'];
+  }
+  return Array.from(new Set(list.filter(Boolean)));
+}
+
+function classifyAnthropicError(err) {
+  const msg = String(err?.message || err || '');
+  const status = Number(err?.status || err?.statusCode || 0);
+  const lower = msg.toLowerCase();
+
+  if (status === 401 || status === 403 || lower.includes('authentication') || lower.includes('api key')) {
+    return Object.assign(new Error('Anthropic API key is invalid or unauthorized.'), {
+      code: 'AUTH_CONFIG_ERROR',
+      statusCode: status || 401,
+    });
+  }
+  if (status === 429 || lower.includes('rate_limit') || lower.includes('rate limit')) {
+    return Object.assign(new Error('Claude rate limit reached. Retrying with fallback engine.'), {
+      code: 'RATE_LIMITED',
+      statusCode: 429,
+    });
+  }
+  if (status === 404 || lower.includes('not_found')) {
+    return Object.assign(new Error(msg || 'Requested Claude model is unavailable.'), {
+      code: 'MODEL_UNAVAILABLE',
+      statusCode: 404,
+    });
+  }
+  if (lower.includes('timeout') || lower.includes('aborted')) {
+    return Object.assign(new Error('Claude generation timed out.'), {
+      code: 'STREAM_TIMEOUT',
+      statusCode: 504,
+    });
+  }
+  return Object.assign(new Error(msg || 'Claude generation failed.'), {
+    code: err?.code || 'GENERATION_ERROR',
+    statusCode: status || 500,
+  });
+}
+
 /**
  * Stream an edit using Anthropic Claude.
- * Returns { html, tokenUsage, latencyMs }.
+ * Returns { html, tokenUsage, latencyMs, finishReason, modelUsed }.
  */
 export async function streamAnthropicEdit(
-  { html, instruction, history, model = 'claude-sonnet-5-5', apiKey, maxOutputTokens = 8192 },
+  { html, instruction, history, model = 'claude-sonnet-5-5', apiKey, maxOutputTokens = 32768, signal, onReset },
   onChunk,
   onThinking,
 ) {
@@ -100,70 +150,169 @@ export async function streamAnthropicEdit(
 
   if (!client) {
     console.warn(`[anthropicAdapter] No API client initialized. Cannot fulfill request.`);
-    throw new Error('AI servers busy, try later.');
-  }
-
-  // Direct mapping to live Anthropic models in AI Web Studio
-  let actualModel = model;
-  if (model === 'claude-haiku-5-5' || model.includes('haiku')) {
-    actualModel = 'claude-haiku-5-5';
-  } else if (model === 'claude-fable-5-1' || model.includes('fable')) {
-    actualModel = 'claude-fable-5-1';
-  } else if (model === 'claude-sonnet-5-5' || model.includes('sonnet')) {
-    actualModel = 'claude-sonnet-5-5';
-  }
-
-  const messages = buildClaudeMessages(html, instruction, history);
-
-  try {
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('AI servers busy, try later.')), 150000)
-    );
-
-    const stream = await Promise.race([
-      client.messages.stream({
-        model: actualModel,
-        max_tokens: Math.min(maxOutputTokens, 8192),
-        system: SYSTEM_PROMPT,
-        messages,
-      }),
-      timeoutPromise,
-    ]);
-
-    let fullHtml = '';
-    stream.on('text', (text) => {
-      fullHtml += text;
-      if (onChunk) onChunk(text);
+    throw Object.assign(new Error('Anthropic API key is not configured.'), {
+      code: 'AUTH_CONFIG_ERROR',
+      statusCode: 401,
     });
+  }
 
-    const finalMessage = await stream.finalMessage();
-    const latencyMs = Date.now() - startTime;
+  const candidates = resolveAnthropicCandidates(model);
+  const messages = buildClaudeMessages(html, instruction, history);
+  const targetMaxTokens = Math.min(Math.max(Number(maxOutputTokens) || 16384, 16384), 32768);
+  let lastErr = null;
 
-    if (!fullHtml || fullHtml.length < 100) {
-      throw new Error('AI servers busy, try later.');
+  for (const actualModel of candidates) {
+    if (signal?.aborted) {
+      throw Object.assign(new Error('Generation cancelled.'), { code: 'ABORTED', statusCode: 499 });
     }
 
-    const usage = finalMessage.usage || {};
-    const inputTokens = Number(usage.input_tokens) || 0;
-    const outputTokens = Number(usage.output_tokens) || 0;
-    const cachedReadTokens = Number(usage.cache_read_input_tokens || 0);
-    const cacheWriteTokens = Number(usage.cache_creation_input_tokens || 0);
-    const totalTokens = inputTokens + outputTokens;
+    const tokenBudgets = [targetMaxTokens, 8192];
+    for (const maxTokens of tokenBudgets) {
+      let emittedForCandidate = false;
+      let idleTimer = null;
+      let stream = null;
 
-    return {
-      html: fullHtml,
-      tokenUsage: {
-        inputTokens,
-        outputTokens,
-        thoughtTokens: 0,
-        cachedReadTokens,
-        cacheWriteTokens,
-        totalTokens,
-      },
-      latencyMs,
-    };
-  } catch (err) {
-    console.warn(`[anthropicAdapter] Generation failed on ${actualModel}: ${err.message}`);
-    throw new Error('AI servers busy, try later.');
+      try {
+        const abortCtrl = new AbortController();
+        const onExternalAbort = () => abortCtrl.abort();
+        signal?.addEventListener?.('abort', onExternalAbort, { once: true });
+
+        const resetIdleTimer = (rejectFn) => {
+          if (idleTimer) clearTimeout(idleTimer);
+          idleTimer = setTimeout(() => {
+            try { stream?.abort?.(); } catch {}
+            abortCtrl.abort();
+            rejectFn(new Error('Claude stream idle timeout exceeded.'));
+          }, 30000);
+        };
+
+        let fullHtml = '';
+        const finalMessage = await new Promise((resolve, reject) => {
+          resetIdleTimer(reject);
+          try {
+            stream = client.messages.stream(
+              {
+                model: actualModel,
+                max_tokens: maxTokens,
+                system: SYSTEM_PROMPT,
+                messages,
+              },
+              { signal: abortCtrl.signal },
+            );
+
+            stream.on('text', (text) => {
+              resetIdleTimer(reject);
+              emittedForCandidate = true;
+              fullHtml += text;
+              if (onChunk) onChunk(text);
+            });
+
+            if (onThinking) {
+              stream.on('thinking', (thinkingDelta) => {
+                resetIdleTimer(reject);
+                if (thinkingDelta) onThinking(String(thinkingDelta));
+              });
+            }
+
+            stream.on('error', (streamErr) => reject(streamErr));
+            stream.finalMessage().then(resolve, reject);
+          } catch (initErr) {
+            reject(initErr);
+          }
+        }).finally(() => {
+          if (idleTimer) clearTimeout(idleTimer);
+          signal?.removeEventListener?.('abort', onExternalAbort);
+        });
+
+        let usage = finalMessage?.usage || {};
+        let inputTokens = Number(usage.input_tokens) || 0;
+        let outputTokens = Number(usage.output_tokens) || 0;
+
+        // 1-shot continuation if stopped due to max_tokens before </html>
+        if (
+          finalMessage?.stop_reason === 'max_tokens' &&
+          !fullHtml.toLowerCase().includes('</html>') &&
+          fullHtml.length >= 250
+        ) {
+          try {
+            const tail = fullHtml.slice(-1800);
+            const contMsg = await client.messages.create(
+              {
+                model: actualModel,
+                max_tokens: 4096,
+                system: 'Continue the HTML document from the exact tail provided until </html>. Output raw HTML only, no markdown fences.',
+                messages: [
+                  { role: 'user', content: `Continue immediately after:\n${tail}` },
+                ],
+              },
+              { signal },
+            );
+            const extra = (contMsg?.content || [])
+              .filter((b) => b?.type === 'text' && b.text)
+              .map((b) => b.text)
+              .join('')
+              .replace(/^```(?:html)?\s*/i, '')
+              .replace(/\s*```$/i, '');
+            if (extra) {
+              fullHtml += extra;
+              if (onChunk) onChunk(extra);
+            }
+            outputTokens += Number(contMsg?.usage?.output_tokens) || 0;
+          } catch (contErr) {
+            console.warn(`[anthropicAdapter] Continuation notice on ${actualModel}:`, contErr.message);
+          }
+        }
+
+        const latencyMs = Date.now() - startTime;
+        if (!fullHtml || fullHtml.trim().length < 40) {
+          throw new Error(`Empty response from ${actualModel}`);
+        }
+
+        const cachedReadTokens = Number(usage.cache_read_input_tokens || 0);
+        const cacheWriteTokens = Number(usage.cache_creation_input_tokens || 0);
+        const totalTokens = inputTokens + outputTokens;
+
+        return {
+          html: fullHtml,
+          modelUsed: actualModel,
+          finishReason: finalMessage?.stop_reason || 'end_turn',
+          tokenUsage: {
+            inputTokens,
+            outputTokens,
+            thoughtTokens: 0,
+            cachedReadTokens,
+            cacheWriteTokens,
+            totalTokens,
+          },
+          latencyMs,
+        };
+      } catch (err) {
+        if (idleTimer) clearTimeout(idleTimer);
+        if (signal?.aborted) {
+          throw Object.assign(new Error('Generation cancelled.'), { code: 'ABORTED', statusCode: 499 });
+        }
+        if (emittedForCandidate && onReset) {
+          onReset();
+        }
+        const msg = String(err?.message || '');
+        const isMaxTokenErr =
+          Number(err?.status || err?.statusCode) === 400 &&
+          msg.toLowerCase().includes('max_tokens');
+        lastErr = classifyAnthropicError(err);
+        console.warn(`[anthropicAdapter] ${actualModel} failed (${lastErr.code}): ${msg.slice(0, 140)}`);
+
+        if (lastErr.code === 'AUTH_CONFIG_ERROR') {
+          throw lastErr;
+        }
+        if (!isMaxTokenErr) {
+          break;
+        }
+      }
+    }
   }
+
+  throw lastErr || Object.assign(new Error('Anthropic models unavailable.'), {
+    code: 'MODEL_UNAVAILABLE',
+    statusCode: 503,
+  });
 }

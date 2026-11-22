@@ -23,7 +23,7 @@ function resetSbAiCircuitBreaker() {
 // One-time AI Vibe Coding credits granted to every Free-plan account (15 credits = $0.15).
 // This is NOT a monthly allowance: it is granted exactly once per account, tracked by
 // user_credits.free_vibe_granted_at (see grantFreeVibeCreditsOnce).
-export const FREE_VIBE_CREDITS = 1;
+export const FREE_VIBE_CREDITS = 0;
 
 // Free accounts may only use low-cost Flash-tier models so the $0.15 grant stays bounded.
 export const FREE_ALLOWED_MODEL_IDS = ['gemini-3.5-flash', 'gemini-3.8-flash'];
@@ -33,7 +33,7 @@ export function isFreePlanName(planName) {
 }
 
 export const PLAN_ALLOWANCES = {
-  'Free Plan': { monthlyUsd: 0.05, monthlyCredits: FREE_VIBE_CREDITS, priceUsd: 0 },
+  'Free Plan': { monthlyUsd: 0.0, monthlyCredits: FREE_VIBE_CREDITS, priceUsd: 0 },
   'Starter Plan': { monthlyUsd: 6.00, monthlyCredits: 600, priceUsd: 97 },
   'Pro Plan': { monthlyUsd: 13.00, monthlyCredits: 1300, priceUsd: 187 },
   'Agency Plan': { monthlyUsd: 20.00, monthlyCredits: 2000, priceUsd: 297 },
@@ -60,20 +60,21 @@ async function fetchSupabaseAiAccount(userId) {
   if (isSbAiDegraded()) return null;
   const { sbUrl, sbKey } = getSupabaseRestCredentials();
   if (!sbUrl || !sbKey || !userId) return null;
-  try {
+
+  const attemptFetch = async () => {
     const [planRes, credRes] = await Promise.all([
       fetch(
         `${sbUrl}/rest/v1/user_plans?user_id=eq.${encodeURIComponent(userId)}&select=*&limit=1`,
         {
           headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
-          signal: AbortSignal.timeout(1000),
+          signal: AbortSignal.timeout(3000),
         }
       ),
       fetch(
         `${sbUrl}/rest/v1/user_credits?user_id=eq.${encodeURIComponent(userId)}&select=*&limit=1`,
         {
           headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
-          signal: AbortSignal.timeout(1000),
+          signal: AbortSignal.timeout(3000),
         }
       ),
     ]);
@@ -84,10 +85,18 @@ async function fetchSupabaseAiAccount(userId) {
     if (!planRow && !credRow) return null;
     resetSbAiCircuitBreaker();
     return { planRow, credRow };
-  } catch (err) {
-    tripSbAiCircuitBreaker(45000);
-    console.warn('[accountingService] Supabase REST fetch notice:', err.message);
-    return null;
+  };
+
+  try {
+    return await attemptFetch();
+  } catch {
+    try {
+      return await attemptFetch();
+    } catch (err) {
+      tripSbAiCircuitBreaker(20000);
+      console.warn('[accountingService] Supabase REST fetch notice:', err.message);
+      return null;
+    }
   }
 }
 
@@ -222,6 +231,7 @@ async function ensureFreeVibeColumn() {
  * Returns { granted: boolean, balance?: number }.
  */
 export async function grantFreeVibeCreditsOnce(userId, knownPlanName = null) {
+  if (FREE_VIBE_CREDITS <= 0) return { granted: false };
   if (!userId || _freeVibeGrantSettled.has(userId)) return { granted: false };
   const { sbUrl, sbKey } = getSupabaseRestCredentials();
   if (!sbUrl || !sbKey || isSbAiDegraded()) return { granted: false };
@@ -427,14 +437,14 @@ export async function reserveBudget({
 
   const isFreeAccount = isFreePlanName(activePlan);
 
-  // Free accounts run on the one-time grant: Flash-tier models only, and no overdraft.
-  if (isFreeAccount && !FREE_ALLOWED_MODEL_IDS.includes(normModel)) {
+  // Free accounts cannot use AI Vibe Coding Studio (Starter Plan and above only).
+  if (isFreeAccount) {
     const err = new Error(
-      'This model is available on Starter, Pro and Agency plans. Free accounts can use Gemini Flash models with their free vibe-coding credits.'
+      'AI Vibe Coding Studio is available on Starter, Pro, and Agency plans. Upgrade to Starter ($97/mo) or higher to unlock AI Web Studio.'
     );
-    err.status = 402;
-    err.code = 'FREE_MODEL_LOCKED';
-    err.balance = currentBalance;
+    err.status = 403;
+    err.code = 'PLAN_UPGRADE_REQUIRED';
+    err.balance = 0;
     err.needed = estimatedCredits;
     throw err;
   }
@@ -521,6 +531,7 @@ export async function settleUsage({
   status = 'settled',
   errorMessage = null,
   metadata = {},
+  backgroundPersist = false,
 }) {
   if (!requestId) return null;
   const normModel = normalizeModelId(modelId);
@@ -553,12 +564,22 @@ export async function settleUsage({
     };
   }
 
-  // Fetch authoritative current balance from Supabase REST before deducting
+  // Fetch authoritative current balance from Supabase REST before deducting (unless fast
+  // backgroundPersist mode is requested right after preflight reservation in the same stream).
   let currentBalance = rec?.balanceBefore ?? null;
   let currentDollarsSpent = 0;
   let activePlan = 'Starter Plan';
 
-  if (targetUserId) {
+  const localUserSnap = targetUserId ? _localAccounts.get(targetUserId) : null;
+  if (localUserSnap) {
+    if (currentBalance === null || Number.isNaN(currentBalance)) {
+      currentBalance = Number(localUserSnap.balance);
+    }
+    currentDollarsSpent = Number(localUserSnap.dollarsSpent || 0);
+    if (localUserSnap.plan) activePlan = localUserSnap.plan;
+  }
+
+  if (targetUserId && !backgroundPersist) {
     const sbData = await fetchSupabaseAiAccount(targetUserId);
     if (sbData?.credRow && typeof sbData.credRow.ai_credits_balance === 'number') {
       currentBalance = Number(sbData.credRow.ai_credits_balance);
@@ -572,9 +593,8 @@ export async function settleUsage({
   }
 
   if (currentBalance === null || Number.isNaN(currentBalance)) {
-    const localUser = targetUserId ? _localAccounts.get(targetUserId) : null;
-    currentBalance = localUser ? Number(localUser.balance) : 0;
-    currentDollarsSpent = localUser ? Number(localUser.dollarsSpent || 0) : 0;
+    currentBalance = localUserSnap ? Number(localUserSnap.balance) : 0;
+    currentDollarsSpent = localUserSnap ? Number(localUserSnap.dollarsSpent || 0) : 0;
   }
 
   let newBalance = currentBalance;
@@ -587,7 +607,13 @@ export async function settleUsage({
     newBalance = isFree ? 0 : Math.max(0, Number((currentBalance - deduction).toFixed(4)));
     newDollarsSpent = Number((currentDollarsSpent + (isFree ? Math.max(0.01, actualCostUsd) : actualCostUsd)).toFixed(6));
     if (targetUserId) {
-      await persistSupabaseAiBalance(targetUserId, newBalance, newDollarsSpent);
+      if (backgroundPersist) {
+        persistSupabaseAiBalance(targetUserId, newBalance, newDollarsSpent).catch((e) => {
+          console.warn('[accountingService] background balance persist notice:', e?.message);
+        });
+      } else {
+        await persistSupabaseAiBalance(targetUserId, newBalance, newDollarsSpent);
+      }
     }
   } else {
     refundedCredits = rec?.reservedCredits || 0;
@@ -644,7 +670,7 @@ export async function settleUsage({
 
   // Persist settled audit row to Supabase REST `ai_usage_ledger`
   if (targetUserId) {
-    await upsertSupabaseLedgerRow({
+    const ledgerRow = {
       user_id: targetUserId,
       request_id: requestId,
       reservation_id: requestId,
@@ -667,7 +693,14 @@ export async function settleUsage({
       error_message: errorMessage,
       metadata: { ...metadata, breakdown: costData.breakdown },
       settled_at: new Date().toISOString(),
-    });
+    };
+    if (backgroundPersist) {
+      upsertSupabaseLedgerRow(ledgerRow).catch((e) => {
+        console.warn('[accountingService] background ledger persist notice:', e?.message);
+      });
+    } else {
+      await upsertSupabaseLedgerRow(ledgerRow);
+    }
   }
 
   return {
@@ -763,7 +796,7 @@ export async function syncUserAiPlan(userId, planName = 'Starter Plan', forceRes
           ai_credits_balance: provisionBalance,
           updated_at: nowMs,
         }),
-        signal: AbortSignal.timeout(1000),
+        signal: AbortSignal.timeout(3500),
       });
       await persistSupabaseAiBalance(effectiveUserId, provisionBalance, 0, planName);
       if (isFreeTarget) {
@@ -771,7 +804,7 @@ export async function syncUserAiPlan(userId, planName = 'Starter Plan', forceRes
         if (grant.granted && typeof grant.balance === 'number') resultBalance = grant.balance;
       }
     } catch (err) {
-      tripSbAiCircuitBreaker(45000);
+      tripSbAiCircuitBreaker(20000);
       console.warn('[accountingService] syncUserAiPlan REST error:', err.message);
     }
   }
@@ -840,23 +873,16 @@ export async function getUserAiStatus(userId, planHint = null) {
       balanceCredits = planConfig.monthlyCredits;
     }
 
-    // Free accounts get strictly 1 free AI prompt.
-    // If dollarsSpent > 0 or balance < 1, balance is locked to 0 permanently.
+    // Free accounts have 0 AI Vibe Coding credits (Starter Plan and above only).
     if (isFreePlanName(activePlan)) {
-      if (rawCredBal === null && rawPlanBal === null && dollarsSpent === 0) {
-        balanceCredits = FREE_VIBE_CREDITS;
-        persistSupabaseAiBalance(effectiveUserId, FREE_VIBE_CREDITS, 0, 'Free Plan').catch(() => {});
-      } else if (dollarsSpent > 0 || balanceCredits < 1) {
-        balanceCredits = 0;
-      } else {
-        balanceCredits = 1;
-      }
+      balanceCredits = 0;
     }
 
-    const monthlyCredits =
-      planRow && Number(planRow.monthly_ai_credits) > 0
-        ? Number(planRow.monthly_ai_credits)
-        : Math.max(balanceCredits, planConfig.monthlyCredits);
+    const monthlyCredits = isFreePlanName(activePlan)
+      ? 0
+      : (planRow && Number(planRow.monthly_ai_credits) > 0
+          ? Number(planRow.monthly_ai_credits)
+          : Math.max(balanceCredits, planConfig.monthlyCredits));
 
     const monthlyAllowanceUsd =
       planRow && Number(planRow.monthly_ai_allowance_usd) > 0
@@ -984,4 +1010,8 @@ export async function listAiUsageLedger(userId, limit = 50) {
   }
 
   return Array.from(_localLedger.values()).slice(-limit).reverse();
+}
+
+export function invalidateLocalAiAccountCache(userId) {
+  if (userId) _localAccounts.delete(userId);
 }

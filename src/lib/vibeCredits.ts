@@ -5,10 +5,10 @@
 //   Starter ($97/mo):   $6.00  = 600 AI credits
 //   Pro ($187/mo):      $13.00 = 1,300 AI credits
 //   Agency ($297/mo):   $20.00 = 2,000 AI credits
-//   Free ($0/mo):       $0.05  = 1 AI prompt, ONE-TIME grant per account (never monthly, never re-granted)
+//   Free ($0/mo):       $0.00  = 0 AI credits (AI Vibe Coding locked; Starter & above only)
 
-/** One-time AI Web Studio prompt every Free account receives (strictly 1 free AI prompt). */
-export const FREE_VIBE_CREDITS = 1;
+/** Free accounts receive 0 AI Web Studio credits (Starter Plan and above only). */
+export const FREE_VIBE_CREDITS = 0;
 
 /** Free accounts may only use these low-cost Flash-tier models (mirrors server FREE_ALLOWED_MODEL_IDS). */
 export const FREE_ALLOWED_MODEL_IDS = ['gemini-3.5-flash', 'gemini-3.8-flash'];
@@ -58,8 +58,8 @@ export const PLAN_AI_CREDITS: Record<string, PlanAiCredits> = {
   free: {
     planKey: 'free',
     planName: 'Free Plan',
-    monthlyCredits: FREE_VIBE_CREDITS,
-    dollarValue: 0.05,
+    monthlyCredits: 0,
+    dollarValue: 0,
     creditCostUsd: 0.01,
     subscriptionPriceUsd: 0,
   },
@@ -96,12 +96,10 @@ export function getPlanAiConfig(planName?: string | null): PlanAiCredits {
 }
 
 /**
- * Paid plans are always eligible. Free accounts are eligible while they still hold
- * some of their one-time free vibe-coding credits (balance > 0).
+ * Only paid plans (Starter, Pro, Agency) are eligible for AI Vibe Coding Studio.
  */
 export function isVibeEligiblePlan(planName?: string | null): boolean {
-  if (normalizePlanKey(planName) !== 'free') return true;
-  return getVibeCreditBalance(planName) > 0;
+  return normalizePlanKey(planName) !== 'free';
 }
 
 export function isFreeVibePlan(planName?: string | null): boolean {
@@ -139,25 +137,17 @@ export function getVibeCreditBalance(explicitPlan?: string | null): number {
     'Free Plan';
   const config = getPlanAiConfig(activePlan);
   const isFree = normalizePlanKey(activePlan) === 'free';
-  const defaultBalance = isFree ? 1 : (config.monthlyCredits ?? 0);
+  if (isFree) return 0;
+  const defaultBalance = config.monthlyCredits ?? 0;
 
   if (typeof window === 'undefined') return defaultBalance;
   try {
-    if (isFree) {
-      const usedFlag =
-        localStorage.getItem(`lunao_u_${userId}_free_prompt_used`) === 'true' ||
-        localStorage.getItem('lunao_free_prompt_used') === 'true';
-      if (usedFlag) return 0;
-    }
     const raw =
       localStorage.getItem(`lunao_u_${userId}_vibe_credits`) ??
       localStorage.getItem('lunao_vibe_credits');
     if (raw !== null) {
       const parsed = parseFloat(raw);
       if (!Number.isNaN(parsed) && parsed >= 0) {
-        if (isFree) {
-          return parsed >= 1 ? 1 : 0;
-        }
         return parsed;
       }
     }
@@ -262,27 +252,20 @@ export function hasSufficientVibeCredits(planName?: string | null): {
       : null) ||
     'Free Plan';
   const isFree = normalizePlanKey(currentPlan) === 'free';
-  const isUsedFlag =
-    typeof localStorage !== 'undefined' &&
-    (localStorage.getItem(`lunao_u_${userId}_free_prompt_used`) === 'true' ||
-      localStorage.getItem('lunao_free_prompt_used') === 'true');
-  const currentBalance = getVibeCreditBalance(currentPlan);
-
-  if (isFree && (currentBalance < 1 || isUsedFlag)) {
+  if (isFree) {
     return {
       ok: false,
       balance: 0,
-      error: `You've used your 1 free AI prompt. Upgrade to Starter, Pro, or Agency to keep building with AI.`,
+      error: 'AI Vibe Coding Studio is locked on the Free Plan. Upgrade to Starter ($97/mo), Pro, or Agency to unlock AI Web Studio.',
     };
   }
+  const currentBalance = getVibeCreditBalance(currentPlan);
 
   if (currentBalance <= 0) {
     return {
       ok: false,
       balance: 0,
-      error: isFree
-        ? `You've used your 1 free AI prompt. Upgrade to Starter, Pro, or Agency to keep building with AI.`
-        : 'Insufficient AI credits (0 remaining). Please upgrade your plan in Subscription Plans.',
+      error: 'Insufficient AI credits (0 remaining). Please upgrade your plan in Subscription Plans.',
     };
   }
   return {

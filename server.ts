@@ -58,6 +58,10 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 Lunao Full-Stack running on http://0.0.0.0:${PORT}\n`);
 });
 
+server.keepAliveTimeout = 65_000;
+server.headersTimeout = 66_000;
+server.requestTimeout = 300_000;
+
 const onShutdownSignal = async (sig: string) => {
   if (typeof gracefulShutdown === 'function') {
     await gracefulShutdown(sig);

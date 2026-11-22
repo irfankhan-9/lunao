@@ -38,6 +38,7 @@ export default defineConfig(() => {
           // SSE streams from /api/campaign/run and /api/site-deploy/run can run
           // 50–120 s (Cloudflare deploy + SMS dispatch). Bump timeout to 3 min.
           timeout: 180_000,
+          proxyTimeout: 180_000,
         },
         '/sites': { target: 'http://localhost:8787', changeOrigin: true },
       },

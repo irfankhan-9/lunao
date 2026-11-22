@@ -101,15 +101,16 @@ export const Plans: React.FC<PlansProps> = ({
       id: 'Free',
       name: 'Free',
       price: '$0',
-      credits: '15 credits (one-time)',
+      credits: '15 Lunao credits (one-time) • 0 AI Prompts',
       textColor: 'text-ink-secondary',
       borderColor: 'border-border-main',
       badgeColor: 'bg-off-white text-ink-secondary border-border-main',
       icon: <Award className="w-5 h-5 text-ink-secondary" />,
-      tagline: 'Trial sandbox for testing the Lunao engine + AI Vibe Coding',
+      tagline: 'Trial sandbox for outreach & site rebranding (0 Vibe Coding credits)',
       features: [
         '15 one-time Lunao Credits included',
-        '1 free AI Web Studio prompt (one-time)',
+        '0 AI Web Studio Prompts / 0 Vibe Coding credits',
+        'No Vibe Coding allowed on Free Plan (Starter & above only)',
         '1 trial Owner PWA business',
         'Rebrand & deploy websites (3 credits/site)',
         'Find SMS lead (1.5 credits/lead)',
@@ -200,26 +201,22 @@ export const Plans: React.FC<PlansProps> = ({
   ];
 
   const planNormalized = (userPlan || '').toLowerCase();
-  // Every plan (including Free, with its one-time 15 vibe credits) can see the vibe-coding balance.
-
   const isFreePlan = planNormalized.includes('free');
 
   const getVibeCodingCredits = (plan: string): number => {
     const p = (plan || '').toLowerCase();
+    if (p.includes('free')) return 0;
     const stored = typeof window !== 'undefined' ? localStorage.getItem('lunao_vibe_credits') : null;
     if (stored) {
       const parsed = parseFloat(stored);
       if (!isNaN(parsed) && parsed >= 0) {
-        if (p.includes('free')) {
-          return parsed > 0 ? 1 : 0;
-        }
         return parsed;
       }
     }
     if (p.includes('agency')) return 2000;
     if (p.includes('pro')) return 1300;
     if (p.includes('starter')) return 600;
-    return isFreePlan ? 1 : 0;
+    return 0;
   };
 
   const vibeCodingCredits = getVibeCodingCredits(userPlan);
@@ -243,12 +240,12 @@ export const Plans: React.FC<PlansProps> = ({
             </div>
           </div>
 
-          {/* Vibe Coding Credits Card (all plans; Free shows its one-time 1 free prompt) */}
+          {/* Vibe Coding Credits Card (Starter+ unlocked; Free Plan locked with 0 AI credits) */}
           <div className="bg-accent-soft/30 border border-accent/20 rounded-xl px-4 py-2.5 flex items-center gap-2.5 text-left shadow-2xs">
-            <span className="w-2.5 h-2.5 rounded-full bg-accent animate-pulse shrink-0"></span>
+            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isFreePlan ? 'bg-ink-tertiary' : 'bg-accent animate-pulse'}`}></span>
             <div>
               <div className="text-[10px] uppercase tracking-wider font-extrabold text-ink-secondary">Vibe Coding Balance</div>
-              <div className="text-lg font-bold font-sans text-ink">{isFreePlan ? `${vibeCodingCredits === 1 ? '1 AI Prompt' : `${vibeCodingCredits} AI Prompts`} (free, one-time)` : `${vibeCodingCredits.toLocaleString(undefined, { maximumFractionDigits: 1 })} AI Credits`}</div>
+              <div className="text-lg font-bold font-sans text-ink">{isFreePlan ? '0 AI Prompts (No Vibe Coding on Free Plan)' : `${vibeCodingCredits.toLocaleString(undefined, { maximumFractionDigits: 1 })} AI Credits`}</div>
             </div>
           </div>
 

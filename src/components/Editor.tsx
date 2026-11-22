@@ -5,7 +5,7 @@ import {
   Monitor, Smartphone, Loader2, ExternalLink, X,
   AlertCircle, CheckCircle2,
   Globe, Copy, Search, RefreshCw, Clock,
-  Key, Eye,
+  Key, Eye, Lock,
 } from 'lucide-react';
 import {
   listSites, getSiteHtml,
@@ -151,6 +151,36 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   };
   const [sites, setSites] = useState<EditorSite[]>([]);
   const [aiEnabled, setAiEnabled] = useState(true);
+  const [userPlan, setUserPlan] = useState<string>(() => {
+    try {
+      const ownerKey = localStorage.getItem('lunao_owner_key');
+      return (ownerKey && localStorage.getItem(`lunao_u_${ownerKey}_plan`)) || localStorage.getItem('lunao_user_plan') || 'Free Plan';
+    } catch {
+      return 'Free Plan';
+    }
+  });
+
+  useEffect(() => {
+    const syncPlan = () => {
+      try {
+        const ownerKey = localStorage.getItem('lunao_owner_key');
+        const nextPlan = (ownerKey && localStorage.getItem(`lunao_u_${ownerKey}_plan`)) || localStorage.getItem('lunao_user_plan') || 'Free Plan';
+        setUserPlan(nextPlan);
+      } catch {}
+    };
+    window.addEventListener('lunao_auth_changed', syncPlan);
+    window.addEventListener('lunao:plan-changed', syncPlan);
+    window.addEventListener('lunao_owner_key_changed', syncPlan);
+    window.addEventListener('storage', syncPlan);
+    return () => {
+      window.removeEventListener('lunao_auth_changed', syncPlan);
+      window.removeEventListener('lunao:plan-changed', syncPlan);
+      window.removeEventListener('lunao_owner_key_changed', syncPlan);
+      window.removeEventListener('storage', syncPlan);
+    };
+  }, []);
+
+  const isFreePlan = !userPlan || userPlan.toLowerCase().includes('free');
   const [listLoading, setListLoading] = useState(false);
   const [listLoaded, setListLoaded] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
@@ -338,7 +368,51 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
   // ===========================================================================
 
   if (view === 'lab') {
-    const labContent = (
+    const labContent = isFreePlan ? (
+      <div
+        key="editor-lab-locked"
+        className="fixed inset-0 md:left-[260px] z-40 bg-off-white flex items-center justify-center p-6 overflow-y-auto animate-editor-rise"
+        style={{ display: active ? 'flex' : 'none' }}
+      >
+        <div className="max-w-md w-full bg-white border border-border-main rounded-2xl p-8 text-center shadow-lg">
+          <div className="w-14 h-14 rounded-2xl bg-accent-soft border border-accent/20 text-accent flex items-center justify-center mx-auto mb-5">
+            <Lock className="w-7 h-7" />
+          </div>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-accent-soft text-accent border border-accent/20 mb-3">
+            Starter Plan & Above
+          </span>
+          <h2 className="text-xl font-bold font-sans text-ink mb-2">
+            AI Vibe Coding Studio is Locked
+          </h2>
+          <p className="text-sm font-sans text-ink-secondary leading-relaxed mb-6">
+            Free Plan accounts include <strong>0 AI Vibe Coding credits</strong>. Upgrade to <strong>Starter ($97/mo)</strong>, <strong>Pro</strong>, or <strong>Agency</strong> to unlock AI Web Studio and start with 600+ monthly AI credits.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                sfx.primary();
+                setView('list');
+                window.dispatchEvent(new CustomEvent('lunao:switch-tab', { detail: 'plans' }));
+              }}
+              className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-accent text-white text-sm font-bold font-sans shadow-sm hover:bg-accent/90 active:scale-[0.98] transition-all cursor-pointer"
+            >
+              Upgrade to Unlock
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                sfx.close();
+                setView('list');
+              }}
+              className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-off-white border border-border-main text-ink text-sm font-semibold font-sans hover:bg-white active:scale-[0.98] transition-all cursor-pointer"
+            >
+              Back to Editor
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : (
       <div
         key="editor-lab"
         className="fixed inset-0 md:left-[260px] z-40 bg-white flex flex-col overflow-hidden animate-editor-rise"
@@ -434,6 +508,7 @@ export const Editor: React.FC<EditorProps> = ({ active }) => {
         {/* Template Lab — AI-powered custom template creator */}
         <TemplateLabBanner
           aiEnabled={aiEnabled}
+          isFreePlan={isFreePlan}
           onBrowseTemplates={() => {
             sfx.open();
             setBrowseOpen(true);
@@ -777,9 +852,10 @@ const SAMPLE_PROMPTS = [
 // Uses the same brand token palette as every other Lunao card (white bg, accent tones).
 const TemplateLabBanner: React.FC<{
   aiEnabled: boolean;
+  isFreePlan?: boolean;
   onBrowseTemplates: () => void;
   onOpenStudio: () => void;
-}> = ({ aiEnabled, onBrowseTemplates, onOpenStudio }) => (
+}> = ({ aiEnabled, isFreePlan = false, onBrowseTemplates, onOpenStudio }) => (
   <div className="relative mb-6 sm:mb-8 rounded-2xl overflow-hidden bg-gradient-to-br from-accent-soft/60 via-white to-accent-soft/20 border border-accent/15 p-4 sm:p-7 animate-sparkle-in">
     {/* Ambient glow — subtle accent diffusion */}
     <div className="pointer-events-none absolute -top-16 -right-16 w-64 h-64 bg-accent/8 rounded-full blur-3xl" />
@@ -789,15 +865,22 @@ const TemplateLabBanner: React.FC<{
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2.5 mb-2">
           <div className="w-8 h-8 rounded-xl bg-accent flex items-center justify-center shadow-sm">
-            <Code2 className="w-4 h-4 text-white" />
+            {isFreePlan ? <Lock className="w-4 h-4 text-white" /> : <Code2 className="w-4 h-4 text-white" />}
           </div>
           <span className="text-[10px] font-bold font-sans text-accent uppercase tracking-widest">Template Lab</span>
+          {isFreePlan && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-off-white text-ink-secondary border border-border-main">
+              Starter+ Required
+            </span>
+          )}
         </div>
         <h2 className="text-lg sm:text-xl font-bold font-sans text-ink mb-1 leading-snug">
           Build any website with AI
         </h2>
         <p className="text-sm font-sans text-ink-secondary max-w-md">
-          Describe a business type and style in plain English. AI generates a complete template — no code required.
+          {isFreePlan
+            ? 'AI Vibe Coding Studio is available exclusively on Starter Plan ($97/mo) and above. Upgrade your plan to build custom websites with AI.'
+            : 'Describe a business type and style in plain English. AI generates a complete template — no code required.'}
         </p>
       </div>
 
@@ -805,9 +888,10 @@ const TemplateLabBanner: React.FC<{
       <div className="flex flex-col sm:flex-row gap-2.5 shrink-0">
         <button
           onClick={onOpenStudio}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-3 px-6 sm:px-8 py-3 sm:py-3.5 rounded-2xl bg-accent text-white text-sm sm:text-base font-bold font-sans shadow-md hover:bg-accent/90 active:scale-[0.98] transition-all transform hover:-translate-y-0.5 cursor-pointer"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 sm:px-8 py-3 sm:py-3.5 rounded-2xl bg-accent text-white text-sm sm:text-base font-bold font-sans shadow-md hover:bg-accent/90 active:scale-[0.98] transition-all transform hover:-translate-y-0.5 cursor-pointer"
         >
-          Open AI Studio
+          {isFreePlan && <Lock className="w-4 h-4" />}
+          <span>{isFreePlan ? 'Unlock AI Studio' : 'Open AI Studio'}</span>
         </button>
       </div>
     </div>

@@ -9,7 +9,7 @@ import {
 import {
   AiChatMessage, SiteHistoryEntry, AiStreamMetadata,
   listSiteHistory, createSiteHistory, convertHistoryToTemplate,
-  streamAiEdit, processUploadedHtml,
+  streamAiEdit, processUploadedHtml, sanitizeAndRepairStreamHtml,
   listTemplateCategories, createTemplateCategory,
   TemplateScanResult, RebrandingSuiteReport, RebrandTestResult,
   scanTemplateReadinessClient, testRebrandClient,
@@ -515,6 +515,13 @@ export const TemplateLabPage: React.FC<{
   const selectedModelDisplayName = STUDIO_MODELS.find(m => m.id === selectedModel)?.displayName || selectedModel;
   const [generatingNewSite, setGeneratingNewSite] = useState(false);
   const [generatingStepText, setGeneratingStepText] = useState('Designing page structure…');
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Synchronized Niches across the platform
   const [allNiches, addNiche] = useSyncNiches();
@@ -1109,6 +1116,59 @@ export const TemplateLabPage: React.FC<{
   };
 
 
+  const finalizeStudioHtml = (rawOutput: string, baseHtml?: string): string => {
+    const cleaned = sanitizeAndRepairStreamHtml(rawOutput);
+    const lower = cleaned.toLowerCase();
+    if (
+      !cleaned ||
+      cleaned.length < 150 ||
+      (baseHtml && cleaned.trim() === baseHtml.trim()) ||
+      (!lower.includes('<!doctype') && !lower.includes('<html')) ||
+      !lower.includes('</html>')
+    ) {
+      const code = baseHtml && cleaned.trim() === baseHtml.trim() ? 'UNCHANGED_MARKUP' : 'INCOMPLETE_HTML';
+      const msg =
+        code === 'UNCHANGED_MARKUP'
+          ? 'AI returned unchanged markup — No credits deducted. Try a more specific instruction.'
+          : 'AI returned incomplete HTML — No credits deducted. Please retry.';
+      throw Object.assign(new Error(msg), { code });
+    }
+    return cleaned;
+  };
+
+  const formatStudioError = (err: any): { text: string; isServerDown: boolean } => {
+    const code = String(err?.code || '');
+    const msg = String(err?.message || '').trim();
+
+    if (code === 'FREE_VIBE_EXHAUSTED' || code === 'INSUFFICIENT_CREDITS' || code === 'FREE_MODEL_LOCKED') {
+      return { text: msg || 'Insufficient AI credits for this request.', isServerDown: false };
+    }
+    if (code === 'UNCHANGED_MARKUP') {
+      return { text: msg || 'No visual changes detected — No credits deducted. Try a more specific prompt.', isServerDown: false };
+    }
+    if (code === 'AUTH_CONFIG_ERROR') {
+      return { text: msg || 'AI service authentication is not configured properly.', isServerDown: true };
+    }
+    if (code === 'RATE_LIMITED' || code === 'MODEL_UNAVAILABLE') {
+      return {
+        text: `${msg || 'Selected AI model is temporarily busy.'} Try again or switch to Gemini 3.8 Flash. (No credits deducted.)`,
+        isServerDown: true,
+      };
+    }
+    if (code === 'STREAM_TIMEOUT' || code === 'STREAM_INTERRUPTED' || code === 'NETWORK_ERROR' || code === 'INCOMPLETE_HTML') {
+      return {
+        text: `${msg || 'Connection interrupted while generating code.'} No credits deducted — please click generate to retry.`,
+        isServerDown: true,
+      };
+    }
+    return {
+      text: msg && !/^ai servers busy/i.test(msg)
+        ? `${msg} (No credits deducted.)`
+        : 'AI Servers Down / Busy — No credits deducted. Please try again.',
+      isServerDown: true,
+    };
+  };
+
   // Start vibe coding with Gemini: strictly verify real HTML output before opening workspace or deducting credits
   const handleStartVibeCode = async (promptText: string, customTitle?: string) => {
     if (!promptText.trim() || streaming || generatingNewSite) return;
@@ -1230,27 +1290,7 @@ export const TemplateLabPage: React.FC<{
         );
       }
 
-      let cleanResult = (result || '').trim();
-      const fenceMatch = cleanResult.match(/```(?:html)?\s*([\s\S]*?)\s*```/i);
-      if (fenceMatch && fenceMatch[1]) {
-        cleanResult = fenceMatch[1].trim();
-      }
-      result = cleanResult;
-
-      const lowerResult = result.toLowerCase();
-      if (
-        !result ||
-        typeof result !== 'string' ||
-        result.length < 150 ||
-        result === BLANK_CANVAS.trim() ||
-        (!lowerResult.includes('<!doctype') && !lowerResult.includes('<html')) ||
-        !lowerResult.includes('</html>') ||
-        (!isUgcMode() &&
-          (result.includes('World-Class Service by {{BUSINESS_NAME}}') ||
-            result.includes('<!-- Lunao Studio Refinement:')))
-      ) {
-        throw new Error('AI servers busy, try later.');
-      }
+      result = finalizeStudioHtml(result, BLANK_CANVAS);
 
       // Enforce AI Website Studio temporary booking restriction:
       // Replace any generated booking forms with a high-converting phone & contact CTA
@@ -1302,6 +1342,8 @@ export const TemplateLabPage: React.FC<{
         activeStudioSession.title = finalTitle;
       }
 
+      if (!isMountedRef.current) return;
+
       sfx.open();
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -1332,20 +1374,23 @@ export const TemplateLabPage: React.FC<{
       } catch { /* ignore */ }
     } catch (err: any) {
       activeStudioSession = null;
+      if (!isMountedRef.current) return;
       sfx.error();
-      setAiServerError(true);
+      const { text: errText, isServerDown } = formatStudioError(err);
+      setAiServerError(isServerDown);
       setGeneratingNewSite(false);
       setStreaming(false);
       setMode('idle');
       setHtml('');
       setPreviewHtml('');
-      const errText = 'AI Servers Down / Busy — No credits deducted. Please try again.';
       setLabError(errText);
       window.scrollTo({ top: 0, behavior: 'smooth' });
       setThinkingAcc('');
     } finally {
-      setStreaming(false);
-      setGeneratingNewSite(false);
+      if (isMountedRef.current) {
+        setStreaming(false);
+        setGeneratingNewSite(false);
+      }
     }
   };
 
@@ -1422,20 +1467,7 @@ export const TemplateLabPage: React.FC<{
       }
 
       // Hard-coded validation: AI must write valid code and cannot return empty or unchanged markup
-      const lowerResult = (result || '').trim().toLowerCase();
-      if (
-        !result ||
-        typeof result !== 'string' ||
-        result.trim().length < 150 ||
-        result.trim() === base.trim() ||
-        (!lowerResult.includes('<!doctype') && !lowerResult.includes('<html')) ||
-        !lowerResult.includes('</html>') ||
-        (!isUgcMode() &&
-          (result.includes('World-Class Service by {{BUSINESS_NAME}}') ||
-            result.includes('<!-- Lunao Studio Refinement:')))
-      ) {
-        throw new Error('AI servers busy, try later.');
-      }
+      result = finalizeStudioHtml(result, base);
 
       // Enforce AI Website Studio temporary booking restriction:
       let bookingEditNotice = '';
@@ -1553,10 +1585,12 @@ export const TemplateLabPage: React.FC<{
     } catch (err: any) {
       activeStudioSession = null;
       sfx.error();
-      setAiServerError(true);
+      const { text: errText, isServerDown } = formatStudioError(err);
+      setAiServerError(isServerDown);
       setThinkingAcc('');
-      const errText = 'AI Servers Down / Busy — No credits deducted. Please try again.';
       setLabError(errText);
+      // Restore prompt so user can retry in 1 click without retyping
+      setInput((prev) => (prev.trim() ? prev : instruction));
       setMessages(prev => [
         ...prev,
         {
@@ -2063,7 +2097,7 @@ export const TemplateLabPage: React.FC<{
                             <div className="max-w-[92%] sm:max-w-[90%] rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 bg-red-50 border border-red-200 text-red-700 rounded-bl-xs shadow-2xs space-y-1">
                               <div className="flex items-center gap-1.5 font-bold text-xs text-red-700">
                                 <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0" />
-                                <span>AI servers busy</span>
+                                <span>Generation Notice</span>
                               </div>
                               <p className="text-xs text-red-600 leading-relaxed font-sans">
                                 {m.content || 'AI servers busy, try later.'}

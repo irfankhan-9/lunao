@@ -90,26 +90,221 @@ function buildGeminiPrompt(html, instruction, history = []) {
   ].filter(Boolean).join('\n');
 }
 
-function resolveRealGeminiModel(requestedModel) {
+function resolveGeminiCandidates(requestedModel) {
   const norm = String(requestedModel || '').toLowerCase();
+  const envModel = process.env.GEMINI_MODEL ? process.env.GEMINI_MODEL.trim() : '';
+  const envProModel = process.env.GEMINI_PRO_MODEL ? process.env.GEMINI_PRO_MODEL.trim() : '';
+
+  let list;
   if (norm.includes('3.1') || norm.includes('pro')) {
-    return process.env.GEMINI_PRO_MODEL || 'gemini-3.1-pro-preview';
+    list = [
+      envProModel || 'gemini-3.1-pro-preview',
+      'gemini-3-flash-preview',
+      envModel || 'gemini-3-flash-preview',
+      'gemini-flash-latest',
+      'gemini-2.5-pro',
+    ];
+  } else if (norm.includes('lite')) {
+    list = [
+      'gemini-3.1-flash-lite',
+      'gemini-3-flash-preview',
+      envModel || 'gemini-3-flash-preview',
+      'gemini-flash-latest',
+      'gemini-2.5-flash-lite',
+    ];
+  } else {
+    list = [
+      envModel || 'gemini-3-flash-preview',
+      'gemini-3-flash-preview',
+      'gemini-flash-latest',
+      'gemini-3.1-flash-lite',
+      'gemini-2.5-flash-lite',
+    ];
   }
-  if (norm.includes('3.8') || norm.includes('flash') || norm.includes('3.5')) {
-    return process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
+
+  return Array.from(new Set(list.filter(Boolean)));
+}
+
+function classifyGeminiError(err) {
+  const msg = String(err?.message || err || '');
+  const status = Number(err?.status || err?.statusCode || err?.code || 0);
+  const lower = msg.toLowerCase();
+
+  if (status === 401 || status === 403 || lower.includes('api key') || lower.includes('permission') || lower.includes('unauthorized')) {
+    return Object.assign(new Error('AI service authentication is not configured properly.'), {
+      code: 'AUTH_CONFIG_ERROR',
+      statusCode: status || 401,
+      retryable: false,
+    });
   }
-  if (norm.includes('lite')) {
-    return 'gemini-3.5-flash-lite';
+  if (status === 429 || lower.includes('quota') || lower.includes('rate limit') || lower.includes('resource_exhausted')) {
+    return Object.assign(new Error('AI model rate limit reached. Please retry in a moment or switch models.'), {
+      code: 'RATE_LIMITED',
+      statusCode: 429,
+      retryable: true,
+    });
   }
-  return process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
+  if (lower.includes('timeout') || lower.includes('aborted') || lower.includes('timed out')) {
+    return Object.assign(new Error('AI generation timed out before completing. Please retry.'), {
+      code: 'STREAM_TIMEOUT',
+      statusCode: 504,
+      retryable: true,
+    });
+  }
+  if (status === 404 || lower.includes('not found') || lower.includes('is not supported')) {
+    return Object.assign(new Error(msg || 'Requested AI model is unavailable.'), {
+      code: 'MODEL_UNAVAILABLE',
+      statusCode: 404,
+      retryable: true,
+    });
+  }
+  if (status >= 500 || lower.includes('overloaded') || lower.includes('unavailable') || lower.includes('econnreset') || lower.includes('socket')) {
+    return Object.assign(new Error('AI servers are temporarily busy. Please try again.'), {
+      code: 'MODEL_UNAVAILABLE',
+      statusCode: status || 503,
+      retryable: true,
+    });
+  }
+  return Object.assign(new Error(msg || 'AI generation failed. Please try again.'), {
+    code: err?.code || 'GENERATION_ERROR',
+    statusCode: status || 500,
+    retryable: true,
+  });
+}
+
+function extractGeminiChunkParts(chunk) {
+  let text = '';
+  let thought = '';
+  const candidate = chunk?.candidates?.[0];
+  const parts = candidate?.content?.parts;
+  const finishReason = candidate?.finishReason || null;
+
+  if (Array.isArray(parts) && parts.length > 0) {
+    for (const part of parts) {
+      if (!part || typeof part.text !== 'string' || !part.text) continue;
+      if (part.thought) {
+        thought += part.text;
+      } else {
+        text += part.text;
+      }
+    }
+  } else {
+    try {
+      text = chunk?.text || '';
+    } catch {
+      text = '';
+    }
+  }
+
+  return { text, thought, finishReason };
+}
+
+async function consumeStreamWithIdleTimeout(stream, { idleTimeoutMs = 25000, signal, onChunk, onThinking }) {
+  let fullHtml = '';
+  let lastUsageMetadata = null;
+  let lastFinishReason = null;
+
+  const iterator = stream[Symbol.asyncIterator]();
+  while (true) {
+    if (signal?.aborted) {
+      throw new Error('Request aborted by client.');
+    }
+
+    let idleTimer = null;
+    const nextPromise = iterator.next();
+    const timeoutPromise = new Promise((_, reject) => {
+      idleTimer = setTimeout(() => {
+        reject(new Error('AI stream idle timeout exceeded.'));
+      }, idleTimeoutMs);
+    });
+
+    let step;
+    try {
+      step = await Promise.race([nextPromise, timeoutPromise]);
+    } finally {
+      if (idleTimer) clearTimeout(idleTimer);
+    }
+
+    if (step.done) break;
+    const chunk = step.value;
+    if (chunk?.usageMetadata) {
+      lastUsageMetadata = chunk.usageMetadata;
+    }
+
+    const { text, thought, finishReason } = extractGeminiChunkParts(chunk);
+    if (finishReason) {
+      lastFinishReason = finishReason;
+    }
+    if (thought && onThinking) {
+      onThinking(thought);
+    }
+    if (text) {
+      fullHtml += text;
+      if (onChunk) onChunk(text);
+    }
+  }
+
+  return { fullHtml, lastUsageMetadata, lastFinishReason };
+}
+
+async function attemptGeminiContinuation({ client, modelName, partialHtml, onChunk, signal }) {
+  const lower = partialHtml.toLowerCase();
+  if (lower.includes('</html>')) return { extraHtml: '', usageMetadata: null };
+  if (!lower.includes('<html') && !lower.includes('<!doctype')) return { extraHtml: '', usageMetadata: null };
+  if (partialHtml.length < 250) return { extraHtml: '', usageMetadata: null };
+
+  const tail = partialHtml.slice(-1800);
+  const contPrompt = [
+    'The previous HTML website generation hit the output token limit right before finishing.',
+    'Continue IMMEDIATELY from the exact last character of the snippet below and finish all remaining sections, closing </body> and </html> tags.',
+    'Do NOT repeat anything already present in the snippet. Do NOT output markdown fences or explanations.',
+    '',
+    'TAIL OF GENERATED HTML:',
+    tail,
+  ].join('\n');
+
+  let timer = null;
+  try {
+    const resp = await Promise.race([
+      client.models.generateContent({
+        model: modelName,
+        contents: contPrompt,
+        config: {
+          temperature: 0.2,
+          maxOutputTokens: 4096,
+        },
+      }),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Continuation timeout')), 15000);
+      }),
+    ]);
+    if (signal?.aborted) return { extraHtml: '', usageMetadata: null };
+    let extra = '';
+    try {
+      extra = resp?.text || '';
+    } catch {
+      extra = '';
+    }
+    extra = extra.replace(/^```(?:html)?\s*/i, '').replace(/\s*```$/i, '');
+    if (extra && onChunk) {
+      onChunk(extra);
+    }
+    return { extraHtml: extra, usageMetadata: resp?.usageMetadata || null };
+  } catch (contErr) {
+    console.warn(`[geminiAdapter] Continuation attempt notice on ${modelName}:`, contErr.message);
+    return { extraHtml: '', usageMetadata: null };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /**
  * Stream an edit using Google Gemini.
- * Returns { html, tokenUsage, latencyMs }.
+ * Full-lifecycle fallback wraps both stream initiation and chunk reading.
+ * Returns { html, tokenUsage, latencyMs, finishReason, modelUsed }.
  */
 export async function streamGeminiEdit(
-  { html, instruction, history, model = 'gemini-3.8-flash', apiKey, maxOutputTokens = 65536 },
+  { html, instruction, history, model = 'gemini-3.8-flash', apiKey, maxOutputTokens = 32768, signal, onReset },
   onChunk,
   onThinking,
 ) {
@@ -118,105 +313,167 @@ export async function streamGeminiEdit(
 
   if (!client) {
     console.warn(`[geminiAdapter] No API client initialized. Cannot fulfill request.`);
-    throw new Error('AI servers busy, try later.');
+    throw Object.assign(new Error('Gemini API key is not configured on the server.'), {
+      code: 'AUTH_CONFIG_ERROR',
+      statusCode: 401,
+    });
   }
 
-  const primaryModel = resolveRealGeminiModel(model);
-  const candidates = [
-    primaryModel,
-    'gemini-3-flash-preview',
-    'gemini-3.5-flash-lite',
-    'gemini-3.1-flash-lite',
-  ].filter((v, i, a) => Boolean(v) && a.indexOf(v) === i);
+  const candidates = resolveGeminiCandidates(model);
   const prompt = buildGeminiPrompt(html, instruction, history);
-  const isProReasoning = String(model).includes('pro') || String(model).includes('fable');
+  const isProReasoning = String(model).toLowerCase().includes('pro') || String(model).toLowerCase().includes('fable');
+  const requestedTokens = Math.min(Math.max(Number(maxOutputTokens) || 32768, 16384), 65536);
 
-  let stream = null;
-  let activeModelUsed = primaryModel;
-  let lastErr = null;
+  let lastClassifiedErr = null;
 
-  for (const candidate of candidates) {
-    try {
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('AI servers busy, try later.')), 30000)
-      );
+  for (let idx = 0; idx < candidates.length; idx++) {
+    const candidate = candidates[idx];
+    if (signal?.aborted) {
+      throw Object.assign(new Error('Generation cancelled.'), { code: 'ABORTED', statusCode: 499 });
+    }
 
-      stream = await Promise.race([
-        client.models.generateContentStream({
-          model: candidate,
-          contents: prompt,
-          config: {
-            systemInstruction: SYSTEM_PROMPT,
-            temperature: 0.3,
-            maxOutputTokens: Math.max(maxOutputTokens || 65536, 32768),
-            thinkingConfig: {
-              thinkingBudget: isProReasoning ? 256 : 0,
+    // Try with thinkingConfig first; if model rejects thinkingConfig or token limit, adjust once on same candidate.
+    const configsToTry = [
+      {
+        maxOutputTokens: requestedTokens,
+        thinkingConfig: isProReasoning ? { thinkingBudget: 512 } : { thinkingBudget: 0 },
+      },
+      {
+        maxOutputTokens: Math.min(requestedTokens, 8192),
+        thinkingConfig: null,
+      },
+    ];
+
+    for (const cfg of configsToTry) {
+      let emittedForCandidate = false;
+      let openTimer = null;
+
+      try {
+        const genConfig = {
+          systemInstruction: SYSTEM_PROMPT,
+          temperature: 0.3,
+          maxOutputTokens: cfg.maxOutputTokens,
+        };
+        if (cfg.thinkingConfig) {
+          genConfig.thinkingConfig = cfg.thinkingConfig;
+        }
+
+        const stream = await Promise.race([
+          client.models.generateContentStream({
+            model: candidate,
+            contents: prompt,
+            config: genConfig,
+          }),
+          new Promise((_, reject) => {
+            openTimer = setTimeout(() => reject(new Error('AI stream open timeout exceeded.')), 25000);
+          }),
+        ]);
+        if (openTimer) {
+          clearTimeout(openTimer);
+          openTimer = null;
+        }
+
+        const { fullHtml: streamedHtml, lastUsageMetadata, lastFinishReason } = await consumeStreamWithIdleTimeout(
+          stream,
+          {
+            idleTimeoutMs: 25000,
+            signal,
+            onThinking,
+            onChunk: (delta) => {
+              emittedForCandidate = true;
+              if (onChunk) onChunk(delta);
             },
           },
-        }),
-        timeoutPromise,
-      ]);
-      activeModelUsed = candidate;
-      break;
-    } catch (candErr) {
-      lastErr = candErr;
-      console.warn(`[geminiAdapter] candidate ${candidate} failed (${candErr.message?.slice(0, 80)}), trying next candidate...`);
+        );
+
+        let fullHtml = streamedHtml;
+        let finalUsage = lastUsageMetadata;
+
+        // If truncated right before </html>, run a quick 1-shot continuation
+        if (
+          (lastFinishReason === 'MAX_TOKENS' || !fullHtml.toLowerCase().includes('</html>')) &&
+          fullHtml.length >= 250 &&
+          (fullHtml.toLowerCase().includes('<!doctype') || fullHtml.toLowerCase().includes('<html'))
+        ) {
+          const cont = await attemptGeminiContinuation({
+            client,
+            modelName: candidate,
+            partialHtml: fullHtml,
+            onChunk: (delta) => {
+              emittedForCandidate = true;
+              if (onChunk) onChunk(delta);
+            },
+            signal,
+          });
+          if (cont.extraHtml) {
+            fullHtml += cont.extraHtml;
+          }
+        }
+
+        if (!fullHtml || fullHtml.trim().length < 40) {
+          throw new Error(`Empty response from ${candidate} (finishReason=${lastFinishReason || 'unknown'})`);
+        }
+
+        const latencyMs = Date.now() - startTime;
+        const fallbackPromptTokens = Math.max(100, Math.ceil((SYSTEM_PROMPT.length + prompt.length) / 4));
+        const fallbackOutputTokens = Math.max(50, Math.ceil(fullHtml.length / 4));
+
+        const promptTokens = Number(finalUsage?.promptTokenCount) || fallbackPromptTokens;
+        const candidateTokens = Number(finalUsage?.candidatesTokenCount) || fallbackOutputTokens;
+        const thoughtTokens = Number(finalUsage?.thoughtsTokenCount) || 0;
+        const cachedTokens = Number(finalUsage?.cachedContentTokenCount) || 0;
+        const totalTokens = Number(finalUsage?.totalTokenCount) || (promptTokens + candidateTokens + thoughtTokens);
+
+        return {
+          html: fullHtml,
+          modelUsed: candidate,
+          finishReason: lastFinishReason || 'STOP',
+          tokenUsage: {
+            inputTokens: promptTokens,
+            outputTokens: candidateTokens,
+            thoughtTokens,
+            cachedReadTokens: cachedTokens,
+            cacheWriteTokens: 0,
+            totalTokens,
+          },
+          latencyMs,
+        };
+      } catch (candErr) {
+        if (openTimer) clearTimeout(openTimer);
+        if (signal?.aborted) {
+          throw Object.assign(new Error('Generation cancelled.'), { code: 'ABORTED', statusCode: 499 });
+        }
+
+        // If we already sent partial chunks for this candidate before failing, reset client buffer before retrying.
+        if (emittedForCandidate && onReset) {
+          onReset();
+        }
+
+        const errMsg = String(candErr?.message || '');
+        const isConfigParamErr =
+          Number(candErr?.status || candErr?.statusCode) === 400 &&
+          (errMsg.toLowerCase().includes('thinking') || errMsg.toLowerCase().includes('max_output_tokens') || errMsg.toLowerCase().includes('maxoutputtokens'));
+
+        lastClassifiedErr = classifyGeminiError(candErr);
+        console.warn(
+          `[geminiAdapter] candidate ${candidate} failed (${lastClassifiedErr.code}): ${errMsg.slice(0, 140)}`,
+        );
+
+        // Auth errors won't recover on another model
+        if (lastClassifiedErr.code === 'AUTH_CONFIG_ERROR') {
+          throw lastClassifiedErr;
+        }
+
+        // Only retry the second config on the same candidate if it was a config/param error
+        if (!isConfigParamErr) {
+          break;
+        }
+      }
     }
   }
 
-  if (!stream) {
-    console.warn(`[geminiAdapter] All candidates failed. Last error: ${lastErr?.message}`);
-    throw lastErr || new Error('AI servers busy, try later.');
-  }
-
-  try {
-    let fullHtml = '';
-    let lastUsageMetadata = null;
-
-    for await (const chunk of stream) {
-      if (chunk.usageMetadata) {
-        lastUsageMetadata = chunk.usageMetadata;
-      }
-      let text = '';
-      try {
-        text = chunk.text || '';
-      } catch {
-        text = '';
-      }
-      if (text) {
-        fullHtml += text;
-        if (onChunk) onChunk(text);
-      }
-    }
-
-    if (!fullHtml || fullHtml.length < 40) {
-      throw new Error('AI servers busy, try later.');
-    }
-
-    const latencyMs = Date.now() - startTime;
-    const fallbackPromptTokens = Math.max(100, Math.ceil((SYSTEM_PROMPT.length + prompt.length) / 4));
-    const fallbackOutputTokens = Math.max(50, Math.ceil(fullHtml.length / 4));
-
-    const promptTokens = Number(lastUsageMetadata?.promptTokenCount) || fallbackPromptTokens;
-    const candidateTokens = Number(lastUsageMetadata?.candidatesTokenCount) || fallbackOutputTokens;
-    const thoughtTokens = Number(lastUsageMetadata?.thoughtsTokenCount) || 0;
-    const cachedTokens = Number(lastUsageMetadata?.cachedContentTokenCount) || 0;
-    const totalTokens = Number(lastUsageMetadata?.totalTokenCount) || (promptTokens + candidateTokens + thoughtTokens);
-
-    return {
-      html: fullHtml,
-      tokenUsage: {
-        inputTokens: promptTokens,
-        outputTokens: candidateTokens,
-        thoughtTokens,
-        cachedReadTokens: cachedTokens,
-        cacheWriteTokens: 0,
-        totalTokens,
-      },
-      latencyMs,
-    };
-  } catch (err) {
-    console.warn(`[geminiAdapter] Generation failed on ${activeModelUsed}: ${err.message}`);
-    throw err;
-  }
+  throw lastClassifiedErr || Object.assign(new Error('All Gemini models failed to respond.'), {
+    code: 'MODEL_UNAVAILABLE',
+    statusCode: 503,
+  });
 }

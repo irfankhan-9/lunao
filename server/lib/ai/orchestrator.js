@@ -6,33 +6,89 @@ import { streamGeminiEdit } from './geminiAdapter.js';
 import { streamAnthropicEdit } from './anthropicAdapter.js';
 import { replaceBookingWithPhoneCta, hasBookingForm } from '../aiStudioBookingGuard.js';
 
-export function cleanHtmlOutput(text) {
+export function cleanAndRepairHtmlOutput(text) {
   let out = (text || '').trim();
-  const fence = out.match(/```(?:html)?\s*([\s\S]*?)\s*```/i);
-  if (fence && fence[1]) {
-    out = fence[1].trim();
+
+  // 1. Strip closed markdown fences first, then any unclosed leading/trailing fences
+  const closedFence = out.match(/```(?:html)?\s*([\s\S]*?)\s*```/i);
+  if (closedFence && closedFence[1]) {
+    out = closedFence[1].trim();
+  } else {
+    out = out
+      .replace(/^```(?:html)?\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
   }
 
   const docStart = out.search(/<!doctype\s+html|<html[\s>]/i);
-  const docEndMatch = out.match(/<\/html\s*>/i);
-  if (docStart !== -1 && docEndMatch && docEndMatch.index !== undefined) {
-    out = out.slice(docStart, docEndMatch.index + docEndMatch[0].length).trim();
+  if (docStart !== -1) {
+    out = out.slice(docStart).trim();
   }
 
-  const lower = out.toLowerCase();
+  const docEndMatch = out.match(/<\/html\s*>/i);
+  if (docEndMatch && docEndMatch.index !== undefined) {
+    out = out.slice(0, docEndMatch.index + docEndMatch[0].length).trim();
+  }
+
+  let lower = out.toLowerCase();
+  let wasRepaired = false;
+
+  const hasDocRoot = lower.includes('<!doctype') || lower.includes('<html') || lower.includes('<body');
+  const hasBodyStructure =
+    lower.includes('<body') ||
+    lower.includes('<section') ||
+    lower.includes('<main') ||
+    lower.includes('<div') ||
+    lower.includes('<header');
+
+  // 2. Deterministic repair if stream truncated right before closing tags
+  if (hasDocRoot && hasBodyStructure && out.length >= 120 && !lower.includes('</html>')) {
+    // Trim a partial incomplete opening tag at the exact tail (e.g. "<div class=\"foo")
+    out = out.replace(/<[a-zA-Z!/?][^>]*$/s, '').trim();
+    lower = out.toLowerCase();
+
+    const lastStyleOpen = lower.lastIndexOf('<style');
+    const lastStyleClose = lower.lastIndexOf('</style>');
+    if (lastStyleOpen !== -1 && lastStyleOpen > lastStyleClose) {
+      out += '\n</style>';
+      lower = out.toLowerCase();
+    }
+
+    const lastScriptOpen = lower.lastIndexOf('<script');
+    const lastScriptClose = lower.lastIndexOf('</script>');
+    if (lastScriptOpen !== -1 && lastScriptOpen > lastScriptClose) {
+      out += '\n</script>';
+      lower = out.toLowerCase();
+    }
+
+    if (lower.includes('<body') && !lower.includes('</body>')) {
+      out += '\n</body>';
+    }
+    out += '\n</html>';
+    lower = out.toLowerCase();
+    wasRepaired = true;
+  }
+
   if (
     !out ||
     out.length < 40 ||
     (!lower.includes('<!doctype') && !lower.includes('<html')) ||
     !lower.includes('</html>')
   ) {
-    throw new Error('AI servers busy, try later.');
+    throw Object.assign(new Error('AI returned incomplete HTML markup. Please retry.'), {
+      code: 'INCOMPLETE_HTML',
+      statusCode: 502,
+    });
   }
 
   if (hasBookingForm(out)) {
     out = replaceBookingWithPhoneCta(out);
   }
-  return out;
+  return { html: out, wasRepaired };
+}
+
+export function cleanHtmlOutput(text) {
+  return cleanAndRepairHtmlOutput(text).html;
 }
 
 /**
@@ -49,16 +105,18 @@ export async function orchestrateAiEditStream({
   anthropicApiKey,
   geminiApiKey,
   apiKey,
-  maxOutputTokens = 8192,
+  maxOutputTokens = 32768,
+  signal,
   onStart,
   onChunk,
   onThinking,
+  onReset,
 }) {
   const normModel = normalizeModelId(model);
   const rates = await getModelRates(normModel);
 
   // 1. Preflight Atomic Reservation in Supabase / Local Account
-  const reservation = await reserveBudget({
+  await reserveBudget({
     userId,
     requestId,
     modelId: normModel,
@@ -85,21 +143,23 @@ export async function orchestrateAiEditStream({
     if (isAnthropic && hasAnthropicKey) {
       try {
         streamResult = await streamAnthropicEdit(
-          { html, instruction, history, model: normModel, apiKey: effectiveApiKey, maxOutputTokens },
+          { html, instruction, history, model: normModel, apiKey: effectiveApiKey, maxOutputTokens, signal, onReset },
           onChunk,
           onThinking,
         );
       } catch (anthErr) {
+        if (signal?.aborted) throw anthErr;
         console.warn(`[orchestrator] Anthropic adapter notice on ${normModel}, routing via primary engine:`, anthErr.message);
+        if (onReset) onReset();
         streamResult = await streamGeminiEdit(
-          { html, instruction, history, model: normModel, apiKey: geminiApiKey || apiKey, maxOutputTokens },
+          { html, instruction, history, model: normModel, apiKey: geminiApiKey || apiKey, maxOutputTokens, signal, onReset },
           onChunk,
           onThinking,
         );
       }
     } else {
       streamResult = await streamGeminiEdit(
-        { html, instruction, history, model: normModel, apiKey: geminiApiKey || apiKey, maxOutputTokens },
+        { html, instruction, history, model: normModel, apiKey: geminiApiKey || apiKey, maxOutputTokens, signal, onReset },
         onChunk,
         onThinking,
       );
@@ -111,66 +171,90 @@ export async function orchestrateAiEditStream({
   // 2. Failure Handling: zero credits deducted if generation failed
   if (errorOccurred || !streamResult || !streamResult.html) {
     const errorMsg = errorOccurred?.message || 'Generation failed to complete.';
-    await settleUsage({
+    settleUsage({
       requestId,
       userId,
       modelId: normModel,
       latencyMs: streamResult?.latencyMs || 0,
       status: 'failed',
       errorMessage: errorMsg,
-    });
-    throw errorOccurred || new Error(errorMsg);
+      backgroundPersist: true,
+    }).catch(() => {});
+    throw errorOccurred || Object.assign(new Error(errorMsg), { code: 'GENERATION_ERROR', statusCode: 500 });
   }
 
-  // 3. Validation & Sanitization: verify AI actually wrote valid HTML code
+  // 3. Validation, Repair & Sanitization: verify AI actually wrote valid HTML code
   let cleanedHtml = '';
+  let wasRepaired = false;
   try {
-    cleanedHtml = cleanHtmlOutput(streamResult.html);
+    const cleaned = cleanAndRepairHtmlOutput(streamResult.html);
+    cleanedHtml = cleaned.html;
+    wasRepaired = cleaned.wasRepaired;
     if (cleanedHtml.trim() === (html || '').trim()) {
-      throw new Error('AI returned unchanged markup — no credits charged.');
+      throw Object.assign(new Error('AI returned unchanged markup — no credits charged. Try a more specific edit instruction.'), {
+        code: 'UNCHANGED_MARKUP',
+        statusCode: 422,
+      });
     }
   } catch (cleanErr) {
-    await settleUsage({
+    settleUsage({
       requestId,
       userId,
       modelId: normModel,
       latencyMs: streamResult.latencyMs,
       status: 'failed',
       errorMessage: cleanErr.message || 'Output HTML failed structure validation',
-    });
+      backgroundPersist: true,
+    }).catch(() => {});
     throw cleanErr;
   }
 
-  // 4. Atomic Settlement with Real Token Usage & Model Rate Card (100 AI credits = $1.00 USD)
-  const settlement = await settleUsage({
-    requestId,
-    userId,
-    modelId: normModel,
-    tokenUsage: streamResult.tokenUsage,
-    latencyMs: streamResult.latencyMs,
-    status: 'settled',
-    metadata: {
+  // 4. Fast Non-Blocking Settlement: compute cost & balance immediately so 'done' is never delayed by Supabase
+  let settlement = null;
+  try {
+    settlement = await settleUsage({
+      requestId,
       userId,
-      modelDisplayName: rates.displayName,
-      provider: rates.provider,
-      inputCostPerMillion: rates.inputCostPerMillion,
-      outputCostPerMillion: rates.outputCostPerMillion,
-    },
-  });
+      modelId: normModel,
+      tokenUsage: streamResult.tokenUsage,
+      latencyMs: streamResult.latencyMs,
+      status: 'settled',
+      backgroundPersist: true,
+      metadata: {
+        userId,
+        modelDisplayName: rates.displayName,
+        provider: rates.provider,
+        modelUsed: streamResult.modelUsed,
+        finishReason: streamResult.finishReason,
+        wasRepaired,
+        inputCostPerMillion: rates.inputCostPerMillion,
+        outputCostPerMillion: rates.outputCostPerMillion,
+      },
+    });
+  } catch (settleErr) {
+    console.warn(`[orchestrator] Settlement notice (non-fatal) for ${requestId}:`, settleErr.message);
+  }
+
+  console.log(
+    `[orchestrator] requestId=${requestId} model=${streamResult.modelUsed || normModel} latencyMs=${streamResult.latencyMs} finishReason=${streamResult.finishReason || 'unknown'} chars=${cleanedHtml.length} repaired=${wasRepaired}`,
+  );
 
   const metadata = {
     provider: rates.provider === 'google' ? 'Google Gemini' : 'Anthropic Claude',
     model: rates.displayName,
     modelId: normModel,
+    modelUsed: streamResult.modelUsed || normModel,
+    finishReason: streamResult.finishReason || 'STOP',
+    wasRepaired,
     inputTokens: settlement?.costData?.inputTokens ?? streamResult.tokenUsage.inputTokens,
     outputTokens: settlement?.costData?.outputTokens ?? streamResult.tokenUsage.outputTokens,
     thoughtTokens: settlement?.costData?.thoughtTokens ?? streamResult.tokenUsage.thoughtTokens,
     cachedReadTokens: settlement?.costData?.cachedReadTokens ?? streamResult.tokenUsage.cachedReadTokens,
     totalTokens: settlement?.costData?.totalTokens ?? streamResult.tokenUsage.totalTokens,
     latencyMs: streamResult.latencyMs,
-    creditsDeducted: settlement.actualCredits,
-    remainingCredits: settlement.balanceAfter,
-    actualCostUsd: settlement.actualCostUsd,
+    creditsDeducted: settlement?.actualCredits ?? 0,
+    remainingCredits: settlement?.balanceAfter ?? 0,
+    actualCostUsd: settlement?.actualCostUsd ?? 0,
     inputRatePerMillion: rates.inputCostPerMillion,
     outputRatePerMillion: rates.outputCostPerMillion,
     requestId,

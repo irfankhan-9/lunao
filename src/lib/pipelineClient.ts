@@ -26,6 +26,8 @@ import {
   simulateUgcOrSalesPhoneAudit,
 } from '../specialModes/UgcSandboxEngine';
 import { runMockedVibeCodeAiEdit } from './mockVibeEngine';
+import { extractSseEvents, sanitizeAndRepairStreamHtml } from './aiStreamUtils';
+export { extractSseEvents, sanitizeAndRepairStreamHtml };
 import type { PromptMetadata } from './vibeCredits';
 export type { PromptMetadata };
 
@@ -1537,8 +1539,18 @@ export async function streamAiEdit(
       ? localStorage.getItem('lunao_user_plan') || 'Starter Plan'
       : 'Starter Plan';
 
+  const abortCtrl = new AbortController();
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  const resetIdleWatchdog = (ms = 45000) => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      abortCtrl.abort();
+    }, ms);
+  };
+
   let res: Response;
   try {
+    resetIdleWatchdog(45000);
     res = await fetch(`${API_BASE}/api/ai/edit`, {
       method: 'POST',
       headers: {
@@ -1546,6 +1558,7 @@ export async function streamAiEdit(
         ...getEditorAuthHeaders(userId),
         'x-user-plan': activePlan,
       },
+      signal: abortCtrl.signal,
       body: JSON.stringify({
         html: params.html,
         instruction: params.instruction,
@@ -1556,12 +1569,28 @@ export async function streamAiEdit(
         plan: activePlan,
       }),
     });
-  } catch {
-    throw new Error('AI servers busy, try later.');
+  } catch (netErr: any) {
+    if (idleTimer) clearTimeout(idleTimer);
+    const isAbort = netErr?.name === 'AbortError';
+    const err = new Error(
+      isAbort
+        ? 'Connection timed out waiting for AI response. Please retry.'
+        : 'Unable to reach AI server. Check your connection and try again.',
+    );
+    (err as any).code = isAbort ? 'STREAM_TIMEOUT' : 'NETWORK_ERROR';
+    throw err;
   }
 
   if (!res.ok || !res.body) {
-    throw new Error('AI servers busy, try later.');
+    if (idleTimer) clearTimeout(idleTimer);
+    let errJson: any = null;
+    try {
+      errJson = await res.json();
+    } catch {}
+    const err = new Error(errJson?.error || `AI request failed (${res.status}). Please try again.`);
+    (err as any).code = errJson?.code || 'HTTP_ERROR';
+    (err as any).statusCode = res.status;
+    throw err;
   }
 
   const reader = res.body.getReader();
@@ -1570,84 +1599,89 @@ export async function streamAiEdit(
   let fullHtml = '';
   let doneHtml = '';
   let started = false;
+  let receivedDone = false;
 
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      const parts = buffer.split('\n\n');
-      buffer = parts.pop() || '';
-
-      for (const block of parts) {
-        const lines = block.split('\n');
-        for (const rawLine of lines) {
-          const line = rawLine.trim();
-          if (!line.startsWith('data:')) continue;
-          const jsonStr = line.slice(5).trim();
-          if (!jsonStr) continue;
-
-          let evt: any;
-          try {
-            evt = JSON.parse(jsonStr);
-          } catch {
-            continue;
-          }
-
-          if (evt.type === 'error') {
-            const err = new Error(evt.error || 'AI servers busy, try later.');
-            (err as any).code = evt.code;
-            (err as any).balance = evt.balance;
-            (err as any).needed = evt.needed;
-            throw err;
-          }
-          if (evt.type === 'start') {
-            if (!started) {
-              started = true;
-              if (onStart) onStart();
-            }
-          } else if (evt.type === 'thinking') {
-            if (!started) {
-              started = true;
-              if (onStart) onStart();
-            }
-            if (evt.delta && onThinking) {
-              onThinking(String(evt.delta));
-            }
-          } else if (evt.type === 'chunk') {
-            if (!started) {
-              started = true;
-              if (onStart) onStart();
-            }
-            const delta = String(evt.delta || '');
-            if (delta) {
-              fullHtml += delta;
-              onChunk(fullHtml, delta);
-            }
-          } else if (evt.type === 'done') {
-            if (typeof evt.html === 'string' && evt.html.trim().length > 0) {
-              doneHtml = evt.html.trim();
-            }
-            if (evt.metadata && onMetadata) {
-              onMetadata(evt.metadata as AiStreamMetadata);
-            }
-          }
+  const processEvents = (events: any[]) => {
+    for (const evt of events) {
+      if (evt.type === 'error') {
+        const err = new Error(evt.error || 'AI servers busy, try later.');
+        (err as any).code = evt.code || 'GENERATION_ERROR';
+        (err as any).statusCode = evt.statusCode;
+        (err as any).balance = evt.balance;
+        (err as any).needed = evt.needed;
+        throw err;
+      }
+      if (evt.type === 'reset') {
+        fullHtml = '';
+        doneHtml = '';
+      } else if (evt.type === 'start') {
+        if (!started) {
+          started = true;
+          if (onStart) onStart();
+        }
+      } else if (evt.type === 'thinking') {
+        if (!started) {
+          started = true;
+          if (onStart) onStart();
+        }
+        if (evt.delta && onThinking) {
+          onThinking(String(evt.delta));
+        }
+      } else if (evt.type === 'chunk') {
+        if (!started) {
+          started = true;
+          if (onStart) onStart();
+        }
+        const delta = String(evt.delta || '');
+        if (delta) {
+          fullHtml += delta;
+          onChunk(fullHtml, delta);
+        }
+      } else if (evt.type === 'done') {
+        receivedDone = true;
+        if (typeof evt.html === 'string' && evt.html.trim().length > 0) {
+          doneHtml = evt.html.trim();
+        }
+        if (evt.metadata && onMetadata) {
+          onMetadata(evt.metadata as AiStreamMetadata);
         }
       }
     }
+  };
+
+  try {
+    while (true) {
+      resetIdleWatchdog(45000);
+      const { value, done } = await reader.read();
+      if (done) {
+        const flushed = decoder.decode();
+        const { events } = extractSseEvents(flushed, buffer, true);
+        buffer = '';
+        processEvents(events);
+        break;
+      }
+      const chunkText = decoder.decode(value, { stream: true });
+      const { events, remaining } = extractSseEvents(chunkText, buffer, false);
+      buffer = remaining;
+      processEvents(events);
+    }
   } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      const timeoutErr = new Error('AI stream stalled before finishing. Please retry.');
+      (timeoutErr as any).code = 'STREAM_TIMEOUT';
+      throw timeoutErr;
+    }
     if (err && err.message) {
       throw err;
     }
-    throw new Error('AI servers busy, try later.');
+    const fallbackErr = new Error('Connection interrupted while generating code. Please retry.');
+    (fallbackErr as any).code = 'STREAM_INTERRUPTED';
+    throw fallbackErr;
+  } finally {
+    if (idleTimer) clearTimeout(idleTimer);
   }
 
-  let finalHtml = (doneHtml || fullHtml || '').trim();
-  const fence = finalHtml.match(/```(?:html)?\s*([\s\S]*?)\s*```/i);
-  if (fence && fence[1]) {
-    finalHtml = fence[1].trim();
-  }
+  const finalHtml = sanitizeAndRepairStreamHtml(doneHtml || fullHtml);
   const lower = finalHtml.toLowerCase();
   if (
     !finalHtml ||
@@ -1655,7 +1689,13 @@ export async function streamAiEdit(
     (!lower.includes('<!doctype') && !lower.includes('<html')) ||
     !lower.includes('</html>')
   ) {
-    throw new Error('AI servers busy, try later.');
+    const err = new Error(
+      receivedDone
+        ? 'AI returned incomplete HTML markup. Please retry.'
+        : 'Connection ended before AI finished generating. Please retry.',
+    );
+    (err as any).code = receivedDone ? 'INCOMPLETE_HTML' : 'STREAM_INTERRUPTED';
+    throw err;
   }
 
   return finalHtml;

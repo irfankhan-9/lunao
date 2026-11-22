@@ -21,7 +21,11 @@ import {
   AlertCircle,
   X,
   Radio,
-  FileText
+  FileText,
+  SlidersHorizontal,
+  Sparkles,
+  Coins,
+  Plus
 } from 'lucide-react';
 import { Logo } from '../landing/components/Logo';
 
@@ -36,8 +40,12 @@ interface AdminStats {
 
 interface AdminUser {
   owner_key: string;
+  email?: string;
+  name?: string;
   plan: string;
   balance: number;
+  aiCreditsBalance?: number;
+  planExpiresAt?: number | null;
   sitesRebranded: number;
   sitesDeployed: number;
   campaignsCount: number;
@@ -45,6 +53,14 @@ interface AdminUser {
   googleMapsCalls: number;
   lastActive: string | number;
 }
+
+const PLAN_OPTIONS = ['Free Plan', 'Starter Plan', 'Pro Plan', 'Agency Plan'] as const;
+const PLAN_DEFAULT_CREDITS: Record<string, { lunao: number; ai: number }> = {
+  'Free Plan': { lunao: 15, ai: 0 },
+  'Starter Plan': { lunao: 2500, ai: 600 },
+  'Pro Plan': { lunao: 6500, ai: 1300 },
+  'Agency Plan': { lunao: 12000, ai: 2000 },
+};
 
 export interface GoogleMapsCallItem {
   callNumber: number;
@@ -124,6 +140,158 @@ export function AdminPage({ onNavigateHome }: AdminPageProps) {
   // Modal State for inspecting a specific campaign's Google Maps API calls
   const [inspectingCampaign, setInspectingCampaign] = useState<AdminCampaign | null>(null);
 
+  // Modal State for granting Plans, Lunao Credits & AI Credits
+  const [grantModalOpen, setGrantModalOpen] = useState(false);
+  const [grantTargetUser, setGrantTargetUser] = useState<AdminUser | null>(null);
+  const [grantIdentifier, setGrantIdentifier] = useState('');
+  const [grantPlan, setGrantPlan] = useState<string>('');
+  const [grantDurationDays, setGrantDurationDays] = useState<string>('30');
+  const [grantLunaoMode, setGrantLunaoMode] = useState<'keep' | 'add' | 'set'>('keep');
+  const [grantLunaoAmount, setGrantLunaoAmount] = useState<string>('');
+  const [grantAiMode, setGrantAiMode] = useState<'keep' | 'add' | 'set'>('keep');
+  const [grantAiAmount, setGrantAiAmount] = useState<string>('');
+  const [grantNote, setGrantNote] = useState<string>('');
+  const [grantSaving, setGrantSaving] = useState(false);
+  const [grantError, setGrantError] = useState<string | null>(null);
+  const [grantSuccess, setGrantSuccess] = useState<string | null>(null);
+
+  const openGrantModal = (target?: AdminUser) => {
+    setGrantTargetUser(target || null);
+    setGrantIdentifier(target ? target.owner_key : '');
+    setGrantPlan('');
+    setGrantDurationDays('30');
+    setGrantLunaoMode('keep');
+    setGrantLunaoAmount('');
+    setGrantAiMode('keep');
+    setGrantAiAmount('');
+    setGrantNote('');
+    setGrantError(null);
+    setGrantSuccess(null);
+    setGrantModalOpen(true);
+  };
+
+  const handleFillPlanDefaults = (planName: string) => {
+    const resolvedPlan = planName || grantTargetUser?.plan || 'Starter Plan';
+    const def = PLAN_DEFAULT_CREDITS[resolvedPlan];
+    if (!def) return;
+    setGrantLunaoMode('set');
+    setGrantLunaoAmount(String(def.lunao));
+    setGrantAiMode('set');
+    setGrantAiAmount(String(def.ai));
+  };
+
+  const handleGrantSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGrantError(null);
+    setGrantSuccess(null);
+
+    const trimmedId = grantIdentifier.trim();
+    if (!trimmedId) {
+      setGrantError('Please enter a User ID (owner_key) or email address.');
+      return;
+    }
+
+    const hasPlanChange = Boolean(grantPlan);
+    const hasLunaoChange = grantLunaoMode !== 'keep';
+    const hasAiChange = grantAiMode !== 'keep';
+    if (!hasPlanChange && !hasLunaoChange && !hasAiChange) {
+      setGrantError('Choose a plan, Lunao credits change, or AI credits change to apply.');
+      return;
+    }
+
+    const lunaoNum = hasLunaoChange ? Number(grantLunaoAmount) : 0;
+    if (hasLunaoChange && (!Number.isFinite(lunaoNum) || (grantLunaoMode === 'set' && lunaoNum < 0))) {
+      setGrantError('Enter a valid Lunao credits number.');
+      return;
+    }
+
+    const aiNum = hasAiChange ? Number(grantAiAmount) : 0;
+    if (hasAiChange && (!Number.isFinite(aiNum) || (grantAiMode === 'set' && aiNum < 0))) {
+      setGrantError('Enter a valid AI credits number.');
+      return;
+    }
+
+    const pwd = sessionStorage.getItem('lunao_admin_secret') || '$KHAN1234455';
+    const isEmailLookup = !grantTargetUser && trimmedId.includes('@');
+
+    setGrantSaving(true);
+    try {
+      const res = await fetch('/api/admin/users/grant', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Password': pwd,
+          Authorization: `Bearer ${pwd}`,
+        },
+        body: JSON.stringify({
+          ownerKey: isEmailLookup ? undefined : trimmedId,
+          email: isEmailLookup ? trimmedId : undefined,
+          plan: grantPlan || null,
+          durationDays: grantDurationDays === 'lifetime' ? null : Number(grantDurationDays),
+          lunaoMode: grantLunaoMode,
+          lunaoAmount: lunaoNum,
+          aiMode: grantAiMode,
+          aiAmount: aiNum,
+          note: grantNote,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || `Request failed (HTTP ${res.status})`);
+      }
+
+      const updated = data.user;
+      setUsers((prev) => {
+        const exists = prev.some((u) => u.owner_key === updated.ownerKey);
+        if (exists) {
+          return prev.map((u) =>
+            u.owner_key === updated.ownerKey
+              ? {
+                  ...u,
+                  email: updated.email || u.email,
+                  name: updated.name || u.name,
+                  plan: updated.plan,
+                  balance: updated.balance,
+                  aiCreditsBalance: updated.aiCreditsBalance,
+                  planExpiresAt: updated.planExpiresAt,
+                }
+              : u
+          );
+        }
+        return [
+          {
+            owner_key: updated.ownerKey,
+            email: updated.email,
+            name: updated.name,
+            plan: updated.plan,
+            balance: updated.balance,
+            aiCreditsBalance: updated.aiCreditsBalance,
+            planExpiresAt: updated.planExpiresAt,
+            sitesRebranded: 0,
+            sitesDeployed: 0,
+            campaignsCount: 0,
+            businessesRequested: 0,
+            googleMapsCalls: 0,
+            lastActive: Date.now(),
+          },
+          ...prev,
+        ];
+      });
+
+      setGrantSuccess(
+        `Saved to Supabase: ${updated.plan} | Lunao: ${updated.balance} | AI: ${updated.aiCreditsBalance}`
+      );
+      fetchAdminData(pwd);
+      setTimeout(() => {
+        setGrantModalOpen(false);
+      }, 900);
+    } catch (err: any) {
+      setGrantError(err.message || 'Failed to update plan & credits');
+    } finally {
+      setGrantSaving(false);
+    }
+  };
+
   const fetchAdminData = async (pwdToUse?: string) => {
     const pwd = pwdToUse || sessionStorage.getItem('lunao_admin_secret') || '$KHAN1234455';
     setLoading(true);
@@ -201,7 +369,9 @@ export function AdminPage({ onNavigateHome }: AdminPageProps) {
     return users.filter(
       (u) =>
         u.owner_key.toLowerCase().includes(q) ||
-        u.plan.toLowerCase().includes(q)
+        u.plan.toLowerCase().includes(q) ||
+        (u.email && u.email.toLowerCase().includes(q)) ||
+        (u.name && u.name.toLowerCase().includes(q))
     );
   }, [users, searchQuery]);
 
@@ -583,18 +753,28 @@ export function AdminPage({ onNavigateHome }: AdminPageProps) {
         {/* ------------------------------------------------------------------- */}
         {activeTab === 'users' && (
           <div className="bg-[#14161C] border border-[#222530] rounded-2xl overflow-hidden shadow-xl">
-            <div className="p-5 border-b border-[#222530] flex items-center justify-between">
+            <div className="p-5 border-b border-[#222530] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h2 className="text-sm font-bold text-white tracking-tight">
                   User Accounts & Deployment Portfolio
                 </h2>
                 <p className="text-xs text-[#9CA3AF] mt-0.5">
-                  Breakdown of rebranded sites, deployed live links, and campaign volume per user
+                  Manage plans, Lunao credits, AI credits, rebranded sites, and campaign volume per user
                 </p>
               </div>
-              <span className="text-xs text-[#9CA3AF]">
-                Showing {filteredUsers.length} account(s)
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-[#9CA3AF]">
+                  Showing {filteredUsers.length} account(s)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => openGrantModal()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-xs font-semibold text-white transition-colors cursor-pointer shadow-sm"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Grant Plan / Credits</span>
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -603,11 +783,12 @@ export function AdminPage({ onNavigateHome }: AdminPageProps) {
                   <tr>
                     <th className="px-6 py-3.5">User / Account ID</th>
                     <th className="px-4 py-3.5">Active Plan</th>
+                    <th className="px-4 py-3.5 text-center">Lunao Credits</th>
+                    <th className="px-4 py-3.5 text-center">AI Credits</th>
                     <th className="px-4 py-3.5 text-center">Sites Rebranded</th>
                     <th className="px-4 py-3.5 text-center">Sites Deployed</th>
                     <th className="px-4 py-3.5 text-center">Campaigns</th>
-                    <th className="px-4 py-3.5 text-center">Businesses Requested</th>
-                    <th className="px-4 py-3.5 text-center">Google Maps Calls</th>
+                    <th className="px-4 py-3.5 text-center">Maps Calls</th>
                     <th className="px-4 py-3.5">Last Activity</th>
                     <th className="px-6 py-3.5 text-right">Actions</th>
                   </tr>
@@ -615,13 +796,14 @@ export function AdminPage({ onNavigateHome }: AdminPageProps) {
                 <tbody className="divide-y divide-[#1F222C]">
                   {filteredUsers.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-6 py-12 text-center text-[#6B7280]">
+                      <td colSpan={10} className="px-6 py-12 text-center text-[#6B7280]">
                         No user accounts match the search criteria.
                       </td>
                     </tr>
                   ) : (
                     filteredUsers.map((u) => {
                       const isFiltered = selectedUserFilter === u.owner_key;
+                      const isPaidPlan = u.plan && !u.plan.toLowerCase().includes('free');
                       return (
                         <tr
                           key={u.owner_key}
@@ -629,13 +811,35 @@ export function AdminPage({ onNavigateHome }: AdminPageProps) {
                             isFiltered ? 'bg-[#2563EB]/10' : ''
                           }`}
                         >
-                          <td className="px-6 py-4 font-mono font-medium text-white max-w-[200px] truncate" title={u.owner_key}>
-                            {u.owner_key}
+                          <td className="px-6 py-4 max-w-[220px]" title={u.owner_key}>
+                            {u.email ? (
+                              <div>
+                                <div className="font-medium text-white truncate">{u.email}</div>
+                                <div className="font-mono text-[10px] text-[#9CA3AF] truncate">{u.owner_key}</div>
+                              </div>
+                            ) : (
+                              <div className="font-mono font-medium text-white truncate">{u.owner_key}</div>
+                            )}
                           </td>
                           <td className="px-4 py-4">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#2563EB]/15 text-[#60A5FA] border border-[#2563EB]/30">
-                              {u.plan}
-                            </span>
+                            <div className="flex flex-col items-start gap-1">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#2563EB]/15 text-[#60A5FA] border border-[#2563EB]/30">
+                                {u.plan}
+                              </span>
+                              {isPaidPlan && (
+                                <span className="text-[10px] text-[#9CA3AF]">
+                                  {u.planExpiresAt
+                                    ? `Exp ${new Date(u.planExpiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                                    : 'No expiry'}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 text-center font-mono font-bold text-[#10B981]">
+                            {Number(u.balance || 0).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-4 text-center font-mono font-bold text-[#A855F7]">
+                            {Number(u.aiCreditsBalance ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                           </td>
                           <td className="px-4 py-4 text-center font-bold text-white">
                             {u.sitesRebranded}
@@ -653,17 +857,23 @@ export function AdminPage({ onNavigateHome }: AdminPageProps) {
                           <td className="px-4 py-4 text-center text-[#9CA3AF] font-medium">
                             {u.campaignsCount}
                           </td>
-                          <td className="px-4 py-4 text-center text-white font-medium">
-                            {u.businessesRequested}
-                          </td>
                           <td className="px-4 py-4 text-center text-[#F59E0B] font-semibold">
-                            {u.googleMapsCalls} call(s)
+                            {u.googleMapsCalls}
                           </td>
                           <td className="px-4 py-4 text-[#9CA3AF] text-[11px]">
                             {formatDate(u.lastActive)}
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <div className="flex items-center justify-end gap-2.5">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openGrantModal(u)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#2563EB]/15 hover:bg-[#2563EB]/25 text-[#60A5FA] text-[11px] font-semibold border border-[#2563EB]/30 transition-colors cursor-pointer"
+                                title="Change plan or grant Lunao & AI credits"
+                              >
+                                <SlidersHorizontal className="w-3 h-3" />
+                                <span>Manage</span>
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -1099,6 +1309,254 @@ export function AdminPage({ onNavigateHome }: AdminPageProps) {
                 Close Inspector
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------- */}
+      {/* MODAL: GRANT PLAN, LUNAO CREDITS & AI CREDITS                       */}
+      {/* ------------------------------------------------------------------- */}
+      {grantModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <div className="w-full max-w-xl bg-[#14161C] border border-[#2E3340] rounded-2xl shadow-2xl overflow-hidden my-8">
+            <div className="p-5 border-b border-[#222530] flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#2563EB]/15 text-[#60A5FA] border border-[#2563EB]/30 inline-flex items-center gap-1">
+                    <SlidersHorizontal className="w-3 h-3" />
+                    Supabase Plan & Credit Control
+                  </span>
+                </div>
+                <h3 className="text-base font-bold text-white tracking-tight">
+                  {grantTargetUser ? 'Manage User Plan & Credits' : 'Grant Plan & Credits to User'}
+                </h3>
+                {grantTargetUser && (
+                  <p className="text-xs text-[#9CA3AF] mt-0.5 font-mono">
+                    {grantTargetUser.email ? `${grantTargetUser.email} • ` : ''}
+                    {grantTargetUser.owner_key}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setGrantModalOpen(false)}
+                className="p-1.5 rounded-lg text-[#9CA3AF] hover:text-white hover:bg-[#222530] transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleGrantSubmit} className="p-5 space-y-5">
+              {grantTargetUser ? (
+                <div className="grid grid-cols-3 gap-2.5 p-3 rounded-xl bg-[#101217] border border-[#222530]">
+                  <div>
+                    <span className="text-[10px] uppercase text-[#9CA3AF] block">Current Plan</span>
+                    <span className="text-xs font-bold text-[#60A5FA]">{grantTargetUser.plan}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase text-[#9CA3AF] block">Lunao Credits</span>
+                    <span className="text-xs font-mono font-bold text-[#10B981]">
+                      {Number(grantTargetUser.balance || 0).toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase text-[#9CA3AF] block">AI Credits</span>
+                    <span className="text-xs font-mono font-bold text-[#A855F7]">
+                      {Number(grantTargetUser.aiCreditsBalance ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1.5">
+                    User Email or Account ID (owner_key)
+                  </label>
+                  <input
+                    type="text"
+                    value={grantIdentifier}
+                    onChange={(e) => setGrantIdentifier(e.target.value)}
+                    placeholder="user@example.com or owner_key…"
+                    className="w-full h-10 px-3.5 rounded-xl bg-[#101217] border border-[#282C38] focus:border-[#3B82F6] focus:outline-none text-xs text-white placeholder-[#6B7280]"
+                  />
+                </div>
+              )}
+
+              {/* Plan + Duration */}
+              <div className="space-y-2.5 p-4 rounded-xl bg-[#101217] border border-[#222530]">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-white">Subscription Plan</label>
+                  <button
+                    type="button"
+                    onClick={() => handleFillPlanDefaults(grantPlan)}
+                    className="text-[11px] font-semibold text-[#60A5FA] hover:text-[#93C5FD] underline cursor-pointer"
+                  >
+                    Fill Plan Default Credits
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <span className="block text-[10px] uppercase text-[#9CA3AF] mb-1">Target Plan</span>
+                    <select
+                      value={grantPlan}
+                      onChange={(e) => setGrantPlan(e.target.value)}
+                      className="w-full h-9 px-3 rounded-lg bg-[#181A22] border border-[#2B303D] focus:border-[#3B82F6] focus:outline-none text-xs text-white"
+                    >
+                      <option value="">Keep Current ({grantTargetUser?.plan || 'Unchanged'})</option>
+                      {PLAN_OPTIONS.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] uppercase text-[#9CA3AF] mb-1">Plan Validity</span>
+                    <select
+                      value={grantDurationDays}
+                      onChange={(e) => setGrantDurationDays(e.target.value)}
+                      disabled={!grantPlan || grantPlan === 'Free Plan'}
+                      className="w-full h-9 px-3 rounded-lg bg-[#181A22] border border-[#2B303D] focus:border-[#3B82F6] focus:outline-none text-xs text-white disabled:opacity-50"
+                    >
+                      <option value="30">30 Days (Standard)</option>
+                      <option value="90">90 Days (Quarter)</option>
+                      <option value="365">365 Days (1 Year)</option>
+                      <option value="lifetime">No Expiry (Lifetime)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Lunao Credits & AI Credits */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Lunao Action Credits */}
+                <div className="p-4 rounded-xl bg-[#101217] border border-[#222530] space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white inline-flex items-center gap-1.5">
+                      <Coins className="w-3.5 h-3.5 text-[#10B981]" />
+                      Lunao Credits
+                    </span>
+                  </div>
+                  <select
+                    value={grantLunaoMode}
+                    onChange={(e) => setGrantLunaoMode(e.target.value as 'keep' | 'add' | 'set')}
+                    className="w-full h-9 px-3 rounded-lg bg-[#181A22] border border-[#2B303D] focus:border-[#10B981] focus:outline-none text-xs text-white"
+                  >
+                    <option value="keep">Keep Current</option>
+                    <option value="add">Add / Subtract (+/-)</option>
+                    <option value="set">Set Exact Balance (=)</option>
+                  </select>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={grantLunaoAmount}
+                    onChange={(e) => setGrantLunaoAmount(e.target.value)}
+                    disabled={grantLunaoMode === 'keep'}
+                    placeholder={grantLunaoMode === 'add' ? 'e.g. 500 or -50' : 'e.g. 6500'}
+                    className="w-full h-9 px-3 rounded-lg bg-[#181A22] border border-[#2B303D] focus:border-[#10B981] focus:outline-none text-xs text-white placeholder-[#6B7280] disabled:opacity-40"
+                  />
+                  {grantTargetUser && grantLunaoMode !== 'keep' && grantLunaoAmount !== '' && !isNaN(Number(grantLunaoAmount)) && (
+                    <p className="text-[11px] text-[#10B981] font-mono">
+                      New balance:{' '}
+                      {(grantLunaoMode === 'set'
+                        ? Math.max(0, Number(grantLunaoAmount))
+                        : Math.max(0, Number(grantTargetUser.balance || 0) + Number(grantLunaoAmount))
+                      ).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+
+                {/* AI Vibe Credits */}
+                <div className="p-4 rounded-xl bg-[#101217] border border-[#222530] space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white inline-flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-[#A855F7]" />
+                      AI Credits
+                    </span>
+                  </div>
+                  <select
+                    value={grantAiMode}
+                    onChange={(e) => setGrantAiMode(e.target.value as 'keep' | 'add' | 'set')}
+                    className="w-full h-9 px-3 rounded-lg bg-[#181A22] border border-[#2B303D] focus:border-[#A855F7] focus:outline-none text-xs text-white"
+                  >
+                    <option value="keep">Keep Current</option>
+                    <option value="add">Add / Subtract (+/-)</option>
+                    <option value="set">Set Exact Balance (=)</option>
+                  </select>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={grantAiAmount}
+                    onChange={(e) => setGrantAiAmount(e.target.value)}
+                    disabled={grantAiMode === 'keep'}
+                    placeholder={grantAiMode === 'add' ? 'e.g. 500 or -50' : 'e.g. 1300'}
+                    className="w-full h-9 px-3 rounded-lg bg-[#181A22] border border-[#2B303D] focus:border-[#A855F7] focus:outline-none text-xs text-white placeholder-[#6B7280] disabled:opacity-40"
+                  />
+                  {grantTargetUser && grantAiMode !== 'keep' && grantAiAmount !== '' && !isNaN(Number(grantAiAmount)) && (
+                    <p className="text-[11px] text-[#A855F7] font-mono">
+                      New balance:{' '}
+                      {(grantAiMode === 'set'
+                        ? Math.max(0, Number(grantAiAmount))
+                        : Math.max(0, Number(grantTargetUser.aiCreditsBalance ?? 0) + Number(grantAiAmount))
+                      ).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Optional Audit Note */}
+              <div>
+                <label className="block text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1">
+                  Audit Note (optional)
+                </label>
+                <input
+                  type="text"
+                  value={grantNote}
+                  onChange={(e) => setGrantNote(e.target.value)}
+                  placeholder="e.g. Partner comp upgrade, VIP bonus credits…"
+                  className="w-full h-9 px-3 rounded-lg bg-[#101217] border border-[#282C38] focus:border-[#3B82F6] focus:outline-none text-xs text-white placeholder-[#6B7280]"
+                />
+              </div>
+
+              {grantError && (
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/25 text-xs text-red-400 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{grantError}</span>
+                </div>
+              )}
+              {grantSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-xs text-emerald-400 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>{grantSuccess}</span>
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-[#222530]">
+                <button
+                  type="button"
+                  onClick={() => setGrantModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-[#1C1F26] hover:bg-[#262A34] border border-[#2C313E] text-xs font-medium text-[#9CA3AF] hover:text-white transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={grantSaving}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-xs font-semibold text-white transition-colors cursor-pointer disabled:opacity-60"
+                >
+                  {grantSaving ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving to Supabase…</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Save Plan & Credits</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

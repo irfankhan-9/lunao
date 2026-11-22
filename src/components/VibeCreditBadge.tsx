@@ -22,9 +22,10 @@ export const VibeCreditBadge: React.FC<VibeCreditBadgeProps> = ({
   const [justDeducted, setJustDeducted] = useState(false);
   const [userPlan, setUserPlan] = useState<string>(() => {
     try {
-      return localStorage.getItem('lunao_user_plan') || 'Starter Plan';
+      const ownerKey = localStorage.getItem('lunao_owner_key');
+      return (ownerKey && localStorage.getItem(`lunao_u_${ownerKey}_plan`)) || localStorage.getItem('lunao_user_plan') || 'Free Plan';
     } catch {
-      return 'Starter Plan';
+      return 'Free Plan';
     }
   });
 
@@ -44,7 +45,8 @@ export const VibeCreditBadge: React.FC<VibeCreditBadgeProps> = ({
 
     const handlePlanChange = () => {
       try {
-        const p = localStorage.getItem('lunao_user_plan') || 'Starter Plan';
+        const ownerKey = localStorage.getItem('lunao_owner_key');
+        const p = (ownerKey && localStorage.getItem(`lunao_u_${ownerKey}_plan`)) || localStorage.getItem('lunao_user_plan') || 'Free Plan';
         setUserPlan(p);
         setBalance(getVibeCreditBalance(p));
       } catch {
@@ -56,12 +58,14 @@ export const VibeCreditBadge: React.FC<VibeCreditBadgeProps> = ({
     window.addEventListener('lunao_special_mode_changed', handlePlanChange);
     window.addEventListener('storage', handlePlanChange);
     window.addEventListener('lunao:plan-changed', handlePlanChange);
+    window.addEventListener('lunao_auth_changed', handlePlanChange);
 
     return () => {
       window.removeEventListener('lunao_vibe_credits_changed', handleCreditChange);
       window.removeEventListener('lunao_special_mode_changed', handlePlanChange);
       window.removeEventListener('storage', handlePlanChange);
       window.removeEventListener('lunao:plan-changed', handlePlanChange);
+      window.removeEventListener('lunao_auth_changed', handlePlanChange);
     };
   }, []);
 
@@ -77,11 +81,11 @@ export const VibeCreditBadge: React.FC<VibeCreditBadgeProps> = ({
   };
 
   const isFree = userPlan.toLowerCase().includes('free');
-  const displayBalance = isFree ? (balance >= 1 ? 1 : 0) : balance;
-  const labelText = isFree ? (displayBalance === 1 ? 'AI Prompt' : 'AI Prompts') : 'AI Credits';
+  const displayBalance = isFree ? 0 : balance;
+  const labelText = isFree ? 'AI Credits (Starter+)' : 'AI Credits';
 
   const formattedBalance = isFree
-    ? String(displayBalance)
+    ? '0'
     : balance.toLocaleString(undefined, {
         minimumFractionDigits: balance % 1 !== 0 ? 1 : 0,
         maximumFractionDigits: 2,
@@ -92,7 +96,7 @@ export const VibeCreditBadge: React.FC<VibeCreditBadgeProps> = ({
       <button
         type="button"
         onClick={handleClick}
-        title={isFree ? `Lunao AI: ${formattedBalance} free prompt${displayBalance === 1 ? '' : 's'} remaining.` : `Lunao AI Credits: ${formattedBalance} remaining.`}
+        title={isFree ? 'AI Vibe Coding is locked on the Free Plan. Upgrade to Starter ($97/mo) or above to unlock.' : `Lunao AI Credits: ${formattedBalance} remaining.`}
         className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-mono transition-all select-none ${
           justDeducted
             ? 'bg-accent/15 border-accent text-accent scale-102 ring-2 ring-accent/30'
@@ -111,7 +115,7 @@ export const VibeCreditBadge: React.FC<VibeCreditBadgeProps> = ({
     <button
       type="button"
       onClick={handleClick}
-      title={isFree ? `Lunao AI: ${formattedBalance} free prompt${balance === 1 ? '' : 's'} remaining.` : `Lunao AI Credits: ${formattedBalance} remaining.`}
+      title={isFree ? 'AI Vibe Coding is locked on the Free Plan. Upgrade to Starter ($97/mo) or above to unlock.' : `Lunao AI Credits: ${formattedBalance} remaining.`}
       className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all text-xs select-none shadow-2xs ${
         justDeducted
           ? 'bg-accent/15 border-accent text-accent scale-102 ring-2 ring-accent/30'
