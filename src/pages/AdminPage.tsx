@@ -397,7 +397,16 @@ export function AdminPage({ onNavigateHome }: AdminPageProps) {
       if (!data.ok) throw new Error(data.error || 'Server returned an error');
 
       setStats(data.stats);
-      setUsers(data.users || []);
+      if (Array.isArray(data.users) && data.users.length > 0) {
+        setUsers((prev) => {
+          const map = new Map(prev.map((u) => [u.owner_key, u]));
+          for (const u of data.users) {
+            const existing = map.get(u.owner_key);
+            map.set(u.owner_key, existing ? { ...existing, ...u, email: u.email || existing.email, name: u.name || existing.name } : u);
+          }
+          return Array.from(map.values()).sort((a, b) => (b.sitesRebranded + b.campaignsCount) - (a.sitesRebranded + a.campaignsCount));
+        });
+      }
       setCampaigns(data.campaigns || []);
       setSites(data.recentSites || []);
       setIsAuthenticated(true);
