@@ -66,7 +66,7 @@ import { streamEdit, isAiEnabled, cleanHtmlOutput, generateTemplateHtml } from '
 import { orchestrateAiEditStream } from './lib/ai/orchestrator.js';
 import { listStudioModels } from './lib/ai/pricingRegistry.js';
 import { getUserAiStatus, listAiUsageLedger, syncUserAiPlan, persistSupabaseAiBalance, FREE_VIBE_CREDITS } from './lib/ai/accountingService.js';
-import { fetchAdminUserDetailsMaps, adminGrantUserPlanAndCredits } from './lib/adminGrants.js';
+import { fetchAdminUserDetailsMaps, fetchAllAdminUsersFast, adminGrantUserPlanAndCredits } from './lib/adminGrants.js';
 import { createBooking, createBookingAsync, listBookings, listBookingsAsync, updateBookingStatus, updateBookingStatusAsync, getBooking, getBookingAsync } from './lib/bookings.js';
 import { validateBookingContract, rollbackToApprovedBooking, CONTRACT_REJECTION_MESSAGE } from './lib/bookingContractValidator.js';
 import {
@@ -2899,6 +2899,19 @@ function isAdminAuthorized(req) {
   return pwdHeader === expected || authHeader === `Bearer ${expected}`;
 }
 
+// Fast Admin Users Endpoint: returns ALL users from Supabase immediately without waiting on heavy sites/campaigns blobs
+app.get('/api/admin/users', async (req, res) => {
+  if (!isAdminAuthorized(req)) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized: Invalid Admin Password' });
+  }
+  try {
+    const users = await fetchAllAdminUsersFast();
+    return res.json({ ok: true, users, totalUsers: users.length });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: 'Failed to load admin users: ' + err.message });
+  }
+});
+
 app.get('/api/admin/overview', async (req, res) => {
   if (!isAdminAuthorized(req)) {
     return res.status(401).json({ ok: false, error: 'Unauthorized: Invalid Admin Password' });
@@ -3067,28 +3080,30 @@ app.get('/api/admin/overview', async (req, res) => {
       };
     });
 
-    // Enrich userMap with authoritative Supabase user_plans, user_credits, and lunao_users
-    const { plansByUser, creditsByUser, profilesByUser, decodeActionBalance } = adminDetails || {};
+    // Enrich userMap with authoritative Supabase user_plans, user_credits, credit_accounts, and auth profiles
+    const { plansByUser, creditsByUser, accountsByUser, profilesByUser, decodeActionBalance } = adminDetails || {};
     const extraKeys = new Set([
       ...(plansByUser ? plansByUser.keys() : []),
       ...(creditsByUser ? creditsByUser.keys() : []),
+      ...(accountsByUser ? accountsByUser.keys() : []),
       ...(profilesByUser ? profilesByUser.keys() : []),
     ]);
     for (const k of extraKeys) {
       if (!userMap.has(k)) {
         const pRow = plansByUser?.get(k);
         const cRow = creditsByUser?.get(k);
+        const aRow = accountsByUser?.get(k);
         const uRow = profilesByUser?.get(k);
         userMap.set(k, {
           owner_key: k,
-          plan: pRow?.plan_tier || 'Free Plan',
-          balance: cRow ? decodeActionBalance(cRow, 0) : 0,
+          plan: pRow?.plan_tier || aRow?.plan || 'Free Plan',
+          balance: cRow ? decodeActionBalance(cRow, Number(aRow?.balance ?? 0)) : Number(aRow?.balance ?? 0),
           sitesRebranded: 0,
           sitesDeployed: 0,
           campaignsCount: 0,
           businessesRequested: 0,
           googleMapsCalls: 0,
-          lastActive: uRow?.last_login_at || pRow?.updated_at || cRow?.updated_at || uRow?.created_at || null,
+          lastActive: uRow?.last_login_at || pRow?.updated_at || cRow?.updated_at || aRow?.updated_at || uRow?.created_at || null,
         });
       }
     }
@@ -3096,12 +3111,11 @@ app.get('/api/admin/overview', async (req, res) => {
       const pRow = plansByUser?.get(k);
       const cRow = creditsByUser?.get(k);
       const uRow = profilesByUser?.get(k);
-      if (uRow) {
-        rec.email = uRow.email || '';
-        rec.name = uRow.name || '';
-        if (uRow.last_login_at && (!rec.lastActive || Number(uRow.last_login_at) > Number(rec.lastActive))) {
-          rec.lastActive = uRow.last_login_at;
-        }
+      const keyEmail = k.startsWith('user_') && k.slice(5).includes('@') ? k.slice(5).toLowerCase() : '';
+      rec.email = uRow?.email || pRow?.email || rec.email || keyEmail || '';
+      rec.name = uRow?.name || rec.name || '';
+      if (uRow?.last_login_at && (!rec.lastActive || Number(uRow.last_login_at) > Number(rec.lastActive))) {
+        rec.lastActive = uRow.last_login_at;
       }
       if (pRow?.plan_tier) {
         rec.plan = pRow.plan_tier;

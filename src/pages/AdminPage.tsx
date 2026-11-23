@@ -144,6 +144,9 @@ export function AdminPage({ onNavigateHome }: AdminPageProps) {
   const [grantModalOpen, setGrantModalOpen] = useState(false);
   const [grantTargetUser, setGrantTargetUser] = useState<AdminUser | null>(null);
   const [grantIdentifier, setGrantIdentifier] = useState('');
+  const [grantUserSearch, setGrantUserSearch] = useState('');
+  const [grantPickerOpen, setGrantPickerOpen] = useState(true);
+  const [loadingUsers, setLoadingUsers] = useState(false);
   const [grantPlan, setGrantPlan] = useState<string>('');
   const [grantDurationDays, setGrantDurationDays] = useState<string>('30');
   const [grantLunaoMode, setGrantLunaoMode] = useState<'keep' | 'add' | 'set'>('keep');
@@ -155,9 +158,64 @@ export function AdminPage({ onNavigateHome }: AdminPageProps) {
   const [grantError, setGrantError] = useState<string | null>(null);
   const [grantSuccess, setGrantSuccess] = useState<string | null>(null);
 
+  const fetchFastUsers = async (pwdToUse?: string): Promise<AdminUser[]> => {
+    const pwd = pwdToUse || sessionStorage.getItem('lunao_admin_secret') || '$KHAN1234455';
+    setLoadingUsers(true);
+    try {
+      const res = await fetch(`/api/admin/users?password=${encodeURIComponent(pwd)}`, {
+        headers: {
+          'X-Admin-Password': pwd,
+          Authorization: `Bearer ${pwd}`,
+        },
+      });
+      if (!res.ok) {
+        if (res.status === 401) throw new Error('Invalid Admin Password. Access Denied.');
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      if (data?.ok && Array.isArray(data.users)) {
+        setUsers((prev) => {
+          const prevMap = new Map(prev.map((u) => [u.owner_key, u]));
+          return data.users.map((u: AdminUser) => {
+            const existing = prevMap.get(u.owner_key);
+            return existing
+              ? {
+                  ...existing,
+                  ...u,
+                  sitesRebranded: existing.sitesRebranded || u.sitesRebranded,
+                  sitesDeployed: existing.sitesDeployed || u.sitesDeployed,
+                  campaignsCount: existing.campaignsCount || u.campaignsCount,
+                  businessesRequested: existing.businessesRequested || u.businessesRequested,
+                  googleMapsCalls: existing.googleMapsCalls || u.googleMapsCalls,
+                }
+              : u;
+          });
+        });
+        setStats((prev) =>
+          prev
+            ? { ...prev, totalUsers: Math.max(prev.totalUsers, data.users.length) }
+            : {
+                totalUsers: data.users.length,
+                totalSitesRebranded: 0,
+                totalSitesDeployed: 0,
+                totalCampaigns: 0,
+                totalBusinessesRequested: 0,
+                totalGoogleMapsCalls: 0,
+              }
+        );
+        return data.users;
+      }
+      return [];
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
   const openGrantModal = (target?: AdminUser) => {
     setGrantTargetUser(target || null);
     setGrantIdentifier(target ? target.owner_key : '');
+    setGrantUserSearch('');
+    setGrantPickerOpen(!target);
     setGrantPlan('');
     setGrantDurationDays('30');
     setGrantLunaoMode('keep');
@@ -168,7 +226,21 @@ export function AdminPage({ onNavigateHome }: AdminPageProps) {
     setGrantError(null);
     setGrantSuccess(null);
     setGrantModalOpen(true);
+    // Refresh all users instantly in background so the picker is always up to date
+    fetchFastUsers().catch(() => {});
   };
+
+  const grantFilteredUsers = useMemo(() => {
+    const q = grantUserSearch.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter(
+      (u) =>
+        u.owner_key.toLowerCase().includes(q) ||
+        (u.email && u.email.toLowerCase().includes(q)) ||
+        (u.name && u.name.toLowerCase().includes(q)) ||
+        (u.plan && u.plan.toLowerCase().includes(q))
+    );
+  }, [users, grantUserSearch]);
 
   const handleFillPlanDefaults = (planName: string) => {
     const resolvedPlan = planName || grantTargetUser?.plan || 'Starter Plan';
@@ -297,12 +369,22 @@ export function AdminPage({ onNavigateHome }: AdminPageProps) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/admin/overview?password=${encodeURIComponent(pwd)}`, {
+      // Load all users immediately via fast endpoint while full overview aggregates in parallel
+      const overviewPromise = fetch(`/api/admin/overview?password=${encodeURIComponent(pwd)}`, {
         headers: {
           'X-Admin-Password': pwd,
           'Authorization': `Bearer ${pwd}`,
         },
       });
+
+      const fastUsers = await fetchFastUsers(pwd);
+      if (fastUsers.length > 0) {
+        setIsAuthenticated(true);
+        sessionStorage.setItem(STORAGE_KEY, 'authenticated');
+        sessionStorage.setItem('lunao_admin_secret', pwd);
+      }
+
+      const res = await overviewPromise;
 
       if (!res.ok) {
         if (res.status === 401) {
@@ -1346,40 +1428,133 @@ export function AdminPage({ onNavigateHome }: AdminPageProps) {
               </button>
             </div>
 
-            <form onSubmit={handleGrantSubmit} className="p-5 space-y-5">
-              {grantTargetUser ? (
-                <div className="grid grid-cols-3 gap-2.5 p-3 rounded-xl bg-[#101217] border border-[#222530]">
-                  <div>
-                    <span className="text-[10px] uppercase text-[#9CA3AF] block">Current Plan</span>
-                    <span className="text-xs font-bold text-[#60A5FA]">{grantTargetUser.plan}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase text-[#9CA3AF] block">Lunao Credits</span>
-                    <span className="text-xs font-mono font-bold text-[#10B981]">
-                      {Number(grantTargetUser.balance || 0).toLocaleString()}
+            <form onSubmit={handleGrantSubmit} className="p-5 space-y-5 max-h-[82vh] overflow-y-auto">
+              {/* All-Users Live Picker inside Plan Grant Section */}
+              <div className="p-3.5 rounded-xl bg-[#101217] border border-[#222530] space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-3.5 h-3.5 text-[#3B82F6]" />
+                    <span className="text-xs font-bold text-white">
+                      Select User ({users.length} loaded)
                     </span>
                   </div>
-                  <div>
-                    <span className="text-[10px] uppercase text-[#9CA3AF] block">AI Credits</span>
-                    <span className="text-xs font-mono font-bold text-[#A855F7]">
-                      {Number(grantTargetUser.aiCreditsBalance ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                    </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => fetchFastUsers().catch(() => {})}
+                      disabled={loadingUsers}
+                      className="inline-flex items-center gap-1 text-[11px] text-[#9CA3AF] hover:text-white cursor-pointer disabled:opacity-50"
+                      title="Reload all users from Supabase"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${loadingUsers ? 'animate-spin' : ''}`} />
+                      <span>Refresh</span>
+                    </button>
+                    {grantTargetUser && (
+                      <button
+                        type="button"
+                        onClick={() => setGrantPickerOpen((v) => !v)}
+                        className="text-[11px] font-semibold text-[#60A5FA] hover:text-[#93C5FD] underline cursor-pointer"
+                      >
+                        {grantPickerOpen ? 'Hide List' : 'Switch User'}
+                      </button>
+                    )}
                   </div>
                 </div>
-              ) : (
-                <div>
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1.5">
-                    User Email or Account ID (owner_key)
-                  </label>
-                  <input
-                    type="text"
-                    value={grantIdentifier}
-                    onChange={(e) => setGrantIdentifier(e.target.value)}
-                    placeholder="user@example.com or owner_key…"
-                    className="w-full h-10 px-3.5 rounded-xl bg-[#101217] border border-[#282C38] focus:border-[#3B82F6] focus:outline-none text-xs text-white placeholder-[#6B7280]"
-                  />
-                </div>
-              )}
+
+                {grantTargetUser && (
+                  <div className="grid grid-cols-3 gap-2.5 p-3 rounded-lg bg-[#161922] border border-[#2563EB]/30">
+                    <div>
+                      <span className="text-[10px] uppercase text-[#9CA3AF] block">Current Plan</span>
+                      <span className="text-xs font-bold text-[#60A5FA]">{grantTargetUser.plan}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase text-[#9CA3AF] block">Lunao Credits</span>
+                      <span className="text-xs font-mono font-bold text-[#10B981]">
+                        {Number(grantTargetUser.balance || 0).toLocaleString()}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase text-[#9CA3AF] block">AI Credits</span>
+                      <span className="text-xs font-mono font-bold text-[#A855F7]">
+                        {Number(grantTargetUser.aiCreditsBalance ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {grantPickerOpen && (
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-[#6B7280] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={grantUserSearch}
+                        onChange={(e) => setGrantUserSearch(e.target.value)}
+                        placeholder="Search all users by email, name, account ID, or plan…"
+                        className="w-full h-9 pl-8 pr-3 rounded-lg bg-[#181A22] border border-[#2B303D] focus:border-[#3B82F6] focus:outline-none text-xs text-white placeholder-[#6B7280]"
+                      />
+                    </div>
+                    <div className="max-h-44 overflow-y-auto divide-y divide-[#1F222C] rounded-lg border border-[#222530] bg-[#14161C]">
+                      {loadingUsers && users.length === 0 ? (
+                        <div className="p-4 text-center text-xs text-[#9CA3AF]">Loading all users from Supabase…</div>
+                      ) : grantFilteredUsers.length === 0 ? (
+                        <div className="p-4 text-center text-xs text-[#6B7280]">No users match your search.</div>
+                      ) : (
+                        grantFilteredUsers.map((u) => {
+                          const isSelected = grantTargetUser?.owner_key === u.owner_key;
+                          return (
+                            <button
+                              key={u.owner_key}
+                              type="button"
+                              onClick={() => {
+                                setGrantTargetUser(u);
+                                setGrantIdentifier(u.owner_key);
+                                setGrantPickerOpen(false);
+                              }}
+                              className={`w-full px-3 py-2 text-left flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                                isSelected ? 'bg-[#2563EB]/20' : 'hover:bg-[#1C1F28]'
+                              }`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="text-xs font-medium text-white truncate">
+                                  {u.email || u.name || u.owner_key}
+                                </div>
+                                {u.email && (
+                                  <div className="text-[10px] font-mono text-[#9CA3AF] truncate">{u.owner_key}</div>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0 text-[10px] font-mono">
+                                <span className="px-1.5 py-0.5 rounded bg-[#2563EB]/15 text-[#60A5FA] border border-[#2563EB]/30 font-sans font-semibold">
+                                  {u.plan}
+                                </span>
+                                <span className="text-[#10B981] font-bold">{Number(u.balance || 0).toLocaleString()}L</span>
+                                <span className="text-[#A855F7] font-bold">
+                                  {Number(u.aiCreditsBalance ?? 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}AI
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {!grantTargetUser && (
+                  <div>
+                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1">
+                      Or Enter Email / Account ID Manually
+                    </label>
+                    <input
+                      type="text"
+                      value={grantIdentifier}
+                      onChange={(e) => setGrantIdentifier(e.target.value)}
+                      placeholder="user@example.com or owner_key…"
+                      className="w-full h-9 px-3 rounded-lg bg-[#181A22] border border-[#2B303D] focus:border-[#3B82F6] focus:outline-none text-xs text-white placeholder-[#6B7280]"
+                    />
+                  </div>
+                )}
+              </div>
 
               {/* Plan + Duration */}
               <div className="space-y-2.5 p-4 rounded-xl bg-[#101217] border border-[#222530]">

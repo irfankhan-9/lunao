@@ -4,7 +4,7 @@
 import { db } from './db.js';
 import { getPgPool } from './supabase.js';
 import { supabase as supabaseCfg } from './config.js';
-import { normalisePlan } from './planGates.js';
+import { normalisePlan, pwaAllowanceForPlan } from './planGates.js';
 import { invalidateLocalAiAccountCache } from './ai/accountingService.js';
 
 export const ADMIN_PLAN_DEFAULTS = Object.freeze({
@@ -28,7 +28,7 @@ function encodeActionBalance(rawBalance, nowMs = Date.now()) {
   return { action_credits_balance: intPart, updated_at: updatedAt, exactBalance: safe };
 }
 
-function decodeActionBalance(row, fallback = 0) {
+export function decodeActionBalance(row, fallback = 0) {
   if (!row || row.action_credits_balance === null || row.action_credits_balance === undefined) return fallback;
   const num = Number(row.action_credits_balance);
   if (!Number.isFinite(num)) return fallback;
@@ -40,6 +40,12 @@ function decodeActionBalance(row, fallback = 0) {
   return Math.round(num * 10) / 10;
 }
 
+function inferEmailFromOwnerKey(ownerKey) {
+  const raw = String(ownerKey || '').trim();
+  const stripped = raw.startsWith('user_') ? raw.slice(5) : raw;
+  return stripped.includes('@') && stripped.includes('.') ? stripped.toLowerCase() : '';
+}
+
 async function sbRestFetch(pathWithQuery, options = {}) {
   const { sbUrl, sbKey } = getSbRest();
   if (!sbUrl || !sbKey) throw new Error('Supabase REST credentials not configured');
@@ -48,74 +54,237 @@ async function sbRestFetch(pathWithQuery, options = {}) {
     Authorization: `Bearer ${sbKey}`,
     ...(options.headers || {}),
   };
-  const res = await fetch(`${sbUrl}/rest/v1/${pathWithQuery}`, {
+  return fetch(`${sbUrl}/rest/v1/${pathWithQuery}`, {
     ...options,
     headers,
-    signal: options.signal || AbortSignal.timeout(5000),
+    signal: options.signal || AbortSignal.timeout(8000),
   });
-  return res;
+}
+
+async function fetchAllRestRows(tableAndSelect) {
+  const all = [];
+  const pageSize = 1000;
+  for (let offset = 0; offset < 20000; offset += pageSize) {
+    const res = await sbRestFetch(tableAndSelect, {
+      headers: {
+        Range: `${offset}-${offset + pageSize - 1}`,
+        'Range-Unit': 'items',
+      },
+    }).catch(() => null);
+    if (!res || !res.ok) break;
+    const rows = await res.json().catch(() => []);
+    if (!Array.isArray(rows) || rows.length === 0) break;
+    all.push(...rows);
+    if (rows.length < pageSize) break;
+  }
+  return all;
+}
+
+async function fetchAllSupabaseAuthUsers() {
+  const { sbUrl, sbKey } = getSbRest();
+  if (!sbUrl || !sbKey) return [];
+  const out = [];
+  try {
+    for (let page = 1; page <= 10; page++) {
+      const res = await fetch(`${sbUrl}/auth/v1/admin/users?page=${page}&per_page=1000`, {
+        headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
+        signal: AbortSignal.timeout(5000),
+      }).catch(() => null);
+      if (!res || !res.ok) break;
+      const data = await res.json().catch(() => null);
+      const users = Array.isArray(data?.users) ? data.users : Array.isArray(data) ? data : [];
+      if (users.length === 0) break;
+      out.push(...users);
+      if (users.length < 1000) break;
+    }
+  } catch {}
+  return out;
+}
+
+function attachAuthProfiles(authUsers, knownKeysSet, profilesByUser) {
+  for (const au of authUsers) {
+    const email = String(au?.email || au?.user_metadata?.email || '').trim().toLowerCase();
+    const name = String(au?.user_metadata?.full_name || au?.user_metadata?.name || '').trim();
+    const sub = String(au?.user_metadata?.sub || au?.user_metadata?.provider_id || '').trim();
+    const uid = String(au?.id || '').trim();
+    const candidates = [
+      sub ? `user_${sub}` : null,
+      email ? `user_${email}` : null,
+      uid ? `user_${uid}` : null,
+      uid || null,
+    ].filter(Boolean);
+
+    let matchedKey = candidates.find((k) => knownKeysSet.has(k));
+    if (!matchedKey && candidates.length > 0) {
+      matchedKey = candidates[0];
+    }
+    if (matchedKey) {
+      profilesByUser.set(matchedKey, {
+        owner_key: matchedKey,
+        email,
+        name,
+        last_login_at: au?.last_sign_in_at ? Date.parse(au.last_sign_in_at) : null,
+        created_at: au?.created_at ? Date.parse(au.created_at) : null,
+      });
+    }
+  }
 }
 
 /**
- * Fetches user_plans, user_credits, and lunao_users maps from Supabase to enrich /api/admin/overview.
- * Never throws; returns empty maps on transient errors so overview keeps working.
+ * Fetches user_plans, user_credits, credit_accounts, and Supabase Auth profiles.
+ * Uses select=* so schema differences (like optional plan_expires_at) never 400.
  */
 export async function fetchAdminUserDetailsMaps() {
   const plansByUser = new Map();
   const creditsByUser = new Map();
+  const accountsByUser = new Map();
   const profilesByUser = new Map();
+  const knownKeys = new Set();
 
   const pool = getPgPool();
   if (pool) {
     try {
-      const [plansRes, credsRes, usersRes] = await Promise.all([
-        pool.query('SELECT user_id, plan_tier, plan_expires_at, plan_purchased_at, ai_credits_balance, updated_at FROM public.user_plans').catch(() => ({ rows: [] })),
-        pool.query('SELECT user_id, action_credits_balance, ai_credits_balance, ai_dollars_spent, updated_at FROM public.user_credits').catch(() => ({ rows: [] })),
+      const [plansRes, credsRes, acctsRes, usersRes, authUsers] = await Promise.all([
+        pool.query('SELECT * FROM public.user_plans').catch(() => ({ rows: [] })),
+        pool.query('SELECT * FROM public.user_credits').catch(() => ({ rows: [] })),
+        pool.query('SELECT * FROM public.credit_accounts').catch(() => ({ rows: [] })),
         pool.query('SELECT owner_key, email, name, last_login_at, created_at FROM public.lunao_users').catch(() => ({ rows: [] })),
+        fetchAllSupabaseAuthUsers(),
       ]);
       for (const r of plansRes.rows || []) {
-        if (r.user_id) plansByUser.set(r.user_id, r);
+        if (r.user_id) {
+          plansByUser.set(r.user_id, r);
+          knownKeys.add(r.user_id);
+        }
       }
       for (const r of credsRes.rows || []) {
-        if (r.user_id) creditsByUser.set(r.user_id, r);
+        if (r.user_id) {
+          creditsByUser.set(r.user_id, r);
+          knownKeys.add(r.user_id);
+        }
+      }
+      for (const r of acctsRes.rows || []) {
+        if (r.owner_key) {
+          accountsByUser.set(r.owner_key, r);
+          knownKeys.add(r.owner_key);
+        }
       }
       for (const r of usersRes.rows || []) {
-        if (r.owner_key) profilesByUser.set(r.owner_key, r);
+        if (r.owner_key) {
+          profilesByUser.set(r.owner_key, r);
+          knownKeys.add(r.owner_key);
+        }
       }
-      if (plansByUser.size > 0 || creditsByUser.size > 0 || profilesByUser.size > 0) {
-        return { plansByUser, creditsByUser, profilesByUser, decodeActionBalance };
+      attachAuthProfiles(authUsers, knownKeys, profilesByUser);
+      if (plansByUser.size > 0 || creditsByUser.size > 0 || accountsByUser.size > 0 || profilesByUser.size > 0) {
+        return { plansByUser, creditsByUser, accountsByUser, profilesByUser, decodeActionBalance };
       }
     } catch {}
   }
 
   try {
-    const [plansRes, credsRes, usersRes] = await Promise.all([
-      sbRestFetch('user_plans?select=user_id,plan_tier,plan_expires_at,plan_purchased_at,ai_credits_balance,updated_at').catch(() => null),
-      sbRestFetch('user_credits?select=user_id,action_credits_balance,ai_credits_balance,ai_dollars_spent,updated_at').catch(() => null),
-      sbRestFetch('lunao_users?select=owner_key,email,name,last_login_at,created_at').catch(() => null),
+    const [plansRows, credsRows, acctsRows, authUsers] = await Promise.all([
+      fetchAllRestRows('user_plans?select=*'),
+      fetchAllRestRows('user_credits?select=*'),
+      fetchAllRestRows('credit_accounts?select=*'),
+      fetchAllSupabaseAuthUsers(),
     ]);
-    const plansRows = plansRes && plansRes.ok ? await plansRes.json() : [];
-    const credsRows = credsRes && credsRes.ok ? await credsRes.json() : [];
-    const usersRows = usersRes && usersRes.ok ? await usersRes.json() : [];
 
-    if (Array.isArray(plansRows)) {
-      for (const r of plansRows) {
-        if (r?.user_id) plansByUser.set(r.user_id, r);
+    for (const r of plansRows) {
+      if (r?.user_id) {
+        plansByUser.set(r.user_id, r);
+        knownKeys.add(r.user_id);
       }
     }
-    if (Array.isArray(credsRows)) {
-      for (const r of credsRows) {
-        if (r?.user_id) creditsByUser.set(r.user_id, r);
+    for (const r of credsRows) {
+      if (r?.user_id) {
+        creditsByUser.set(r.user_id, r);
+        knownKeys.add(r.user_id);
       }
     }
-    if (Array.isArray(usersRows)) {
-      for (const r of usersRows) {
-        if (r?.owner_key) profilesByUser.set(r.owner_key, r);
+    for (const r of acctsRows) {
+      if (r?.owner_key) {
+        accountsByUser.set(r.owner_key, r);
+        knownKeys.add(r.owner_key);
+      }
+    }
+    attachAuthProfiles(authUsers, knownKeys, profilesByUser);
+  } catch {}
+
+  return { plansByUser, creditsByUser, accountsByUser, profilesByUser, decodeActionBalance };
+}
+
+/**
+ * Fast Admin Users list endpoint helper (skips heavy campaigns/csv_snapshot/sites queries)
+ * so the Admin Panel & Plan Grant modal load every user instantly.
+ */
+export async function fetchAllAdminUsersFast() {
+  const { plansByUser, creditsByUser, accountsByUser, profilesByUser } = await fetchAdminUserDetailsMaps();
+
+  const allKeys = new Set([
+    ...plansByUser.keys(),
+    ...creditsByUser.keys(),
+    ...accountsByUser.keys(),
+    ...profilesByUser.keys(),
+  ]);
+
+  // Also include any user only present in local db cache
+  try {
+    const localRows = db.prepare('SELECT * FROM credit_accounts').all();
+    for (const lr of localRows || []) {
+      if (lr?.owner_key) {
+        allKeys.add(lr.owner_key);
+        if (!accountsByUser.has(lr.owner_key)) {
+          accountsByUser.set(lr.owner_key, lr);
+        }
       }
     }
   } catch {}
 
-  return { plansByUser, creditsByUser, profilesByUser, decodeActionBalance };
+  const list = [];
+  for (const k of allKeys) {
+    const pRow = plansByUser.get(k);
+    const cRow = creditsByUser.get(k);
+    const aRow = accountsByUser.get(k);
+    const uRow = profilesByUser.get(k);
+
+    const email = uRow?.email || pRow?.email || inferEmailFromOwnerKey(k) || '';
+    const name = uRow?.name || '';
+    const plan = pRow?.plan_tier || aRow?.plan || 'Free Plan';
+    const balance = cRow
+      ? decodeActionBalance(cRow, Number(aRow?.balance ?? 0))
+      : Number(aRow?.balance ?? 0);
+    const aiVal =
+      cRow && cRow.ai_credits_balance !== null && cRow.ai_credits_balance !== undefined
+        ? Number(cRow.ai_credits_balance)
+        : pRow && pRow.ai_credits_balance !== null && pRow.ai_credits_balance !== undefined
+          ? Number(pRow.ai_credits_balance)
+          : 0;
+
+    const candidates = [uRow?.last_login_at, pRow?.updated_at, cRow?.updated_at, aRow?.updated_at, uRow?.created_at, aRow?.created_at]
+      .map((v) => (v ? Number(v) : 0))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    const lastActive = candidates.length > 0 ? Math.max(...candidates) : null;
+
+    list.push({
+      owner_key: k,
+      email,
+      name,
+      plan,
+      balance,
+      aiCreditsBalance: Number.isFinite(aiVal) ? aiVal : 0,
+      planExpiresAt: pRow?.plan_expires_at ? Number(pRow.plan_expires_at) : null,
+      sitesRebranded: 0,
+      sitesDeployed: 0,
+      campaignsCount: 0,
+      businessesRequested: 0,
+      googleMapsCalls: 0,
+      lastActive,
+    });
+  }
+
+  list.sort((a, b) => (Number(b.lastActive || 0) - Number(a.lastActive || 0)));
+  return list;
 }
 
 async function resolveOwnerKeyAndProfile({ ownerKey, email }) {
@@ -136,17 +305,73 @@ async function resolveOwnerKeyAndProfile({ ownerKey, email }) {
     }
     if (!profile) {
       try {
-        const r = await sbRestFetch(`lunao_users?owner_key=eq.${encodeURIComponent(cleanKey)}&select=owner_key,email,name&limit=1`);
-        if (r.ok) {
-          const rows = await r.json();
-          if (Array.isArray(rows) && rows[0]) profile = rows[0];
+        const pRes = await sbRestFetch(`user_plans?user_id=eq.${encodeURIComponent(cleanKey)}&select=user_id,email&limit=1`);
+        if (pRes.ok) {
+          const rows = await pRes.json();
+          if (Array.isArray(rows) && rows[0]?.email) {
+            profile = { owner_key: cleanKey, email: rows[0].email, name: '' };
+          }
         }
       } catch {}
     }
-    return { ownerKey: cleanKey, email: profile?.email || cleanEmail || '', name: profile?.name || '' };
+    const inferredEmail = profile?.email || cleanEmail || inferEmailFromOwnerKey(cleanKey);
+    return { ownerKey: cleanKey, email: inferredEmail, name: profile?.name || '' };
   }
 
   if (cleanEmail) {
+    // 1. Check user_plans.email
+    try {
+      const pRes = await sbRestFetch(`user_plans?email=ilike.${encodeURIComponent(cleanEmail)}&select=user_id,email&limit=1`);
+      if (pRes.ok) {
+        const rows = await pRes.json();
+        if (Array.isArray(rows) && rows[0]?.user_id) {
+          return { ownerKey: rows[0].user_id, email: rows[0].email || cleanEmail, name: '' };
+        }
+      }
+    } catch {}
+
+    // 2. Check credit_accounts owner_key = user_<email>
+    const emailKey = `user_${cleanEmail}`;
+    try {
+      const aRes = await sbRestFetch(`credit_accounts?owner_key=eq.${encodeURIComponent(emailKey)}&select=owner_key&limit=1`);
+      if (aRes.ok) {
+        const rows = await aRes.json();
+        if (Array.isArray(rows) && rows[0]?.owner_key) {
+          return { ownerKey: rows[0].owner_key, email: cleanEmail, name: '' };
+        }
+      }
+    } catch {}
+
+    // 3. Check Supabase Auth users list
+    try {
+      const authUsers = await fetchAllSupabaseAuthUsers();
+      const match = authUsers.find((u) => String(u?.email || '').trim().toLowerCase() === cleanEmail);
+      if (match) {
+        const sub = String(match.user_metadata?.sub || match.user_metadata?.provider_id || '').trim();
+        const name = String(match.user_metadata?.full_name || match.user_metadata?.name || '').trim();
+        const candidates = [
+          sub ? `user_${sub}` : null,
+          `user_${cleanEmail}`,
+          `user_${match.id}`,
+          match.id,
+        ].filter(Boolean);
+        for (const cand of candidates) {
+          const checkPlan = await sbRestFetch(`user_plans?user_id=eq.${encodeURIComponent(cand)}&select=user_id&limit=1`).catch(() => null);
+          if (checkPlan?.ok) {
+            const r = await checkPlan.json();
+            if (Array.isArray(r) && r[0]) return { ownerKey: cand, email: cleanEmail, name };
+          }
+          const checkCred = await sbRestFetch(`user_credits?user_id=eq.${encodeURIComponent(cand)}&select=user_id&limit=1`).catch(() => null);
+          if (checkCred?.ok) {
+            const r = await checkCred.json();
+            if (Array.isArray(r) && r[0]) return { ownerKey: cand, email: cleanEmail, name };
+          }
+        }
+        return { ownerKey: candidates[0], email: cleanEmail, name };
+      }
+    } catch {}
+
+    // 4. Check lunao_users if present in PG
     if (pool) {
       try {
         const res = await pool.query(
@@ -154,28 +379,12 @@ async function resolveOwnerKeyAndProfile({ ownerKey, email }) {
           [cleanEmail]
         );
         if (res.rows[0]?.owner_key) {
-          return {
-            ownerKey: res.rows[0].owner_key,
-            email: res.rows[0].email || cleanEmail,
-            name: res.rows[0].name || '',
-          };
+          return { ownerKey: res.rows[0].owner_key, email: res.rows[0].email || cleanEmail, name: res.rows[0].name || '' };
         }
       } catch {}
     }
-    try {
-      const r = await sbRestFetch(`lunao_users?email=ilike.${encodeURIComponent(cleanEmail)}&select=owner_key,email,name&limit=1`);
-      if (r.ok) {
-        const rows = await r.json();
-        if (Array.isArray(rows) && rows[0]?.owner_key) {
-          return {
-            ownerKey: rows[0].owner_key,
-            email: rows[0].email || cleanEmail,
-            name: rows[0].name || '',
-          };
-        }
-      }
-    } catch {}
-    throw Object.assign(new Error(`No user account found with email "${email}". Try entering their owner_key directly.`), { status: 404 });
+
+    throw Object.assign(new Error(`No user account found with email "${email}". Select a user from the list or enter their owner_key directly.`), { status: 404 });
   }
 
   throw Object.assign(new Error('Either ownerKey or email is required'), { status: 400 });
@@ -229,6 +438,34 @@ async function readExistingAccountState(ownerKey) {
   }
 
   return { planRow, credRow, acctRow };
+}
+
+async function restUpsertRow(table, filterCol, keyVal, payload) {
+  // Try PATCH first if row exists; fall back to POST merge-duplicates
+  const patchRes = await sbRestFetch(`${table}?${filterCol}=eq.${encodeURIComponent(keyVal)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify(payload),
+  });
+  if (patchRes.ok) {
+    const rows = await patchRes.json().catch(() => []);
+    if (Array.isArray(rows) && rows.length > 0) return { ok: true, rows };
+  } else if (patchRes.status === 400) {
+    const errText = await patchRes.text().catch(() => '');
+    return { ok: false, status: 400, errText };
+  }
+
+  const postRes = await sbRestFetch(table, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify(payload),
+  });
+  if (!postRes.ok) {
+    const errText = await postRes.text().catch(() => postRes.statusText);
+    return { ok: false, status: postRes.status, errText };
+  }
+  const rows = await postRes.json().catch(() => []);
+  return { ok: true, rows };
 }
 
 /**
@@ -316,6 +553,7 @@ export async function adminGrantUserPlanAndCredits({
   const monthlyActionCredits = planDefaults.lunaoCredits;
   const monthlyAiCredits = Math.max(planDefaults.aiCredits, roundedAiInt);
   const monthlyAiAllowanceUsd = Number(Math.max(planDefaults.aiAllowanceUsd, nextAi * 0.01).toFixed(2));
+  const pwaLimit = pwaAllowanceForPlan(nextPlan);
 
   const auditParts = [];
   if (plan && String(plan).trim()) {
@@ -384,8 +622,7 @@ export async function adminGrantUserPlanAndCredits({
              updated_at = EXCLUDED.updated_at`,
           [targetKey, nextLunao, nextAi, nextAiDollarsSpent, encoded.updated_at]
         );
-      } catch (credErr) {
-        // If action_credits_balance column is int32 in PG, store integer part + fractional tail in updated_at
+      } catch {
         await pool.query(
           `INSERT INTO public.user_credits (
              user_id, action_credits_balance, ai_credits_balance, ai_dollars_spent, updated_at
@@ -423,16 +660,22 @@ export async function adminGrantUserPlanAndCredits({
   }
 
   if (!wroteToSupabase) {
-    const planPayload = {
+    const corePlanPayload = {
       user_id: targetKey,
       plan_tier: nextPlan,
       monthly_action_credits: monthlyActionCredits,
       monthly_ai_credits: monthlyAiCredits,
       monthly_ai_allowance_usd: monthlyAiAllowanceUsd,
       ai_credits_balance: roundedAiInt,
+      pwa_business_limit: pwaLimit,
+      updated_at: encoded.updated_at,
+      ...(resolved.email ? { email: resolved.email } : {}),
+    };
+
+    const fullPlanPayload = {
+      ...corePlanPayload,
       plan_purchased_at: nextPurchasedAt,
       plan_expires_at: nextExpiresAt,
-      updated_at: encoded.updated_at,
     };
 
     const credPayload = {
@@ -451,33 +694,21 @@ export async function adminGrantUserPlanAndCredits({
       created_at: acctRow?.created_at || now,
     };
 
-    const [pUpsert, cUpsert] = await Promise.all([
-      sbRestFetch('user_plans', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=representation' },
-        body: JSON.stringify(planPayload),
-      }),
-      sbRestFetch('user_credits', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=representation' },
-        body: JSON.stringify(credPayload),
-      }),
-    ]);
-
+    let pUpsert = await restUpsertRow('user_plans', 'user_id', targetKey, fullPlanPayload);
+    if (!pUpsert.ok && pUpsert.status === 400) {
+      // Live Supabase user_plans may not have optional plan_expires_at/plan_purchased_at columns
+      pUpsert = await restUpsertRow('user_plans', 'user_id', targetKey, corePlanPayload);
+    }
     if (!pUpsert.ok) {
-      const msg = await pUpsert.text().catch(() => pUpsert.statusText);
-      throw new Error(`Failed to persist user_plans in Supabase: ${msg}`);
-    }
-    if (!cUpsert.ok) {
-      const msg = await cUpsert.text().catch(() => cUpsert.statusText);
-      throw new Error(`Failed to persist user_credits in Supabase: ${msg}`);
+      throw new Error(`Failed to persist user_plans in Supabase: ${pUpsert.errText || pUpsert.status}`);
     }
 
-    await sbRestFetch('credit_accounts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
-      body: JSON.stringify(acctPayload),
-    }).catch(() => {});
+    const cUpsert = await restUpsertRow('user_credits', 'user_id', targetKey, credPayload);
+    if (!cUpsert.ok) {
+      throw new Error(`Failed to persist user_credits in Supabase: ${cUpsert.errText || cUpsert.status}`);
+    }
+
+    await restUpsertRow('credit_accounts', 'owner_key', targetKey, acctPayload).catch(() => {});
 
     await sbRestFetch('credit_transactions', {
       method: 'POST',
