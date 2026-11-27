@@ -298,28 +298,94 @@ function createFallbackBusiness(input: string, fallbackName?: string): TenantBus
   };
 }
 
+const CODE_EXACT_RE = /^LUNAO-[A-Z0-9]{4}-[A-Z0-9]{4}$/i;
+const CODE_EMBEDDED_RE = /\bLUNAO[\s\-–—_]*([A-Z0-9]{4})[\s\-–—_]*([A-Z0-9]{4})\b/i;
+
+/**
+ * Extracts a normalized LUNAO-XXXX-XXXX code or website slug from ANY QR payload,
+ * URL (?code=... / ?slug=...), pasted string, or raw code input.
+ */
+export function extractAccessCodeOrSlug(input: string): {
+  code: string | null;
+  slug: string | null;
+  sendValue: string;
+} {
+  const raw = String(input || '').trim();
+  if (!raw) return { code: null, slug: null, sendValue: '' };
+
+  // 1. URL / query string with ?code= or ?slug=
+  if (/^https?:\/\//i.test(raw) || raw.startsWith('/owner') || raw.includes('code=') || raw.includes('slug=')) {
+    try {
+      const parsed = new URL(raw.startsWith('/') ? `https://lunao.org${raw}` : raw);
+      const qCode = parsed.searchParams.get('code');
+      const qSlug = parsed.searchParams.get('slug');
+      if (qCode) {
+        const cleaned = qCode.trim().toUpperCase().replace(/[\s–—_]+/g, '-');
+        if (CODE_EXACT_RE.test(cleaned)) {
+          return { code: cleaned, slug: qSlug?.trim().toLowerCase() || null, sendValue: cleaned };
+        }
+        if (/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(cleaned)) {
+          const full = `LUNAO-${cleaned}`;
+          return { code: full, slug: qSlug?.trim().toLowerCase() || null, sendValue: full };
+        }
+      }
+      if (qSlug && qSlug.trim()) {
+        const cleanSlug = qSlug.trim().toLowerCase();
+        return { code: null, slug: cleanSlug, sendValue: cleanSlug };
+      }
+    } catch {
+      /* continue to pattern matching */
+    }
+  }
+
+  // 2. Embedded LUNAO-XXXX-XXXX anywhere in text
+  const embedded = raw.match(CODE_EMBEDDED_RE);
+  if (embedded) {
+    const code = `LUNAO-${embedded[1].toUpperCase()}-${embedded[2].toUpperCase()}`;
+    return { code, slug: null, sendValue: code };
+  }
+
+  // 3. Compact LUNAOXXXXXXXX (no dashes)
+  const compact = raw.toUpperCase().replace(/[\s\-–—_]+/g, '');
+  const compactMatch = compact.match(/^LUNAO([A-Z0-9]{4})([A-Z0-9]{4})$/);
+  if (compactMatch) {
+    const code = `LUNAO-${compactMatch[1]}-${compactMatch[2]}`;
+    return { code, slug: null, sendValue: code };
+  }
+
+  // 4. Bare XXXX-XXXX segment
+  const normalized = raw.toUpperCase().replace(/[\s–—_]+/g, '-');
+  if (/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(normalized)) {
+    const code = `LUNAO-${normalized}`;
+    return { code, slug: null, sendValue: code };
+  }
+
+  return { code: null, slug: null, sendValue: raw };
+}
+
 export const tenantAuthService = {
   /**
-   * Validate a Lunao owner code against the backend. On success, persist
-   * {token, slug, business} in localStorage and return it.
+   * Validate a Lunao owner code (or scanned QR payload) against the backend.
+   * On success, persist {token, slug, business} in localStorage and return it.
    */
   async authenticateCode(inputCode: string): Promise<AuthResult> {
     const rawInput = String(inputCode || '').trim();
     if (!rawInput) {
-      return { success: false, errorMessage: 'Please enter your unique owner access code or website name.' };
+      return { success: false, errorMessage: 'Please enter your unique owner access code or scan your QR code.' };
     }
-    let normalized = rawInput.toUpperCase();
-    if (!normalized.startsWith('LUNAO-') && /^[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(normalized)) {
-      normalized = `LUNAO-${normalized}`;
-    }
-    const codeToSend = /^LUNAO-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(normalized) ? normalized : rawInput;
+    const extracted = extractAccessCodeOrSlug(rawInput);
+    const codeToSend = extracted.sendValue || rawInput;
 
-    // 1. Attempt backend validation with 8000ms timeout
+    // 1. Attempt backend validation with 20000ms timeout
     let data: any = null;
     let ok = false;
+    let timedOut = false;
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const timeoutId = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, 20000);
 
       const ownerKey = (() => {
         try { return localStorage.getItem('lunao_owner_key') || ''; } catch { return ''; }
@@ -348,19 +414,21 @@ export const tenantAuthService = {
       ok = resp.ok;
       data = await resp.json().catch(() => ({}));
     } catch {
-      // Backend offline or unreachable — seamlessly proceed to instant preview fallback
+      /* network / timeout handled below */
     }
 
     if (ok && data?.token && data?.slug) {
+      const resolvedCode =
+        String(data?.inviteCode?.code || extracted.code || codeToSend).trim().toUpperCase();
       const business = await fetchFullBusiness(data.token, data.slug, data.businessName);
-      business.lunaoCode = normalized;
+      business.lunaoCode = resolvedCode;
       business.authToken = data.token;
       business.slug = data.slug;
 
       persistSession({
         token: data.token,
         slug: data.slug,
-        code: normalized,
+        code: resolvedCode,
         business,
         authenticatedAt: new Date().toISOString(),
       });
@@ -372,7 +440,9 @@ export const tenantAuthService = {
       success: false,
       errorMessage:
         data?.error ||
-        'Invalid or unrecognized owner access code. Please check your code and try again.',
+        (timedOut
+          ? 'Connection timed out while verifying your QR code. Please try again.'
+          : 'Invalid or unrecognized owner access code. Please check your code and try again.'),
     };
   },
 

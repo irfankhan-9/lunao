@@ -73,8 +73,7 @@ export const OwnerPWADrawer: React.FC<OwnerPWADrawerProps> = ({
 
       const active = (details.codes || []).filter((c) => !c.revokedAt);
       if (active.length > 0) {
-        const redeemed = active.find((c) => c.usedAt);
-        setDisplayCode((redeemed || active[0]).code);
+        setDisplayCode(active[0].code);
       } else {
         setDisplayCode(null);
       }

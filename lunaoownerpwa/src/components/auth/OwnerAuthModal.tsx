@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ShieldCheck,
   ArrowRight,
@@ -8,8 +8,14 @@ import {
   Loader2,
   KeyRound,
   Clock,
+  Camera,
+  Upload,
+  X,
+  QrCode,
 } from 'lucide-react';
+import jsQR from 'jsqr';
 import { useBusiness } from '../../context/BusinessContext';
+import { extractAccessCodeOrSlug } from '../../services/tenantAuthService';
 import { soundEffects } from '../../utils/soundEffects';
 import { scrollToTop } from '../../utils/scrollToTop';
 
@@ -60,26 +66,119 @@ export const OwnerAuthModal: React.FC = () => {
   });
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const autoSubmittedUrlRef = useRef(false);
 
-  // Auto-fill and auto-submit from ?code= URL param on mount.
+  const [isScanningCamera, setIsScanningCamera] = useState(false);
+  const [isDecodingImage, setIsDecodingImage] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [qrStatusMsg, setQrStatusMsg] = useState<string | null>(null);
+
+  const stopCamera = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    if (streamRef.current) {
+      try {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      } catch {
+        /* ignore */
+      }
+      streamRef.current = null;
+    }
+    setIsScanningCamera(false);
+  }, []);
+
+  useEffect(() => {
+    return () => stopCamera();
+  }, [stopCamera]);
+
+  const submitAccessCode = useCallback(
+    async (rawVal: string) => {
+      if (isVerifying) return;
+      const extracted = extractAccessCodeOrSlug(rawVal);
+      const displayVal = (extracted.code || rawVal).trim().toUpperCase();
+      if (!displayVal) {
+        soundEffects.playError?.();
+        setIsShaking(true);
+        setTimeout(() => setIsShaking(false), 500);
+        return;
+      }
+
+      setInputCode(displayVal);
+      setIsVerifying(true);
+      setServerError(null);
+      setAuthError(null);
+      setQrStatusMsg(null);
+
+      const success = await loginWithCode(extracted.sendValue || displayVal);
+
+      if (success) {
+        soundEffects.playSuccess?.();
+        scrollToTop();
+        setFailedAttempts(0);
+        setLockoutUntil(null);
+        try {
+          localStorage.removeItem(STORAGE_KEY_FAILED);
+          localStorage.removeItem(STORAGE_KEY_LOCKOUT);
+        } catch {
+          /* ignore */
+        }
+        setTimeout(() => setIsVerifying(false), 400);
+      } else {
+        setIsVerifying(false);
+        soundEffects.playError?.();
+        setIsShaking(true);
+        setTimeout(() => setIsShaking(false), 600);
+        const nextAttempts = failedAttempts + 1;
+        setFailedAttempts(nextAttempts);
+        if (nextAttempts >= MAX_RETRIES) {
+          const banEndTime = Date.now() + LOCKOUT_MS;
+          setLockoutUntil(banEndTime);
+          setTimeLeftMs(LOCKOUT_MS);
+          try {
+            localStorage.setItem(STORAGE_KEY_FAILED, String(MAX_RETRIES));
+            localStorage.setItem(STORAGE_KEY_LOCKOUT, String(banEndTime));
+          } catch {
+            /* ignore */
+          }
+        } else {
+          try {
+            localStorage.setItem(STORAGE_KEY_FAILED, String(nextAttempts));
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    },
+    [failedAttempts, isVerifying, loginWithCode, setAuthError],
+  );
+
+  // Auto-fill and auto-submit from ?code= URL param on mount (guarded so it fires once).
   useEffect(() => {
     scrollToTop();
-    const searchParams = new URLSearchParams(window.location.search);
-    const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
-    const hashParams = new URLSearchParams(hashQuery);
-    const prefill = searchParams.get('code') || hashParams.get('code');
-    if (prefill) {
-      const normalized = prefill.trim().toUpperCase();
-      setInputCode(normalized);
-      try {
-        window.history.replaceState({}, '', window.location.pathname);
-      } catch {}
-      loginWithCode(normalized);
+    if (!autoSubmittedUrlRef.current) {
+      const searchParams = new URLSearchParams(window.location.search);
+      const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+      const hashParams = new URLSearchParams(hashQuery);
+      const prefill = searchParams.get('code') || hashParams.get('code');
+      if (prefill && !lockoutUntil) {
+        autoSubmittedUrlRef.current = true;
+        const extracted = extractAccessCodeOrSlug(prefill);
+        const displayVal = (extracted.code || prefill.trim()).toUpperCase();
+        setInputCode(displayVal);
+        submitAccessCode(extracted.sendValue || displayVal);
+        return;
+      }
     }
     if (!lockoutUntil && inputRef.current) {
       inputRef.current.focus();
     }
-  }, [lockoutUntil, loginWithCode]);
+  }, [lockoutUntil, submitAccessCode]);
 
   // Lockout countdown timer ticker
   useEffect(() => {
@@ -121,10 +220,141 @@ export const OwnerAuthModal: React.FC = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     soundEffects.playKeypress?.();
-    setInputCode(e.target.value.toUpperCase());
+    const raw = e.target.value;
+    const extracted = extractAccessCodeOrSlug(raw);
+    setInputCode(extracted.code ? extracted.code : raw.toUpperCase());
     setServerError(null);
     setAuthError(null);
+    setQrStatusMsg(null);
   };
+
+  const decodeQrFromImageFile = useCallback(
+    async (file: File) => {
+      if (!file || isBanned || isVerifying) return;
+      setIsDecodingImage(true);
+      setQrStatusMsg(null);
+      setServerError(null);
+      setAuthError(null);
+
+      try {
+        const objectUrl = URL.createObjectURL(file);
+        try {
+          const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const el = new Image();
+            el.onload = () => resolve(el);
+            el.onerror = () => reject(new Error('Could not read image'));
+            el.src = objectUrl;
+          });
+
+          const maxDim = 1200;
+          const scale = Math.min(1, maxDim / Math.max(img.width || 1, img.height || 1));
+          const w = Math.max(1, Math.round((img.width || 400) * scale));
+          const h = Math.max(1, Math.round((img.height || 400) * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('Canvas unavailable');
+
+          // White backdrop ensures transparent SVG/PNG QR codes remain high contrast.
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+
+          let decodedText: string | null = null;
+          const imgData = ctx.getImageData(0, 0, w, h);
+          const qrResult = jsQR(imgData.data, w, h, { inversionAttempts: 'attemptBoth' });
+          if (qrResult?.data) {
+            decodedText = qrResult.data;
+          }
+
+          if (!decodedText && typeof (window as any).BarcodeDetector === 'function') {
+            try {
+              const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
+              const results = await detector.detect(canvas);
+              if (Array.isArray(results) && results[0]?.rawValue) {
+                decodedText = String(results[0].rawValue);
+              }
+            } catch {
+              /* ignore BarcodeDetector fallback error */
+            }
+          }
+
+          if (!decodedText) {
+            soundEffects.playError?.();
+            setQrStatusMsg('No valid QR code found in this image. Try a clearer crop or enter your LUNAO code.');
+            return;
+          }
+
+          const extracted = extractAccessCodeOrSlug(decodedText);
+          await submitAccessCode(extracted.code || extracted.sendValue || decodedText);
+        } finally {
+          URL.revokeObjectURL(objectUrl);
+        }
+      } catch {
+        soundEffects.playError?.();
+        setQrStatusMsg('Unable to read QR image. Please try another image or paste your LUNAO code.');
+      } finally {
+        setIsDecodingImage(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    },
+    [isBanned, isVerifying, setAuthError, submitAccessCode],
+  );
+
+  const startCameraScanner = useCallback(async () => {
+    if (isBanned || isVerifying) return;
+    if (!navigator?.mediaDevices?.getUserMedia) {
+      setQrStatusMsg('Camera access is unavailable on this browser. Please upload the QR image or paste your code.');
+      return;
+    }
+    setQrStatusMsg(null);
+    setServerError(null);
+    setAuthError(null);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+      });
+      streamRef.current = stream;
+      setIsScanningCamera(true);
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+      const tick = () => {
+        const video = videoRef.current;
+        if (!streamRef.current || !video) return;
+        if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0 && ctx) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const hit = jsQR(imgData.data, canvas.width, canvas.height, {
+            inversionAttempts: 'dontInvert',
+          });
+          if (hit?.data) {
+            stopCamera();
+            const extracted = extractAccessCodeOrSlug(hit.data);
+            submitAccessCode(extracted.code || extracted.sendValue || hit.data);
+            return;
+          }
+        }
+        rafRef.current = requestAnimationFrame(tick);
+      };
+
+      requestAnimationFrame(() => {
+        if (videoRef.current && streamRef.current) {
+          videoRef.current.srcObject = streamRef.current;
+          videoRef.current.play().catch(() => {});
+          rafRef.current = requestAnimationFrame(tick);
+        }
+      });
+    } catch {
+      stopCamera();
+      setQrStatusMsg('Camera permission denied or unavailable. Upload your QR image or paste your code instead.');
+    }
+  }, [isBanned, isVerifying, setAuthError, stopCamera, submitAccessCode]);
 
   const handleResetBan = () => {
     soundEffects.playButtonClick?.();
@@ -141,51 +371,7 @@ export const OwnerAuthModal: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isBanned || isVerifying) return;
-    const trimmed = inputCode.trim().toUpperCase();
-    if (!trimmed) {
-      soundEffects.playError?.();
-      setIsShaking(true);
-      setTimeout(() => setIsShaking(false), 500);
-      return;
-    }
-    setIsVerifying(true);
-    setServerError(null);
-
-    const success = await loginWithCode(trimmed);
-
-    if (success) {
-      soundEffects.playSuccess?.();
-      scrollToTop();
-      setFailedAttempts(0);
-      setLockoutUntil(null);
-      try {
-        localStorage.removeItem(STORAGE_KEY_FAILED);
-        localStorage.removeItem(STORAGE_KEY_LOCKOUT);
-      } catch { /* ignore */ }
-      setTimeout(() => setIsVerifying(false), 400);
-    } else {
-      setIsVerifying(false);
-      soundEffects.playError?.();
-      setIsShaking(true);
-      setTimeout(() => setIsShaking(false), 600);
-      const nextAttempts = failedAttempts + 1;
-      setFailedAttempts(nextAttempts);
-      const errMsg = authError || 'Invalid Lunao code. Please check your code and try again.';
-      setServerError(errMsg);
-      if (nextAttempts >= MAX_RETRIES) {
-        const banEndTime = Date.now() + LOCKOUT_MS;
-        setLockoutUntil(banEndTime);
-        setTimeLeftMs(LOCKOUT_MS);
-        try {
-          localStorage.setItem(STORAGE_KEY_FAILED, String(MAX_RETRIES));
-          localStorage.setItem(STORAGE_KEY_LOCKOUT, String(banEndTime));
-        } catch { /* ignore */ }
-      } else {
-        try {
-          localStorage.setItem(STORAGE_KEY_FAILED, String(nextAttempts));
-        } catch { /* ignore */ }
-      }
-    }
+    await submitAccessCode(inputCode);
   };
 
   return (
@@ -220,9 +406,37 @@ export const OwnerAuthModal: React.FC = () => {
         </div>
 
         <div
-          className={`bg-white border-2 border-emerald-200 rounded-3xl p-6 sm:p-8 shadow-xl shadow-emerald-900/5 space-y-5 transition-all ${
-            isShaking ? 'animate-shake' : ''
-          }`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (!isBanned) setIsDragOver(true);
+          }}
+          onDragLeave={() => setIsDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setIsDragOver(false);
+            const dropped = e.dataTransfer?.files?.[0];
+            if (dropped && dropped.type.startsWith('image/')) {
+              decodeQrFromImageFile(dropped);
+            }
+          }}
+          onPaste={(e) => {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            for (let i = 0; i < items.length; i++) {
+              const item = items[i];
+              if (item && item.type.startsWith('image/')) {
+                const file = item.getAsFile();
+                if (file) {
+                  e.preventDefault();
+                  decodeQrFromImageFile(file);
+                  break;
+                }
+              }
+            }
+          }}
+          className={`bg-white border-2 rounded-3xl p-6 sm:p-8 shadow-xl shadow-emerald-900/5 space-y-5 transition-all ${
+            isDragOver ? 'border-emerald-500 ring-4 ring-emerald-100' : 'border-emerald-200'
+          } ${isShaking ? 'animate-shake' : ''}`}
         >
           {/* Banned state */}
           {isBanned ? (
@@ -293,7 +507,7 @@ export const OwnerAuthModal: React.FC = () => {
               </div>
 
               {/* Server error */}
-              {(serverError || authError) && (
+              {(authError || serverError) && (
                 <div className="p-4 rounded-2xl bg-white border-2 border-emerald-500 shadow-lg shadow-emerald-600/10 text-emerald-950 animate-in fade-in zoom-in-95 duration-200">
                   <div className="flex items-start gap-3">
                     <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">
@@ -307,7 +521,7 @@ export const OwnerAuthModal: React.FC = () => {
                         </span>
                       </div>
                       <p className="text-xs text-emerald-800 mt-1 leading-snug">
-                        {serverError || authError}
+                        {authError || serverError}
                       </p>
                       <div className="mt-3">
                         <div className="flex items-center gap-1.5">
@@ -332,6 +546,37 @@ export const OwnerAuthModal: React.FC = () => {
                 </div>
               )}
 
+              {/* QR status helper message (non-penalty) */}
+              {qrStatusMsg && (
+                <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-start gap-2">
+                  <QrCode className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span>{qrStatusMsg}</span>
+                </div>
+              )}
+
+              {/* Live camera QR scanner */}
+              {isScanningCamera && (
+                <div className="relative rounded-2xl overflow-hidden bg-slate-950 border-2 border-emerald-400">
+                  <video
+                    ref={videoRef}
+                    playsInline
+                    muted
+                    className="w-full h-52 object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={stopCamera}
+                    className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-900/80 text-white hover:bg-slate-900 cursor-pointer"
+                    aria-label="Close scanner"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-slate-900/80 text-[11px] font-medium text-emerald-200 whitespace-nowrap">
+                    Point camera at your Lunao QR code
+                  </div>
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={isVerifying || !inputCode.trim()}
@@ -349,6 +594,44 @@ export const OwnerAuthModal: React.FC = () => {
                   </>
                 )}
               </button>
+
+              {/* Scan / Upload QR Code actions */}
+              <div className="pt-1">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) decodeQrFromImageFile(f);
+                  }}
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={isVerifying || isDecodingImage}
+                    onClick={isScanningCamera ? stopCamera : startCameraScanner}
+                    className="h-10 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <Camera className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>{isScanningCamera ? 'Stop Camera' : 'Scan QR'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isVerifying || isDecodingImage}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="h-10 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {isDecodingImage ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                    ) : (
+                      <Upload className="w-3.5 h-3.5 text-emerald-600" />
+                    )}
+                    <span>{isDecodingImage ? 'Reading QR...' : 'Upload QR'}</span>
+                  </button>
+                </div>
+              </div>
             </form>
           )}
         </div>

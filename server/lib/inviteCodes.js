@@ -74,9 +74,11 @@ function rowToSafeRecord(row) {
 }
 
 export function listCodes(slug) {
+  const cleanSlug = String(slug || '').trim().toLowerCase();
   const rows = db
-    .prepare('SELECT * FROM invite_codes WHERE slug = ? ORDER BY created_at DESC')
-    .all(slug);
+    .prepare('SELECT * FROM invite_codes WHERE LOWER(slug) = ? ORDER BY created_at DESC')
+    .all(cleanSlug);
+  rows.sort((a, b) => (Number(b.created_at) || 0) - (Number(a.created_at) || 0));
   return rows.map(rowToRecord);
 }
 
@@ -224,37 +226,64 @@ export async function findByCodeAsync(code) {
   try {
     await Promise.race([
       (async () => {
-        const { getSupabase } = await import('./supabase.js');
-        const sb = getSupabase();
-        if (sb) {
-          const { data } = await sb
-            .from('invite_codes')
-            .select('*')
-            .eq('code', normalized)
-            .maybeSingle();
-          if (data) {
-            try {
-              db.prepare(
-                `INSERT INTO invite_codes (code, slug, label, created_at, used_at, last_active_at, redeemed_count, revoked_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                 ON CONFLICT(code) DO UPDATE SET slug=excluded.slug, revoked_at=excluded.revoked_at`
-              ).run(
-                data.code,
-                data.slug,
-                data.label || null,
-                data.created_at || Date.now(),
-                data.used_at || null,
-                data.last_active_at || null,
-                data.redeemed_count || 0,
-                data.revoked_at || null
-              );
-            } catch {}
-            return rowToRecord(data);
+        let data = null;
+        try {
+          const { getSupabase } = await import('./supabase.js');
+          const sb = getSupabase();
+          if (sb) {
+            const resp = await sb
+              .from('invite_codes')
+              .select('*')
+              .eq('code', normalized)
+              .maybeSingle();
+            if (resp?.data) data = resp.data;
           }
+        } catch {}
+
+        if (!data) {
+          try {
+            const SUPABASE_URL = process.env.SUPABASE_URL || 'https://wqlbuadknltsjfzrltpe.supabase.co';
+            const SUPABASE_KEY =
+              process.env.SUPABASE_SECRET_KEY ||
+              process.env.SUPABASE_SERVICE_ROLE_KEY ||
+              '';
+            if (SUPABASE_URL && SUPABASE_KEY) {
+              const url = new URL(`${SUPABASE_URL}/rest/v1/invite_codes`);
+              url.searchParams.set('code', `eq.${normalized}`);
+              url.searchParams.set('limit', '1');
+              const restRes = await fetch(url.toString(), {
+                headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+              });
+              if (restRes.ok) {
+                const arr = await restRes.json();
+                if (Array.isArray(arr) && arr[0]) data = arr[0];
+              }
+            }
+          } catch {}
+        }
+
+        if (data) {
+          try {
+            db.prepare(
+              `INSERT INTO invite_codes (code, slug, label, created_at, used_at, last_active_at, redeemed_count, revoked_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(code) DO UPDATE SET slug=excluded.slug, revoked_at=excluded.revoked_at`
+            ).run(
+              data.code,
+              data.slug,
+              data.label || null,
+              data.created_at || Date.now(),
+              data.used_at || null,
+              data.last_active_at || null,
+              data.redeemed_count || 0,
+              data.revoked_at || null
+            );
+          } catch {}
+          return rowToRecord(data);
         }
         return null;
       })(),
-      new Promise((resolve) => setTimeout(() => resolve(null), 600)),
+      new Promise((resolve) => setTimeout(() => resolve(null), 1500)),
     ]);
   } catch {}
 

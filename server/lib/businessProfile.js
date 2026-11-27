@@ -178,18 +178,38 @@ export function extractProfileFromHtml(slug, html) {
   };
 }
 
-// Read the compiled HTML for a slug if it exists.
+// Read the compiled HTML for a slug if it exists on disk or in Supabase.
 async function readCompiledHtml(slug) {
   try {
     const file = path.join(SITES_DIR, slug, 'index.html');
     return await fs.readFile(file, 'utf8');
   } catch {
-    return null;
+    /* fall through to DB / Supabase */
   }
+  try {
+    const localRow = db.prepare('SELECT compiled_html FROM user_sites WHERE LOWER(slug) = ?').get(String(slug).toLowerCase());
+    if (localRow?.compiled_html) return localRow.compiled_html;
+  } catch {}
+  try {
+    const { getSupabase } = await import('./supabase.js');
+    const sb = getSupabase();
+    if (sb) {
+      const resp = await Promise.race([
+        sb.from('user_sites').select('compiled_html, business_name, niche, city, deploy_url').eq('slug', String(slug).toLowerCase()).maybeSingle(),
+        new Promise((resolve) => setTimeout(() => resolve(null), 1200)),
+      ]);
+      const d = resp?.data;
+      if (d?.compiled_html) return d.compiled_html;
+      if (d) {
+        return `<!doctype html><html><head><title>${d.business_name || slug}</title><meta name="business-name" content="${d.business_name || slug}"><meta name="business-niche" content="${d.niche || 'Local Business'}"><meta name="business-city" content="${d.city || ''}"></head><body></body></html>`;
+      }
+    }
+  } catch {}
+  return null;
 }
 
-// Read the profile for a slug, lazily backfilling from compiled HTML.
-// Returns null only if no profile and no compiled HTML exist.
+// Read the profile for a slug, lazily backfilling from compiled HTML or Supabase.
+// Returns null only if no profile and no site metadata exist anywhere.
 export async function getProfile(slug) {
   if (!slug) return null;
   const row = db
@@ -197,9 +217,13 @@ export async function getProfile(slug) {
     .get(slug);
   if (row) return rowToProfile(row);
 
-  // Backfill from compiled HTML.
-  const html = await readCompiledHtml(slug);
-  if (!html) return null;
+  // Backfill from compiled HTML or Supabase user_sites.
+  let html = await readCompiledHtml(slug);
+  if (!html) {
+    // Graceful minimal profile from slug so valid redeemed invite codes always load the Owner PWA.
+    const prettyName = String(slug).replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    html = `<!doctype html><html><head><title>${prettyName}</title><meta name="business-name" content="${prettyName}"><meta name="business-niche" content="Local Business"></head><body></body></html>`;
+  }
 
   const profile = extractProfileFromHtml(slug, html);
   if (!profile) return null;

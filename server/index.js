@@ -2840,6 +2840,38 @@ async function authenticate(req, res, next) {
   return next();
 }
 
+// Serve built Lunao Owner PWA at /owner/* BEFORE public static assets so no
+// stale file under public/owner can ever shadow lunaoownerpwa/dist.
+const PWA_DIST = path.join(ROOT_DIR, 'lunaoownerpwa', 'dist');
+const FRONTEND_DIST = path.join(ROOT_DIR, 'dist');
+let pwaStaticMiddleware = null;
+function getPwaStatic() {
+  if (!pwaStaticMiddleware && fs.existsSync(PWA_DIST)) {
+    pwaStaticMiddleware = express.static(PWA_DIST, {
+      setHeaders(res, filePath) {
+        if (filePath.endsWith('index.html') || filePath.endsWith('sw.js')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        }
+      },
+    });
+  }
+  return pwaStaticMiddleware;
+}
+app.use('/owner', (req, res, next) => {
+  // Ensure bare /owner redirects to /owner/ (preserving ?code=...&slug=...) so
+  // relative ./assets/* paths always resolve under /owner/.
+  if (req.originalUrl.split('?')[0] === '/owner') {
+    const qIdx = req.originalUrl.indexOf('?');
+    const qs = qIdx >= 0 ? req.originalUrl.slice(qIdx) : '';
+    return res.redirect(302, `/owner/${qs}`);
+  }
+  const mw = getPwaStatic();
+  if (mw) {
+    return mw(req, res, next);
+  }
+  next();
+});
+
 // Serve static public assets (favicons, brand icons, bridge scripts)
 app.use(express.static(path.join(ROOT_DIR, 'public')));
 app.use('/uploads', express.static(path.join(ROOT_DIR, 'public', 'uploads')));
@@ -3253,6 +3285,137 @@ app.use('/sites', express.static(SITES_DIR, { extensions: ['html'] }));
 // format code and bind the caller to the matching site.
 
 const OWNER_CODE_RE = /^LUNAO-[A-Z0-9]{4}-[A-Z0-9]{4}$/i;
+const EMBEDDED_OWNER_CODE_RE = /\bLUNAO[\s\-–—_]*([A-Z0-9]{4})[\s\-–—_]*([A-Z0-9]{4})\b/i;
+
+function extractRedeemInput(rawInput) {
+  const raw = String(rawInput || '').trim();
+  if (!raw) return { raw: '', code: null, slugHint: null };
+
+  // 1. Check for embedded URL parameters (?code=... or ?slug=...)
+  if (/^https?:\/\//i.test(raw) || raw.startsWith('/owner') || raw.includes('code=') || raw.includes('slug=')) {
+    try {
+      const parsed = new URL(raw.startsWith('/') ? `https://lunao.org${raw}` : raw);
+      const qCode = parsed.searchParams.get('code');
+      const qSlug = parsed.searchParams.get('slug');
+      if (qCode) {
+        const cleaned = qCode.trim().toUpperCase().replace(/[\s–—_]+/g, '-');
+        const normalizedCode = OWNER_CODE_RE.test(cleaned)
+          ? cleaned
+          : /^[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(cleaned)
+            ? `LUNAO-${cleaned}`
+            : null;
+        if (normalizedCode) {
+          return { raw, code: normalizedCode, slugHint: qSlug ? qSlug.trim().toLowerCase() : null };
+        }
+      }
+      if (qSlug && isValidSlug(qSlug.trim())) {
+        return { raw, code: null, slugHint: qSlug.trim().toLowerCase() };
+      }
+    } catch {
+      /* fall through to regex parsing */
+    }
+  }
+
+  // 2. Check for embedded LUNAO-XXXX-XXXX anywhere in text / URL / JSON
+  const embedded = raw.match(EMBEDDED_OWNER_CODE_RE);
+  if (embedded) {
+    return { raw, code: `LUNAO-${embedded[1].toUpperCase()}-${embedded[2].toUpperCase()}`, slugHint: null };
+  }
+
+  // 3. Compact 8-char suffix after LUNAO (e.g. LUNAOXXXXXXXX)
+  const compact = raw.trim().toUpperCase().replace(/[\s\-–—_]+/g, '');
+  const compactMatch = compact.match(/^LUNAO([A-Z0-9]{4})([A-Z0-9]{4})$/);
+  if (compactMatch) {
+    return { raw, code: `LUNAO-${compactMatch[1]}-${compactMatch[2]}`, slugHint: null };
+  }
+
+  // 4. Bare XXXX-XXXX segment without prefix
+  const bareNormalized = raw.trim().toUpperCase().replace(/[\s–—_]+/g, '-');
+  if (/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(bareNormalized)) {
+    return { raw, code: `LUNAO-${bareNormalized}`, slugHint: null };
+  }
+
+  return { raw, code: null, slugHint: null };
+}
+
+// Fast O(1) lookup for a single site slug instead of scanning all 1,000+ disk folders.
+function findSiteBySlugSync(slug) {
+  if (!slug || !isValidSlug(slug)) return null;
+  const cleanSlug = String(slug).trim();
+  const lower = cleanSlug.toLowerCase();
+
+  try {
+    const file = path.join(SITES_DIR, cleanSlug, 'index.html');
+    if (fs.existsSync(file)) {
+      const html = fs.readFileSync(file, 'utf8');
+      return {
+        slug: cleanSlug,
+        title: titleFromHtml(html) || cleanSlug,
+        niche: nicheFromHtml(html),
+        url: siteUrlForSlug(cleanSlug),
+      };
+    }
+  } catch {}
+
+  try {
+    const d = db.prepare('SELECT slug, business_name, niche, deploy_url FROM user_sites WHERE LOWER(slug) = ?').get(lower);
+    if (d) {
+      return {
+        slug: d.slug || cleanSlug,
+        title: d.business_name || cleanSlug,
+        niche: d.niche || 'Local Business',
+        url: normalizeSiteDeployUrl(d.deploy_url, d.slug || cleanSlug),
+      };
+    }
+  } catch {}
+
+  try {
+    const bp = db.prepare('SELECT slug, name, niche, website_url FROM business_profiles WHERE LOWER(slug) = ?').get(lower);
+    if (bp) {
+      return {
+        slug: bp.slug || cleanSlug,
+        title: bp.name || cleanSlug,
+        niche: bp.niche || 'Local Business',
+        url: normalizeSiteDeployUrl(bp.website_url, bp.slug || cleanSlug),
+      };
+    }
+  } catch {}
+
+  return null;
+}
+
+async function findSiteBySlugAsync(slug) {
+  const local = findSiteBySlugSync(slug);
+  if (local) return local;
+  if (!slug || !isValidSlug(slug)) return null;
+  const lower = String(slug).trim().toLowerCase();
+
+  try {
+    const { getSupabase } = await import('./lib/supabase.js');
+    const sb = getSupabase();
+    if (sb) {
+      const result = await Promise.race([
+        sb
+          .from('user_sites')
+          .select('slug, business_name, niche, deploy_url')
+          .eq('slug', lower)
+          .maybeSingle(),
+        new Promise((resolve) => setTimeout(() => resolve(null), 1000)),
+      ]);
+      const d = result?.data;
+      if (d) {
+        return {
+          slug: d.slug || lower,
+          title: d.business_name || lower,
+          niche: d.niche || 'Local Business',
+          url: normalizeSiteDeployUrl(d.deploy_url, d.slug || lower),
+        };
+      }
+    }
+  } catch {}
+
+  return null;
+}
 
 function generateToken(code) {
   // Simple opaque token — in production replace with a real JWT or DB session.
@@ -3265,14 +3428,11 @@ app.post('/api/owner/redeem', async (req, res) => {
     if (typeof code !== 'string' || !code.trim()) {
       return res.status(400).json({ ok: false, error: 'Please enter an owner access code or website slug.' });
     }
-    let input = code.trim();
-    let upperCode = input.toUpperCase();
-    if (!upperCode.startsWith('LUNAO-') && /^[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(upperCode)) {
-      upperCode = `LUNAO-${upperCode}`;
-    }
+    const parsedInput = extractRedeemInput(code);
+    let input = parsedInput.slugHint || parsedInput.raw;
+    let upperCode = parsedInput.code || '';
 
-    const isCodeFormat = upperCode.startsWith('LUNAO-') || /^[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(input);
-    const sites = listSitesSync();
+    const isCodeFormat = Boolean(upperCode);
     let row = null;
     let target = null;
 
@@ -3310,7 +3470,7 @@ app.post('/api/owner/redeem', async (req, res) => {
         }
       }
       if (!target) {
-        target = sites.find((s) => s.slug === row.slug) || {
+        target = (await findSiteBySlugAsync(row.slug)) || {
           slug: row.slug,
           title: row.slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
           niche: 'Local Business',
@@ -3319,11 +3479,11 @@ app.post('/api/owner/redeem', async (req, res) => {
       }
     } else {
       // 2. Exact match only by full website slug or full URL (supports https://<slug>.lunao.org and https://lunao.org/<slug>)
-      const subMatch = input.toLowerCase().trim().match(/^https?:\/\/([a-z0-9-]+)\.lunao\.org\/?$/i);
+      const subMatch = input.toLowerCase().trim().match(/^https?:\/\/([a-z0-9-]+)\.lunao\.org(?:\/.*)?$/i);
       const cleanSlug = subMatch
         ? subMatch[1].toLowerCase()
-        : input.toLowerCase().replace(/^https?:\/\/[^/]+\//, '').replace(/\/$/, '').trim();
-      target = sites.find((s) => s.slug.toLowerCase() === cleanSlug || s.slug.toLowerCase() === input.toLowerCase());
+        : input.toLowerCase().replace(/^https?:\/\/[^/]+\//, '').split(/[?#]/)[0].replace(/\/$/, '').trim();
+      target = await findSiteBySlugAsync(cleanSlug);
 
       if (!target && (isEdmontonContractorSlug(cleanSlug) || isSpecialUgcOrSalesRequest(req, 'dashboard'))) {
         await ensureSpecialModeSiteHtml(cleanSlug, SITES_DIR);
@@ -3482,25 +3642,32 @@ function listSitesSync() {
   return out;
 }
 
-app.get('/api/owner/me', (req, res) => {
-  // In production: verify Bearer token, return owner profile.
-  // Here we return a stub so the app can test the real endpoint.
+app.get('/api/owner/me', async (req, res) => {
+  // Verify Bearer token and resolve owner business profile via fast slug lookup.
   const auth = req.headers.authorization || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
   if (!token) {
     return res.status(401).json({ ok: false, error: 'Unauthorized. Send Authorization: Bearer <token>.' });
   }
-  // Parse the slug from the token (matches redeem token format).
   try {
     const payload = token.split('.')[1] || '';
     const decoded = Buffer.from(payload, 'base64url').toString('utf-8');
     const codeMatch = decoded.match(/LUNAO-[A-Z0-9]{4}-[A-Z0-9]{4}/i);
-    const code = codeMatch ? codeMatch[0] : null;
-    const sites = listSitesSync();
-    let target = sites[0];
+    const code = codeMatch ? codeMatch[0].toUpperCase() : null;
+    let target = null;
     if (code) {
-      const hint = code.replace('LUNAO-', '').toLowerCase().replace(/[^a-z0-9-]/g, '');
-      target = sites.find((s) => s.slug.includes(hint)) || target;
+      const codeRow = findByCode(code);
+      if (codeRow?.slug) {
+        target = await findSiteBySlugAsync(codeRow.slug);
+        if (!target) {
+          target = {
+            slug: codeRow.slug,
+            title: codeRow.slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+            niche: 'Local Business',
+            url: siteUrlForSlug(codeRow.slug),
+          };
+        }
+      }
     }
     if (!target) return res.status(404).json({ ok: false, error: 'Profile not found.' });
     res.json({ ok: true, slug: target.slug, businessName: target.title, niche: target.niche, siteUrl: target.url });
@@ -9075,19 +9242,11 @@ export const templatesCheck = checkTemplates();
 mountPwaApi(app);
 
 // Serve the built Lunao Owner PWA at /owner/* — isolated from the agency SPA
-// at / and from /api/*.  In production, the PWA is deployed at owner.lunao.com;
-// in development, /owner/ serves the static bundle while :3001 is the Vite HMR
-// dev server (which proxies to the backend).
-const PWA_DIST = path.join(ROOT_DIR, 'lunaoownerpwa', 'dist');
-const FRONTEND_DIST = path.join(ROOT_DIR, 'dist');
-app.use('/owner', (req, res, next) => {
-  if (fs.existsSync(PWA_DIST)) {
-    return express.static(PWA_DIST)(req, res, next);
-  }
-  next();
-});
+// at / and from /api/*. (Static handler is mounted earlier before public/ so
+// no stale public/owner files can shadow lunaoownerpwa/dist.)
 app.get('/owner*', (_req, res, next) => {
   if (fs.existsSync(PWA_DIST)) {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     return res.sendFile(path.join(PWA_DIST, 'index.html'));
   }
   next();

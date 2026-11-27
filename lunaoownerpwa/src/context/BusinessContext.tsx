@@ -99,9 +99,19 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // Try to restore a persisted session on mount.
+  // Try to restore a persisted session on mount (unless URL carries a QR ?code= to redeem).
   useEffect(() => {
     (async () => {
+      try {
+        const searchParams = new URLSearchParams(window.location.search);
+        const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+        const hashParams = new URLSearchParams(hashQuery);
+        if (searchParams.get('code') || hashParams.get('code')) {
+          return;
+        }
+      } catch {
+        /* ignore URL parsing */
+      }
       const session = await tenantAuthService.getStoredSession();
       if (session?.business && session?.token) {
         setBusiness(session.business);
@@ -160,10 +170,17 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       try {
         const result = await tenantAuthService.authenticateCode(code);
         if (result.success && result.business) {
-          setActiveLunaoCode(code.trim().toUpperCase());
+          setActiveLunaoCode(result.business.lunaoCode || code.trim().toUpperCase());
           setBusiness({ ...result.business });
           setIsAuthenticated(true);
           setActiveSectionState('dashboard');
+          try {
+            if (window.location.search.includes('code=') || window.location.search.includes('slug=')) {
+              window.history.replaceState({}, '', window.location.pathname);
+            }
+          } catch {
+            /* ignore history errors */
+          }
           doScrollTop();
           showToast(`Welcome, Owner of ${result.business.name}!`);
           return true;
