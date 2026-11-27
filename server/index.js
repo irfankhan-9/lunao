@@ -67,6 +67,7 @@ import { orchestrateAiEditStream } from './lib/ai/orchestrator.js';
 import { listStudioModels } from './lib/ai/pricingRegistry.js';
 import { getUserAiStatus, listAiUsageLedger, syncUserAiPlan, persistSupabaseAiBalance, FREE_VIBE_CREDITS } from './lib/ai/accountingService.js';
 import { fetchAdminUserDetailsMaps, fetchAllAdminUsersFast, adminGrantUserPlanAndCredits } from './lib/adminGrants.js';
+import { mirrorUserToSupabaseAuth, syncGoogleUserTablesViaRest } from './lib/googleSupabaseSync.js';
 import { createBooking, createBookingAsync, listBookings, listBookingsAsync, updateBookingStatus, updateBookingStatusAsync, getBooking, getBookingAsync } from './lib/bookings.js';
 import { validateBookingContract, rollbackToApprovedBooking, CONTRACT_REJECTION_MESSAGE } from './lib/bookingContractValidator.js';
 import {
@@ -2280,6 +2281,15 @@ app.post('/api/auth/google-session', async (req, res) => {
     let userCredits = 15;
     let vibeCredits = 0;
 
+    // Always mirror Google GIS login/signup into Supabase Auth (auth.users) without altering ownerKey or Google branding
+    const authMirrorPromise = mirrorUserToSupabaseAuth({
+      ownerKey,
+      uid: cleanUid,
+      email: cleanEmail,
+      name: displayName,
+      picture: avatarUrl,
+    });
+
     if (pool) {
       try {
         await pool.query(`
@@ -2323,24 +2333,47 @@ app.post('/api/auth/google-session', async (req, res) => {
           const newAiStatus = await syncUserAiPlan(ownerKey, 'Free Plan');
           plan = acct?.plan || 'Free Plan';
           userCredits = acct?.balance ?? 15;
-          // New Free account: includes the one-time free vibe-coding credits (granted by syncUserAiPlan).
-          vibeCredits = Number(newAiStatus?.balanceCredits ?? 0);
+          vibeCredits = plan === 'Free Plan' ? 0 : Number(newAiStatus?.balanceCredits ?? 0);
         } else {
           plan = existingPlanRes.rows[0].plan_tier || 'Free Plan';
           userCredits = Number(existingCredRes.rows[0].action_credits_balance ?? 0);
-          // getUserAiStatus self-heals the one-time free vibe grant for existing Free accounts.
           const aiStatus = await getUserAiStatus(ownerKey);
           vibeCredits = plan === 'Free Plan'
-            ? Number(aiStatus?.balanceCredits ?? existingCredRes.rows[0].ai_credits_balance ?? 0)
+            ? 0
             : Number(existingCredRes.rows[0].ai_credits_balance ?? aiStatus?.balanceCredits ?? 0);
+        }
+
+        if (cleanEmail) {
+          await pool.query(
+            `UPDATE public.user_plans SET email = $2 WHERE user_id = $1 AND (email IS NULL OR email = '')`,
+            [ownerKey, cleanEmail]
+          ).catch(() => {});
         }
       } catch (pgErr) {
         console.warn('[auth/google-session] Postgres sync notice:', pgErr.message);
-        userCredits = await getSupabaseUserCredits(ownerKey, 0);
+        const restSync = await syncGoogleUserTablesViaRest({ ownerKey, email: cleanEmail });
+        if (restSync) {
+          isNewUser = restSync.isNewUser;
+          plan = restSync.plan;
+          userCredits = restSync.userCredits;
+          vibeCredits = restSync.vibeCredits;
+        } else {
+          userCredits = await getSupabaseUserCredits(ownerKey, 15);
+        }
       }
     } else {
-      userCredits = await getSupabaseUserCredits(ownerKey, 0);
+      const restSync = await syncGoogleUserTablesViaRest({ ownerKey, email: cleanEmail });
+      if (restSync) {
+        isNewUser = restSync.isNewUser;
+        plan = restSync.plan;
+        userCredits = restSync.userCredits;
+        vibeCredits = restSync.vibeCredits;
+      } else {
+        userCredits = await getSupabaseUserCredits(ownerKey, 15);
+      }
     }
+
+    await authMirrorPromise.catch(() => {});
 
     // Also ensure local SQLite mirror has the account so local synchronous checks succeed
     try {
@@ -2348,7 +2381,7 @@ app.post('/api/auth/google-session', async (req, res) => {
       if (!localExisting) {
         ensureAccount(ownerKey, plan);
       }
-      db.prepare('UPDATE credit_accounts SET balance = ?, updated_at = ? WHERE owner_key = ?').run(userCredits, Math.floor(Date.now() / 1000), ownerKey);
+      db.prepare('UPDATE credit_accounts SET plan = ?, balance = ?, updated_at = ? WHERE owner_key = ?').run(plan, userCredits, Math.floor(Date.now() / 1000), ownerKey);
     } catch {}
 
     return res.json({
